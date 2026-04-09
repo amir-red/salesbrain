@@ -1,8 +1,0 @@
-{
-  "/followups/page": "app/followups/page.js",
-  "/page": "app/page.js",
-  "/pipeline/page": "app/pipeline/page.js",
-  "/api/agent/route": "app/api/agent/route.js",
-  "/api/deals/route": "app/api/deals/route.js",
-  "/api/deals/[id]/route": "app/api/deals/[id]/route.js"
-}
