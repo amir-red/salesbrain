@@ -39,3 +39,5 @@ Thumbs.db
 
 # claude
 .claude/
+node_modules/
+node_modulkes/
