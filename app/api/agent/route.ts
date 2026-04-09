@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   const parsed = RequestSchema.safeParse(body);
   if (!parsed.success) {
     return new Response(
-      JSON.stringify({ error: 'Validation failed', details: parsed.error.flatten() }),
+      JSON.stringify({ error: 'Validation failed', details: parsed.error.issues }),
       { status: 400 }
     );
   }
