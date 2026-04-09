@@ -176,8 +176,8 @@ export async function loadHistory(dealId: string): Promise<Anthropic.MessagePara
     const lastMsg = messages[messages.length - 1];
     if (lastMsg.role === 'assistant' && Array.isArray(lastMsg.content)) {
       // Remove the unmatched tool_use blocks
-      lastMsg.content = (lastMsg.content as Array<{ type: string; id?: string }>).filter(
-        (block) => block.type !== 'tool_use' || !pendingToolIds.includes(block.id || '')
+      lastMsg.content = (lastMsg.content as Anthropic.ContentBlockParam[]).filter(
+        (block) => block.type !== 'tool_use' || !pendingToolIds.includes((block as Anthropic.ToolUseBlockParam).id || '')
       );
       // If nothing left, remove the message
       if ((lastMsg.content as unknown[]).length === 0) messages.pop();

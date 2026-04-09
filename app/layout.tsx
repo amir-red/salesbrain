@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+// @ts-expect-error -- CSS import handled by Next.js bundler
 import './globals.css';
 
 export const metadata: Metadata = {

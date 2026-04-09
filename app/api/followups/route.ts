@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
 
   const parsed = CreateFollowupSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+    return NextResponse.json({ error: 'Validation failed', details: parsed.error.issues }, { status: 400 });
   }
 
   const { deal_id, type, subject, body: content, to_email, due_at } = parsed.data;

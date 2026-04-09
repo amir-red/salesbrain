@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
 
   const parsed = CreateDealSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+    return NextResponse.json({ error: 'Validation failed', details: parsed.error.issues }, { status: 400 });
   }
 
   const { name, company, contact_name, contact_email, value } = parsed.data;
