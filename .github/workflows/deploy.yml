@@ -3,7 +3,7 @@ name: Deploy to Production
 on:
   push:
     branches:
-      - production
+      - Production
 
 jobs:
   deploy:
@@ -29,7 +29,7 @@ jobs:
           envs: ANTHROPIC_API_KEY,DATABASE_URL,SESSION_SECRET,RESEND_API_KEY,EMAIL_FROM,TELEGRAM_BOT_TOKEN,TELEGRAM_BOARD_CHAT_ID,TELEGRAM_WEBHOOK_SECRET,CRON_SECRET
           script: |
             cd /srv/salesbrain
-            git pull origin production
+            git pull origin Production
 
             cat > .env.production << ENVEOF
             ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
