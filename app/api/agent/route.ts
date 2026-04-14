@@ -5,7 +5,7 @@ import { getSession } from '@/lib/auth';
 
 const RequestSchema = z.object({
   deal_id: z.string().uuid(),
-  message: z.string().min(1).max(10000),
+  message: z.string().min(1).max(100000),
 });
 
 export async function POST(req: NextRequest) {
