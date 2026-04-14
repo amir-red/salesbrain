@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { GATES } from '@/lib/gates';
+import Timeline from './Timeline';
 
 interface Deal {
   id: string;
@@ -365,6 +366,14 @@ export default function DealPanel({ deal, onDealUpdate }: DealPanelProps) {
           </div>
         </div>
       )}
+
+      {/* Activity Timeline */}
+      <div>
+        <h3 className="text-xs font-medium uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>
+          Activity
+        </h3>
+        <Timeline dealId={deal.id} />
+      </div>
 
       {/* Fields data */}
       {fieldKeys.length > 0 && (

@@ -151,4 +151,23 @@ export const TOOLS: Tool[] = [
       required: ['deal_id', 'problem', 'solution', 'pricing_approach', 'differentiators', 'risks'],
     },
   },
+  {
+    name: 'prep_meeting',
+    description:
+      'Generate a structured meeting preparation briefing for an upcoming client meeting, call, demo, or presentation. Loads full deal context and produces a comprehensive briefing with talking points, objection handling, and recommended asks.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        deal_id: { type: 'string', description: 'UUID of the deal' },
+        meeting_type: {
+          type: 'string',
+          enum: ['discovery_call', 'demo', 'negotiation', 'board_review', 'closing', 'general'],
+          description: 'Type of meeting to prepare for',
+        },
+        attendees: { type: 'string', description: 'Who will attend (roles/names)' },
+        focus_areas: { type: 'array', items: { type: 'string' }, description: 'Specific topics to address' },
+      },
+      required: ['deal_id', 'meeting_type'],
+    },
+  },
 ];

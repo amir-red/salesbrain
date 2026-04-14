@@ -63,6 +63,7 @@ function ToolBlock({ event }: { event: ToolEvent }) {
     update_deal: 'Updating Deal',
     schedule_followup: 'Scheduling Followup',
     draft_concept: 'Drafting Concept',
+    prep_meeting: 'Preparing Meeting Briefing',
   };
 
   return (

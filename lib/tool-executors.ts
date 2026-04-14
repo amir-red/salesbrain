@@ -1,7 +1,10 @@
+import Anthropic from '@anthropic-ai/sdk';
 import pool from './db';
 import { sendTelegramMessage } from './telegram';
 import { sendEmail } from './email';
 import { getMissingFields, getGate } from './gates';
+
+const anthropic = new Anthropic();
 
 // ─── assess_deal ────────────────────────────────────────────────
 
@@ -224,6 +227,124 @@ export async function exec_draft_concept(input: {
   return concept;
 }
 
+// ─── prep_meeting ──────────────────────────────────────────────
+
+export async function exec_prep_meeting(input: {
+  deal_id: string;
+  meeting_type: string;
+  attendees?: string;
+  focus_areas?: string[];
+}): Promise<Record<string, unknown>> {
+  const { deal_id, meeting_type, attendees, focus_areas } = input;
+
+  // Load full deal context
+  const [dealRes, convoRes, gateRes, boardRes, followupRes] = await Promise.all([
+    pool.query(
+      `SELECT d.*, u.name as lead_name, u.email as lead_email
+       FROM deals d LEFT JOIN users u ON u.id = d.lead_id
+       WHERE d.id = $1`,
+      [deal_id]
+    ),
+    pool.query(
+      `SELECT role, content, created_at FROM conversations
+       WHERE deal_id = $1 AND role IN ('user', 'assistant')
+       ORDER BY created_at DESC LIMIT 50`,
+      [deal_id]
+    ),
+    pool.query(
+      `SELECT from_gate, to_gate, reason, created_at FROM gate_events
+       WHERE deal_id = $1 ORDER BY created_at DESC`,
+      [deal_id]
+    ),
+    pool.query(
+      `SELECT gate, question, decision, decided_by, decided_at FROM board_decisions
+       WHERE deal_id = $1 ORDER BY created_at DESC`,
+      [deal_id]
+    ),
+    pool.query(
+      `SELECT type, subject, body, due_at, sent, sent_at FROM followups
+       WHERE deal_id = $1 ORDER BY due_at DESC LIMIT 20`,
+      [deal_id]
+    ),
+  ]);
+
+  const deal = dealRes.rows[0];
+  if (!deal) return { error: 'Deal not found' };
+
+  const context = {
+    deal: {
+      name: deal.name,
+      company: deal.company,
+      gate: deal.gate,
+      score: deal.score,
+      risk: deal.risk,
+      verdict: deal.verdict,
+      value: deal.value,
+      currency: deal.currency,
+      contact_name: deal.contact_name,
+      contact_email: deal.contact_email,
+      lead_name: deal.lead_name,
+      fields: deal.fields,
+      missing: deal.missing,
+      flags: deal.flags,
+      notes: deal.notes ? (deal.notes as string).slice(0, 500) : null,
+    },
+    conversation_highlights: convoRes.rows.slice(0, 20).map((r) => ({
+      role: r.role,
+      content: (r.content as string).slice(0, 200),
+      date: r.created_at,
+    })),
+    gate_history: gateRes.rows,
+    board_decisions: boardRes.rows,
+    followups: followupRes.rows.slice(0, 10),
+    meeting_type,
+    attendees: attendees || 'Not specified',
+    focus_areas: focus_areas || [],
+  };
+
+  const response = await anthropic.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 2048,
+    system: `You are a meeting prep specialist for B2B sales. The company sells Mate — a work intelligence and automation readiness platform. Generate a structured, actionable briefing. Use markdown formatting. Include these sections:
+
+## Executive Summary
+One paragraph — what this deal is about and where it stands.
+
+## Deal Timeline
+Key milestones and gate progression.
+
+## Current Status & Gaps
+What's been done, what's missing, what's at risk.
+
+## Talking Points
+3-5 specific points to raise in this ${meeting_type} meeting.
+
+## Potential Objections & Responses
+Anticipate 2-3 likely pushbacks and prepare responses.
+
+## Recommended Asks
+What to request from the client in this meeting.
+
+Be specific — reference actual data from the deal, not generic advice.`,
+    messages: [{
+      role: 'user',
+      content: `Generate a ${meeting_type} prep briefing:\n\n${JSON.stringify(context, null, 2)}`,
+    }],
+  });
+
+  const briefingText = response.content
+    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('\n');
+
+  return {
+    briefing: briefingText,
+    deal_name: deal.name,
+    meeting_type,
+    generated_at: new Date().toISOString(),
+  };
+}
+
 // ─── Dispatcher ─────────────────────────────────────────────────
 
 export async function executeTool(
@@ -243,6 +364,8 @@ export async function executeTool(
       return exec_schedule_followup(input as Parameters<typeof exec_schedule_followup>[0]);
     case 'draft_concept':
       return exec_draft_concept(input as Parameters<typeof exec_draft_concept>[0]);
+    case 'prep_meeting':
+      return exec_prep_meeting(input as Parameters<typeof exec_prep_meeting>[0]);
     default:
       return { error: `Unknown tool: ${name}` };
   }
