@@ -38,10 +38,14 @@ export default async function PipelinePage() {
   if (!userId) return null;
 
   const { rows: deals } = await pool.query(
-    `SELECT id, name, company, gate, score, risk, value, currency, owner, gate_entered_at,
-     EXTRACT(EPOCH FROM (now() - gate_entered_at))/86400 as days_in_gate_raw
-     FROM deals WHERE user_id = $1
-     ORDER BY gate, score DESC NULLS LAST`,
+    `SELECT d.id, d.name, d.company, d.gate, d.score, d.risk, d.value, d.currency,
+     d.owner, d.gate_entered_at, d.lead_id,
+     u.name as lead_name,
+     EXTRACT(EPOCH FROM (now() - d.gate_entered_at))/86400 as days_in_gate_raw
+     FROM deals d
+     LEFT JOIN users u ON u.id = d.lead_id
+     WHERE d.user_id = $1
+     ORDER BY d.gate, d.score DESC NULLS LAST`,
     [userId]
   );
 
@@ -58,6 +62,8 @@ export default async function PipelinePage() {
         value: d.value,
         currency: d.currency || 'USD',
         owner: d.owner,
+        lead_id: d.lead_id,
+        lead_name: d.lead_name,
         gate_entered_at: d.gate_entered_at,
         days_in_gate: Math.floor(Number(d.days_in_gate_raw)),
         sla_days: g.slaDays,
@@ -84,7 +90,7 @@ export default async function PipelinePage() {
           </p>
         </div>
         <div className="p-4 overflow-x-auto h-full">
-          <FilterBar gates={gateData} />
+          <FilterBar gates={gateData} currentUserId={userId} />
         </div>
       </div>
     </div>

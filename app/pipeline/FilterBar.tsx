@@ -12,6 +12,8 @@ interface Deal {
   value: string | null;
   currency: string;
   owner: string | null;
+  lead_id: string | null;
+  lead_name: string | null;
   gate_entered_at: string;
   days_in_gate: number;
   sla_days: number;
@@ -60,21 +62,26 @@ function DealCard({ deal }: { deal: Deal }) {
           </span>
         )}
       </div>
-      {deal.owner && (
-        <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>{deal.owner}</p>
+      {deal.lead_name && (
+        <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: 'var(--text-muted)' }}>
+          <span className="inline-flex w-3.5 h-3.5 rounded-full items-center justify-center text-[7px] font-bold" style={{ background: 'var(--accent)', color: '#fff' }}>
+            {deal.lead_name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}
+          </span>
+          {deal.lead_name}
+        </p>
       )}
     </a>
   );
 }
 
-export default function FilterBar({ gates }: { gates: Gate[] }) {
+export default function FilterBar({ gates, currentUserId }: { gates: Gate[]; currentUserId: string }) {
   const [filter, setFilter] = useState<typeof FILTERS[number]>('All');
 
   const filteredGates = gates.map((g) => ({
     ...g,
     deals: g.deals.filter((d) => {
       if (filter === 'All') return true;
-      if (filter === 'My deals') return d.owner !== null;
+      if (filter === 'My deals') return d.lead_id === currentUserId;
       if (filter === 'Overdue') return d.is_overdue;
       if (filter === 'Board pending') return d.is_board;
       return true;

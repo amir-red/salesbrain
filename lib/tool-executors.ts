@@ -95,7 +95,7 @@ export async function exec_send_email(input: {
 
 const DIRECT_COLUMNS = new Set([
   'name', 'company', 'contact_name', 'contact_email', 'contact_phone',
-  'gate', 'score', 'risk', 'verdict', 'notes', 'value', 'currency', 'owner',
+  'gate', 'score', 'risk', 'verdict', 'notes', 'value', 'currency', 'owner', 'lead_id',
 ]);
 
 export async function exec_update_deal(input: {

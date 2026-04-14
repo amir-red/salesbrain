@@ -19,6 +19,9 @@ interface Deal {
   contact_name: string | null;
   contact_email: string | null;
   owner: string | null;
+  lead_id: string | null;
+  lead_name: string | null;
+  lead_email: string | null;
   missing: string[];
   flags: string[];
   fields: Record<string, unknown>;
@@ -193,6 +196,14 @@ export default function Home() {
                   G{deal.gate}
                 </span>
               </div>
+              {deal.lead_name && (
+                <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: 'var(--text-muted)' }}>
+                  <span className="inline-flex w-4 h-4 rounded-full items-center justify-center text-[8px] font-bold" style={{ background: 'var(--accent)', color: '#fff' }}>
+                    {deal.lead_name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}
+                  </span>
+                  {deal.lead_name}
+                </p>
+              )}
               {deal.score !== null && (
                 <div className="mt-1 flex items-center gap-2">
                   <div className="flex-1 h-1 rounded-full" style={{ background: 'var(--border)' }}>
@@ -230,7 +241,7 @@ export default function Home() {
         className="w-80 flex-shrink-0 border-l"
         style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}
       >
-        <DealPanel deal={selectedDeal} />
+        <DealPanel deal={selectedDeal} onDealUpdate={handleDealUpdate} />
       </div>
     </div>
   );
