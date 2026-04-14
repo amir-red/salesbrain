@@ -163,9 +163,10 @@ export async function loadHistory(dealId: string): Promise<Anthropic.MessagePara
   // Phase 2: Validate tool_use/tool_result pairing
   // Every assistant message with tool_use blocks must be followed by
   // a user message containing ALL matching tool_result blocks.
-  // If not, truncate at that point.
+  // If a pair is broken, SKIP it (don't truncate — keep valid messages after it).
   const validated: Anthropic.MessageParam[] = [];
-  for (let i = 0; i < rawMessages.length; i++) {
+  let i = 0;
+  while (i < rawMessages.length) {
     const msg = rawMessages[i];
 
     if (msg.role === 'assistant' && Array.isArray(msg.content)) {
@@ -175,33 +176,51 @@ export async function loadHistory(dealId: string): Promise<Anthropic.MessagePara
 
       if (toolUseIds.length > 0) {
         const next = rawMessages[i + 1];
-        if (!next || next.role !== 'user' || !Array.isArray(next.content)) {
-          break; // No matching tool_result message — truncate
+
+        // Check if next message has matching tool_results
+        let pairValid = false;
+        if (next && next.role === 'user' && Array.isArray(next.content)) {
+          const resultIds = new Set(
+            (next.content as Array<{ type?: string; tool_use_id?: string }>)
+              .filter((b) => b.type === 'tool_result' && b.tool_use_id)
+              .map((b) => b.tool_use_id!)
+          );
+          pairValid = toolUseIds.every((id) => resultIds.has(id));
         }
-        const resultIds = new Set(
-          (next.content as Array<{ type?: string; tool_use_id?: string }>)
-            .filter((b) => b.type === 'tool_result' && b.tool_use_id)
-            .map((b) => b.tool_use_id!)
-        );
-        if (!toolUseIds.every((id) => resultIds.has(id))) {
-          break; // Mismatched IDs — truncate
+
+        if (pairValid) {
+          // Valid pair: keep both
+          validated.push(msg);
+          validated.push(next!);
+          i += 2;
+        } else {
+          // Broken pair: strip tool_use blocks, keep text-only assistant message
+          const textBlocks = (msg.content as Array<{ type: string; text?: string }>)
+            .filter((b) => b.type === 'text' && b.text);
+          if (textBlocks.length > 0) {
+            const textOnly = textBlocks.map((b) => b.text).join('');
+            validated.push({ role: 'assistant', content: textOnly });
+          }
+          // Skip the orphaned tool_result message too if it exists
+          if (next && next.role === 'user' && Array.isArray(next.content)) {
+            i += 2;
+          } else {
+            i += 1;
+          }
         }
-        // Pair is valid: push both and skip next
-        validated.push(msg);
-        validated.push(next);
-        i++; // skip the tool_result message (already added)
         continue;
       }
     }
 
     validated.push(msg);
+    i++;
   }
 
   // Phase 3: Ensure strict role alternation (user/assistant/user/assistant)
   const final: Anthropic.MessageParam[] = [];
   for (const msg of validated) {
     if (final.length > 0 && final[final.length - 1].role === msg.role) {
-      // Consecutive same-role: drop the older one
+      // Consecutive same-role: keep the newer one
       final.pop();
     }
     final.push(msg);
