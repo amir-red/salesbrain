@@ -106,40 +106,30 @@ export async function loadHistory(dealId: string): Promise<Anthropic.MessagePara
      FROM conversations
      WHERE deal_id = $1
      ORDER BY created_at DESC
-     LIMIT 20`,
+     LIMIT 60`,
     [dealId]
   );
 
-  // Reconstruct Anthropic message format from flat DB rows.
-  // Key rule: tool_result must reference the tool_use_id from the
-  // immediately preceding assistant message.
-  //
-  // Strategy: walk rows in chronological order. Collect consecutive
-  // tool_use rows into the current assistant message, then collect
-  // their matching tool_result rows into a single user message.
-
+  // Phase 1: Reconstruct Anthropic message format from flat DB rows
   const ordered = rows.reverse();
-  const messages: Anthropic.MessageParam[] = [];
+  const rawMessages: Anthropic.MessageParam[] = [];
   let toolIdCounter = 0;
-
-  // Queue of tool IDs from tool_use blocks waiting for their results
   const pendingToolIds: string[] = [];
 
   for (const row of ordered) {
     if (row.role === 'user') {
-      messages.push({ role: 'user', content: row.content });
+      rawMessages.push({ role: 'user', content: row.content });
     } else if (row.role === 'assistant') {
-      messages.push({ role: 'assistant', content: row.content });
+      rawMessages.push({ role: 'assistant', content: row.content });
     } else if (row.role === 'tool_use') {
       toolIdCounter++;
       const toolId = `hist_${toolIdCounter}`;
       pendingToolIds.push(toolId);
 
-      // Append to the last assistant message (or create one)
-      let lastMsg = messages[messages.length - 1];
+      let lastMsg = rawMessages[rawMessages.length - 1];
       if (!lastMsg || lastMsg.role !== 'assistant') {
         lastMsg = { role: 'assistant', content: [] };
-        messages.push(lastMsg);
+        rawMessages.push(lastMsg);
       }
       const content = Array.isArray(lastMsg.content)
         ? lastMsg.content
@@ -152,9 +142,8 @@ export async function loadHistory(dealId: string): Promise<Anthropic.MessagePara
       });
       lastMsg.content = content;
     } else if (row.role === 'tool_result') {
-      // Pop the first pending tool ID (FIFO matches insertion order)
       const toolId = pendingToolIds.shift();
-      if (!toolId) continue; // orphaned result, skip
+      if (!toolId) continue;
 
       const resultBlock = {
         type: 'tool_result' as const,
@@ -162,31 +151,68 @@ export async function loadHistory(dealId: string): Promise<Anthropic.MessagePara
         content: row.content,
       };
 
-      // If last message is already a user message with tool_results, append
-      const lastMsg = messages[messages.length - 1];
+      const lastMsg = rawMessages[rawMessages.length - 1];
       if (lastMsg?.role === 'user' && Array.isArray(lastMsg.content)) {
         (lastMsg.content as Anthropic.ToolResultBlockParam[]).push(resultBlock);
       } else {
-        messages.push({ role: 'user', content: [resultBlock] });
+        rawMessages.push({ role: 'user', content: [resultBlock] });
       }
     }
   }
 
-  // Safety: drop any trailing tool_use without matching results
-  // (would cause API errors)
-  if (pendingToolIds.length > 0 && messages.length > 0) {
-    const lastMsg = messages[messages.length - 1];
-    if (lastMsg.role === 'assistant' && Array.isArray(lastMsg.content)) {
-      // Remove the unmatched tool_use blocks
-      lastMsg.content = (lastMsg.content as Anthropic.ContentBlockParam[]).filter(
-        (block) => block.type !== 'tool_use' || !pendingToolIds.includes((block as Anthropic.ToolUseBlockParam).id || '')
-      );
-      // If nothing left, remove the message
-      if ((lastMsg.content as unknown[]).length === 0) messages.pop();
+  // Phase 2: Validate tool_use/tool_result pairing
+  // Every assistant message with tool_use blocks must be followed by
+  // a user message containing ALL matching tool_result blocks.
+  // If not, truncate at that point.
+  const validated: Anthropic.MessageParam[] = [];
+  for (let i = 0; i < rawMessages.length; i++) {
+    const msg = rawMessages[i];
+
+    if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+      const toolUseIds = (msg.content as Array<{ type: string; id?: string }>)
+        .filter((b) => b.type === 'tool_use' && b.id)
+        .map((b) => b.id!);
+
+      if (toolUseIds.length > 0) {
+        const next = rawMessages[i + 1];
+        if (!next || next.role !== 'user' || !Array.isArray(next.content)) {
+          break; // No matching tool_result message — truncate
+        }
+        const resultIds = new Set(
+          (next.content as Array<{ type?: string; tool_use_id?: string }>)
+            .filter((b) => b.type === 'tool_result' && b.tool_use_id)
+            .map((b) => b.tool_use_id!)
+        );
+        if (!toolUseIds.every((id) => resultIds.has(id))) {
+          break; // Mismatched IDs — truncate
+        }
+        // Pair is valid: push both and skip next
+        validated.push(msg);
+        validated.push(next);
+        i++; // skip the tool_result message (already added)
+        continue;
+      }
     }
+
+    validated.push(msg);
   }
 
-  return messages;
+  // Phase 3: Ensure strict role alternation (user/assistant/user/assistant)
+  const final: Anthropic.MessageParam[] = [];
+  for (const msg of validated) {
+    if (final.length > 0 && final[final.length - 1].role === msg.role) {
+      // Consecutive same-role: drop the older one
+      final.pop();
+    }
+    final.push(msg);
+  }
+
+  // Ensure first message is 'user' (API requirement)
+  while (final.length > 0 && final[0].role !== 'user') {
+    final.shift();
+  }
+
+  return final;
 }
 
 // ─── Persist Message ────────────────────────────────────────────
