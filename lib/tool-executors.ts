@@ -158,6 +158,30 @@ export async function exec_update_deal(input: {
        VALUES ($1, $2, $3, $4, 'agent')`,
       [deal_id, oldGate, updates.gate, updates.notes || `Advanced to gate ${updates.gate}`]
     );
+
+    // Send Telegram notification for board gate completions and significant advances
+    const newGate = updates.gate as number;
+    const isBoardPass = (oldGate === 3 && newGate === 4) || (oldGate === 5 && newGate === 6);
+    const isWon = newGate === 9;
+
+    if (isBoardPass || isWon) {
+      const dealName = deal?.name || 'Unknown deal';
+      const dealCompany = deal?.company || '';
+      let notifText = '';
+
+      if (isWon) {
+        notifText = `DEAL WON: "${dealName}" (${dealCompany}) has reached G9 — Project Handover! Congratulations to the team.`;
+      } else {
+        const boardGate = oldGate;
+        notifText = `BOARD APPROVED: "${dealName}" (${dealCompany}) passed Review Board G${boardGate} and advanced to G${newGate}. Deal score: ${deal?.score ?? 'N/A'}.`;
+      }
+
+      try {
+        await sendTelegramMessage(notifText);
+      } catch (err) {
+        console.error('[Telegram] Failed to send gate advance notification:', err);
+      }
+    }
   }
 
   // Recalculate missing fields
