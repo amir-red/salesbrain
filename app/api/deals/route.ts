@@ -18,7 +18,11 @@ export async function GET() {
 
   try {
     const { rows } = await pool.query(
-      `SELECT * FROM deals WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 100`,
+      `SELECT d.*, u.name as lead_name, u.email as lead_email
+       FROM deals d
+       LEFT JOIN users u ON u.id = d.lead_id
+       WHERE d.user_id = $1
+       ORDER BY d.updated_at DESC LIMIT 100`,
       [session.userId]
     );
     return NextResponse.json(rows);

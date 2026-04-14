@@ -22,9 +22,14 @@ CREATE TABLE deals (
   value         NUMERIC(15,2),
   currency      TEXT DEFAULT 'USD',
   owner         TEXT,
+  lead_id       UUID REFERENCES users(id),
+  user_id       UUID REFERENCES users(id),
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE INDEX idx_deals_lead_id ON deals (lead_id);
+CREATE INDEX idx_deals_user_id ON deals (user_id);
 
 -- Conversations: chat history per deal
 CREATE TABLE conversations (

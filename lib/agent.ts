@@ -80,6 +80,7 @@ ${GATES.map((g) => `G${g.number}: ${g.name} (${g.slaDays}d SLA${g.isBoard ? ', B
 - **Verdict**: ${deal.verdict ?? 'Not assessed'}
 - **Value**: ${deal.value ? `${deal.currency || 'USD'} ${deal.value}` : 'Unknown'}
 - **Contact**: ${deal.contact_name || 'Unknown'} (${deal.contact_email || 'no email'})
+- **Project Lead**: ${deal.lead_name || 'Unassigned'}${deal.lead_email ? ` (${deal.lead_email})` : ''}
 - **Owner**: ${deal.owner || 'Unassigned'}
 - **Missing fields**: ${missing.length > 0 ? missing.join(', ') : 'None'}
 - **Flags**: ${(deal.flags as string[])?.length > 0 ? (deal.flags as string[]).join(', ') : 'None'}
@@ -221,8 +222,12 @@ export async function* runAgent(
 ): AsyncGenerator<StreamEvent> {
   // Load deal (scoped to user if userId provided)
   const dealQuery = userId
-    ? 'SELECT * FROM deals WHERE id = $1 AND user_id = $2'
-    : 'SELECT * FROM deals WHERE id = $1';
+    ? `SELECT d.*, u.name as lead_name, u.email as lead_email
+       FROM deals d LEFT JOIN users u ON u.id = d.lead_id
+       WHERE d.id = $1 AND d.user_id = $2`
+    : `SELECT d.*, u.name as lead_name, u.email as lead_email
+       FROM deals d LEFT JOIN users u ON u.id = d.lead_id
+       WHERE d.id = $1`;
   const dealParams = userId ? [dealId, userId] : [dealId];
   const { rows: dealRows } = await pool.query(dealQuery, dealParams);
   const deal = dealRows[0] || null;

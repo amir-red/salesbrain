@@ -11,7 +11,10 @@ export async function GET(
 
   try {
     const { rows } = await pool.query(
-      'SELECT * FROM deals WHERE id = $1 AND user_id = $2',
+      `SELECT d.*, u.name as lead_name, u.email as lead_email
+       FROM deals d
+       LEFT JOIN users u ON u.id = d.lead_id
+       WHERE d.id = $1 AND d.user_id = $2`,
       [params.id, session.userId]
     );
     if (rows.length === 0) {

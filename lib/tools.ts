@@ -98,6 +98,7 @@ export const TOOLS: Tool[] = [
             value: { type: 'number' },
             currency: { type: 'string' },
             owner: { type: 'string' },
+            lead_id: { type: 'string', description: 'UUID of the user to assign as project lead' },
           },
         },
       },
