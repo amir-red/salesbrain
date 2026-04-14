@@ -63,10 +63,10 @@ function getSuggestions(deal: DealInfo | null | undefined, messageCount: number)
       starters.push('Prepare a board summary for this deal');
     } else if (deal.gate === 4) {
       starters.push('Draft an offer strategy for this deal');
-      starters.push('What pricing approach should we take?');
+      starters.push(`Prep me for the meeting with ${deal.company}`);
     } else if (deal.gate === 6) {
       starters.push('Draft a concept document for the client');
-      starters.push('What should we highlight in our presentation?');
+      starters.push(`Prep me for the presentation with ${deal.company}`);
     } else if (deal.gate === 7) {
       starters.push('The client wants a discount — how should we respond?');
       starters.push('What are our negotiation levers here?');

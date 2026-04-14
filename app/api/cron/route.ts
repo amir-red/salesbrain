@@ -3,6 +3,7 @@ import pool from '@/lib/db';
 import { sendEmail } from '@/lib/email';
 import { runAgent } from '@/lib/agent';
 import { getSLAStatus } from '@/lib/gates';
+import { computeDecayScore } from '@/lib/decay';
 
 export async function GET(req: NextRequest) {
   // Auth check
@@ -11,7 +12,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const stats = { followups: 0, sla_alerts: 0, errors: 0 };
+  const stats = { followups: 0, sla_alerts: 0, decay_alerts: 0, errors: 0 };
 
   // ─── 1. Process due followups ───────────────────────────────
 
@@ -90,6 +91,52 @@ export async function GET(req: NextRequest) {
     }
   } catch (err) {
     console.error('SLA query failed:', err);
+    stats.errors++;
+  }
+
+  // ─── 3. Deal decay detection ─────────────────────────────────
+
+  try {
+    const { rows: decayCandidates } = await pool.query(
+      `SELECT id, name, gate, flags
+       FROM deals
+       WHERE gate BETWEEN 2 AND 8
+       ORDER BY gate_entered_at ASC`
+    );
+
+    for (const deal of decayCandidates) {
+      const flagKey = `decay_alert_g${deal.gate}`;
+      if ((deal.flags as string[])?.includes(flagKey)) continue;
+
+      try {
+        const decay = await computeDecayScore(deal.id);
+        if (!decay.shouldAlert) continue;
+
+        await pool.query(
+          `UPDATE deals SET flags = array_append(flags, $1) WHERE id = $2`,
+          [flagKey, deal.id]
+        );
+
+        const signalSummary = decay.signals
+          .map((s) => `- ${s.signal}: ${s.detail} (weight: ${s.weight})`)
+          .join('\n');
+
+        const agentMessage = `SYSTEM ALERT: DEAL DECAY detected for "${deal.name}" (decay score: ${decay.score}/100). This deal is slowly dying. Signals:\n${signalSummary}\n\nAnalyze the situation. If the deal is salvageable, schedule aggressive followups and alert the owner. If not, recommend walking away.`;
+
+        for await (const event of runAgent(deal.id, agentMessage)) {
+          if (event.type === 'error') {
+            console.error(`Decay agent error for deal ${deal.id}:`, event.error);
+          }
+        }
+
+        stats.decay_alerts++;
+      } catch (err) {
+        console.error(`Decay check for deal ${deal.id} failed:`, err);
+        stats.errors++;
+      }
+    }
+  } catch (err) {
+    console.error('Decay detection failed:', err);
     stats.errors++;
   }
 

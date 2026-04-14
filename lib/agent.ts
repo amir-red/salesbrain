@@ -58,6 +58,7 @@ ${GATES.map((g) => `G${g.number}: ${g.name} (${g.slaDays}d SLA${g.isBoard ? ', B
 - When updating deal data, always use update_deal to persist changes.
 - After any significant update, run assess_deal to recalculate score/risk.
 - When scheduling followups, be specific about content and timing.
+- When the user mentions an upcoming meeting, call, demo, or presentation with the client, automatically call prep_meeting to generate a briefing. Don't wait to be asked for meeting prep.
 - For concept drafts (G4+), produce thorough, structured documents.`;
 
   if (!deal) {
@@ -237,17 +238,24 @@ export async function* runAgent(
     return;
   }
 
-  // Persist user message
-  await persistMessage(dealId, 'user', userMessage);
-
-  // Load history
+  // Load history BEFORE persisting new message (avoids duplicate/ordering issues)
   const history = await loadHistory(dealId);
 
-  // Ensure the latest user message is included
-  const messages: Anthropic.MessageParam[] = [
-    ...history.slice(0, -1), // drop last if it's our just-persisted message
-    { role: 'user', content: userMessage },
-  ];
+  // Build messages array with proper role alternation
+  const messages: Anthropic.MessageParam[] = [...history];
+
+  // If history ends with a user message, we can't append another user message
+  // (Anthropic API requires strict user/assistant alternation)
+  if (messages.length > 0 && messages[messages.length - 1].role === 'user') {
+    // Drop the trailing user message — the new one replaces it
+    messages.pop();
+  }
+
+  // Append the new user message
+  messages.push({ role: 'user', content: userMessage });
+
+  // Persist after building the array
+  await persistMessage(dealId, 'user', userMessage);
 
   const systemPrompt = buildSystemPrompt(deal);
 
