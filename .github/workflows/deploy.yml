@@ -28,21 +28,29 @@ jobs:
           port: 22
           envs: ANTHROPIC_API_KEY,DATABASE_URL,SESSION_SECRET,RESEND_API_KEY,EMAIL_FROM,TELEGRAM_BOT_TOKEN,TELEGRAM_BOARD_CHAT_ID,TELEGRAM_WEBHOOK_SECRET,CRON_SECRET
           script: |
+            set -e
             cd /srv/salesbrain
             git pull origin Production
 
-            cat > .env.production << ENVEOF
-            ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-            DATABASE_URL=${DATABASE_URL}
-            SESSION_SECRET=${SESSION_SECRET}
-            RESEND_API_KEY=${RESEND_API_KEY}
-            EMAIL_FROM=${EMAIL_FROM}
-            TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-            TELEGRAM_BOARD_CHAT_ID=${TELEGRAM_BOARD_CHAT_ID}
-            TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}
-            CRON_SECRET=${CRON_SECRET}
-            ENVEOF
+            # Write env file (no leading spaces)
+            printf '%s\n' \
+              "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" \
+              "DATABASE_URL=${DATABASE_URL}" \
+              "SESSION_SECRET=${SESSION_SECRET}" \
+              "RESEND_API_KEY=${RESEND_API_KEY}" \
+              "EMAIL_FROM=${EMAIL_FROM}" \
+              "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}" \
+              "TELEGRAM_BOARD_CHAT_ID=${TELEGRAM_BOARD_CHAT_ID}" \
+              "TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}" \
+              "CRON_SECRET=${CRON_SECRET}" \
+              > .env.production
 
-            npm install --production
+            # Install all deps (including devDependencies for build)
+            npm install
+
+            # Build
             npm run build
+
+            # Restart or start PM2
             pm2 restart salesbrain || pm2 start ecosystem.config.cjs
+            pm2 save
