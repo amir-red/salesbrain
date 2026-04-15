@@ -37,6 +37,7 @@ export default async function PipelinePage() {
   const userId = await getUserId();
   if (!userId) return null;
 
+  // Show ALL deals to everyone (pipeline is org-wide visibility)
   const { rows: deals } = await pool.query(
     `SELECT d.id, d.name, d.company, d.gate, d.score, d.risk, d.value, d.currency,
      d.owner, d.gate_entered_at, d.lead_id,
@@ -44,9 +45,7 @@ export default async function PipelinePage() {
      EXTRACT(EPOCH FROM (now() - d.gate_entered_at))/86400 as days_in_gate_raw
      FROM deals d
      LEFT JOIN users u ON u.id = d.lead_id
-     WHERE d.user_id = $1
-     ORDER BY d.gate, d.score DESC NULLS LAST`,
-    [userId]
+     ORDER BY d.gate, d.score DESC NULLS LAST`
   );
 
   const gateData = GATES.map((g) => {

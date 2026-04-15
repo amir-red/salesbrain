@@ -6,6 +6,7 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  // Org-wide — all clients visible to all authenticated users
   const { rows } = await pool.query(
     `SELECT
        company,
@@ -16,10 +17,8 @@ export async function GET() {
        MAX(COALESCE(updated_at, created_at)) as last_activity,
        (array_agg(currency ORDER BY value DESC NULLS LAST))[1] as currency
      FROM deals
-     WHERE user_id = $1
      GROUP BY company
-     ORDER BY last_activity DESC`,
-    [session.userId]
+     ORDER BY last_activity DESC`
   );
 
   return NextResponse.json(rows);
