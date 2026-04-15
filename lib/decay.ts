@@ -14,6 +14,7 @@ export interface DecayResult {
   shouldAlert: boolean;
 }
 
+
 const DECAY_THRESHOLD = 60;
 
 export async function computeDecayScore(dealId: string): Promise<DecayResult> {
