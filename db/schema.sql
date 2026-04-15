@@ -73,7 +73,7 @@ CREATE TABLE followups (
 
 CREATE INDEX idx_followups_due ON followups(due_at) WHERE sent = false;
 
--- Board decisions: Telegram-based review board votes
+-- Board decisions: Telegram-based review board votes (multi-voter)
 CREATE TABLE board_decisions (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   deal_id          UUID NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
@@ -83,10 +83,29 @@ CREATE TABLE board_decisions (
   decision         TEXT CHECK (decision IN ('proceed', 'stop', 'amend')),
   decided_by       TEXT,
   decided_at       TIMESTAMPTZ,
+  votes_required   INTEGER NOT NULL DEFAULT 5,
+  votes_to_block   INTEGER NOT NULL DEFAULT 4,
+  total_voters     INTEGER NOT NULL DEFAULT 8,
+  status           TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'amended')),
+  resolved_at      TIMESTAMPTZ,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_board_decisions_msg ON board_decisions(telegram_message_id) WHERE telegram_message_id IS NOT NULL;
+
+-- Individual board votes from executives
+CREATE TABLE board_votes (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  board_decision_id UUID NOT NULL REFERENCES board_decisions(id) ON DELETE CASCADE,
+  voter_name        TEXT NOT NULL,
+  voter_telegram_id BIGINT,
+  vote              TEXT NOT NULL CHECK (vote IN ('proceed', 'stop', 'amend')),
+  comment           TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(board_decision_id, voter_telegram_id)
+);
+
+CREATE INDEX idx_board_votes_decision ON board_votes(board_decision_id);
 
 -- Updated_at trigger
 CREATE OR REPLACE FUNCTION update_updated_at()

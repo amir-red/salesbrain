@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import pool from './db';
-import { sendTelegramMessage } from './telegram';
+import { sendTelegramMessage, formatBoardReviewMessage } from './telegram';
 import { sendEmail } from './email';
 import { getMissingFields, getGate } from './gates';
 
@@ -49,12 +49,28 @@ export async function exec_send_telegram(input: {
 }): Promise<Record<string, unknown>> {
   const { deal_id, message, gate } = input;
 
-  const { messageId } = await sendTelegramMessage(message);
+  // Load deal data for structured board review message
+  const { rows: dealRows } = await pool.query(
+    `SELECT d.name, d.company, d.value, d.currency, d.score, d.risk, d.verdict, d.gate,
+            u.name as lead_name
+     FROM deals d LEFT JOIN users u ON u.id = d.lead_id
+     WHERE d.id = $1`,
+    [deal_id]
+  );
 
-  // Store board decision record
+  let formattedMessage: string;
+  if (dealRows[0]) {
+    formattedMessage = formatBoardReviewMessage(dealRows[0], message);
+  } else {
+    formattedMessage = message;
+  }
+
+  const { messageId } = await sendTelegramMessage(formattedMessage);
+
+  // Store board decision record with multi-vote tracking
   await pool.query(
-    `INSERT INTO board_decisions (deal_id, gate, telegram_message_id, question)
-     VALUES ($1, $2, $3, $4)`,
+    `INSERT INTO board_decisions (deal_id, gate, telegram_message_id, question, status, votes_required, votes_to_block, total_voters)
+     VALUES ($1, $2, $3, $4, 'pending', 5, 4, 8)`,
     [deal_id, gate, messageId, message]
   );
 
@@ -65,7 +81,7 @@ export async function exec_send_telegram(input: {
     [flag, deal_id]
   );
 
-  return { success: true, telegram_message_id: messageId, gate, flag_set: flag };
+  return { success: true, telegram_message_id: messageId, gate, flag_set: flag, votes_required: 5 };
 }
 
 // ─── send_email ─────────────────────────────────────────────────
