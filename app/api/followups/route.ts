@@ -16,13 +16,12 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  // Org-wide — all followups visible to all authenticated users
   const { rows } = await pool.query(
     `SELECT f.*, d.name as deal_name, d.gate
      FROM followups f
      JOIN deals d ON d.id = f.deal_id
-     WHERE d.user_id = $1
-     ORDER BY f.due_at ASC`,
-    [session.userId]
+     ORDER BY f.due_at ASC`
   );
 
   return NextResponse.json(rows);

@@ -10,12 +10,13 @@ export async function GET(
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
+    // Any authenticated user can view any deal (highlights are public within the org)
     const { rows } = await pool.query(
       `SELECT d.*, u.name as lead_name, u.email as lead_email
        FROM deals d
        LEFT JOIN users u ON u.id = d.lead_id
-       WHERE d.id = $1 AND d.user_id = $2`,
-      [params.id, session.userId]
+       WHERE d.id = $1`,
+      [params.id]
     );
     if (rows.length === 0) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });

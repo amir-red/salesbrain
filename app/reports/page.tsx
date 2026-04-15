@@ -36,39 +36,33 @@ export default async function ReportsPage() {
   const userId = await getUserId();
   if (!userId) return null;
 
-  // Metric queries
+  // Metric queries (org-wide — all deals visible)
   const [activeRes, valueRes, overdueRes, wonRes, byGateRes, activityRes] = await Promise.all([
-    pool.query('SELECT COUNT(*)::int as count FROM deals WHERE gate < 9 AND user_id = $1', [userId]),
-    pool.query('SELECT COALESCE(SUM(value), 0)::numeric as total FROM deals WHERE gate < 9 AND user_id = $1', [userId]),
+    pool.query('SELECT COUNT(*)::int as count FROM deals WHERE gate < 9'),
+    pool.query('SELECT COALESCE(SUM(value), 0)::numeric as total FROM deals WHERE gate < 9'),
     pool.query(
       `SELECT COUNT(*)::int as count FROM deals
-       WHERE gate < 9 AND user_id = $1
+       WHERE gate < 9
        AND EXTRACT(EPOCH FROM (now() - gate_entered_at))/86400 >
          CASE gate
            WHEN 1 THEN 3 WHEN 2 THEN 10 WHEN 3 THEN 5 WHEN 4 THEN 14
            WHEN 5 THEN 5 WHEN 6 THEN 7 WHEN 7 THEN 21 WHEN 8 THEN 3 WHEN 9 THEN 5
-         END`,
-      [userId]
+         END`
     ),
     pool.query(
-      `SELECT COUNT(*)::int as count FROM gate_events ge
-       JOIN deals d ON d.id = ge.deal_id
-       WHERE ge.to_gate = 9 AND d.user_id = $1
-       AND ge.created_at >= date_trunc('month', now())`,
-      [userId]
+      `SELECT COUNT(*)::int as count FROM gate_events
+       WHERE to_gate = 9
+       AND created_at >= date_trunc('month', now())`
     ),
     pool.query(
       `SELECT gate, COUNT(*)::int as count FROM deals
-       WHERE user_id = $1 GROUP BY gate ORDER BY gate`,
-      [userId]
+       GROUP BY gate ORDER BY gate`
     ),
     pool.query(
       `SELECT ge.from_gate, ge.to_gate, ge.created_at, d.name as deal_name
        FROM gate_events ge
        JOIN deals d ON d.id = ge.deal_id
-       WHERE d.user_id = $1
-       ORDER BY ge.created_at DESC LIMIT 10`,
-      [userId]
+       ORDER BY ge.created_at DESC LIMIT 10`
     ),
   ]);
 
