@@ -1,3 +1,5 @@
+import { GATES } from './gates';
+
 const TELEGRAM_API = 'https://api.telegram.org/bot';
 
 interface TelegramResponse {
@@ -17,8 +19,6 @@ export async function sendTelegramMessage(text: string, replyToMessageId?: numbe
   const body: Record<string, unknown> = {
     chat_id: chatId,
     text,
-    // No parse_mode — plain text is safest. Telegram's Markdown parser
-    // rejects messages with unescaped special characters like _ * [ etc.
   };
 
   if (replyToMessageId) {
@@ -62,4 +62,84 @@ export async function sendTelegramMessage(text: string, replyToMessageId?: numbe
 
   console.log('[Telegram] Message sent successfully, message_id:', data.result!.message_id);
   return { messageId: data.result!.message_id };
+}
+
+// ─── Board Review Message Formatting ────────────────────────────
+
+export interface BoardReviewDeal {
+  name: string;
+  company: string;
+  value: string | null;
+  currency: string;
+  score: number | null;
+  risk: string | null;
+  verdict: string | null;
+  gate: number;
+  lead_name: string | null;
+}
+
+export function formatBoardReviewMessage(deal: BoardReviewDeal, summary: string): string {
+  const gate = GATES[deal.gate - 1];
+  const gateName = gate?.name || `Gate ${deal.gate}`;
+
+  const gateProgress = GATES.map((g) => {
+    if (g.number < deal.gate) return `G${g.number} done`;
+    if (g.number === deal.gate) return `[G${g.number}]`;
+    return `G${g.number}`;
+  }).join('  ');
+
+  const valueStr = deal.value ? `${deal.currency} ${Number(deal.value).toLocaleString()}` : 'Not set';
+  const scoreStr = deal.score !== null ? `${deal.score}/100` : 'N/A';
+  const riskStr = deal.risk ? deal.risk.toUpperCase() : 'N/A';
+  const verdictStr = deal.verdict ? deal.verdict.replace(/_/g, ' ') : 'N/A';
+  const leadStr = deal.lead_name || 'Unassigned';
+
+  const lines = [
+    `BOARD REVIEW — ${gateName}`,
+    '',
+    `Deal: ${deal.name}`,
+    `Company: ${deal.company}`,
+    `Value: ${valueStr}`,
+    `Score: ${scoreStr} | Risk: ${riskStr} | Verdict: ${verdictStr}`,
+    `Lead: ${leadStr}`,
+    '',
+    gateProgress,
+    '',
+    `Summary:`,
+    summary,
+    '',
+    'Reply to this message with:',
+    'proceed / stop / amend',
+    '',
+    'Votes needed: 5 of 8 to proceed',
+  ];
+
+  return lines.join('\n');
+}
+
+export function formatVoteTallyReply(
+  voterName: string,
+  vote: string,
+  tally: { proceed: number; stop: number; amend: number },
+  votesRequired: number
+): string {
+  return [
+    `${voterName} voted: ${vote}`,
+    `Tally: ${tally.proceed} proceed / ${tally.stop} stop / ${tally.amend} amend (${votesRequired} needed)`,
+  ].join('\n');
+}
+
+export function formatBoardResolution(
+  status: 'approved' | 'rejected' | 'amended',
+  dealName: string,
+  gate: number,
+  tally: { proceed: number; stop: number; amend: number }
+): string {
+  if (status === 'approved') {
+    return `APPROVED: "${dealName}" passed G${gate} board review (${tally.proceed} proceed, ${tally.stop} stop, ${tally.amend} amend). Deal advances.`;
+  } else if (status === 'rejected') {
+    return `BLOCKED: "${dealName}" G${gate} board review rejected (${tally.proceed} proceed, ${tally.stop} stop, ${tally.amend} amend). Deal held.`;
+  } else {
+    return `AMEND REQUESTED: "${dealName}" G${gate} board review needs amendments (${tally.proceed} proceed, ${tally.stop} stop, ${tally.amend} amend).`;
+  }
 }

@@ -36,12 +36,12 @@ export const TOOLS: Tool[] = [
   {
     name: 'send_telegram',
     description:
-      'Send a message to the Telegram review board channel. Used for board gates (G3, G5) to request proceed/stop/amend decisions.',
+      'Send a board review request to the Telegram executive group for voting. Used at board gates (G3, G5). The system auto-formats the message with deal details, gate progress, and voting instructions. You provide a 3-4 sentence summary covering deal value, key risks, solution fit, and your recommendation. Requires 5/8 executives to vote proceed.',
     input_schema: {
       type: 'object' as const,
       properties: {
         deal_id: { type: 'string', description: 'UUID of the deal' },
-        message: { type: 'string', description: 'Message text to send to the board' },
+        message: { type: 'string', description: 'AI-generated 3-4 sentence summary of the deal for the board. Include key decision factors, risks, and your recommendation.' },
         gate: { type: 'number', description: 'Gate number this board review is for (3 or 5)' },
       },
       required: ['deal_id', 'message', 'gate'],

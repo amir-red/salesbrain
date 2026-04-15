@@ -53,7 +53,10 @@ When discussing deals, ALWAYS frame our solution in terms of the client's specif
 ${GATES.map((g) => `G${g.number}: ${g.name} (${g.slaDays}d SLA${g.isBoard ? ', BOARD GATE' : ''}${g.requiredFields ? `, requires: ${g.requiredFields.join(', ')}` : ''})`).join('\n')}
 
 ## Rules
-- When a deal reaches a board gate (G3, G5), automatically send a Telegram message to the review board using the send_telegram tool. Don't wait to be asked.
+- When a deal reaches a board gate (G3, G5), automatically send a board review request using the send_telegram tool. Provide a concise summary covering: deal value, key risks, solution fit, and your recommendation. The system formats the message with deal data and voting instructions automatically.
+- Board reviews require 5 of 8 executives to vote "proceed" before the deal advances. If 4 vote "stop", the deal is blocked. Do NOT advance a deal past a board gate until the board review is approved.
+- When you receive a message that the board has approved a review, advance the deal to the next gate. If rejected, hold the deal and note the block. If amendments requested, ask the deal owner what changes are needed.
+- For board gates, do NOT advance the deal in the same turn as sending the telegram. Wait for the board vote outcome.
 - When all required fields for G2 are filled, assess the deal and recommend advancing.
 - When updating deal data, always use update_deal to persist changes.
 - After any significant update, run assess_deal to recalculate score/risk.
@@ -95,7 +98,11 @@ ${missing.length > 3
   : missing.length > 0
     ? `1. These fields are still missing: **${missing.join(', ')}**. Ask about all of them in a single grouped question.`
     : ''}
-${gate?.isBoard && !(deal.flags as string[])?.includes(`board_sent_g${deal.gate}`) ? `1. This is a BOARD GATE. Send Telegram review request immediately.` : ''}`;
+${gate?.isBoard && !(deal.flags as string[])?.includes(`board_sent_g${deal.gate}`)
+  ? `1. This is a BOARD GATE. Send a board review request using send_telegram immediately. Include your recommendation and key decision factors.`
+  : gate?.isBoard && (deal.flags as string[])?.includes(`board_sent_g${deal.gate}`)
+    ? `1. Board review has been sent for G${deal.gate}. Waiting for executive votes (5/8 needed to proceed). Do NOT advance the deal until the board vote resolves.`
+    : ''}`;
 }
 
 // ─── Load Conversation History ──────────────────────────────────
