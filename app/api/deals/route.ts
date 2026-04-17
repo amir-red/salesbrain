@@ -17,13 +17,15 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
+    // Admins see all deals, regular users see only their own
+    const isAdmin = session.role === 'admin';
     const { rows } = await pool.query(
       `SELECT d.*, u.name as lead_name, u.email as lead_email
        FROM deals d
        LEFT JOIN users u ON u.id = d.lead_id
-       WHERE d.user_id = $1
+       ${isAdmin ? '' : 'WHERE d.user_id = $1'}
        ORDER BY d.updated_at DESC LIMIT 100`,
-      [session.userId]
+      isAdmin ? [] : [session.userId]
     );
     return NextResponse.json(rows);
   } catch (err) {

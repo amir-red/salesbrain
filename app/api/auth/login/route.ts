@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   const { email, password } = parsed.data;
 
   const { rows } = await pool.query(
-    'SELECT id, email, name, password_hash FROM users WHERE email = $1',
+    'SELECT id, email, name, role, password_hash FROM users WHERE email = $1',
     [email]
   );
 
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
   }
 
-  await setSession({ userId: user.id, email: user.email, name: user.name });
+  await setSession({ userId: user.id, email: user.email, name: user.name, role: user.role || 'user' });
 
-  return NextResponse.json({ id: user.id, email: user.email, name: user.name });
+  return NextResponse.json({ id: user.id, email: user.email, name: user.name, role: user.role || 'user' });
 }

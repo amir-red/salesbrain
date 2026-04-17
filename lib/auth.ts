@@ -6,6 +6,7 @@ export interface SessionData {
   userId: string;
   email: string;
   name: string;
+  role: string;
 }
 
 export const sessionOptions: SessionOptions = {
@@ -24,7 +25,7 @@ export async function getSession(): Promise<SessionData | null> {
   const cookieStore = await cookies();
   const session = await getIronSession<SessionData>(cookieStore, sessionOptions);
   if (!session.userId) return null;
-  return { userId: session.userId, email: session.email, name: session.name };
+  return { userId: session.userId, email: session.email, name: session.name, role: session.role || 'user' };
 }
 
 export async function setSession(data: SessionData): Promise<void> {
@@ -33,6 +34,7 @@ export async function setSession(data: SessionData): Promise<void> {
   session.userId = data.userId;
   session.email = data.email;
   session.name = data.name;
+  session.role = data.role;
   await session.save();
 }
 

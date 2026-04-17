@@ -38,14 +38,14 @@ export async function POST(req: NextRequest) {
   const passwordHash = await hashPassword(password);
 
   const { rows } = await pool.query(
-    `INSERT INTO users (name, email, password_hash)
-     VALUES ($1, $2, $3)
-     RETURNING id, email, name`,
+    `INSERT INTO users (name, email, password_hash, role)
+     VALUES ($1, $2, $3, 'user')
+     RETURNING id, email, name, role`,
     [name, email, passwordHash]
   );
 
   const user = rows[0];
-  await setSession({ userId: user.id, email: user.email, name: user.name });
+  await setSession({ userId: user.id, email: user.email, name: user.name, role: user.role || 'user' });
 
-  return NextResponse.json({ id: user.id, email: user.email, name: user.name }, { status: 201 });
+  return NextResponse.json({ id: user.id, email: user.email, name: user.name, role: user.role }, { status: 201 });
 }

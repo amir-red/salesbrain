@@ -35,7 +35,9 @@ export async function POST(req: NextRequest) {
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        for await (const event of runAgent(deal_id, message, session.userId)) {
+        // Admins can chat with any deal (no userId scoping)
+        const agentUserId = session.role === 'admin' ? undefined : session.userId;
+        for await (const event of runAgent(deal_id, message, agentUserId)) {
           controller.enqueue(encoder.encode(JSON.stringify(event) + '\n'));
         }
       } catch (err) {
