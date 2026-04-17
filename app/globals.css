@@ -59,3 +59,9 @@ body {
 .markdown-body strong {
   color: #fff;
 }
+
+/* Mic pulse animation */
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  50% { opacity: 0.85; box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+}

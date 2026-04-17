@@ -37,6 +37,7 @@ interface CurrentUser {
   userId: string;
   email: string;
   name: string;
+  role: string;
 }
 
 function ScoreRing({ score }: { score: number | null }) {
@@ -107,7 +108,8 @@ export default function DealViewPage() {
     );
   }
 
-  const isOwner = currentUser?.userId === deal.user_id;
+  const isAdmin = currentUser?.role === 'admin';
+  const isOwner = currentUser?.userId === deal.user_id || isAdmin;
   const gate = GATES[deal.gate - 1];
   const fields = deal.fields || {};
   const fieldKeys = Object.keys(fields);

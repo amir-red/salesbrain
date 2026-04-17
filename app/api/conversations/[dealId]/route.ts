@@ -9,10 +9,13 @@ export async function GET(
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  // Verify the deal belongs to this user
+  // Verify access: admins can see all, regular users only their own deals
+  const isAdmin = session.role === 'admin';
   const { rows: dealRows } = await pool.query(
-    'SELECT id FROM deals WHERE id = $1 AND user_id = $2',
-    [params.dealId, session.userId]
+    isAdmin
+      ? 'SELECT id FROM deals WHERE id = $1'
+      : 'SELECT id FROM deals WHERE id = $1 AND user_id = $2',
+    isAdmin ? [params.dealId] : [params.dealId, session.userId]
   );
   if (dealRows.length === 0) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });

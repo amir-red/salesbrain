@@ -134,8 +134,74 @@ export default function Chat({ dealId, deal, onDealUpdate }: ChatProps) {
   const [messages, setMessages] = useState<MessageData[]>([]);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
+  const [speechSupported, setSpeechSupported] = useState(false);
+
+  // Initialize Web Speech API
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const W = window as any;
+    const SpeechRecognitionClass = W.SpeechRecognition || W.webkitSpeechRecognition;
+    if (!SpeechRecognitionClass) return;
+
+    setSpeechSupported(true);
+    const recognition = new SpeechRecognitionClass();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    let finalTranscript = '';
+
+    recognition.onresult = (event: { resultIndex: number; results: { length: number; [i: number]: { isFinal: boolean; 0: { transcript: string } } } }) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript + ' ';
+        } else {
+          interim = transcript;
+        }
+      }
+      setInput(finalTranscript + interim);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.onerror = (event: { error: string }) => {
+      console.error('[Speech] Error:', event.error);
+      setIsListening(false);
+    };
+
+    recognitionRef.current = recognition;
+
+    return () => {
+      recognition.abort();
+    };
+  }, []);
+
+  const toggleListening = useCallback(() => {
+    const recognition = recognitionRef.current;
+    if (!recognition) return;
+
+    if (isListening) {
+      recognition.stop();
+      setIsListening(false);
+    } else {
+      // Reset for new recording session
+      setIsListening(true);
+      try {
+        recognition.start();
+      } catch {
+        // Already started — ignore
+      }
+    }
+  }, [isListening]);
 
   // Load conversation history when deal changes
   useEffect(() => {
@@ -361,6 +427,27 @@ export default function Chat({ dealId, deal, onDealUpdate }: ChatProps) {
             className="flex-1 bg-transparent resize-none outline-none text-sm py-2 px-2"
             style={{ color: 'var(--text)', minHeight: '40px', maxHeight: '120px' }}
           />
+          {/* Mic button */}
+          {speechSupported && (
+            <button
+              onClick={toggleListening}
+              disabled={!dealId || isStreaming}
+              className="p-2 rounded-lg transition-all"
+              style={{
+                background: isListening ? 'var(--red)' : 'transparent',
+                color: isListening ? '#fff' : 'var(--text-muted)',
+                animation: isListening ? 'pulse 1.5s infinite' : 'none',
+              }}
+              title={isListening ? 'Stop recording' : 'Voice input'}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+                <line x1="8" y1="23" x2="16" y2="23" />
+              </svg>
+            </button>
+          )}
           <button
             onClick={sendMessage}
             disabled={!dealId || isStreaming || !input.trim()}
@@ -374,7 +461,7 @@ export default function Chat({ dealId, deal, onDealUpdate }: ChatProps) {
           </button>
         </div>
         <p className="text-xs mt-1 text-center" style={{ color: 'var(--text-muted)' }}>
-          Enter to send, Shift+Enter for newline
+          {isListening ? 'Listening... click mic to stop' : 'Enter to send, Shift+Enter for newline'}
         </p>
       </div>
     </div>
