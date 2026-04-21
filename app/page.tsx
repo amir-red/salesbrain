@@ -27,6 +27,7 @@ interface Deal {
   fields: Record<string, unknown>;
   gate_entered_at: string;
   created_at: string;
+  deal_type: 'sales' | 'grant';
 }
 
 type MobileTab = 'deals' | 'chat' | 'details';
@@ -36,6 +37,7 @@ export default function Home() {
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [showNewDeal, setShowNewDeal] = useState(false);
+  const [newDealType, setNewDealType] = useState<'sales' | 'grant'>('sales');
   const [newDealName, setNewDealName] = useState('');
   const [newDealCompany, setNewDealCompany] = useState('');
   const [loading, setLoading] = useState(true);
@@ -88,7 +90,11 @@ export default function Home() {
       const res = await fetch('/api/deals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newDealName.trim(), company: newDealCompany.trim() }),
+        body: JSON.stringify({
+          name: newDealName.trim(),
+          company: newDealCompany.trim(),
+          deal_type: newDealType,
+        }),
       });
       if (res.ok) {
         const deal = await res.json();
@@ -97,6 +103,7 @@ export default function Home() {
         setShowNewDeal(false);
         setNewDealName('');
         setNewDealCompany('');
+        setNewDealType('sales');
         setMobileTab('chat');
       }
     } catch {
@@ -147,17 +154,40 @@ export default function Home() {
 
       {showNewDeal && (
         <div className="px-3 pb-3 space-y-2">
+          {/* Deal type selector */}
+          <div className="flex gap-1 p-0.5 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+            <button
+              onClick={() => setNewDealType('sales')}
+              className="flex-1 py-1.5 rounded text-xs font-medium transition-colors"
+              style={{
+                background: newDealType === 'sales' ? 'var(--accent)' : 'transparent',
+                color: newDealType === 'sales' ? '#fff' : 'var(--text-muted)',
+              }}
+            >
+              Sales (Mate)
+            </button>
+            <button
+              onClick={() => setNewDealType('grant')}
+              className="flex-1 py-1.5 rounded text-xs font-medium transition-colors"
+              style={{
+                background: newDealType === 'grant' ? 'var(--accent)' : 'transparent',
+                color: newDealType === 'grant' ? '#fff' : 'var(--text-muted)',
+              }}
+            >
+              Grant (ChipChip)
+            </button>
+          </div>
           <input
             value={newDealName}
             onChange={(e) => setNewDealName(e.target.value)}
-            placeholder="Deal name"
+            placeholder={newDealType === 'grant' ? 'Opportunity name' : 'Deal name'}
             className="w-full px-3 py-2 rounded-lg text-sm outline-none"
             style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }}
           />
           <input
             value={newDealCompany}
             onChange={(e) => setNewDealCompany(e.target.value)}
-            placeholder="Company"
+            placeholder={newDealType === 'grant' ? 'Donor / Funding body' : 'Company'}
             className="w-full px-3 py-2 rounded-lg text-sm outline-none"
             style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }}
           />
@@ -192,9 +222,19 @@ export default function Home() {
             }}
           >
             <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm font-medium">{deal.name}</p>
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{deal.company}</p>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  {deal.deal_type === 'grant' && (
+                    <span
+                      className="text-[8px] px-1 py-0.5 rounded font-bold flex-shrink-0"
+                      style={{ background: 'var(--green)', color: '#fff' }}
+                    >
+                      GRANT
+                    </span>
+                  )}
+                  <p className="text-sm font-medium truncate">{deal.name}</p>
+                </div>
+                <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{deal.company}</p>
               </div>
               <span
                 className="text-xs px-1.5 py-0.5 rounded"

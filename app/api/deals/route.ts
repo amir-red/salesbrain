@@ -10,6 +10,7 @@ const CreateDealSchema = z.object({
   contact_name: z.string().optional(),
   contact_email: z.string().email().optional(),
   value: z.number().optional(),
+  deal_type: z.enum(['sales', 'grant']).default('sales'),
 });
 
 export async function GET() {
@@ -50,15 +51,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Validation failed', details: parsed.error.issues }, { status: 400 });
   }
 
-  const { name, company, contact_name, contact_email, value } = parsed.data;
-  const missing = getMissingFields(1, {});
+  const { name, company, contact_name, contact_email, value, deal_type } = parsed.data;
+  const missing = getMissingFields(1, {}, deal_type);
 
   try {
     const { rows } = await pool.query(
-      `INSERT INTO deals (name, company, contact_name, contact_email, value, missing, user_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO deals (name, company, contact_name, contact_email, value, missing, user_id, deal_type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [name, company, contact_name || null, contact_email || null, value || null, missing, session.userId]
+      [name, company, contact_name || null, contact_email || null, value || null, missing, session.userId, deal_type]
     );
     return NextResponse.json(rows[0], { status: 201 });
   } catch (err) {
