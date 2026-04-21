@@ -74,10 +74,21 @@ function DealCard({ deal }: { deal: Deal }) {
   );
 }
 
-export default function FilterBar({ gates, currentUserId }: { gates: Gate[]; currentUserId: string }) {
+type PipelineTab = 'sales' | 'grant';
+
+interface FilterBarProps {
+  salesGates: Gate[];
+  grantGates: Gate[];
+  currentUserId: string;
+}
+
+export default function FilterBar({ salesGates, grantGates, currentUserId }: FilterBarProps) {
+  const [pipeline, setPipeline] = useState<PipelineTab>('sales');
   const [filter, setFilter] = useState<typeof FILTERS[number]>('All');
 
-  const filteredGates = gates.map((g) => ({
+  const activeGates = pipeline === 'sales' ? salesGates : grantGates;
+
+  const filteredGates = activeGates.map((g) => ({
     ...g,
     deals: g.deals.filter((d) => {
       if (filter === 'All') return true;
@@ -88,9 +99,38 @@ export default function FilterBar({ gates, currentUserId }: { gates: Gate[]; cur
     }),
   }));
 
+  const salesCount = salesGates.reduce((sum, g) => sum + g.deals.length, 0);
+  const grantCount = grantGates.reduce((sum, g) => sum + g.deals.length, 0);
+
   return (
     <div>
-      {/* Filter tabs */}
+      {/* Pipeline tabs */}
+      <div className="flex gap-2 mb-3">
+        <button
+          onClick={() => setPipeline('sales')}
+          className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          style={{
+            background: pipeline === 'sales' ? 'var(--accent)' : 'var(--bg-card)',
+            color: pipeline === 'sales' ? '#fff' : 'var(--text-muted)',
+            border: `1px solid ${pipeline === 'sales' ? 'var(--accent)' : 'var(--border)'}`,
+          }}
+        >
+          Sales ({salesCount})
+        </button>
+        <button
+          onClick={() => setPipeline('grant')}
+          className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          style={{
+            background: pipeline === 'grant' ? 'var(--green)' : 'var(--bg-card)',
+            color: pipeline === 'grant' ? '#fff' : 'var(--text-muted)',
+            border: `1px solid ${pipeline === 'grant' ? 'var(--green)' : 'var(--border)'}`,
+          }}
+        >
+          Grants ({grantCount})
+        </button>
+      </div>
+
+      {/* Filter chips */}
       <div className="flex gap-2 mb-4">
         {FILTERS.map((f) => (
           <button
@@ -109,7 +149,7 @@ export default function FilterBar({ gates, currentUserId }: { gates: Gate[]; cur
       </div>
 
       {/* Kanban columns */}
-      <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: 'calc(100vh - 140px)' }}>
+      <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: 'calc(100vh - 200px)' }}>
         {filteredGates.map((g) => (
           <div key={g.number} className="flex-shrink-0 w-56 flex flex-col">
             {/* Column header */}

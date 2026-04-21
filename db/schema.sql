@@ -10,11 +10,12 @@ CREATE TABLE deals (
   contact_name  TEXT,
   contact_email TEXT,
   contact_phone TEXT,
-  gate          INTEGER NOT NULL DEFAULT 1 CHECK (gate BETWEEN 1 AND 9),
+  gate          INTEGER NOT NULL DEFAULT 1 CHECK (gate BETWEEN 1 AND 10),
   gate_entered_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deal_type     TEXT NOT NULL DEFAULT 'sales' CHECK (deal_type IN ('sales', 'grant')),
   score         INTEGER CHECK (score BETWEEN 0 AND 100),
   risk          TEXT CHECK (risk IN ('low', 'medium', 'high', 'critical')),
-  verdict       TEXT CHECK (verdict IN ('STRONG', 'PROCEED_WITH_CAUTION', 'WEAK', 'WALK_AWAY')),
+  verdict       TEXT CHECK (verdict IN ('STRONG', 'PROCEED_WITH_CAUTION', 'WEAK', 'WALK_AWAY', 'STRONG_FIT', 'WEAK_FIT', 'DO_NOT_PURSUE')),
   fields        JSONB NOT NULL DEFAULT '{}'::jsonb,
   missing       TEXT[] NOT NULL DEFAULT '{}',
   flags         TEXT[] NOT NULL DEFAULT '{}',
@@ -30,6 +31,7 @@ CREATE TABLE deals (
 
 CREATE INDEX idx_deals_lead_id ON deals (lead_id);
 CREATE INDEX idx_deals_user_id ON deals (user_id);
+CREATE INDEX idx_deals_type ON deals (deal_type);
 
 -- Conversations: chat history per deal
 CREATE TABLE conversations (
