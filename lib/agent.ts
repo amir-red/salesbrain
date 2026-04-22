@@ -91,6 +91,24 @@ When discussing ${dealType === 'grant' ? 'grants' : 'deals'}, ALWAYS frame in te
 ## ${pipelineTitle}
 ${pipeline.map((g) => `G${g.number}: ${g.name} (${g.slaDays}d SLA${g.isBoard ? ', BOARD GATE' : ''}${g.requiredFields ? `, requires: ${g.requiredFields.join(', ')}` : ''})`).join('\n')}
 
+## Pre-deal Prospecting Pipeline
+Before a deal exists at G1, prospects move through 10 pre-deal stages: P0_IMPORTED → P1_ENRICHED → P2_ICP_CHECKED → P3_RESEARCH_READY → P4_OUTREACH_DRAFTED → P5_SENT → P6_REPLIED → P7_QUALIFIED (converts to deal) / P8_DISQUALIFIED / P9_ARCHIVED.
+
+Use the prospecting tools (create_or_import_prospect, enrich_prospect, score_prospect_fit, research_company_from_url, generate_research_brief, draft_outreach_message, classify_outreach_reply, convert_prospect_to_deal, archive_prospect) when the user asks to prospect, research, or reach out to companies that are NOT yet deals. When a prospect replies positively (interested/meeting_ready), convert to a sales deal at G1 using convert_prospect_to_deal — don't create a deal manually.
+
+For cold prospects with a website but no research yet:
+1. Call research_company_from_url first — it fetches the site, writes a structured brief, updates the account with industry / company_size / location, and advances the prospect to P3_RESEARCH_READY.
+2. THEN draft cold outreach using draft_outreach_message with step_type='first_touch'. Reference specifics from the research brief only — do not invent facts.
+3. Deliverability is tight: the system enforces a per-user daily send cap (default 50), a 3-minute throttle per recipient domain, and auto-appends an unsubscribe footer. Don't spam. Quality over quantity.
+
+Outreach draft rules:
+- Short, credible, founder-led tone. No hype, no exaggeration, no fake personalization.
+- Reference specifics from research_brief only when genuinely supported. Don't invent facts.
+- Supported types: first_touch, follow_up_1, follow_up_2, breakup.
+- BEFORE drafting, check if the contact has a communication_profile (learned from their past messages). If yes, MATCH that tone exactly: formality, typical length, greeting style, sign-off, quirks. If no profile exists but the contact has imported_messages, call analyze_communication_style first. If the contact is new with no history, use the persona_type or seniority to infer formality.
+- Always save as draft — a human must approve before send.
+- Always save as draft — a human must approve before send.
+
 ## Rules
 - When a deal reaches a board gate (sales: G3/G5, grants: G7/G9), automatically send a board review request using the send_telegram tool. Provide a concise summary covering: ${dealType === 'grant' ? 'strategic alignment, co-funding posture, compliance burden, and your recommendation' : 'deal value, key risks, solution fit, and your recommendation'}. The system formats the message automatically.
 - Board reviews require 5 of 8 executives to vote "proceed" before the deal advances. If 4 vote "stop", the deal is blocked. Do NOT advance a deal past a board gate until the board review is approved.
@@ -417,7 +435,7 @@ export async function* runAgent(
 
         let result: Record<string, unknown>;
         try {
-          result = await executeTool(block.name, toolInput);
+          result = await executeTool(block.name, toolInput, { userId });
         } catch (err) {
           result = { error: err instanceof Error ? err.message : 'Tool execution failed' };
         }
