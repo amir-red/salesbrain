@@ -113,6 +113,24 @@ export async function GET(req: NextRequest) {
       if (count > 0) lines.push(`  G${g.number} ${g.name}: ${count}`);
     }
 
+    // ─── Prospecting summary ──────────────────────────────
+    try {
+      const [sentToday, draftsHighFit, repliesNeedingReview, readyToConvert] = await Promise.all([
+        pool.query(`SELECT COUNT(*)::int as n FROM outreach_messages WHERE status = 'sent' AND sent_at >= now() - interval '24 hours'`),
+        pool.query(`SELECT COUNT(*)::int as n FROM outreach_messages om JOIN prospects p ON p.id = om.prospect_id WHERE om.status = 'draft' AND p.icp_score >= 60`),
+        pool.query(`SELECT COUNT(*)::int as n FROM prospects WHERE stage = 'P6_REPLIED'`),
+        pool.query(`SELECT COUNT(*)::int as n FROM prospects WHERE reply_status IN ('interested','meeting_ready') AND converted_deal_id IS NULL`),
+      ]);
+      lines.push('');
+      lines.push('PROSPECTING:');
+      lines.push(`  Outreach sent (24h): ${sentToday.rows[0]?.n || 0}`);
+      lines.push(`  High-fit drafts pending approval: ${draftsHighFit.rows[0]?.n || 0}`);
+      lines.push(`  Replies needing review: ${repliesNeedingReview.rows[0]?.n || 0}`);
+      lines.push(`  Prospects ready to convert: ${readyToConvert.rows[0]?.n || 0}`);
+    } catch (err) {
+      console.error('Prospecting digest section failed:', err);
+    }
+
     const message = lines.join('\n');
 
     // Send to Telegram (consolidated message to board channel)

@@ -1,6 +1,7 @@
 import type { Tool } from '@anthropic-ai/sdk/resources/messages';
+import { PROSPECT_TOOLS } from './prospect-tools';
 
-export const TOOLS: Tool[] = [
+const DEAL_TOOLS: Tool[] = [
   {
     name: 'assess_deal',
     description:
@@ -171,3 +172,6 @@ export const TOOLS: Tool[] = [
     },
   },
 ];
+
+// Union of deal tools + prospect tools. The agent sees all of them at once.
+export const TOOLS: Tool[] = [...DEAL_TOOLS, ...PROSPECT_TOOLS];

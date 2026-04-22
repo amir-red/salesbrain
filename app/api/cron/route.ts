@@ -4,6 +4,7 @@ import { sendEmail } from '@/lib/email';
 import { runAgent } from '@/lib/agent';
 import { getSLAStatus } from '@/lib/gates';
 import { computeDecayScore } from '@/lib/decay';
+import { exec_send_outreach_message } from '@/lib/prospect-executors';
 
 export async function GET(req: NextRequest) {
   // Auth check
@@ -12,7 +13,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const stats = { followups: 0, sla_alerts: 0, decay_alerts: 0, errors: 0 };
+  const stats = { followups: 0, sla_alerts: 0, decay_alerts: 0, outreach_sent: 0, prospect_stagnation: 0, errors: 0 };
 
   // ─── 1. Process due followups ───────────────────────────────
 
@@ -137,6 +138,65 @@ export async function GET(req: NextRequest) {
     }
   } catch (err) {
     console.error('Decay detection failed:', err);
+    stats.errors++;
+  }
+
+  // ─── 4. Scheduled outreach delivery ─────────────────────────
+
+  try {
+    const { rows: dueOutreach } = await pool.query(
+      `SELECT id FROM outreach_messages
+       WHERE status = 'scheduled' AND scheduled_for <= now()
+       ORDER BY scheduled_for ASC LIMIT 50`
+    );
+    for (const msg of dueOutreach) {
+      try {
+        const result = await exec_send_outreach_message({ message_id: msg.id });
+        if (result.sent) stats.outreach_sent++;
+      } catch (err) {
+        console.error(`Outreach send failed for ${msg.id}:`, err);
+        stats.errors++;
+      }
+    }
+  } catch (err) {
+    console.error('Scheduled outreach check failed:', err);
+    stats.errors++;
+  }
+
+  // ─── 5. Prospect stagnation flagging ────────────────────────
+
+  try {
+    // High-fit prospects (icp_score >= 60) that have been in a non-terminal stage
+    // for 10+ days with no next_action_at set — flag with an event
+    const { rows: stagnant } = await pool.query(
+      `SELECT id, stage FROM prospects
+       WHERE stage NOT IN ('P7_QUALIFIED','P8_DISQUALIFIED','P9_ARCHIVED')
+         AND icp_score >= 60
+         AND (last_contacted_at IS NULL OR last_contacted_at < now() - interval '10 days')
+         AND (next_action_at IS NULL OR next_action_at < now() - interval '3 days')
+         AND NOT EXISTS (
+           SELECT 1 FROM prospect_events
+           WHERE prospect_id = prospects.id
+             AND event_type = 'stagnation_alert'
+             AND created_at > now() - interval '3 days'
+         )
+       LIMIT 50`
+    );
+    for (const p of stagnant) {
+      try {
+        await pool.query(
+          `INSERT INTO prospect_events (prospect_id, event_type, reason, triggered_by)
+           VALUES ($1, 'stagnation_alert', $2, 'cron')`,
+          [p.id, `High-fit prospect idle for 10+ days at ${p.stage}`]
+        );
+        stats.prospect_stagnation++;
+      } catch (err) {
+        console.error(`Stagnation flag failed for ${p.id}:`, err);
+        stats.errors++;
+      }
+    }
+  } catch (err) {
+    console.error('Prospect stagnation check failed:', err);
     stats.errors++;
   }
 

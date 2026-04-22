@@ -3,6 +3,7 @@ import pool from './db';
 import { sendTelegramMessage, formatBoardReviewMessage } from './telegram';
 import { sendEmail } from './email';
 import { getMissingFields, getGate } from './gates';
+import { executeProspectTool, PROSPECT_TOOL_NAMES } from './prospect-executors';
 
 const anthropic = new Anthropic();
 
@@ -389,8 +390,14 @@ Be specific — reference actual data from the deal, not generic advice.`,
 
 export async function executeTool(
   name: string,
-  input: Record<string, unknown>
+  input: Record<string, unknown>,
+  context?: { userId?: string }
 ): Promise<Record<string, unknown>> {
+  // Route prospecting tools to the prospect-executors module
+  if (PROSPECT_TOOL_NAMES.has(name)) {
+    return executeProspectTool(name, input, context);
+  }
+
   switch (name) {
     case 'assess_deal':
       return exec_assess_deal(input as Parameters<typeof exec_assess_deal>[0]);
