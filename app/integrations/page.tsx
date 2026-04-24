@@ -35,11 +35,17 @@ function IntegrationsPageInner() {
 
   const refresh = useCallback(async () => {
     try {
-      // Fetch connection status via oauth_tokens indirectly — just try a sync preflight.
-      // Simpler: call the sync endpoint with 0 work and see if it errors with "Not connected"
-      // But that has side effects; easier to show a "try to connect" UI always.
-      // For now, use a simple check: if URL param says connected, assume connected.
-      if (urlConnected === 'google') setConnected((c) => ({ ...c, google: { account_email: null } }));
+      // Check actual connection state from the DB so it persists across refreshes.
+      const statusRes = await fetch('/api/integrations/status');
+      if (statusRes.ok) {
+        const { providers } = await statusRes.json();
+        setConnected(providers || {});
+      } else if (urlConnected === 'google') {
+        // Fallback: we just came back from OAuth callback but status call failed;
+        // show as connected optimistically.
+        setConnected((c) => ({ ...c, google: { account_email: null } }));
+      }
+
       const res = await fetch('/api/contacts');
       if (res.ok) {
         const data = await res.json();
@@ -124,7 +130,11 @@ function IntegrationsPageInner() {
                 <h2 className="text-sm font-semibold">Google (Gmail + Contacts)</h2>
                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Import contacts from Google + sync recent emails</p>
               </div>
-              {connected.google && <span className="text-[10px] px-2 py-1 rounded" style={{ background: `var(--green)20`, color: 'var(--green)' }}>Connected</span>}
+              {connected.google && (
+                <span className="text-[10px] px-2 py-1 rounded" style={{ background: `var(--green)20`, color: 'var(--green)' }}>
+                  Connected{connected.google.account_email ? ` · ${connected.google.account_email}` : ''}
+                </span>
+              )}
             </div>
             {!connected.google ? (
               <a href="/api/integrations/google/connect" className="block px-3 py-2 rounded-lg text-sm text-center font-medium" style={{ background: 'var(--accent)', color: '#fff' }}>
