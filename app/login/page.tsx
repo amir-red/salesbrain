@@ -99,6 +99,12 @@ export default function LoginPage() {
           >
             {loading ? 'Signing in...' : 'Sign in'}
           </button>
+
+          <div className="text-center">
+            <Link href="/forgot-password" className="text-xs hover:underline" style={{ color: 'var(--text-muted)' }}>
+              Forgot password?
+            </Link>
+          </div>
         </form>
 
         <p className="text-center text-sm mt-6" style={{ color: 'var(--text-muted)' }}>
