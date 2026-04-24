@@ -109,6 +109,18 @@ CREATE TABLE board_votes (
 
 CREATE INDEX idx_board_votes_decision ON board_votes(board_decision_id);
 
+-- Password reset tokens (hashed, single-use, 1h expiry)
+CREATE TABLE password_resets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_password_resets_user ON password_resets(user_id);
+CREATE INDEX idx_password_resets_token_hash ON password_resets(token_hash);
+
 -- Updated_at trigger
 CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER AS $$
