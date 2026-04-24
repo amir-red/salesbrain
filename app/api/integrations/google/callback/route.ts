@@ -3,22 +3,40 @@ import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { exchangeCodeForToken, getGoogleUserEmail } from '@/lib/google-oauth';
 
+/**
+ * Build an absolute URL anchored at the PUBLIC origin, not the internal Node
+ * bind (localhost:3002). Caddy forwards X-Forwarded-Host/Proto — use them,
+ * otherwise req.url would route redirects back to the internal port.
+ */
+function publicUrl(req: NextRequest, path: string): URL {
+  // NEXT_PUBLIC_APP_URL is the most reliable source when configured.
+  const envBase = process.env.NEXT_PUBLIC_APP_URL;
+  if (envBase) {
+    return new URL(path, envBase);
+  }
+  const forwardedHost = req.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
+  const host = forwardedHost || req.headers.get('host') || req.nextUrl.host;
+  const forwardedProto = req.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
+  const proto = forwardedProto || req.nextUrl.protocol.replace(':', '') || 'https';
+  return new URL(path, `${proto}://${host}`);
+}
+
 export async function GET(req: NextRequest) {
   const session = await getSession();
-  if (!session) return NextResponse.redirect(new URL('/login', req.url));
+  if (!session) return NextResponse.redirect(publicUrl(req, '/login'));
 
   const code = req.nextUrl.searchParams.get('code');
   const state = req.nextUrl.searchParams.get('state');
   const error = req.nextUrl.searchParams.get('error');
 
   if (error) {
-    return NextResponse.redirect(new URL(`/integrations?error=${encodeURIComponent(error)}`, req.url));
+    return NextResponse.redirect(publicUrl(req, `/integrations?error=${encodeURIComponent(error)}`));
   }
   if (!code) {
-    return NextResponse.redirect(new URL('/integrations?error=missing_code', req.url));
+    return NextResponse.redirect(publicUrl(req, '/integrations?error=missing_code'));
   }
   if (state !== session.userId) {
-    return NextResponse.redirect(new URL('/integrations?error=invalid_state', req.url));
+    return NextResponse.redirect(publicUrl(req, '/integrations?error=invalid_state'));
   }
 
   try {
@@ -46,11 +64,11 @@ export async function GET(req: NextRequest) {
       ]
     );
 
-    return NextResponse.redirect(new URL('/integrations?connected=google', req.url));
+    return NextResponse.redirect(publicUrl(req, '/integrations?connected=google'));
   } catch (err) {
     console.error('[Google OAuth callback]', err);
     return NextResponse.redirect(
-      new URL(`/integrations?error=${encodeURIComponent(err instanceof Error ? err.message : 'exchange_failed')}`, req.url)
+      publicUrl(req, `/integrations?error=${encodeURIComponent(err instanceof Error ? err.message : 'exchange_failed')}`)
     );
   }
 }
