@@ -93,11 +93,82 @@ function buildGateData(deals: DealRow[], gates: typeof SALES_GATES, colors: Reco
   });
 }
 
+// ─── Aggregates ─────────────────────────────────────────────────
+
+interface PipelineSummary {
+  active_count: number;
+  active_value_by_currency: Record<string, number>; // e.g. { USD: 1500000, EUR: 30000 }
+  weighted_value_by_currency: Record<string, number>; // value × score/100, for deals with score
+  won_count: number;
+  won_value_by_currency: Record<string, number>;
+  board_pending_count: number;
+  overdue_count: number;
+}
+
+function summarize(deals: DealRow[], gates: typeof SALES_GATES): PipelineSummary {
+  const finalGate = gates[gates.length - 1].number;
+  const summary: PipelineSummary = {
+    active_count: 0,
+    active_value_by_currency: {},
+    weighted_value_by_currency: {},
+    won_count: 0,
+    won_value_by_currency: {},
+    board_pending_count: 0,
+    overdue_count: 0,
+  };
+
+  const boardGateNumbers = new Set(gates.filter((g) => g.isBoard).map((g) => g.number));
+
+  for (const d of deals) {
+    const value = d.value ? Number(d.value) : 0;
+    const currency = d.currency || 'USD';
+    const days = Math.floor(Number(d.days_in_gate_raw));
+    const slaDays = gates.find((g) => g.number === d.gate)?.slaDays || 0;
+    const isWon = d.gate === finalGate;
+
+    if (isWon) {
+      summary.won_count++;
+      summary.won_value_by_currency[currency] = (summary.won_value_by_currency[currency] || 0) + value;
+    } else {
+      summary.active_count++;
+      summary.active_value_by_currency[currency] = (summary.active_value_by_currency[currency] || 0) + value;
+
+      // Weighted pipeline: value × (score/100) — only count deals with a score
+      if (d.score !== null && d.score !== undefined) {
+        summary.weighted_value_by_currency[currency] =
+          (summary.weighted_value_by_currency[currency] || 0) + value * (Number(d.score) / 100);
+      }
+
+      if (boardGateNumbers.has(d.gate)) summary.board_pending_count++;
+      if (slaDays > 0 && days > slaDays) summary.overdue_count++;
+    }
+  }
+
+  return summary;
+}
+
+function formatMoney(byCurrency: Record<string, number>): string {
+  const entries = Object.entries(byCurrency).filter(([, v]) => v > 0);
+  if (entries.length === 0) return '—';
+  // Show dominant currency first; if multiple, append the rest with their codes
+  entries.sort((a, b) => b[1] - a[1]);
+  const formatted = entries.map(([cur, val]) => {
+    const display = val >= 1_000_000
+      ? `${(val / 1_000_000).toFixed(2)}M`
+      : val >= 1_000
+        ? `${Math.round(val / 1_000)}K`
+        : Math.round(val).toLocaleString();
+    return `${cur} ${display}`;
+  });
+  return formatted.join(' · ');
+}
+
+// ─── Page ───────────────────────────────────────────────────────
+
 export default async function PipelinePage() {
   const userId = await getUserId();
   if (!userId) return null;
 
-  // Pipeline is org-wide — all deals visible to everyone
   const { rows: deals } = await pool.query<DealRow>(
     `SELECT d.id, d.name, d.company, d.gate, d.score, d.risk, d.value, d.currency,
      d.owner, d.gate_entered_at, d.lead_id, d.deal_type,
@@ -110,6 +181,9 @@ export default async function PipelinePage() {
 
   const salesDeals = deals.filter((d) => d.deal_type !== 'grant');
   const grantDeals = deals.filter((d) => d.deal_type === 'grant');
+
+  const salesSummary = summarize(salesDeals, SALES_GATES);
+  const grantSummary = summarize(grantDeals, GRANT_GATES);
 
   const salesGateData = buildGateData(salesDeals, SALES_GATES, SALES_GATE_COLORS);
   const grantGateData = buildGateData(grantDeals, GRANT_GATES, GRANT_GATE_COLORS);
@@ -124,6 +198,21 @@ export default async function PipelinePage() {
             {salesDeals.length} sales · {grantDeals.length} grants
           </p>
         </div>
+
+        {/* Pipeline value overview */}
+        <div className="p-4 grid grid-cols-2 gap-4 border-b" style={{ borderColor: 'var(--border)' }}>
+          <SummaryCard
+            label="Sales Pipeline"
+            accent="var(--accent)"
+            summary={salesSummary}
+          />
+          <SummaryCard
+            label="Grants Pipeline"
+            accent="var(--green)"
+            summary={grantSummary}
+          />
+        </div>
+
         <div className="p-4 overflow-x-auto flex-1">
           <FilterBar
             salesGates={salesGateData}
@@ -132,6 +221,63 @@ export default async function PipelinePage() {
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+function SummaryCard({ label, accent, summary }: { label: string; accent: string; summary: PipelineSummary }) {
+  const activeMoney = formatMoney(summary.active_value_by_currency);
+  const weightedMoney = formatMoney(summary.weighted_value_by_currency);
+  const wonMoney = formatMoney(summary.won_value_by_currency);
+
+  return (
+    <div className="rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderLeft: `3px solid ${accent}` }}>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-semibold">{label}</h2>
+        <span className="text-[10px] px-2 py-0.5 rounded" style={{ background: `${accent}20`, color: accent }}>
+          {summary.active_count} active
+        </span>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <Stat label="Total in play" value={activeMoney} highlight />
+        <Stat label="Weighted (×score)" value={weightedMoney} hint="Sum of value × score/100 for scored deals" />
+        <Stat
+          label="Won"
+          value={wonMoney}
+          sub={summary.won_count > 0 ? `${summary.won_count} closed` : undefined}
+        />
+      </div>
+
+      {(summary.board_pending_count > 0 || summary.overdue_count > 0) && (
+        <div className="mt-3 flex gap-3 text-[10px]" style={{ color: 'var(--text-muted)' }}>
+          {summary.board_pending_count > 0 && (
+            <span>
+              <span style={{ color: '#a78bfa', fontWeight: 600 }}>{summary.board_pending_count}</span> board pending
+            </span>
+          )}
+          {summary.overdue_count > 0 && (
+            <span>
+              <span style={{ color: 'var(--red)', fontWeight: 600 }}>{summary.overdue_count}</span> overdue SLA
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value, sub, hint, highlight }: { label: string; value: string; sub?: string; hint?: string; highlight?: boolean }) {
+  return (
+    <div title={hint}>
+      <p className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>{label}</p>
+      <p
+        className="font-bold mt-0.5"
+        style={{ fontSize: highlight ? '1.1rem' : '0.95rem', color: 'var(--text)' }}
+      >
+        {value}
+      </p>
+      {sub && <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{sub}</p>}
     </div>
   );
 }
