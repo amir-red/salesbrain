@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import pool from './db';
 import { sendTelegramMessage, formatBoardReviewMessage } from './telegram';
 import { sendEmail } from './email';
-import { getMissingFields, getGate } from './gates';
+import { getMissingFields, getGate, GRANT_MONEY_FIELDS } from './gates';
 import { executeProspectTool, PROSPECT_TOOL_NAMES } from './prospect-executors';
 
 const anthropic = new Anthropic();
@@ -127,11 +127,48 @@ export async function exec_update_deal(input: {
   const values: unknown[] = [];
   let paramIdx = 1;
 
-  // Track gate change for audit
+  // Track gate change for audit + load deal_type/fields for grant guard
   let oldGate: number | null = null;
+  let dealType: string | null = null;
+  let currentFields: Record<string, unknown> = {};
   if (updates.gate !== undefined) {
-    const { rows } = await pool.query('SELECT gate FROM deals WHERE id = $1', [deal_id]);
-    if (rows[0]) oldGate = rows[0].gate;
+    const { rows } = await pool.query(
+      'SELECT gate, deal_type, fields FROM deals WHERE id = $1',
+      [deal_id]
+    );
+    if (rows[0]) {
+      oldGate = rows[0].gate;
+      dealType = rows[0].deal_type;
+      currentFields = (rows[0].fields as Record<string, unknown>) || {};
+    }
+  }
+
+  // ─── HARD BLOCK: grant gate advancement requires all money fields ──
+  // Fields included in THIS update are merged onto current fields for the
+  // check, so the AI can advance + fill money in a single call if it sets
+  // both `gate` and `fields` together.
+  if (
+    dealType === 'grant' &&
+    updates.gate !== undefined &&
+    oldGate !== null &&
+    Number(updates.gate) > oldGate
+  ) {
+    const incomingFields =
+      typeof updates.fields === 'object' && updates.fields !== null
+        ? (updates.fields as Record<string, unknown>)
+        : {};
+    const mergedFields = { ...currentFields, ...incomingFields };
+    const missingMoney = GRANT_MONEY_FIELDS.filter((f) => {
+      const v = mergedFields[f];
+      return v === undefined || v === null || v === '';
+    });
+    if (missingMoney.length > 0) {
+      return {
+        error: `BLOCKED: cannot advance grant from G${oldGate} to G${updates.gate} — money fields missing: ${missingMoney.join(', ')}. Ask the user to provide them and call update_deal again with both the new gate AND a fields object containing the values.`,
+        blocked: true,
+        missing_money_fields: missingMoney,
+      };
+    }
   }
 
   for (const [key, val] of Object.entries(updates)) {
