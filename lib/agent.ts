@@ -2,7 +2,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import pool from './db';
 import { TOOLS } from './tools';
 import { executeTool } from './tool-executors';
-import { getPipeline, getGate, getMissingFields, getSLAStatus, type DealType } from './gates';
+import { getPipeline, getGate, getMissingFields, getSLAStatus, GRANT_MONEY_FIELDS, type DealType } from './gates';
+import { computeGrantPipelineRank, formatRankForPrompt } from './grant-pipeline-rank';
 
 const anthropic = new Anthropic();
 
@@ -60,7 +61,10 @@ ChipChip is an Ethiopian **agri-commerce and supply-chain technology platform** 
 
 **Grant verdicts:** ≥75 = STRONG_FIT, 60-74 = PROCEED_WITH_CAUTION, 40-59 = WEAK_FIT, <40 = DO_NOT_PURSUE.`;
 
-export function buildSystemPrompt(deal: Record<string, unknown> | null): string {
+export function buildSystemPrompt(
+  deal: Record<string, unknown> | null,
+  extraContext?: string
+): string {
   const dealType = (deal?.deal_type as DealType) || 'sales';
   const pipeline = getPipeline(dealType);
   const productKB = dealType === 'grant' ? CHIPCHIP_KB : MATE_KB;
@@ -110,7 +114,7 @@ Outreach draft rules:
 - Always save as draft — a human must approve before send.
 
 ## Rules
-- When a deal reaches a board gate (sales: G3/G5, grants: G7/G9), automatically send a board review request using the send_telegram tool. Provide a concise summary covering: ${dealType === 'grant' ? 'strategic alignment, co-funding posture, compliance burden, and your recommendation' : 'deal value, key risks, solution fit, and your recommendation'}. The system formats the message automatically.
+- When a deal reaches a board gate (sales: G3/G5, grants: G3/G7/G9), automatically send a board review request using the send_telegram tool. Provide a concise summary covering: ${dealType === 'grant' ? 'grant amount + our contribution + cofunding split, strategic alignment, pipeline rank vs other active grants, and your recommendation' : 'deal value, key risks, solution fit, and your recommendation'}. The system formats the message automatically.
 - Board reviews require 5 of 8 executives to vote "proceed" before the deal advances. If 4 vote "stop", the deal is blocked. Do NOT advance a deal past a board gate until the board review is approved.
 - When you receive a message that the board has approved a review, advance the deal to the next gate. If rejected, hold the deal. If amendments requested, ask the deal owner what changes are needed.
 - For board gates, do NOT advance the deal in the same turn as sending the telegram. Wait for the board vote outcome.
@@ -119,9 +123,14 @@ Outreach draft rules:
 - After any significant update, run assess_deal to recalculate score/risk.
 - When scheduling followups, be specific about content and timing.
 - When the user mentions an upcoming meeting, call, demo, or presentation, automatically call prep_meeting to generate a briefing.
-${dealType === 'grant' ? `- For GRANTS: always challenge strategic alignment honestly — if ChipChip's real mission and capabilities don't match the donor's mandate, say so and recommend walking away. No forced narratives.
-- For GRANTS at G3 (Strategic Fit Analysis): compute the alignment score across 7 dimensions (total 100 pts). Threshold ≥60 to proceed, ≥75 for STRONG_FIT.
-- For GRANTS: flag tight deadlines, eligibility gaps, heavy reporting burden, missing co-funding, and unrealistic budget assumptions as HIGH risk.` : `- For concept drafts (G4+), produce thorough, structured documents.`}`;
+${dealType === 'grant' ? `## Grant-specific rules (MONEY FIRST, OPPORTUNITY-COST DISCIPLINE)
+- ALWAYS clarify money before anything else. Your FIRST question on any new grant must be: "How much is the grant (min and max)? What's our contribution (cash + in-kind)? What's the cofunding split (full grant / 75-25 / 50-50 / 25-75)?" If those aren't on the deal, get them now. Do not advance past G1 without them.
+- At G2 (Quick Triage), an injected "Grant Pipeline Comparison" section will tell you where this grant ranks against other active grants by total value. If this grant is in the bottom third while bigger ones are open, recommend de-prioritizing or dropping. Force the user to confront opportunity cost — say it directly: "There's a USD 1.2M grant at G3 already. Why are we burning time on this USD 80K one?"
+- At G3 (Strategic Fit + EARLY BOARD REVIEW), the board votes BEFORE you do any relationship work or concept drafting. Compute the alignment score (7 dimensions, 100 pts: mission 20 / capability 20 / narrative 15 / economics 15 / compliance 10 / upside 10 / timing 10). Threshold ≥60 to proceed, ≥75 for STRONG_FIT. Send the board the money + alignment + pipeline rank + your recommendation. WAIT for the vote before advancing.
+- At G7 (Partner Lock) and G9 (Award Setup), the board votes again — these are commitment points before submission and signing.
+- Always challenge strategic alignment honestly — if ChipChip's real mission and capabilities don't match the donor's mandate, say so and recommend walking away. No forced narratives.
+- Flag HIGH risk: tight deadlines, eligibility gaps, heavy reporting burden, missing co-funding source, unrealistic budget, contribution > 30% of total grant value.
+- Verdict enum for grants: STRONG_FIT / PROCEED_WITH_CAUTION / WEAK_FIT / DO_NOT_PURSUE.` : `- For concept drafts (G4+), produce thorough, structured documents.`}`;
 
   if (!deal) {
     return base + '\n\nNo deal is currently selected. Help the user create or select a deal.';
@@ -130,6 +139,28 @@ ${dealType === 'grant' ? `- For GRANTS: always challenge strategic alignment hon
   const gate = getGate(deal.gate as number, dealType);
   const sla = getSLAStatus(deal.gate as number, new Date(deal.gate_entered_at as string), dealType);
   const missing = getMissingFields(deal.gate as number, (deal.fields as Record<string, unknown>) || {}, dealType);
+
+  // ─── Backward-compat: cross-gate money-field check for grants ────
+  // Existing grants past G1 may have advanced before the new money fields were
+  // added. Check ALL grants regardless of gate so the AI asks for them.
+  const dealFields = (deal.fields as Record<string, unknown>) || {};
+  const missingMoney: string[] = dealType === 'grant'
+    ? GRANT_MONEY_FIELDS.filter((f) => {
+        const v = dealFields[f];
+        return v === undefined || v === null || v === '';
+      })
+    : [];
+
+  // ─── Backward-compat: G3 board-review backfill ──────────────────
+  // Existing grants past G3 never went through the new G3 board gate.
+  // Trigger a one-time backfill (only when money fields are filled, since
+  // a board review without money is useless).
+  const flags = (deal.flags as string[]) || [];
+  const needsG3Backfill =
+    dealType === 'grant' &&
+    (deal.gate as number) >= 3 &&
+    !flags.includes('board_sent_g3') &&
+    missingMoney.length === 0;
 
   return `${base}
 
@@ -152,17 +183,24 @@ ${dealType === 'grant' ? `- For GRANTS: always challenge strategic alignment hon
 ${deal.notes ? `- **Notes**: ${(deal.notes as string).slice(0, 500)}` : ''}
 
 ## What you should do right now
-${sla.status === 'breached' ? '1. IMMEDIATELY flag the SLA breach and suggest action.' : ''}
+${missingMoney.length > 0
+  ? `0. ⚠️ MONEY FIELDS MISSING (highest priority — gate advancement is BLOCKED): **${missingMoney.join(', ')}**. Ask the user for these now BEFORE anything else. The system will refuse update_deal with a new gate until they're filled. When the user replies with money info, call update_deal with a fields object containing the values (numbers for amounts, strings for type/split — accepted values: type ∈ {none, cash, in_kind, mixed}, split ∈ {full_grant, 75_25, 50_50, 25_75, other}).`
+  : ''}
+${needsG3Backfill
+  ? `1. 🔁 BACKFILL G3 BOARD REVIEW: This grant is at G${deal.gate} but never went through the new G3 board review (no board_sent_g3 flag). Send a G3 review NOW via send_telegram with gate=3. Include money breakdown, alignment score, pipeline rank, and your recommendation. This is purely audit-trail backfill — the deal stays at G${deal.gate}, the board vote does not auto-advance it.`
+  : ''}
+${sla.status === 'breached' ? '2. IMMEDIATELY flag the SLA breach and suggest action.' : ''}
 ${missing.length > 3
-  ? `1. There are ${missing.length} missing fields: **${missing.join(', ')}**. Invite the user to brain-dump everything they know — meeting notes, call summaries, emails. Extract all fields you can from their response in one pass using update_deal, then follow up only on what's still missing.`
+  ? `2. There are ${missing.length} missing fields for the current gate: **${missing.join(', ')}**. Invite the user to brain-dump everything they know — meeting notes, call summaries, emails. Extract all fields you can from their response in one pass using update_deal, then follow up only on what's still missing.`
   : missing.length > 0
-    ? `1. These fields are still missing: **${missing.join(', ')}**. Ask about all of them in a single grouped question.`
+    ? `2. These fields are still missing for the current gate: **${missing.join(', ')}**. Ask about all of them in a single grouped question.`
     : ''}
 ${gate?.isBoard && !(deal.flags as string[])?.includes(`board_sent_g${deal.gate}`)
   ? `1. This is a BOARD GATE. Send a board review request using send_telegram immediately. Include your recommendation and key decision factors.`
   : gate?.isBoard && (deal.flags as string[])?.includes(`board_sent_g${deal.gate}`)
     ? `1. Board review has been sent for G${deal.gate}. Waiting for executive votes (5/8 needed to proceed). Do NOT advance the deal until the board vote resolves.`
-    : ''}`;
+    : ''}
+${extraContext ? `\n${extraContext}` : ''}`;
 }
 
 // ─── Load Conversation History ──────────────────────────────────
@@ -377,7 +415,19 @@ export async function* runAgent(
   // Persist after building the array
   await persistMessage(dealId, 'user', userMessage);
 
-  const systemPrompt = buildSystemPrompt(deal);
+  // For grant deals at early gates (G1-G3), inject the pipeline rank so the
+  // AI can do opportunity-cost reasoning vs other active grants.
+  let extraContext: string | undefined;
+  if (deal.deal_type === 'grant' && (deal.gate as number) <= 3) {
+    try {
+      const rank = await computeGrantPipelineRank(dealId);
+      if (rank) extraContext = formatRankForPrompt(rank);
+    } catch (err) {
+      console.warn('[runAgent] grant pipeline rank failed:', err);
+    }
+  }
+
+  const systemPrompt = buildSystemPrompt(deal, extraContext);
 
   let iterations = 0;
 

@@ -29,9 +29,18 @@ interface Deal {
   fields: Record<string, unknown>;
   gate_entered_at: string;
   user_id: string;
+  deal_type: 'sales' | 'grant';
   created_at: string;
   updated_at: string;
 }
+
+const GRANT_MONEY_FIELDS = [
+  'grant_amount_min',
+  'grant_amount_max',
+  'our_contribution',
+  'our_contribution_type',
+  'cofunding_split',
+];
 
 interface CurrentUser {
   userId: string;
@@ -112,6 +121,15 @@ export default function DealViewPage() {
   const isOwner = currentUser?.userId === deal.user_id || isAdmin;
   const gate = GATES[deal.gate - 1];
   const fields = deal.fields || {};
+
+  // Money-fields enforcement for grants — show banner if any are missing.
+  const isGrant = deal.deal_type === 'grant';
+  const missingMoney = isGrant
+    ? GRANT_MONEY_FIELDS.filter((f) => {
+        const v = fields[f];
+        return v === undefined || v === null || v === '';
+      })
+    : [];
   const fieldKeys = Object.keys(fields);
   const totalRequired = GATES[1]?.requiredFields?.length || 7;
   const filledRequired = GATES[1]?.requiredFields?.filter((f) => fields[f] !== undefined && fields[f] !== null && fields[f] !== '')?.length || 0;
@@ -152,6 +170,46 @@ export default function DealViewPage() {
             </Link>
           )}
         </div>
+
+        {/* Money-fields-missing banner for grants */}
+        {isGrant && missingMoney.length > 0 && (
+          <div
+            className="mx-6 mt-4 p-4 rounded-xl flex items-start gap-3"
+            style={{
+              background: 'rgba(234, 179, 8, 0.1)',
+              border: '1px solid rgba(234, 179, 8, 0.4)',
+              color: 'var(--text)',
+            }}
+          >
+            <span style={{ fontSize: '1.25rem', lineHeight: 1 }}>⚠️</span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold" style={{ color: 'var(--yellow)' }}>
+                Money fields missing — gate advancement is BLOCKED
+              </p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                The system refuses to advance this grant to the next gate until these are filled:
+              </p>
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {missingMoney.map((f) => (
+                  <span
+                    key={f}
+                    className="text-[10px] px-1.5 py-0.5 rounded font-mono"
+                    style={{ background: 'rgba(234, 179, 8, 0.2)', color: 'var(--yellow)' }}
+                  >
+                    {f}
+                  </span>
+                ))}
+              </div>
+              <Link
+                href={`/?deal=${deal.id}`}
+                className="inline-block mt-3 px-3 py-1.5 rounded-lg text-xs font-medium"
+                style={{ background: 'var(--accent)', color: '#fff' }}
+              >
+                Open chat to fill →
+              </Link>
+            </div>
+          </div>
+        )}
 
         <div className="p-6 space-y-8">
           {/* Top row: Score + Meta */}

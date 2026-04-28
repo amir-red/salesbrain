@@ -42,38 +42,47 @@ export const SALES_GATES: Gate[] = [
 export const GRANT_GATES: Gate[] = [
   {
     number: 1,
-    name: 'Opportunity Capture',
+    name: 'Opportunity Capture & Money Sniff Test',
     slaDays: 2,
     isBoard: false,
-    objective: 'Log the opportunity and prevent loss of inbound or discovered donor leads.',
+    objective:
+      'Log the opportunity AND establish money clarity before anything else. We must know amount, our contribution, and split before advancing.',
     requiredFields: [
       'funding_body_name',
       'donor_type',
       'source_of_lead',
       'deadline_known',
-      'funding_range_estimate',
+      // Money-first fields (the priority):
+      'grant_amount_min',         // USD minimum likely award
+      'grant_amount_max',         // USD maximum likely award
+      'our_contribution',         // USD WE need to put in (cash + in-kind)
+      'our_contribution_type',    // none | cash | in_kind | mixed
+      'cofunding_split',          // full_grant | 75_25 | 50_50 | 25_75 | other
     ],
   },
   {
     number: 2,
-    name: 'Quick Triage',
+    name: 'Quick Triage & Pipeline Comparison',
     slaDays: 3,
     isBoard: false,
-    objective: 'Kill obvious low-fit opportunities fast.',
+    objective:
+      'Compare against other active grants. If this grant is small while bigger ones are open, de-prioritize. Force opportunity-cost thinking.',
     requiredFields: [
       'rough_eligibility_match',
       'rough_ticket_size_fit',
       'deadline_window',
       'initial_theme_match',
       'likely_entity_fit',
+      'pipeline_rank_decision',  // pursue | deprioritize | drop — the actual call after seeing pipeline
     ],
   },
   {
     number: 3,
-    name: 'Strategic Fit Analysis',
+    name: 'Strategic Fit + Early Board Review',
     slaDays: 5,
-    isBoard: false,
-    objective: 'Score the opportunity against ChipChip strategy, capacity, and timing.',
+    isBoard: true,            // ← NEW: board gate moved to here for early commit
+    objective:
+      'Score the opportunity, present money + alignment + pipeline rank to the board, get an early go/no-go BEFORE investing weeks of relationship and concept work.',
     requiredFields: [
       'strategic_alignment_score',
       'narrative_fit',
@@ -192,6 +201,20 @@ export const GRANT_GATES: Gate[] = [
 // ─── Legacy export for backwards compatibility ──────────────────
 // Existing code imports `GATES` and uses it as the sales pipeline.
 export const GATES = SALES_GATES;
+
+/**
+ * Money fields required at G1 for grant deals. Enforced cross-gate:
+ * regardless of current gate, an existing grant missing any of these
+ * is BLOCKED from advancing (lib/tool-executors.ts:exec_update_deal)
+ * and the AI is told to ask for them at the top of every prompt.
+ */
+export const GRANT_MONEY_FIELDS = [
+  'grant_amount_min',
+  'grant_amount_max',
+  'our_contribution',
+  'our_contribution_type',
+  'cofunding_split',
+];
 
 // ─── Pipeline selector ──────────────────────────────────────────
 

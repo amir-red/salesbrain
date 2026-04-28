@@ -34,10 +34,11 @@ const SALES_GATE_COLORS: Record<number, string> = {
   9: '#166534',
 };
 
-// Grant pipeline gate colors (10 gates) — board gates G7 + G9 purple, final G10 green
+// Grant pipeline gate colors (10 gates) — board gates G3 + G7 + G9 purple, final G10 green
 const GRANT_GATE_COLORS: Record<number, string> = {
   1: '#1D4ED8', 2: '#1D4ED8',
-  3: '#1D4ED8', 4: '#1D4ED8',
+  3: '#6D28D9',  // ← NEW: board gate
+  4: '#1D4ED8',
   5: '#1D4ED8', 6: '#1D4ED8',
   7: '#6D28D9', 8: '#1D4ED8',
   9: '#6D28D9',
