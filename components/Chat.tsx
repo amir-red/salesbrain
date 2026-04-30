@@ -130,13 +130,23 @@ function getSuggestions(deal: DealInfo | null | undefined, messageCount: number)
   return suggestions.slice(0, 3);
 }
 
+interface PendingAttachment {
+  id: string;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+}
+
 export default function Chat({ dealId, deal, onDealUpdate }: ChatProps) {
   const [messages, setMessages] = useState<MessageData[]>([]);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const [uploading, setUploading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
   const [speechSupported, setSpeechSupported] = useState(false);
@@ -239,16 +249,27 @@ export default function Chat({ dealId, deal, onDealUpdate }: ChatProps) {
   );
 
   const sendText = useCallback(async (text: string) => {
-    if (!text.trim() || !dealId || isStreaming) return;
+    const trimmed = text.trim();
+    const hasAttachments = attachments.length > 0;
+    if ((!trimmed && !hasAttachments) || !dealId || isStreaming) return;
+
+    const attachmentNames = attachments.map((a) => a.filename);
+    const attachmentIds = attachments.map((a) => a.id);
+
+    // Render in UI: text + attachment names appended as a small note
+    const displayContent = hasAttachments
+      ? `${trimmed}${trimmed ? '\n\n' : ''}📎 ${attachmentNames.join(', ')}`
+      : trimmed;
 
     const userMessage: MessageData = {
       id: `user-${Date.now()}`,
       role: 'user',
-      content: text.trim(),
+      content: displayContent,
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
+    setAttachments([]);
     setIsStreaming(true);
 
     const assistantId = `assistant-${Date.now()}`;
@@ -266,7 +287,11 @@ export default function Chat({ dealId, deal, onDealUpdate }: ChatProps) {
       const res = await fetch('/api/agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deal_id: dealId, message: text.trim() }),
+        body: JSON.stringify({
+          deal_id: dealId,
+          message: trimmed,
+          attachment_ids: attachmentIds.length > 0 ? attachmentIds : undefined,
+        }),
       });
 
       if (!res.ok) {
@@ -352,7 +377,48 @@ export default function Chat({ dealId, deal, onDealUpdate }: ChatProps) {
     } finally {
       setIsStreaming(false);
     }
-  }, [dealId, isStreaming, onDealUpdate]);
+  }, [dealId, isStreaming, onDealUpdate, attachments]);
+
+  // ── File upload handlers ──────────────────────────────────────
+  const onFilesSelected = useCallback(async (files: FileList | null) => {
+    if (!files || !dealId) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      for (let i = 0; i < files.length; i++) {
+        formData.append('file', files[i]);
+      }
+      const res = await fetch(`/api/deals/${dealId}/files`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        console.error('[upload] failed', await res.text());
+        return;
+      }
+      const data = await res.json();
+      const accepted: PendingAttachment[] = (data.uploaded || [])
+        .filter((u: { id?: string }) => u.id)
+        .map((u: PendingAttachment) => ({
+          id: u.id,
+          filename: u.filename,
+          mime_type: u.mime_type,
+          size_bytes: u.size_bytes,
+        }));
+      const errors = (data.uploaded || []).filter((u: { error?: string }) => u.error);
+      if (errors.length > 0) {
+        alert(errors.map((e: { filename?: string; error: string }) => `${e.filename || 'file'}: ${e.error}`).join('\n'));
+      }
+      setAttachments((prev) => [...prev, ...accepted]);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }, [dealId]);
+
+  const removeAttachment = useCallback((id: string) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  }, []);
 
   const sendMessage = useCallback(() => {
     sendText(input);
@@ -412,16 +478,65 @@ export default function Chat({ dealId, deal, onDealUpdate }: ChatProps) {
 
       {/* Input */}
       <div className="p-4 border-t" style={{ borderColor: 'var(--border)' }}>
+        {/* Attachment chips */}
+        {attachments.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {attachments.map((a) => (
+              <div
+                key={a.id}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs"
+                style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text)' }}
+                title={`${a.mime_type} · ${(a.size_bytes / 1024).toFixed(0)} KB`}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                </svg>
+                <span className="truncate max-w-[200px]">{a.filename}</span>
+                <button
+                  onClick={() => removeAttachment(a.id)}
+                  className="ml-1"
+                  style={{ color: 'var(--text-muted)' }}
+                  title="Remove"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            {uploading && <span className="text-xs px-2 py-1" style={{ color: 'var(--text-muted)' }}>Uploading...</span>}
+          </div>
+        )}
+
         <div
           className="flex items-end gap-2 rounded-xl p-2"
           style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}
         >
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept=".pdf,.docx,.txt,.md,.csv,.json,.png,.jpg,.jpeg,.webp,.gif,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv,application/json,image/*"
+            onChange={(e) => onFilesSelected(e.target.files)}
+            className="hidden"
+          />
+          {/* Paperclip / attach button */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={!dealId || isStreaming || uploading}
+            className="p-2 rounded-lg transition-all"
+            style={{ color: 'var(--text-muted)' }}
+            title="Attach file (PDF, DOCX, TXT, MD, CSV, image)"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+            </svg>
+          </button>
           <textarea
             ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={dealId ? 'Paste meeting notes, call summary, or just talk...' : 'Select a deal first'}
+            placeholder={dealId ? 'Paste meeting notes, attach a file, or just talk...' : 'Select a deal first'}
             disabled={!dealId || isStreaming}
             rows={1}
             className="flex-1 bg-transparent resize-none outline-none text-sm py-2 px-2"
@@ -450,11 +565,11 @@ export default function Chat({ dealId, deal, onDealUpdate }: ChatProps) {
           )}
           <button
             onClick={sendMessage}
-            disabled={!dealId || isStreaming || !input.trim()}
+            disabled={!dealId || isStreaming || (!input.trim() && attachments.length === 0)}
             className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
             style={{
-              background: dealId && input.trim() ? 'var(--accent)' : 'var(--border)',
-              color: dealId && input.trim() ? '#fff' : 'var(--text-muted)',
+              background: dealId && (input.trim() || attachments.length > 0) ? 'var(--accent)' : 'var(--border)',
+              color: dealId && (input.trim() || attachments.length > 0) ? '#fff' : 'var(--text-muted)',
             }}
           >
             {isStreaming ? '...' : 'Send'}
