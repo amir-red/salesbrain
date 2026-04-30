@@ -45,4 +45,6 @@ node_modules/
 .env.production
 .env.example
 
+# user-uploaded chat attachments (stored on local FS)
+uploads/
 

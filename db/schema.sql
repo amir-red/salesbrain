@@ -121,6 +121,21 @@ CREATE TABLE password_resets (
 CREATE INDEX idx_password_resets_user ON password_resets(user_id);
 CREATE INDEX idx_password_resets_token_hash ON password_resets(token_hash);
 
+-- Chat file attachments (meeting transcripts, pitch decks, emails, etc.)
+CREATE TABLE file_attachments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  deal_id UUID NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id),
+  filename TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL,
+  storage_path TEXT NOT NULL,
+  extracted_text TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_file_attachments_deal ON file_attachments(deal_id);
+CREATE INDEX idx_file_attachments_user ON file_attachments(user_id);
+
 -- Updated_at trigger
 CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER AS $$

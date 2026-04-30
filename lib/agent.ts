@@ -1,9 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { promises as fs } from 'fs';
+import path from 'path';
 import pool from './db';
 import { TOOLS } from './tools';
 import { executeTool } from './tool-executors';
 import { getPipeline, getGate, getMissingFields, getSLAStatus, GRANT_MONEY_FIELDS, type DealType } from './gates';
 import { computeGrantPipelineRank, formatRankForPrompt } from './grant-pipeline-rank';
+import { classify } from './file-extractor';
 
 const anthropic = new Anthropic();
 
@@ -355,6 +358,61 @@ async function persistMessage(
   );
 }
 
+// ─── Attachment loader ─────────────────────────────────────────
+
+/**
+ * Load a file_attachments row from disk and convert it to an Anthropic content
+ * block. Text-extracted files become text blocks; PDFs become document blocks;
+ * images become image blocks.
+ */
+async function loadAttachmentBlock(att: {
+  filename: string;
+  mime_type: string;
+  storage_path: string;
+  extracted_text: string | null;
+}): Promise<Anthropic.ContentBlockParam | null> {
+  const kind = classify(att.mime_type);
+
+  if (kind === 'text') {
+    const text = att.extracted_text || '';
+    return { type: 'text', text: `## Attached file: ${att.filename}\n\n${text}` };
+  }
+
+  // PDF / image: read the file from disk and base64-encode for the API.
+  if (kind === 'pdf' || kind === 'image') {
+    try {
+      const fullPath = path.isAbsolute(att.storage_path)
+        ? att.storage_path
+        : path.join(process.cwd(), att.storage_path);
+      const buf = await fs.readFile(fullPath);
+      if (kind === 'pdf') {
+        return {
+          type: 'document',
+          source: {
+            type: 'base64',
+            media_type: 'application/pdf',
+            data: buf.toString('base64'),
+          },
+        };
+      }
+      // image
+      return {
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: att.mime_type as 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif',
+          data: buf.toString('base64'),
+        },
+      };
+    } catch (err) {
+      console.error(`[loadAttachmentBlock] read failed for ${att.filename}:`, err);
+      return { type: 'text', text: `[Attachment ${att.filename} could not be loaded]` };
+    }
+  }
+
+  return null;
+}
+
 // ─── Stream Event Types ─────────────────────────────────────────
 
 export type StreamEvent =
@@ -369,7 +427,8 @@ export type StreamEvent =
 export async function* runAgent(
   dealId: string,
   userMessage: string,
-  userId?: string
+  userId?: string,
+  attachmentIds?: string[]
 ): AsyncGenerator<StreamEvent> {
   // Load deal (scoped to user if userId provided)
   const dealQuery = userId
@@ -409,11 +468,49 @@ export async function* runAgent(
     }
   }
 
-  // Append the new user message
-  messages.push({ role: 'user', content: userMessage });
+  // ── Attachments: load files, build content blocks for Claude ──
+  // The user message becomes an array: text + each attachment as a content block.
+  let attachmentNames: string[] = [];
+  let userContent: Anthropic.MessageParam['content'] = userMessage;
 
-  // Persist after building the array
-  await persistMessage(dealId, 'user', userMessage);
+  if (attachmentIds && attachmentIds.length > 0) {
+    try {
+      const { rows: attRows } = await pool.query(
+        `SELECT id, filename, mime_type, storage_path, extracted_text
+         FROM file_attachments WHERE id = ANY($1::uuid[]) AND deal_id = $2`,
+        [attachmentIds, dealId]
+      );
+
+      const blocks: Anthropic.ContentBlockParam[] = [];
+
+      // Lead with the user's typed message (or a placeholder if empty)
+      blocks.push({
+        type: 'text',
+        text: userMessage || '(see attached files)',
+      });
+
+      for (const att of attRows) {
+        attachmentNames.push(att.filename);
+        const block = await loadAttachmentBlock(att);
+        if (block) blocks.push(block);
+      }
+
+      if (blocks.length > 1) {
+        userContent = blocks;
+      }
+    } catch (err) {
+      console.error('[runAgent] failed to load attachments:', err);
+    }
+  }
+
+  messages.push({ role: 'user', content: userContent });
+
+  // Persist after building the array. Include filenames in the persisted text
+  // so the conversation history shows "the user attached X".
+  const persistedText = attachmentNames.length > 0
+    ? `${userMessage}\n\n[Attached files: ${attachmentNames.join(', ')}]`
+    : userMessage;
+  await persistMessage(dealId, 'user', persistedText);
 
   // For grant deals at early gates (G1-G3), inject the pipeline rank so the
   // AI can do opportunity-cost reasoning vs other active grants.
