@@ -1,36 +1,84 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { parseLinkedInContactsCsv } from '@/lib/message-parsers';
 import { normalizeCompanyName } from '@/lib/prospecting';
 
-const Schema = z.object({
-  source: z.enum(['linkedin_csv', 'generic_csv']),
-  text: z.string().min(1),
-});
+const MAX_BYTES = 10 * 1024 * 1024; // 10 MB cap
 
+const ACCEPTED_MIME = new Set([
+  'text/csv',
+  'application/csv',
+  'text/plain',                 // some browsers send CSVs as text/plain
+  'application/vnd.ms-excel',   // legacy CSV mime in Safari
+  'application/octet-stream',   // fallback for unknown senders
+]);
+
+/**
+ * POST multipart/form-data with:
+ *   - file: a Connections.csv (LinkedIn export)
+ *   - source: 'linkedin_csv' | 'generic_csv' (optional, defaults to linkedin_csv)
+ */
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  let body: unknown;
-  try { body = await req.json(); } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
-  }
-  const parsed = Schema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: 'Validation failed', details: parsed.error.issues }, { status: 400 });
+  let formData: FormData;
+  try {
+    formData = await req.formData();
+  } catch {
+    return NextResponse.json({ error: 'Expected multipart/form-data' }, { status: 400 });
   }
 
-  const contacts = parsed.data.source === 'linkedin_csv'
-    ? parseLinkedInContactsCsv(parsed.data.text)
-    : [];
+  const file = formData.get('file');
+  const source = (formData.get('source') as string) || 'linkedin_csv';
+
+  if (!file || typeof file === 'string') {
+    return NextResponse.json({ error: 'Missing file field' }, { status: 400 });
+  }
+  if (!(file instanceof File)) {
+    return NextResponse.json({ error: 'file must be a File' }, { status: 400 });
+  }
+  if (file.size === 0) {
+    return NextResponse.json({ error: 'File is empty' }, { status: 400 });
+  }
+  if (file.size > MAX_BYTES) {
+    return NextResponse.json({ error: `File exceeds 10 MB limit (got ${(file.size / 1024 / 1024).toFixed(1)} MB)` }, { status: 400 });
+  }
+
+  // Be lenient about mime — accept anything that looks like csv by extension OR mime
+  const isCsvByExt = file.name.toLowerCase().endsWith('.csv');
+  const isCsvByMime = ACCEPTED_MIME.has(file.type);
+  if (!isCsvByExt && !isCsvByMime) {
+    return NextResponse.json(
+      { error: `Unsupported file type: ${file.type || 'unknown'}. Upload a .csv file (LinkedIn Connections export).` },
+      { status: 400 }
+    );
+  }
+
+  const text = await file.text();
+  if (!text.trim()) {
+    return NextResponse.json({ error: 'File contents are empty' }, { status: 400 });
+  }
+
+  const contacts = source === 'linkedin_csv' ? parseLinkedInContactsCsv(text) : [];
+  if (contacts.length === 0) {
+    return NextResponse.json(
+      {
+        error:
+          'No contacts found in CSV. If you exported a ZIP from LinkedIn, extract the Connections.csv file and upload that. Make sure the file has the standard header row (First Name, Last Name, URL, Email Address, Company, Position).',
+        accounts_created: 0,
+        contacts_created: 0,
+        skipped: 0,
+      },
+      { status: 400 }
+    );
+  }
 
   const stats = { accounts_created: 0, contacts_created: 0, skipped: 0 };
 
   for (const c of contacts) {
-    // Account dedup
+    // Account dedup (org-wide)
     let accountId: string | null = null;
     if (c.company) {
       const normalized = normalizeCompanyName(c.company);

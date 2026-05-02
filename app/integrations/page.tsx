@@ -30,7 +30,8 @@ function IntegrationsPageInner() {
   const [myName, setMyName] = useState('');
   const [importResult, setImportResult] = useState<Record<string, unknown> | null>(null);
 
-  const [csvText, setCsvText] = useState('');
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvUploading, setCsvUploading] = useState(false);
   const [csvResult, setCsvResult] = useState<Record<string, unknown> | null>(null);
 
   const refresh = useCallback(async () => {
@@ -89,15 +90,20 @@ function IntegrationsPageInner() {
   };
 
   const importCsv = async () => {
-    if (!csvText.trim()) return;
-    const res = await fetch('/api/imports/contacts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: 'linkedin_csv', text: csvText }),
-    });
-    const data = await res.json();
-    setCsvResult(data);
-    if (res.ok) { setCsvText(''); refresh(); }
+    if (!csvFile) return;
+    setCsvUploading(true);
+    setCsvResult(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', csvFile);
+      fd.append('source', 'linkedin_csv');
+      const res = await fetch('/api/imports/contacts', { method: 'POST', body: fd });
+      const data = await res.json();
+      setCsvResult(data);
+      if (res.ok) { setCsvFile(null); refresh(); }
+    } finally {
+      setCsvUploading(false);
+    }
   };
 
   const analyzeStyle = async () => {
@@ -166,25 +172,68 @@ function IntegrationsPageInner() {
             </p>
           </div>
 
-          {/* LinkedIn CSV */}
+          {/* LinkedIn CSV upload */}
           <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
             <div>
               <h2 className="text-sm font-semibold">LinkedIn Contacts (CSV)</h2>
-              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Settings → Data Privacy → Get a copy of your data → Connections.csv. Paste below.</p>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                LinkedIn → Settings → Data Privacy → Get a copy of your data → request <strong>Connections only</strong>. Extract the ZIP and upload <code>Connections.csv</code>.
+              </p>
             </div>
-            <textarea
-              value={csvText}
-              onChange={(e) => setCsvText(e.target.value)}
-              placeholder="Paste Connections.csv content here..."
-              rows={4}
-              className="w-full px-3 py-2 rounded-lg text-xs outline-none resize-none"
-              style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }}
+
+            <label
+              htmlFor="linkedin-csv-input"
+              className="block w-full text-center px-3 py-6 rounded-lg cursor-pointer text-sm transition-colors"
+              style={{
+                background: csvFile ? 'var(--accent-glow)' : 'var(--bg-input)',
+                border: `1px dashed ${csvFile ? 'var(--accent)' : 'var(--border)'}`,
+                color: csvFile ? 'var(--accent)' : 'var(--text-muted)',
+              }}
+            >
+              {csvFile ? (
+                <>
+                  <span className="font-medium">📄 {csvFile.name}</span>
+                  <span className="block text-[10px] mt-1">{(csvFile.size / 1024).toFixed(1)} KB · click to change</span>
+                </>
+              ) : (
+                <>Click to choose a .csv file</>
+              )}
+            </label>
+            <input
+              id="linkedin-csv-input"
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                setCsvFile(f || null);
+                setCsvResult(null);
+                e.target.value = ''; // allow re-selecting same file
+              }}
             />
-            <button onClick={importCsv} disabled={!csvText.trim()} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'var(--accent)', color: '#fff' }}>
-              Import LinkedIn Connections
-            </button>
+
+            <div className="flex gap-2">
+              <button
+                onClick={importCsv}
+                disabled={!csvFile || csvUploading}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium"
+                style={{ background: csvFile ? 'var(--accent)' : 'var(--border)', color: csvFile ? '#fff' : 'var(--text-muted)', opacity: csvUploading ? 0.6 : 1 }}
+              >
+                {csvUploading ? 'Uploading...' : 'Import LinkedIn Connections'}
+              </button>
+              {csvFile && !csvUploading && (
+                <button
+                  onClick={() => { setCsvFile(null); setCsvResult(null); }}
+                  className="px-3 py-1.5 rounded-lg text-xs"
+                  style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
             {csvResult && (
-              <pre className="text-xs p-2 rounded" style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>{JSON.stringify(csvResult, null, 2)}</pre>
+              <pre className="text-xs p-2 rounded overflow-x-auto" style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>{JSON.stringify(csvResult, null, 2)}</pre>
             )}
           </div>
 
