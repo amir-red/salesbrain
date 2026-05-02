@@ -119,6 +119,15 @@ export default function NetworkGraph(props: NetworkGraphProps) {
         wheelSensitivity: 0.2,
         minZoom: 0.1,
         maxZoom: 3,
+        // ─── Performance ───────────────────────────────────────────────
+        // During pan/zoom: render the canvas as a static texture (much faster
+        // than re-laying out labels/edges on every frame), and skip drawing
+        // edges + labels until interaction ends.
+        textureOnViewport: true,
+        hideEdgesOnViewport: true,
+        hideLabelsOnViewport: true,
+        motionBlur: false,
+        pixelRatio: 1,
         style: [
           {
             selector: 'node',
@@ -134,9 +143,10 @@ export default function NetworkGraph(props: NetworkGraphProps) {
               'text-margin-y': 4,
               'text-outline-color': '#0b1220',
               'text-outline-width': 1,
+              // Only show labels when zoomed in enough that they're readable
+              // (otherwise we're painting thousands of overlapping strings).
+              'min-zoomed-font-size': 8,
               'border-width': 0,
-              'transition-property': 'opacity, background-color, border-width',
-              'transition-duration': '180ms',
             },
           },
           {
@@ -168,10 +178,10 @@ export default function NetworkGraph(props: NetworkGraphProps) {
               'width': 1,
               'line-color': '#334155',
               'target-arrow-color': '#334155',
-              'curve-style': 'bezier',
+              // 'haystack' is the cheapest curve style — no per-frame curve math
+              'curve-style': 'haystack',
+              'haystack-radius': 0,
               'opacity': 0.5,
-              'transition-property': 'opacity, line-color, width',
-              'transition-duration': '180ms',
             },
           },
           {

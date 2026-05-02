@@ -129,14 +129,14 @@ export default function NetworkPage() {
             }}
             placeholder="Search name, title, company, industry…  (⌘F)"
             className="px-3 py-1.5 rounded border text-sm w-72"
-            style={{ background: 'var(--card)', borderColor: 'var(--border)', color: 'var(--text)' }}
+            style={{ background: 'var(--bg-card)', borderColor: 'var(--border)', color: 'var(--text)' }}
           />
 
           <select
             value={layout}
             onChange={(e) => setLayout(e.target.value as LayoutKey)}
             className="px-3 py-1.5 rounded border text-sm"
-            style={{ background: 'var(--card)', borderColor: 'var(--border)', color: 'var(--text)' }}
+            style={{ background: 'var(--bg-card)', borderColor: 'var(--border)', color: 'var(--text)' }}
           >
             <option value="industry">Industry cluster (1)</option>
             <option value="company">Company cluster (2)</option>

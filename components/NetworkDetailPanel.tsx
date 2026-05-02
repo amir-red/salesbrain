@@ -83,7 +83,7 @@ export default function NetworkDetailPanel({ node, onClose, onUpdate }: Props) {
   return (
     <aside
       className="absolute top-0 right-0 h-full w-[340px] flex flex-col border-l overflow-y-auto"
-      style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+      style={{ background: 'var(--bg-card)', borderColor: 'var(--border)' }}
     >
       <header className="flex items-center justify-between p-3 border-b" style={{ borderColor: 'var(--border)' }}>
         <div className="text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
