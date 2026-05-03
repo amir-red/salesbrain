@@ -325,21 +325,87 @@ export async function loadHistory(dealId: string): Promise<Anthropic.MessagePara
   }
 
   // Phase 3: Ensure strict role alternation (user/assistant/user/assistant)
+  // CRITICAL: never drop a message containing tool_use or tool_result blocks —
+  // doing so would orphan the matching block in the adjacent message and the
+  // Anthropic API will reject the request with a 400.
+  const hasStructuredBlocks = (m: Anthropic.MessageParam): boolean => {
+    if (!Array.isArray(m.content)) return false;
+    return (m.content as Array<{ type?: string }>).some(
+      (b) => b.type === 'tool_use' || b.type === 'tool_result'
+    );
+  };
+
   const final: Anthropic.MessageParam[] = [];
   for (const msg of validated) {
-    if (final.length > 0 && final[final.length - 1].role === msg.role) {
-      // Consecutive same-role: keep the newer one
-      final.pop();
+    const prev = final[final.length - 1];
+    if (prev && prev.role === msg.role) {
+      const prevStructured = hasStructuredBlocks(prev);
+      const msgStructured = hasStructuredBlocks(msg);
+      if (prevStructured && !msgStructured) {
+        // Keep the structured one (prev); drop the new plain-text duplicate.
+        continue;
+      } else if (!prevStructured && msgStructured) {
+        // Drop the previous plain-text; keep the structured one.
+        final.pop();
+        final.push(msg);
+      } else if (prevStructured && msgStructured) {
+        // Both structured (rare). Merge their content arrays so neither's
+        // tool_use/tool_result blocks get orphaned.
+        const merged = [
+          ...(prev.content as Anthropic.ContentBlockParam[]),
+          ...(msg.content as Anthropic.ContentBlockParam[]),
+        ];
+        final[final.length - 1] = { role: prev.role, content: merged };
+      } else {
+        // Both plain text — keep newer.
+        final.pop();
+        final.push(msg);
+      }
+    } else {
+      final.push(msg);
     }
-    final.push(msg);
+  }
+
+  // Phase 4: Final safety net — strip any orphaned tool_use blocks.
+  // Walk the array and for each assistant message containing tool_use blocks,
+  // verify the very next message contains a tool_result for every tool_use_id.
+  // If not, drop the orphaned tool_use blocks (preserve text-only content) so
+  // the Anthropic API never sees a mismatched pair.
+  const safe: Anthropic.MessageParam[] = [];
+  for (let k = 0; k < final.length; k++) {
+    const msg = final[k];
+    if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+      const blocks = msg.content as Array<{ type: string; id?: string; text?: string }>;
+      const toolUseIds = blocks.filter((b) => b.type === 'tool_use' && b.id).map((b) => b.id!);
+      if (toolUseIds.length > 0) {
+        const next = final[k + 1];
+        const resultIds = new Set<string>();
+        if (next && next.role === 'user' && Array.isArray(next.content)) {
+          for (const b of next.content as Array<{ type?: string; tool_use_id?: string }>) {
+            if (b.type === 'tool_result' && b.tool_use_id) resultIds.add(b.tool_use_id);
+          }
+        }
+        const allMatched = toolUseIds.every((id) => resultIds.has(id));
+        if (!allMatched) {
+          // Strip ALL tool_use blocks from this assistant message; keep text.
+          const textOnly = blocks
+            .filter((b) => b.type === 'text' && b.text)
+            .map((b) => b.text!)
+            .join('');
+          if (textOnly) safe.push({ role: 'assistant', content: textOnly });
+          continue;
+        }
+      }
+    }
+    safe.push(msg);
   }
 
   // Ensure first message is 'user' (API requirement)
-  while (final.length > 0 && final[0].role !== 'user') {
-    final.shift();
+  while (safe.length > 0 && safe[0].role !== 'user') {
+    safe.shift();
   }
 
-  return final;
+  return safe;
 }
 
 // ─── Persist Message ────────────────────────────────────────────
