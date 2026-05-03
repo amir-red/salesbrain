@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { GraphNode } from '@/lib/network-graph';
+import type { NetworkFilterState } from './NetworkFilters';
+import { EMPTY_FILTERS } from './NetworkFilters';
 
 export interface NetworkInsightsResult {
   high_value_contacts?: { contact_id: string; reason: string }[];
@@ -16,9 +18,323 @@ interface Props {
   onClose: () => void;
   nodes: GraphNode[];
   onFocusNode: (nodeId: string) => void;
+  /** Apply structural filters from a Claude tool call. */
+  onApplyFilters: (next: NetworkFilterState) => void;
+  /** Highlight a small set of contact UUIDs (graph dims everything else). */
+  onHighlightContacts: (contactIds: string[]) => void;
+  /** Reset highlights/filters back to default. */
+  onClearView: () => void;
+  /** Companies metadata: graph stores company nodes by uuid, but Claude
+   *  references them by *name* in tool calls. We need name → uuid lookup. */
+  companies: { id: string; name: string }[];
 }
 
-export default function NetworkInsights({ open, onClose, nodes, onFocusNode }: Props) {
+type ChatMsg = { role: 'user' | 'assistant'; content: string };
+
+type Mode = 'insights' | 'chat';
+
+export default function NetworkInsights(props: Props) {
+  const [mode, setMode] = useState<Mode>('chat');
+  if (!props.open) return null;
+
+  return (
+    <aside
+      className="absolute top-0 right-0 h-full w-[440px] flex flex-col border-l overflow-hidden z-20"
+      style={{ background: 'var(--bg-card)', borderColor: 'var(--border)' }}
+    >
+      <header className="flex items-center justify-between p-3 border-b" style={{ borderColor: 'var(--border)' }}>
+        <div className="flex items-center gap-1 rounded border" style={{ borderColor: 'var(--border)' }}>
+          <TabBtn active={mode === 'chat'} onClick={() => setMode('chat')}>Chat</TabBtn>
+          <TabBtn active={mode === 'insights'} onClick={() => setMode('insights')}>One-shot insights</TabBtn>
+        </div>
+        <button onClick={props.onClose} className="text-xl leading-none" style={{ color: 'var(--text-muted)' }}>×</button>
+      </header>
+
+      {mode === 'chat'
+        ? <ChatPanel {...props} />
+        : <InsightsPanel {...props} />}
+    </aside>
+  );
+}
+
+function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className="px-3 py-1.5 text-xs"
+      style={{
+        background: active ? 'var(--accent-glow)' : 'transparent',
+        color: active ? 'var(--accent)' : 'var(--text-muted)',
+        fontWeight: active ? 600 : 400,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ─── Chat panel ─────────────────────────────────────────────────────────────
+
+function ChatPanel({ nodes, companies, onApplyFilters, onHighlightContacts, onClearView, onFocusNode }: Props) {
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Auto-scroll to bottom on new messages.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [messages, busy]);
+
+  const labelByContact = new Map<string, string>();
+  for (const n of nodes) {
+    if (n.type === 'contact') {
+      labelByContact.set((n.metadata as { contact_id: string }).contact_id, n.label);
+    }
+  }
+  const companyIdByName = new Map(companies.map((c) => [c.name.toLowerCase(), c.id]));
+
+  async function send(userText: string) {
+    const trimmed = userText.trim();
+    if (!trimmed || busy) return;
+    setError(null);
+
+    const next = [...messages, { role: 'user' as const, content: trimmed }];
+    setMessages(next);
+    setInput('');
+    setBusy(true);
+
+    // Build the graph_summary the API expects (compact, capped).
+    const summary = buildSummary(nodes, companies);
+
+    try {
+      const res = await fetch('/api/network/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: next, graph_summary: summary }),
+      });
+      if (!res.ok || !res.body) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || `Request failed (${res.status})`);
+      }
+
+      // We append an empty assistant message and stream into it.
+      let assistantBuf = '';
+      setMessages((m) => [...m, { role: 'assistant', content: '' }]);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let leftover = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        leftover += decoder.decode(value, { stream: true });
+        const lines = leftover.split('\n');
+        leftover = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const evt = JSON.parse(line);
+            if (evt.type === 'text') {
+              assistantBuf += evt.text;
+              setMessages((m) => {
+                const copy = [...m];
+                copy[copy.length - 1] = { role: 'assistant', content: assistantBuf };
+                return copy;
+              });
+            } else if (evt.type === 'tool_call') {
+              applyToolCall(evt.tool, evt.input);
+              const note = describeToolCall(evt.tool, evt.input, labelByContact);
+              if (note) {
+                assistantBuf += (assistantBuf ? '\n\n' : '') + `→ ${note}`;
+                setMessages((m) => {
+                  const copy = [...m];
+                  copy[copy.length - 1] = { role: 'assistant', content: assistantBuf };
+                  return copy;
+                });
+              }
+            } else if (evt.type === 'error') {
+              throw new Error(evt.error || 'Chat error');
+            }
+          } catch (parseErr) {
+            // Tolerate a partial JSON line at the boundary.
+            if (parseErr instanceof Error && parseErr.message.startsWith('Unexpected')) continue;
+            throw parseErr;
+          }
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function applyToolCall(tool: string, input: Record<string, unknown>) {
+    if (tool === 'highlight_contacts') {
+      const ids = Array.isArray(input.contact_ids) ? (input.contact_ids as string[]) : [];
+      onHighlightContacts(ids.slice(0, 50));
+    } else if (tool === 'filter_graph') {
+      const next: NetworkFilterState = { ...EMPTY_FILTERS };
+      if (Array.isArray(input.industries)) next.industries = input.industries as string[];
+      // Claude returns company *names*; convert to UUIDs the filter expects.
+      if (Array.isArray(input.companies)) {
+        next.companies = (input.companies as string[])
+          .map((n) => companyIdByName.get(n.toLowerCase()))
+          .filter((x): x is string => !!x);
+      }
+      if (Array.isArray(input.locations)) next.locations = input.locations as string[];
+      if (typeof input.title_contains === 'string') next.titleContains = input.title_contains;
+      if (typeof input.has_email === 'boolean') next.hasEmail = input.has_email;
+      if (typeof input.has_linkedin === 'boolean') next.hasLinkedin = input.has_linkedin;
+      if (typeof input.has_prospect === 'boolean') next.hasProspect = input.has_prospect;
+      if (typeof input.has_deal === 'boolean') next.hasDeal = input.has_deal;
+      if (typeof input.last_contacted === 'string') {
+        next.lastContacted = input.last_contacted as NetworkFilterState['lastContacted'];
+      }
+      onApplyFilters(next);
+    } else if (tool === 'clear_view') {
+      onClearView();
+    }
+  }
+
+  const STARTERS = [
+    'Show me people at Tech companies I haven\'t contacted in 90 days',
+    'Highlight my most senior contacts (VP, Director, C-level)',
+    'Find warm intros — contacts with email AND LinkedIn but no prospect yet',
+    'Reset and show all',
+  ];
+
+  return (
+    <>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+        {messages.length === 0 && (
+          <div className="space-y-3">
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+              Ask Claude to find or filter parts of your network. The graph updates as it answers.
+            </p>
+            <div className="space-y-1.5">
+              {STARTERS.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => send(s)}
+                  className="w-full text-left text-xs px-3 py-2 rounded border hover:bg-white/5"
+                  style={{ borderColor: 'var(--border)', color: 'var(--text)' }}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {messages.map((m, i) => (
+          <div key={i} className={m.role === 'user' ? 'text-right' : 'text-left'}>
+            <div
+              className="inline-block max-w-[90%] rounded px-3 py-2 text-sm whitespace-pre-wrap"
+              style={{
+                background: m.role === 'user' ? 'var(--accent-glow)' : 'var(--bg-input)',
+                color: m.role === 'user' ? 'var(--accent)' : 'var(--text)',
+              }}
+            >
+              {m.content || (busy && i === messages.length - 1 ? '…' : '')}
+            </div>
+          </div>
+        ))}
+
+        {error && <p className="text-sm" style={{ color: '#fb7185' }}>{error}</p>}
+      </div>
+
+      <form
+        onSubmit={(e) => { e.preventDefault(); send(input); }}
+        className="p-3 border-t flex gap-2"
+        style={{ borderColor: 'var(--border)' }}
+      >
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder={busy ? 'Thinking…' : 'Ask: find me people in Tech who…'}
+          disabled={busy}
+          className="flex-1 px-3 py-2 rounded border text-sm"
+          style={{ background: 'var(--bg-input)', borderColor: 'var(--border)', color: 'var(--text)' }}
+        />
+        <button
+          type="submit"
+          disabled={busy || !input.trim()}
+          className="px-3 py-2 rounded text-sm font-medium disabled:opacity-40"
+          style={{ background: 'var(--accent)', color: '#0b1220' }}
+        >
+          Ask
+        </button>
+      </form>
+    </>
+  );
+}
+
+function describeToolCall(
+  tool: string,
+  input: Record<string, unknown>,
+  labelByContact: Map<string, string>,
+): string | null {
+  if (tool === 'highlight_contacts') {
+    const ids = (input.contact_ids as string[] | undefined) ?? [];
+    const reason = (input.reason as string | undefined) ?? '';
+    const names = ids.slice(0, 5).map((id) => labelByContact.get(id) ?? id.slice(0, 8)).join(', ');
+    return `Highlighted ${ids.length} contact${ids.length === 1 ? '' : 's'}${names ? ` (${names}${ids.length > 5 ? '…' : ''})` : ''}. ${reason}`.trim();
+  }
+  if (tool === 'filter_graph') {
+    const explanation = (input.explanation as string | undefined) ?? 'Filter applied.';
+    return `Filter applied: ${explanation}`;
+  }
+  if (tool === 'clear_view') {
+    return 'Reset to full graph.';
+  }
+  return null;
+}
+
+function buildSummary(nodes: GraphNode[], companies: { id: string; name: string }[]) {
+  const contactNodes = nodes.filter((n) => n.type === 'contact');
+  const accountNodes = nodes.filter((n) => n.type === 'account');
+  const industries = Array.from(new Set(nodes.filter((n) => n.type === 'industry').map((n) => n.label))).sort();
+  const locations = Array.from(new Set(nodes.filter((n) => n.type === 'location').map((n) => n.label))).sort();
+
+  const sample = contactNodes.slice(0, 400).map((n) => {
+    const m = n.metadata as Record<string, unknown>;
+    const last = m.last_contacted_at as string | null;
+    let last_contacted_days: number | null = null;
+    if (last) {
+      const t = Date.parse(last);
+      if (!Number.isNaN(t)) last_contacted_days = Math.floor((Date.now() - t) / 86400_000);
+    }
+    return {
+      contact_id: m.contact_id as string,
+      full_name: (m.full_name as string) ?? null,
+      title: (m.title as string) ?? null,
+      company: (m.company as string) ?? null,
+      industry: (m.industry as string) ?? null,
+      location: (m.location as string) ?? null,
+      has_email: !!m.email,
+      has_linkedin: !!m.linkedin_url,
+      has_prospect: !!m.prospect_id,
+      has_deal: !!m.deal_id,
+      last_contacted_days,
+    };
+  });
+
+  return {
+    contact_count: contactNodes.length,
+    account_count: accountNodes.length,
+    industries,
+    companies: companies.map((c) => c.name).slice(0, 500),
+    locations,
+    contacts_sample: sample,
+  };
+}
+
+// ─── One-shot insights panel (existing behavior) ────────────────────────────
+
+function InsightsPanel({ nodes, onFocusNode }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [insights, setInsights] = useState<NetworkInsightsResult | null>(null);
@@ -34,7 +350,7 @@ export default function NetworkInsights({ open, onClose, nodes, onFocusNode }: P
     setError(null);
     setInsights(null);
     try {
-      const summary = buildSummary(nodes);
+      const summary = buildOneShotSummary(nodes);
       const res = await fetch('/api/network/insights', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -50,83 +366,72 @@ export default function NetworkInsights({ open, onClose, nodes, onFocusNode }: P
     }
   }
 
-  if (!open) return null;
-
   return (
-    <aside
-      className="absolute top-0 right-0 h-full w-[420px] flex flex-col border-l overflow-y-auto z-20"
-      style={{ background: 'var(--bg-card)', borderColor: 'var(--border)' }}
-    >
-      <header className="flex items-center justify-between p-3 border-b" style={{ borderColor: 'var(--border)' }}>
-        <h2 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>AI Network Insights</h2>
-        <button onClick={onClose} className="text-xl leading-none" style={{ color: 'var(--text-muted)' }}>×</button>
-      </header>
+    <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      {!insights && !loading && (
+        <>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            Generate a relationship-intelligence report from your current network. Claude analyzes your contacts and surfaces high-value, neglected, and ready-to-act people.
+          </p>
+          <button
+            className="w-full px-3 py-2 rounded text-sm font-medium"
+            style={{ background: 'var(--accent)', color: '#0b1220' }}
+            onClick={generate}
+          >
+            Generate insights
+          </button>
+        </>
+      )}
 
-      <div className="p-4 space-y-3">
-        {!insights && !loading && (
-          <>
-            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-              Generate a relationship-intelligence report from your current network. Claude analyzes your contacts and surfaces high-value, neglected, and ready-to-act people.
-            </p>
-            <button
-              className="w-full px-3 py-2 rounded text-sm font-medium"
-              style={{ background: 'var(--accent)', color: '#0b1220' }}
-              onClick={generate}
-            >
-              Generate insights
-            </button>
-          </>
-        )}
+      {loading && <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Analyzing network…</p>}
+      {error && <p className="text-sm" style={{ color: '#fb7185' }}>{error}</p>}
 
-        {loading && <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Analyzing network…</p>}
-        {error && <p className="text-sm" style={{ color: '#fb7185' }}>{error}</p>}
+      {insights && (
+        <div className="space-y-4">
+          <Section title="High-value contacts" items={insights.high_value_contacts} render={(it) => (
+            <ItemBtn onClick={() => onFocusNode(`contact:${it.contact_id}`)}>
+              <strong>{labelByContact.get(it.contact_id) ?? it.contact_id}</strong>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{it.reason}</p>
+            </ItemBtn>
+          )} />
+          <Section title="Warm intro paths" items={insights.warm_intro_paths} render={(it) => (
+            <ItemBtn onClick={() => onFocusNode(`contact:${it.from_contact_id}`)}>
+              <strong>{labelByContact.get(it.from_contact_id) ?? it.from_contact_id}</strong>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>→ {it.to_company}</p>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{it.reason}</p>
+            </ItemBtn>
+          )} />
+          <Section title="Industry clusters with potential" items={insights.industry_clusters_with_potential} render={(it) => (
+            <ItemBtn onClick={() => onFocusNode(`industry:${it.industry}`)}>
+              <strong>{it.industry}</strong>{' '}
+              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>({it.contact_count} contacts)</span>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{it.action}</p>
+            </ItemBtn>
+          )} />
+          <Section title="Neglected but valuable" items={insights.neglected_but_valuable} render={(it) => (
+            <ItemBtn onClick={() => onFocusNode(`contact:${it.contact_id}`)}>
+              <strong>{labelByContact.get(it.contact_id) ?? it.contact_id}</strong>
+              <span className="text-xs" style={{ color: 'var(--text-muted)' }}> · {it.last_contacted_days}d ago</span>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{it.reason}</p>
+            </ItemBtn>
+          )} />
+          <Section title="Best next outreach" items={insights.best_next_outreach} render={(it) => (
+            <ItemBtn onClick={() => onFocusNode(`contact:${it.contact_id}`)}>
+              <strong>{labelByContact.get(it.contact_id) ?? it.contact_id}</strong>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{it.suggested_message_hook}</p>
+            </ItemBtn>
+          )} />
 
-        {insights && (
-          <div className="space-y-4">
-            <Section title="High-value contacts" items={insights.high_value_contacts} render={(it) => (
-              <ItemBtn onClick={() => onFocusNode(`contact:${it.contact_id}`)}>
-                <strong>{labelByContact.get(it.contact_id) ?? it.contact_id}</strong>
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{it.reason}</p>
-              </ItemBtn>
-            )} />
-            <Section title="Warm intro paths" items={insights.warm_intro_paths} render={(it) => (
-              <ItemBtn onClick={() => onFocusNode(`contact:${it.from_contact_id}`)}>
-                <strong>{labelByContact.get(it.from_contact_id) ?? it.from_contact_id}</strong>
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>→ {it.to_company}</p>
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{it.reason}</p>
-              </ItemBtn>
-            )} />
-            <Section title="Industry clusters with potential" items={insights.industry_clusters_with_potential} render={(it) => (
-              <ItemBtn onClick={() => onFocusNode(`industry:${it.industry}`)}>
-                <strong>{it.industry}</strong> <span className="text-xs" style={{ color: 'var(--text-muted)' }}>({it.contact_count} contacts)</span>
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{it.action}</p>
-              </ItemBtn>
-            )} />
-            <Section title="Neglected but valuable" items={insights.neglected_but_valuable} render={(it) => (
-              <ItemBtn onClick={() => onFocusNode(`contact:${it.contact_id}`)}>
-                <strong>{labelByContact.get(it.contact_id) ?? it.contact_id}</strong>
-                <span className="text-xs" style={{ color: 'var(--text-muted)' }}> · {it.last_contacted_days}d ago</span>
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{it.reason}</p>
-              </ItemBtn>
-            )} />
-            <Section title="Best next outreach" items={insights.best_next_outreach} render={(it) => (
-              <ItemBtn onClick={() => onFocusNode(`contact:${it.contact_id}`)}>
-                <strong>{labelByContact.get(it.contact_id) ?? it.contact_id}</strong>
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{it.suggested_message_hook}</p>
-              </ItemBtn>
-            )} />
-
-            <button
-              className="w-full px-3 py-2 rounded text-xs border"
-              style={{ borderColor: 'var(--border)', color: 'var(--text)' }}
-              onClick={() => { setInsights(null); }}
-            >
-              Reset
-            </button>
-          </div>
-        )}
-      </div>
-    </aside>
+          <button
+            className="w-full px-3 py-2 rounded text-xs border"
+            style={{ borderColor: 'var(--border)', color: 'var(--text)' }}
+            onClick={() => setInsights(null)}
+          >
+            Reset
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -154,8 +459,8 @@ function ItemBtn({ children, onClick }: { children: React.ReactNode; onClick: ()
   );
 }
 
-// ─── Build the compact summary the API expects ───────────────────────────────
-function buildSummary(nodes: GraphNode[]) {
+// One-shot insights endpoint expects a slightly different summary shape.
+function buildOneShotSummary(nodes: GraphNode[]) {
   const contacts = nodes.filter((n) => n.type === 'contact');
   const accounts = nodes.filter((n) => n.type === 'account');
 

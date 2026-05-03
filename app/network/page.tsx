@@ -34,6 +34,10 @@ export default function NetworkPage() {
   const [filters, setFilters] = useState<NetworkFilterState>(EMPTY_FILTERS);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [insightsOpen, setInsightsOpen] = useState(false);
+  // AI-highlighted contact UUIDs (set by Claude tool calls in the chat panel).
+  // When non-empty, the graph dims everything that isn't in this set or
+  // structurally connected to it.
+  const [aiHighlightIds, setAiHighlightIds] = useState<Set<string>>(new Set());
   const searchRef = useRef<HTMLInputElement | null>(null);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -84,8 +88,8 @@ export default function NetworkPage() {
 
   const hiddenNodeIds = useMemo(() => {
     if (!data) return new Set<string>();
-    return computeHidden(data.nodes, filters);
-  }, [data, filters]);
+    return computeHidden(data.nodes, filters, aiHighlightIds);
+  }, [data, filters, aiHighlightIds]);
 
   const selectedNode = useMemo(() => {
     if (!selectedNodeId || !data) return null;
@@ -163,6 +167,17 @@ export default function NetworkPage() {
             />
           )}
 
+          {(aiHighlightIds.size > 0 || hiddenNodeIds.size > 0) && (
+            <button
+              onClick={() => { setAiHighlightIds(new Set()); setFilters(EMPTY_FILTERS); }}
+              className="px-3 py-1.5 rounded text-xs border"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+              title="Clear all filters and AI highlights"
+            >
+              Reset view
+            </button>
+          )}
+
           <button
             onClick={() => setInsightsOpen(true)}
             className="px-3 py-1.5 rounded text-sm font-medium"
@@ -213,7 +228,25 @@ export default function NetworkPage() {
               open={insightsOpen}
               onClose={() => setInsightsOpen(false)}
               nodes={data.nodes}
+              companies={data.meta.companies}
               onFocusNode={(id) => { setSelectedNodeId(id); }}
+              onApplyFilters={(next) => {
+                // Filters and AI highlights are independent layers — applying
+                // a filter from the chat clears any prior AI highlight so the
+                // user sees a clean structural filter.
+                setAiHighlightIds(new Set());
+                setFilters(next);
+              }}
+              onHighlightContacts={(ids) => {
+                // AI highlight wins; clear structural filters so the user
+                // sees exactly the contacts Claude picked.
+                setFilters(EMPTY_FILTERS);
+                setAiHighlightIds(new Set(ids));
+              }}
+              onClearView={() => {
+                setFilters(EMPTY_FILTERS);
+                setAiHighlightIds(new Set());
+              }}
             />
           )}
           {!insightsOpen && selectedNode && (
@@ -230,8 +263,13 @@ export default function NetworkPage() {
 }
 
 // ─── Filter logic (client-side) ─────────────────────────────────────────────
-function computeHidden(nodes: GraphNode[], f: NetworkFilterState): Set<string> {
+function computeHidden(
+  nodes: GraphNode[],
+  f: NetworkFilterState,
+  aiHighlightIds: Set<string>,
+): Set<string> {
   const hidden = new Set<string>();
+  const aiActive = aiHighlightIds.size > 0;
 
   // First pass: hide contacts that don't match
   const visibleAccountIds = new Set<string>();
@@ -241,6 +279,7 @@ function computeHidden(nodes: GraphNode[], f: NetworkFilterState): Set<string> {
   for (const n of nodes) {
     if (n.type !== 'contact') continue;
     const meta = n.metadata as Record<string, unknown>;
+    const contactId = (meta.contact_id as string) ?? null;
     const industry = (meta.industry as string) ?? null;
     const accountId = (meta.account_id as string) ?? null;
     const location = (meta.location as string) ?? null;
@@ -254,6 +293,8 @@ function computeHidden(nodes: GraphNode[], f: NetworkFilterState): Set<string> {
     const ageDays = last ? Math.floor((Date.now() - Date.parse(last)) / 86400_000) : null;
 
     let visible = true;
+    // AI highlight wins: hide everything that isn't in the highlighted set.
+    if (aiActive && (!contactId || !aiHighlightIds.has(contactId))) visible = false;
     if (f.industries.length && (!industry || !f.industries.includes(industry))) visible = false;
     if (f.companies.length && (!accountId || !f.companies.includes(accountId))) visible = false;
     if (f.locations.length && (!location || !f.locations.includes(location))) visible = false;
