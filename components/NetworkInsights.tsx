@@ -55,7 +55,7 @@ export default function NetworkInsights({ open, onClose, nodes, onFocusNode }: P
   return (
     <aside
       className="absolute top-0 right-0 h-full w-[420px] flex flex-col border-l overflow-y-auto z-20"
-      style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+      style={{ background: 'var(--bg-card)', borderColor: 'var(--border)' }}
     >
       <header className="flex items-center justify-between p-3 border-b" style={{ borderColor: 'var(--border)' }}>
         <h2 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>AI Network Insights</h2>

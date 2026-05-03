@@ -54,7 +54,7 @@ export default function NetworkFilters({ filters, onChange, industries, location
       {open && (
         <div
           className="absolute top-full mt-1 right-0 w-[340px] p-3 rounded border z-30 shadow-lg max-h-[70vh] overflow-y-auto"
-          style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+          style={{ background: 'var(--bg-card)', borderColor: 'var(--border)' }}
         >
           <MultiSelect
             label="Industry"
@@ -83,7 +83,7 @@ export default function NetworkFilters({ filters, onChange, industries, location
             value={filters.titleContains}
             onChange={(e) => onChange({ ...filters, titleContains: e.target.value })}
             className="w-full px-2 py-1.5 rounded border text-sm"
-            style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }}
+            style={{ background: 'var(--bg-input)', borderColor: 'var(--border)', color: 'var(--text)' }}
             placeholder="e.g. CTO, Director"
           />
 
@@ -102,7 +102,7 @@ export default function NetworkFilters({ filters, onChange, industries, location
             value={filters.lastContacted}
             onChange={(e) => onChange({ ...filters, lastContacted: e.target.value as NetworkFilterState['lastContacted'] })}
             className="w-full px-2 py-1.5 rounded border text-sm"
-            style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }}
+            style={{ background: 'var(--bg-input)', borderColor: 'var(--border)', color: 'var(--text)' }}
           >
             <option value="any">Any</option>
             <option value="never">Never</option>
@@ -168,7 +168,7 @@ function MultiSelect({
         onChange={(e) => setFilter(e.target.value)}
         placeholder={`Filter ${label.toLowerCase()}…`}
         className="w-full px-2 py-1 rounded border text-xs mb-1"
-        style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }}
+        style={{ background: 'var(--bg-input)', borderColor: 'var(--border)', color: 'var(--text)' }}
       />
       <div className="max-h-32 overflow-y-auto rounded border" style={{ borderColor: 'var(--border)' }}>
         {show.length === 0 && <p className="p-2 text-xs" style={{ color: 'var(--text-muted)' }}>No matches</p>}
