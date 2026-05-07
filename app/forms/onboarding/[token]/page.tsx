@@ -32,7 +32,7 @@ export default function OnboardingContactsForm() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`/api/public/onboarding-contacts/${token}`);
+        const res = await fetch(`/api/public/onboarding/${token}`);
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || 'Link invalid');
         setCompanyName(json.company_name);
@@ -49,7 +49,7 @@ export default function OnboardingContactsForm() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const res = await fetch(`/api/public/onboarding-contacts/${token}`, {
+      const res = await fetch(`/api/public/onboarding/${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),

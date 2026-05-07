@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { sendOnboardingKickoffEmail } from '@/lib/onboarding-server';
 
 /**
  * GET /api/onboardings
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
 
   // Verify the deal exists and is a sales deal at G9.
   const { rows: dealRows } = await pool.query(
-    `SELECT id, company, notes, fields, lead_id, gate, deal_type FROM deals WHERE id = $1`,
+    `SELECT id, company, notes, fields, lead_id, gate, deal_type, contact_email FROM deals WHERE id = $1`,
     [deal_id]
   );
   const deal = dealRows[0];
@@ -85,11 +86,36 @@ export async function POST(req: NextRequest) {
   const rawPlan = (fields.deployment_plan as string | null) ?? null;
   const deploymentPlan = rawPlan === 'on_premise' || rawPlan === 'saas_cloud' ? rawPlan : null;
 
+  const pmUserId = deal.lead_id ?? session.userId;
   const { rows } = await pool.query(
     `INSERT INTO client_onboardings (deal_id, pm_user_id, company_name, website, description, deployment_plan)
      VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
-    [deal_id, deal.lead_id ?? session.userId, deal.company, website, (deal.notes as string | null) ?? null, deploymentPlan]
+    [deal_id, pmUserId, deal.company, website, (deal.notes as string | null) ?? null, deploymentPlan]
   );
-  return NextResponse.json(rows[0], { status: 201 });
+  const inserted = rows[0];
+
+  // Fire the welcome / kickoff email to the deal's contact_email. Best-effort:
+  // returns the row even if the email fails so the PM can recover from the UI.
+  let emailResult: Awaited<ReturnType<typeof sendOnboardingKickoffEmail>> | null = null;
+  try {
+    let pmName: string | null = null;
+    let pmEmail: string | null = null;
+    if (pmUserId) {
+      const { rows: pmRows } = await pool.query('SELECT name, email FROM users WHERE id = $1', [pmUserId]);
+      pmName = pmRows[0]?.name ?? null;
+      pmEmail = pmRows[0]?.email ?? null;
+    }
+    emailResult = await sendOnboardingKickoffEmail({
+      onboardingId: inserted.id,
+      companyName: inserted.company_name,
+      recipient: (deal.contact_email as string | null) ?? null,
+      pmName,
+      pmEmail,
+    });
+  } catch (err) {
+    console.error('[POST /api/onboardings] kickoff email error:', err);
+  }
+
+  return NextResponse.json({ ...inserted, kickoff_email: emailResult }, { status: 201 });
 }

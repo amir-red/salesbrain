@@ -1,6 +1,10 @@
 /**
  * Pure helpers for the post-G9 client onboarding workflow.
- * No DB calls or IO here — this file is testable in isolation.
+ *
+ * No DB / IO / `pool` imports here — this file is imported by client
+ * components (e.g. app/onboarding/[id]/page.tsx) so it must stay
+ * webpack-safe for the browser bundle. Server-only orchestration that
+ * touches the DB or email service lives in `lib/onboarding-server.ts`.
  */
 
 export interface OnboardingRow {
@@ -154,21 +158,72 @@ export function composeItAdminEmail(row: OnboardingRow): { subject: string; body
   return { subject, body };
 }
 
-export function composeClientFormEmail(formUrl: string, companyName: string): { subject: string; body: string } {
-  const subject = `[Zeami] Please confirm your project contacts for ${companyName}`;
+/**
+ * Returns the public form URL for the given token. This is the URL emailed to
+ * the client. In production it points at zeami.io
+ * (PUBLIC_FORM_BASE_URL=https://zeami.io/onboarding); in dev it falls back to
+ * salesbrain's own /forms/onboarding page.
+ *
+ * Pure function — does not need a request object, so it works equally well
+ * inside the agent loop, cron jobs, and route handlers.
+ */
+export function buildFormUrl(rawToken: string): string {
+  const base = process.env.PUBLIC_FORM_BASE_URL?.replace(/\/+$/, '');
+  if (base) return `${base}/${rawToken}`;
+  const app = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
+  return `${app}/forms/onboarding/${rawToken}`;
+}
+
+/**
+ * The single welcome / kickoff email we send to a client when an onboarding
+ * starts. Combines the welcome message, PM introduction, an outline of the
+ * 8 stages, and the Stage-2 contacts-form CTA. Used both for the initial
+ * auto-send (G9 / manual create) and for any resend via the "Send client
+ * form" button on the detail page.
+ */
+export function composeOnboardingKickoffEmail(args: {
+  companyName: string;
+  formUrl: string;
+  pmName?: string | null;
+  pmEmail?: string | null;
+}): { subject: string; body: string } {
+  const { companyName, formUrl, pmName, pmEmail } = args;
+  const subject = `[Zeami] Welcome — let's get ${companyName} set up`;
+  const pmLine = pmName
+    ? `Your project manager is <strong>${escapeHtml(pmName)}</strong>${pmEmail ? ` (<a href="mailto:${escapeHtml(pmEmail)}" style="color:#2563eb">${escapeHtml(pmEmail)}</a>)` : ''}. They'll guide you through every step.`
+    : `Your project manager will be in touch shortly with personal introductions.`;
   const body = `
 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #111;">
-  <h1 style="font-size: 20px; margin: 0 0 16px;">Hello from Zeami!</h1>
-  <p>To kick off the onboarding for <strong>${companyName}</strong>, we need three points of contact on your side:</p>
-  <ul style="line-height: 1.6;">
-    <li><strong>Executive sponsor</strong> — high-level stakeholder.</li>
-    <li><strong>Project manager</strong> — main point of contact for coordination.</li>
-    <li><strong>IT admin</strong> — responsible for technical deployment and user management.</li>
-  </ul>
-  <p>Please fill them in here:</p>
-  <p><a href="${formUrl}" style="display: inline-block; padding: 12px 20px; background: #2563eb; color: #fff; text-decoration: none; border-radius: 6px;">Open the contacts form</a></p>
-  <p style="font-size: 12px; color: #6b7280;">This link is single-use and expires in 30 days. If you have any questions, just reply to this email.</p>
-  <p>— The Zeami team</p>
+  <p style="font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #2563eb; margin: 0;">Zeami onboarding</p>
+  <h1 style="font-size: 22px; margin: 4px 0 16px;">Welcome, ${escapeHtml(companyName)}!</h1>
+
+  <p>Thanks for partnering with Zeami. Over the next few weeks our team will be onboarding ${escapeHtml(companyName)} through 8 stages, ending with your live deployment and the first P&amp;L impact report.</p>
+
+  <p>${pmLine}</p>
+
+  <h2 style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; margin: 24px 0 8px;">What to expect</h2>
+  <ol style="line-height: 1.7; padding-left: 20px; margin: 0;">
+    <li><strong>Company info</strong> — confirm the basics about your organization.</li>
+    <li><strong>Project contacts</strong> — name your executive sponsor, project manager, and IT admin <em>(action needed below)</em>.</li>
+    <li><strong>Access &amp; communication</strong> — we set up your instance and email your IT admin the deployment toolkit.</li>
+    <li><strong>System briefing meeting</strong> — we walk your team through using Zeami.</li>
+    <li><strong>Employee setup</strong> — your IT admin registers your team in Zeami.</li>
+    <li><strong>Deploy Zeami</strong> — your team installs the app and logs in.</li>
+    <li><strong>Automated audit</strong> — Zeami begins scanning workflow patterns.</li>
+    <li><strong>P&amp;L report</strong> — after about 48 hours of data, your dashboard goes live.</li>
+  </ol>
+
+  <h2 style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; margin: 28px 0 8px;">First step — confirm your contacts</h2>
+  <p>To begin, please tell us who on your side will own each role on the project (executive sponsor, project manager, IT admin):</p>
+
+  <p style="margin: 20px 0;">
+    <a href="${escapeHtml(formUrl)}" style="display: inline-block; padding: 12px 22px; background: #2563eb; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 600;">Open the contacts form</a>
+  </p>
+
+  <p style="font-size: 12px; color: #6b7280;">This link is single-use and expires in 30 days. If you can't open the button, copy and paste this URL into your browser:<br /><span style="word-break: break-all; color: #6b7280;">${escapeHtml(formUrl)}</span></p>
+
+  <p style="margin-top: 32px;">If anything's unclear, just reply to this email — we're happy to help.</p>
+  <p style="margin: 4px 0 0;">— The Zeami team</p>
 </div>
 `.trim();
   return { subject, body };
@@ -197,3 +252,6 @@ export function canMutate(
   if (session.role === 'admin') return true;
   return session.userId === row.pm_user_id;
 }
+
+// Server-only token + email orchestration lives in `lib/onboarding-server.ts`
+// so this file stays import-safe for client components.
