@@ -372,12 +372,11 @@ export async function loadHistory(dealId: string): Promise<Anthropic.MessagePara
     }
   }
 
-  // Phase 4: Final safety net — strip any orphaned tool_use blocks.
-  // Walk the array and for each assistant message containing tool_use blocks,
-  // verify the very next message contains a tool_result for every tool_use_id.
-  // If not, drop the orphaned tool_use blocks (preserve text-only content) so
-  // the Anthropic API never sees a mismatched pair.
-  const safe: Anthropic.MessageParam[] = [];
+  // Phase 4a: Strip any orphaned tool_use blocks.
+  // For each assistant message containing tool_use blocks, verify the very
+  // next message contains a tool_result for every tool_use_id. If not, drop
+  // the orphaned tool_use blocks (preserve text content).
+  const safeForward: Anthropic.MessageParam[] = [];
   for (let k = 0; k < final.length; k++) {
     const msg = final[k];
     if (msg.role === 'assistant' && Array.isArray(msg.content)) {
@@ -398,7 +397,43 @@ export async function loadHistory(dealId: string): Promise<Anthropic.MessagePara
             .filter((b) => b.type === 'text' && b.text)
             .map((b) => b.text!)
             .join('');
-          if (textOnly) safe.push({ role: 'assistant', content: textOnly });
+          if (textOnly) safeForward.push({ role: 'assistant', content: textOnly });
+          continue;
+        }
+      }
+    }
+    safeForward.push(msg);
+  }
+
+  // Phase 4b: Mirror sweep — strip orphaned tool_result blocks.
+  // For each user message containing tool_result blocks, verify the IMMEDIATELY
+  // preceding assistant message has matching tool_use blocks. If not, drop the
+  // orphaned tool_result blocks. If the message has no other content after
+  // stripping, drop the message entirely. Without this pass an Anthropic 400
+  // can fire as: "unexpected tool_use_id found in tool_result blocks: …"
+  const safe: Anthropic.MessageParam[] = [];
+  for (let k = 0; k < safeForward.length; k++) {
+    const msg = safeForward[k];
+    if (msg.role === 'user' && Array.isArray(msg.content)) {
+      const blocks = msg.content as Array<{ type?: string; tool_use_id?: string; text?: string }>;
+      const hasResults = blocks.some((b) => b.type === 'tool_result' && b.tool_use_id);
+      if (hasResults) {
+        const prev = safeForward[k - 1];
+        const prevToolUseIds = new Set<string>();
+        if (prev && prev.role === 'assistant' && Array.isArray(prev.content)) {
+          for (const b of prev.content as Array<{ type?: string; id?: string }>) {
+            if (b.type === 'tool_use' && b.id) prevToolUseIds.add(b.id);
+          }
+        }
+        // Keep only tool_result blocks whose tool_use_id is in the prev assistant,
+        // plus any non-tool_result blocks (rare — usually a tool_result-only msg).
+        const kept = blocks.filter((b) => {
+          if (b.type === 'tool_result') return b.tool_use_id ? prevToolUseIds.has(b.tool_use_id) : false;
+          return true;
+        });
+        if (kept.length === 0) continue;     // entire message was orphan results — drop it
+        if (kept.length !== blocks.length) {
+          safe.push({ role: 'user', content: kept as Anthropic.ContentBlockParam[] });
           continue;
         }
       }
