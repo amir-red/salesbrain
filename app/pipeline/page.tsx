@@ -27,12 +27,14 @@ async function getSessionInfo(): Promise<{ userId: string; isAdmin: boolean } | 
   }
 }
 
-// Sales pipeline gate colors (9 gates)
+// Sales pipeline gate colors (9 gates).
+// Board gates are purple (#6D28D9): G3 (Review Board 1) and G7 (Review Board 2).
+// Final won gate is green: G9 (Project Handover). Everything else is blue.
 const SALES_GATE_COLORS: Record<number, string> = {
   1: '#1D4ED8', 2: '#1D4ED8',
   3: '#6D28D9', 4: '#1D4ED8',
-  5: '#6D28D9', 6: '#1D4ED8',
-  7: '#1D4ED8', 8: '#1D4ED8',
+  5: '#1D4ED8', 6: '#1D4ED8',  // G5 was '#6D28D9' before board review moved
+  7: '#6D28D9', 8: '#1D4ED8',  // G7 was '#1D4ED8' before becoming a board gate
   9: '#166534',
 };
 

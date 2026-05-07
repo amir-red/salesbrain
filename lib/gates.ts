@@ -30,9 +30,22 @@ export const SALES_GATES: Gate[] = [
   },
   { number: 3, name: 'Review Board 1', slaDays: 5, isBoard: true },
   { number: 4, name: 'Offer Strategy', slaDays: 14, isBoard: false },
-  { number: 5, name: 'Review Board 2', slaDays: 5, isBoard: true },
+  // G5 was previously the second board gate. Internal Sign-off is now a
+  // normal team-alignment step before client-facing G6 — the actual
+  // executive review moved to G7 where there are real negotiated terms.
+  { number: 5, name: 'Internal Sign-off', slaDays: 5, isBoard: false },
   { number: 6, name: 'Offer Presentation', slaDays: 7, isBoard: false },
-  { number: 7, name: 'Negotiation', slaDays: 21, isBoard: false },
+  {
+    number: 7,
+    name: 'Negotiation',
+    slaDays: 21,
+    // Second sales board gate. The board reviews the negotiated terms
+    // (pricing, payment, scope) AND the deployment plan locked at this
+    // gate, so they're approving infrastructure choice + commercials in
+    // one pass before Close (G8).
+    isBoard: true,
+    requiredFields: ['deployment_plan'],
+  },
   { number: 8, name: 'Close', slaDays: 3, isBoard: false },
   { number: 9, name: 'Project Handover', slaDays: 5, isBoard: false },
 ];

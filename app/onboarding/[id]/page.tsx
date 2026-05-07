@@ -123,6 +123,7 @@ export default function OnboardingDetailPage() {
           <div className="max-w-3xl mx-auto space-y-8">
             {/* Stage 1 */}
             <Section number={1} row={row} title="Company Info">
+              <DeploymentPlanBadge plan={row.deployment_plan} />
               <Field label="Company name" value={row.company_name} onChange={(v) => patch({ company_name: v })} disabled={ro} required />
               <Field label="Website"      value={row.website ?? ''}      onChange={(v) => patch({ website: v || null })} disabled={ro} />
               <Field label="Company size" value={row.company_size ?? ''} onChange={(v) => patch({ company_size: v || null })} disabled={ro} placeholder="e.g. 50–200" />
@@ -412,6 +413,42 @@ function Stage2ClientForm({ onboardingId, disabled, flash, dealContactEmail }: {
 }
 
 // ─── Stage 3: send IT-admin email ───────────────────────────────────────────
+
+function DeploymentPlanBadge({ plan }: { plan: 'on_premise' | 'saas_cloud' | null }) {
+  // Carried over from the deal at G9 — read-only here. If missing, surface
+  // a warning so the PM can flag it back to sales rather than guessing.
+  if (!plan) {
+    return (
+      <div className="rounded p-3 text-xs flex items-center justify-between" style={{ background: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.3)', color: '#fbbf24' }}>
+        <span>
+          <strong>Deployment plan not set.</strong> This should have been captured at G7 (Negotiation). Confirm with the sales team before proceeding.
+        </span>
+      </div>
+    );
+  }
+  const isOnPrem = plan === 'on_premise';
+  return (
+    <div className="rounded p-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Deployment plan</span>
+        <span
+          className="text-xs font-semibold px-2 py-0.5 rounded"
+          style={{
+            background: isOnPrem ? 'rgba(167, 139, 250, 0.2)' : 'rgba(52, 211, 153, 0.2)',
+            color: isOnPrem ? '#a78bfa' : '#34d399',
+          }}
+        >
+          {isOnPrem ? 'On-premise' : 'SaaS Cloud'}
+        </span>
+      </div>
+      <p className="text-xs mt-1.5" style={{ color: 'var(--text-muted)' }}>
+        {isOnPrem
+          ? 'Secure local deployment · air-gapped compliance · full infrastructure control. Stage 3 download URL points to the on-premise installer.'
+          : 'Fully managed instance · auto-scaling infrastructure · instant updates & support. Stage 3 download URL points to the cloud client.'}
+      </p>
+    </div>
+  );
+}
 
 function Stage3SendBtn({ row, disabled, reload, flash }: { row: DetailRow; disabled?: boolean; reload: () => void; flash: (m: string) => void }) {
   const [busy, setBusy] = useState(false);

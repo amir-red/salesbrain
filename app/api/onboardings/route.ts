@@ -82,12 +82,14 @@ export async function POST(req: NextRequest) {
 
   const fields = (deal.fields as Record<string, unknown>) || {};
   const website = (fields.website as string) || null;
+  const rawPlan = (fields.deployment_plan as string | null) ?? null;
+  const deploymentPlan = rawPlan === 'on_premise' || rawPlan === 'saas_cloud' ? rawPlan : null;
 
   const { rows } = await pool.query(
-    `INSERT INTO client_onboardings (deal_id, pm_user_id, company_name, website, description)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO client_onboardings (deal_id, pm_user_id, company_name, website, description, deployment_plan)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
-    [deal_id, deal.lead_id ?? session.userId, deal.company, website, (deal.notes as string | null) ?? null]
+    [deal_id, deal.lead_id ?? session.userId, deal.company, website, (deal.notes as string | null) ?? null, deploymentPlan]
   );
   return NextResponse.json(rows[0], { status: 201 });
 }
