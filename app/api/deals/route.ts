@@ -18,13 +18,15 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    // Admins see all deals, regular users see only their own
+    // Admins see all deals. Regular users see deals where they are either
+    // the creator (user_id) OR the assigned project lead (lead_id) — so a
+    // teammate-created deal that names you as lead is visible to you.
     const isAdmin = session.role === 'admin';
     const { rows } = await pool.query(
       `SELECT d.*, u.name as lead_name, u.email as lead_email
        FROM deals d
        LEFT JOIN users u ON u.id = d.lead_id
-       ${isAdmin ? '' : 'WHERE d.user_id = $1'}
+       ${isAdmin ? '' : 'WHERE d.user_id = $1 OR d.lead_id = $1'}
        ORDER BY d.updated_at DESC LIMIT 100`,
       isAdmin ? [] : [session.userId]
     );
