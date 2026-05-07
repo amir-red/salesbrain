@@ -383,7 +383,11 @@ function Stage2ClientForm({ onboardingId, disabled, flash, dealContactEmail }: {
   return (
     <div className="rounded p-3" style={{ border: '1px dashed var(--border)' }}>
       <p className="text-[11px] uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>
-        Or send the client a form to fill these themselves
+        Resend the welcome / contacts form to the client
+      </p>
+      <p className="text-[11px] mb-2" style={{ color: 'var(--text-muted)' }}>
+        A welcome email with the form link is sent automatically when an onboarding starts.
+        Use this if the client lost it — a new single-use link will be issued.
       </p>
       <div className="flex gap-2">
         <input
@@ -400,7 +404,7 @@ function Stage2ClientForm({ onboardingId, disabled, flash, dealContactEmail }: {
           className="px-3 py-1.5 rounded text-sm font-medium disabled:opacity-40"
           style={{ background: 'var(--accent)', color: '#0b1220' }}
         >
-          {busy ? '…' : 'Send client form'}
+          {busy ? '…' : 'Resend client form'}
         </button>
       </div>
       {link && (

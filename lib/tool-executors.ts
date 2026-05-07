@@ -255,12 +255,39 @@ export async function exec_update_deal(input: {
           // Values must match the CHECK constraint: 'on_premise' | 'saas_cloud'.
           const rawPlan = (fields.deployment_plan as string | null) ?? null;
           const deploymentPlan = rawPlan === 'on_premise' || rawPlan === 'saas_cloud' ? rawPlan : null;
-          await pool.query(
+          const { rows: insertedRows } = await pool.query(
             `INSERT INTO client_onboardings
               (deal_id, pm_user_id, company_name, website, description, deployment_plan)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
+             VALUES ($1, $2, $3, $4, $5, $6)
+             RETURNING id`,
             [deal_id, deal.lead_id ?? null, deal.company, website, (deal.notes as string | null) ?? null, deploymentPlan]
           );
+          const onboardingId = insertedRows[0]?.id as string | undefined;
+
+          // Fire the welcome email to the deal's contact_email. Best-effort —
+          // the deal advance to G9 must still succeed even if Resend is down.
+          if (onboardingId) {
+            const { sendOnboardingKickoffEmail } = await import('./onboarding-server');
+            // Look up the PM info if any — used as the personal sign-off.
+            let pmName: string | null = null;
+            let pmEmail: string | null = null;
+            if (deal.lead_id) {
+              try {
+                const { rows: pmRows } = await pool.query(
+                  'SELECT name, email FROM users WHERE id = $1', [deal.lead_id]
+                );
+                pmName = pmRows[0]?.name ?? null;
+                pmEmail = pmRows[0]?.email ?? null;
+              } catch { /* non-fatal */ }
+            }
+            await sendOnboardingKickoffEmail({
+              onboardingId,
+              companyName: deal.company as string,
+              recipient: (deal.contact_email as string | null) ?? null,
+              pmName,
+              pmEmail,
+            });
+          }
         }
       } catch (err) {
         // Don't fail the deal advance if onboarding creation hiccups —
