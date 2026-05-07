@@ -243,6 +243,7 @@ export async function exec_update_deal(input: {
     // When a sales deal hits G9 (Project Handover), spin up an onboarding
     // row so the internal team can take it through the 8-stage workflow.
     // Idempotent via the UNIQUE constraint on client_onboardings.deal_id.
+    
     if (isWon && deal?.deal_type === 'sales') {
       try {
         const { rows: existingOnb } = await pool.query(
