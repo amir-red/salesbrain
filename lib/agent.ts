@@ -496,11 +496,13 @@ export async function* runAgent(
   userId?: string,
   attachmentIds?: string[]
 ): AsyncGenerator<StreamEvent> {
-  // Load deal (scoped to user if userId provided)
+  // Load deal. If userId is provided (non-admin caller), scope to the user's
+  // visible deals: those they created (user_id) OR are assigned as lead on
+  // (lead_id). Admins call with userId=undefined and see everything.
   const dealQuery = userId
     ? `SELECT d.*, u.name as lead_name, u.email as lead_email
        FROM deals d LEFT JOIN users u ON u.id = d.lead_id
-       WHERE d.id = $1 AND d.user_id = $2`
+       WHERE d.id = $1 AND (d.user_id = $2 OR d.lead_id = $2)`
     : `SELECT d.*, u.name as lead_name, u.email as lead_email
        FROM deals d LEFT JOIN users u ON u.id = d.lead_id
        WHERE d.id = $1`;
