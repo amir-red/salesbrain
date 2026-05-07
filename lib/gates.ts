@@ -9,7 +9,7 @@ export interface Gate {
 
 export type DealType = 'sales' | 'grant';
 
-// ─── Sales Pipeline (Mate deals) ────────────────────────────────
+// ─── Sales Pipeline (Zeami deals) ────────────────────────────────
 
 export const SALES_GATES: Gate[] = [
   { number: 1, name: 'Lead Qualification', slaDays: 3, isBoard: false },

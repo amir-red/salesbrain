@@ -148,3 +148,50 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER deals_updated_at
   BEFORE UPDATE ON deals
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- ─── Client Onboarding (post-G9) ─────────────────────────────────
+-- See db/migrations/003_client_onboardings.sql for the full definition.
+
+CREATE TABLE IF NOT EXISTS client_onboardings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  deal_id UUID NOT NULL UNIQUE REFERENCES deals(id) ON DELETE CASCADE,
+  pm_user_id UUID REFERENCES users(id),
+  stage SMALLINT NOT NULL DEFAULT 1 CHECK (stage BETWEEN 1 AND 8),
+  status TEXT NOT NULL DEFAULT 'in_progress'
+    CHECK (status IN ('in_progress', 'completed', 'paused')),
+  company_name TEXT NOT NULL,
+  website TEXT, company_size TEXT, description TEXT,
+  executive_name TEXT, executive_email TEXT, executive_role TEXT,
+  project_manager_name TEXT, project_manager_email TEXT,
+  it_admin_name TEXT, it_admin_email TEXT,
+  server_setup_done BOOLEAN NOT NULL DEFAULT false,
+  app_setup_done    BOOLEAN NOT NULL DEFAULT false,
+  download_url TEXT, app_credentials TEXT, email_sent_at TIMESTAMPTZ,
+  briefing_meeting_at TIMESTAMPTZ, briefing_notes TEXT,
+  employee_count INT, employee_setup_notes TEXT,
+  deployment_started_at TIMESTAMPTZ,
+  audit_started_at TIMESTAMPTZ, audit_notes TEXT,
+  pnl_ready_at TIMESTAMPTZ, pnl_report_url TEXT,
+  stage1_completed_at TIMESTAMPTZ, stage2_completed_at TIMESTAMPTZ,
+  stage3_completed_at TIMESTAMPTZ, stage4_completed_at TIMESTAMPTZ,
+  stage5_completed_at TIMESTAMPTZ, stage6_completed_at TIMESTAMPTZ,
+  stage7_completed_at TIMESTAMPTZ, stage8_completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_onboardings_pm ON client_onboardings(pm_user_id);
+CREATE INDEX IF NOT EXISTS idx_onboardings_stage ON client_onboardings(stage);
+CREATE TRIGGER onboardings_updated_at
+  BEFORE UPDATE ON client_onboardings
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+CREATE TABLE IF NOT EXISTS onboarding_form_links (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  onboarding_id UUID NOT NULL REFERENCES client_onboardings(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_onboarding_links_token_hash ON onboarding_form_links(token_hash);
+CREATE INDEX IF NOT EXISTS idx_onboarding_links_onboarding ON onboarding_form_links(onboarding_id);
