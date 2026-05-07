@@ -9,16 +9,20 @@ export async function GET(
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  // Check if deal exists and if current user is the owner
+  // Check if deal exists and whether the caller can see chat history.
+  // Visibility for the conversation entries: creator, assigned lead, or admin.
   const { rows: dealRows } = await pool.query(
-    'SELECT id, user_id FROM deals WHERE id = $1',
+    'SELECT id, user_id, lead_id FROM deals WHERE id = $1',
     [params.id]
   );
   if (dealRows.length === 0) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  const isOwner = dealRows[0].user_id === session.userId;
+  const deal = dealRows[0];
+  const isOwner = deal.user_id === session.userId
+    || deal.lead_id === session.userId
+    || session.role === 'admin';
 
   // Base query: gate changes, board decisions, followups (visible to all)
   let query = `

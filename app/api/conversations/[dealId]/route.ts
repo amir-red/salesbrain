@@ -9,12 +9,14 @@ export async function GET(
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  // Verify access: admins can see all, regular users only their own deals
+  // Verify access: admins see all; regular users see deals they created
+  // (user_id) OR are the assigned project lead on (lead_id). Same rule as
+  // /api/deals so the chat history follows the same visibility as the deal.
   const isAdmin = session.role === 'admin';
   const { rows: dealRows } = await pool.query(
     isAdmin
       ? 'SELECT id FROM deals WHERE id = $1'
-      : 'SELECT id FROM deals WHERE id = $1 AND user_id = $2',
+      : 'SELECT id FROM deals WHERE id = $1 AND (user_id = $2 OR lead_id = $2)',
     isAdmin ? [params.dealId] : [params.dealId, session.userId]
   );
   if (dealRows.length === 0) {
