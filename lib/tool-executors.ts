@@ -215,7 +215,9 @@ export async function exec_update_deal(input: {
 
     // Send Telegram notification for board gate completions and significant advances
     const newGate = updates.gate as number;
-    const isBoardPass = (oldGate === 3 && newGate === 4) || (oldGate === 5 && newGate === 6);
+    // Sales board gates: G3 → G4 (Review Board 1) and G7 → G8 (Review Board 2).
+    // Was G5 → G6 prior to the board review move; G5 is now Internal Sign-off.
+    const isBoardPass = (oldGate === 3 && newGate === 4) || (oldGate === 7 && newGate === 8);
     const isWon = newGate === 9;
 
     if (isBoardPass || isWon) {
@@ -249,11 +251,15 @@ export async function exec_update_deal(input: {
         if (existingOnb.length === 0) {
           const fields = (deal.fields as Record<string, unknown>) || {};
           const website = (fields.website as string) || null;
+          // Carry forward the deployment plan picked at G7 Negotiation.
+          // Values must match the CHECK constraint: 'on_premise' | 'saas_cloud'.
+          const rawPlan = (fields.deployment_plan as string | null) ?? null;
+          const deploymentPlan = rawPlan === 'on_premise' || rawPlan === 'saas_cloud' ? rawPlan : null;
           await pool.query(
             `INSERT INTO client_onboardings
-              (deal_id, pm_user_id, company_name, website, description)
-             VALUES ($1, $2, $3, $4, $5)`,
-            [deal_id, deal.lead_id ?? null, deal.company, website, (deal.notes as string | null) ?? null]
+              (deal_id, pm_user_id, company_name, website, description, deployment_plan)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [deal_id, deal.lead_id ?? null, deal.company, website, (deal.notes as string | null) ?? null, deploymentPlan]
           );
         }
       } catch (err) {

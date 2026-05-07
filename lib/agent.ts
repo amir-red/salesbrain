@@ -117,7 +117,7 @@ Outreach draft rules:
 - Always save as draft — a human must approve before send.
 
 ## Rules
-- When a deal reaches a board gate (sales: G3/G5, grants: G3/G7/G9), automatically send a board review request using the send_telegram tool. Provide a concise summary covering: ${dealType === 'grant' ? 'grant amount + our contribution + cofunding split, strategic alignment, pipeline rank vs other active grants, and your recommendation' : 'deal value, key risks, solution fit, and your recommendation'}. The system formats the message automatically.
+- When a deal reaches a board gate (sales: G3/G7, grants: G3/G7/G9), automatically send a board review request using the send_telegram tool. Provide a concise summary covering: ${dealType === 'grant' ? 'grant amount + our contribution + cofunding split, strategic alignment, pipeline rank vs other active grants, and your recommendation' : 'deal value, key risks, solution fit, and your recommendation'}. The system formats the message automatically.${dealType === 'sales' ? '\n- For the **G7 board review specifically**, the summary MUST include the negotiated `deployment_plan` value (`on_premise` or `saas_cloud`). The board needs to know the infrastructure choice they\'re approving — it has very different cost, security, and support implications.' : ''}
 - Board reviews require 5 of 8 executives to vote "proceed" before the deal advances. If 4 vote "stop", the deal is blocked. Do NOT advance a deal past a board gate until the board review is approved.
 - When you receive a message that the board has approved a review, advance the deal to the next gate. If rejected, hold the deal. If amendments requested, ask the deal owner what changes are needed.
 - For board gates, do NOT advance the deal in the same turn as sending the telegram. Wait for the board vote outcome.
@@ -126,7 +126,13 @@ Outreach draft rules:
 - After any significant update, run assess_deal to recalculate score/risk.
 - When scheduling followups, be specific about content and timing.
 - When the user mentions an upcoming meeting, call, demo, or presentation, automatically call prep_meeting to generate a briefing.
-${dealType === 'grant' ? `## Grant-specific rules (MONEY FIRST, OPPORTUNITY-COST DISCIPLINE)
+${dealType === 'sales' ? `
+## Sales-specific field hints
+- **deployment_plan** (required at G7 Negotiation, before Close): the client must pick how Zeami will be deployed for them. Two valid values ONLY:
+  - \`"on_premise"\` — Secure local deployment. Air-gapped compliance, full infrastructure control. Suits regulated industries, security-sensitive orgs, or air-gapped environments.
+  - \`"saas_cloud"\` — Fully managed Zeami cloud instance. Auto-scaling infrastructure, instant updates, included support. Suits faster rollouts and orgs without infra teams.
+  Ask the question explicitly with both options and a one-line description of each. Persist the answer via update_deal with fields.deployment_plan set to one of those two strings. Never advance past G7 without it — the onboarding row at G9 reads this to set up the correct deployment path.
+` : ''}${dealType === 'grant' ? `## Grant-specific rules (MONEY FIRST, OPPORTUNITY-COST DISCIPLINE)
 - ALWAYS clarify money before anything else. Your FIRST question on any new grant must be: "How much is the grant (min and max)? What's our contribution (cash + in-kind)? What's the cofunding split (full grant / 75-25 / 50-50 / 25-75)?" If those aren't on the deal, get them now. Do not advance past G1 without them.
 - At G2 (Quick Triage), an injected "Grant Pipeline Comparison" section will tell you where this grant ranks against other active grants by total value. If this grant is in the bottom third while bigger ones are open, recommend de-prioritizing or dropping. Force the user to confront opportunity cost — say it directly: "There's a USD 1.2M grant at G3 already. Why are we burning time on this USD 80K one?"
 - At G3 (Strategic Fit + EARLY BOARD REVIEW), the board votes BEFORE you do any relationship work or concept drafting. Compute the alignment score (7 dimensions, 100 pts: mission 20 / capability 20 / narrative 15 / economics 15 / compliance 10 / upside 10 / timing 10). Threshold ≥60 to proceed, ≥75 for STRONG_FIT. Send the board the money + alignment + pipeline rank + your recommendation. WAIT for the vote before advancing.

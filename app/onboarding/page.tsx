@@ -14,6 +14,7 @@ interface OnboardingCard {
   status: 'in_progress' | 'completed' | 'paused';
   company_name: string;
   deal_company: string | null;
+  deployment_plan: 'on_premise' | 'saas_cloud' | null;
   updated_at: string;
   created_at: string;
   // For "days in stage"
@@ -151,6 +152,17 @@ function OnboardingCardView({ row }: { row: OnboardingCard }) {
       <p className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }} title={row.company_name}>
         {row.company_name}
       </p>
+      {row.deployment_plan && (
+        <span
+          className="inline-block text-[9px] font-semibold px-1.5 py-0.5 rounded mt-1"
+          style={{
+            background: row.deployment_plan === 'on_premise' ? 'rgba(167, 139, 250, 0.2)' : 'rgba(52, 211, 153, 0.2)',
+            color: row.deployment_plan === 'on_premise' ? '#a78bfa' : '#34d399',
+          }}
+        >
+          {row.deployment_plan === 'on_premise' ? 'ON-PREM' : 'CLOUD'}
+        </span>
+      )}
       <div className="flex items-center justify-between mt-1.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
         <span className="truncate" title={row.pm_name ?? ''}>
           PM: {row.pm_name || 'Unassigned'}

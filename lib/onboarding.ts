@@ -22,6 +22,8 @@ export interface OnboardingRow {
   project_manager_email: string | null;
   it_admin_name: string | null;
   it_admin_email: string | null;
+  /** Carried over from the deal at G9. 'on_premise' | 'saas_cloud' | null. */
+  deployment_plan: 'on_premise' | 'saas_cloud' | null;
 
   server_setup_done: boolean;
   app_setup_done: boolean;
