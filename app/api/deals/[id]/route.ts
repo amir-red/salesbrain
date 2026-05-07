@@ -10,7 +10,9 @@ export async function GET(
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    // Any authenticated user can view any deal (highlights are public within the org)
+    // Detail page is org-wide so cards on /pipeline stay clickable.
+    // Write/edit operations on the deal still gate on creator-or-admin
+    // in their respective endpoints.
     const { rows } = await pool.query(
       `SELECT d.*, u.name as lead_name, u.email as lead_email
        FROM deals d

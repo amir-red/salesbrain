@@ -11,16 +11,26 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { rows } = await pool.query(
-    `SELECT o.*,
-            d.name as deal_name, d.company as deal_company, d.contact_email as deal_contact_email,
-            u.name as pm_name, u.email as pm_email
-     FROM client_onboardings o
-     LEFT JOIN deals d ON d.id = o.deal_id
-     LEFT JOIN users u ON u.id = o.pm_user_id
-     ORDER BY o.updated_at DESC`
-  );
-  return NextResponse.json(rows);
+  try {
+    const { rows } = await pool.query(
+      `SELECT o.*,
+              d.name as deal_name, d.company as deal_company, d.contact_email as deal_contact_email,
+              u.name as pm_name, u.email as pm_email
+       FROM client_onboardings o
+       LEFT JOIN deals d ON d.id = o.deal_id
+       LEFT JOIN users u ON u.id = o.pm_user_id
+       ORDER BY o.updated_at DESC`
+    );
+    return NextResponse.json(rows);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Query failed';
+    // Translate "relation does not exist" into an actionable hint.
+    const hint = /relation .+ does not exist/i.test(msg)
+      ? ' — run db/migrations/003_client_onboardings.sql on your database'
+      : '';
+    console.error('[GET /api/onboardings]', err);
+    return NextResponse.json({ error: msg + hint }, { status: 500 });
+  }
 }
 
 const CreateSchema = z.object({

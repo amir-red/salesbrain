@@ -9,9 +9,10 @@ interface SessionData {
   userId: string;
   email: string;
   name: string;
+  role?: string;
 }
 
-async function getUserId(): Promise<string | null> {
+async function getSessionInfo(): Promise<{ userId: string; isAdmin: boolean } | null> {
   const cookieStore = await cookies();
   const cookie = cookieStore.get('salesbrain_session');
   if (!cookie?.value) return null;
@@ -19,7 +20,8 @@ async function getUserId(): Promise<string | null> {
     const session = await unsealData<SessionData>(cookie.value, {
       password: process.env.SESSION_SECRET!,
     });
-    return session.userId || null;
+    if (!session.userId) return null;
+    return { userId: session.userId, isAdmin: session.role === 'admin' };
   } catch {
     return null;
   }
@@ -167,9 +169,14 @@ function formatMoney(byCurrency: Record<string, number>): string {
 // ─── Page ───────────────────────────────────────────────────────
 
 export default async function PipelinePage() {
-  const userId = await getUserId();
-  if (!userId) return null;
+  const sessionInfo = await getSessionInfo();
+  if (!sessionInfo) return null;
+  const { userId } = sessionInfo;
 
+  // Pipeline view is intentionally org-wide so the whole team can see where
+  // everyone is at. Per-user filtering ("My deals") is handled client-side
+  // in FilterBar via the currentUserId prop. Detail page (`/deals/[id]`) is
+  // also org-wide so any card on the kanban stays clickable.
   const { rows: deals } = await pool.query<DealRow>(
     `SELECT d.id, d.name, d.company, d.gate, d.score, d.risk, d.value, d.currency,
      d.owner, d.gate_entered_at, d.lead_id, d.deal_type,
