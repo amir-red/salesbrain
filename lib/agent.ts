@@ -14,9 +14,9 @@ const MAX_ITERATIONS = 6;
 
 // ─── System Prompt Builder ──────────────────────────────────────
 
-const MATE_KB = `## Mate (for SALES deals)
+const ZEAMI_KB = `## Zeami (for SALES deals)
 
-Mate is a **work intelligence and automation readiness platform** for organizations running significant computer-based work (knowledge work, back-office, operations, creative and analytical roles).
+Zeami is a **work intelligence and automation readiness platform** for organizations running significant computer-based work (knowledge work, back-office, operations, creative and analytical roles).
 
 **What it does (observe → understand → prioritize → assist):**
 1. Ground-truth visibility — captures how work actually happens on desktops
@@ -26,9 +26,9 @@ Mate is a **work intelligence and automation readiness platform** for organizati
 
 **Key value:** Faster process discovery, higher-quality automation backlog, aligned improvement across business/IT/employees, measurable follow-through, employee-centric enablement.
 
-**What Mate is NOT:** Not surveillance, not a replacement for human judgment, not automation-without-understanding.
+**What Zeami is NOT:** Not surveillance, not a replacement for human judgment, not automation-without-understanding.
 
-**Elevator pitch:** Mate turns desktop work into structured workflows and clear improvement signals. Organizations gain evidence-based view of how work flows, where it slows down, and what's worth automating — then connect that insight to practical AI assistance.`;
+**Elevator pitch:** Zeami turns desktop work into structured workflows and clear improvement signals. Organizations gain evidence-based view of how work flows, where it slows down, and what's worth automating — then connect that insight to practical AI assistance.`;
 
 const CHIPCHIP_KB = `## ChipChip (for GRANT deals)
 
@@ -70,7 +70,7 @@ export function buildSystemPrompt(
 ): string {
   const dealType = (deal?.deal_type as DealType) || 'sales';
   const pipeline = getPipeline(dealType);
-  const productKB = dealType === 'grant' ? CHIPCHIP_KB : MATE_KB;
+  const productKB = dealType === 'grant' ? CHIPCHIP_KB : ZEAMI_KB;
   const pipelineTitle = dealType === 'grant' ? 'The 10-Gate Grant Pipeline' : 'The 9-Gate Sales Pipeline';
   const verdictOptions = dealType === 'grant'
     ? 'STRONG_FIT / PROCEED_WITH_CAUTION / WEAK_FIT / DO_NOT_PURSUE'
@@ -82,7 +82,7 @@ export function buildSystemPrompt(
 
 ${productKB}
 
-When discussing ${dealType === 'grant' ? 'grants' : 'deals'}, ALWAYS frame in terms of the client's/donor's specific needs and how ${dealType === 'grant' ? 'ChipChip' : 'Mate'} addresses them.
+When discussing ${dealType === 'grant' ? 'grants' : 'deals'}, ALWAYS frame in terms of the client's/donor's specific needs and how ${dealType === 'grant' ? 'ChipChip' : 'Zeami'} addresses them.
 
 ## Your personality
 - You are sharp, decisive, and challenge lazy thinking.
@@ -168,7 +168,7 @@ ${dealType === 'grant' ? `## Grant-specific rules (MONEY FIRST, OPPORTUNITY-COST
   return `${base}
 
 ## Current Deal State
-- **Type**: ${dealType === 'grant' ? 'GRANT (ChipChip pipeline)' : 'SALES (Mate pipeline)'}
+- **Type**: ${dealType === 'grant' ? 'GRANT (ChipChip pipeline)' : 'SALES (Zeami pipeline)'}
 - **Deal**: ${deal.name} (${deal.company})
 - **ID**: ${deal.id}
 - **Gate**: G${deal.gate} — ${gate?.name || 'Unknown'}

@@ -42,7 +42,7 @@ export const PROSPECT_TOOLS: Anthropic.Tool[] = [
   {
     name: 'score_prospect_fit',
     description:
-      'Evaluate this prospect against our ICP (Mate-style sales) and return a structured score. Advances stage to P2_ICP_CHECKED. Considers: desktop-heavy knowledge work, process complexity, operational improvement need, automation readiness, stakeholder match, strategic relevance.',
+      'Evaluate this prospect against our ICP (Zeami-style sales) and return a structured score. Advances stage to P2_ICP_CHECKED. Considers: desktop-heavy knowledge work, process complexity, operational improvement need, automation readiness, stakeholder match, strategic relevance.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -60,7 +60,7 @@ export const PROSPECT_TOOLS: Anthropic.Tool[] = [
   {
     name: 'generate_research_brief',
     description:
-      'Generate a concise, sales-usable research brief for this prospect: company context, likely pains, relevance to Mate, outreach angle, buyer hypothesis, risks/objections. Advances stage to P3_RESEARCH_READY.',
+      'Generate a concise, sales-usable research brief for this prospect: company context, likely pains, relevance to Zeami, outreach angle, buyer hypothesis, risks/objections. Advances stage to P3_RESEARCH_READY.',
     input_schema: {
       type: 'object' as const,
       properties: {

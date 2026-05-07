@@ -29,7 +29,29 @@ interface Props {
   companies: { id: string; name: string }[];
 }
 
-type ChatMsg = { role: 'user' | 'assistant'; content: string };
+// Structured payload attached to an assistant message after Claude calls a
+// tool — drives the clickable result card below the prose bubble.
+type FilterCriteria = {
+  industries?: string[];
+  companies?: string[];
+  locations?: string[];
+  title_contains?: string;
+  has_email?: boolean;
+  has_linkedin?: boolean;
+  has_prospect?: boolean;
+  has_deal?: boolean;
+  last_contacted?: 'any' | 'never' | 'lt30' | 'gt30' | 'gt90';
+};
+type ToolResult =
+  | { tool: 'highlight_contacts'; contact_ids: string[]; reason: string }
+  | { tool: 'filter_graph'; criteria: FilterCriteria; explanation: string }
+  | { tool: 'clear_view' };
+
+type ChatMsg = {
+  role: 'user' | 'assistant';
+  content: string;
+  toolResult?: ToolResult;
+};
 
 type Mode = 'insights' | 'chat';
 
@@ -87,12 +109,21 @@ function ChatPanel({ nodes, companies, onApplyFilters, onHighlightContacts, onCl
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, busy]);
 
-  const labelByContact = new Map<string, string>();
+  // Richer lookup so result cards can show name + title + company without
+  // re-walking `nodes` each render.
+  const infoByContact = new Map<string, { name: string; title: string | null; company: string | null }>();
   for (const n of nodes) {
     if (n.type === 'contact') {
-      labelByContact.set((n.metadata as { contact_id: string }).contact_id, n.label);
+      const m = n.metadata as Record<string, unknown>;
+      infoByContact.set(m.contact_id as string, {
+        name: n.label,
+        title: (m.title as string) ?? null,
+        company: (m.company as string) ?? null,
+      });
     }
   }
+  // Backwards-compat helper for `describeToolCall` (still receives label-only map).
+  const labelByContact = new Map(Array.from(infoByContact, ([id, v]) => [id, v.name]));
   const companyIdByName = new Map(companies.map((c) => [c.name.toLowerCase(), c.id]));
 
   async function send(userText: string) {
@@ -148,12 +179,22 @@ function ChatPanel({ nodes, companies, onApplyFilters, onHighlightContacts, onCl
               const note = describeToolCall(evt.tool, evt.input, labelByContact);
               if (note) {
                 assistantBuf += (assistantBuf ? '\n\n' : '') + `→ ${note}`;
-                setMessages((m) => {
-                  const copy = [...m];
-                  copy[copy.length - 1] = { role: 'assistant', content: assistantBuf };
-                  return copy;
-                });
               }
+              // Attach the structured tool payload so the bubble can render
+              // a clickable result card below the prose.
+              const toolResult = buildToolResult(evt.tool, evt.input);
+              setMessages((m) => {
+                const copy = [...m];
+                const last = copy[copy.length - 1];
+                copy[copy.length - 1] = {
+                  role: 'assistant',
+                  content: assistantBuf,
+                  // Preserve any prior toolResult; if Claude fires multiple
+                  // tools in one response the last one wins (rare).
+                  toolResult: toolResult ?? last.toolResult,
+                };
+                return copy;
+              });
             } else if (evt.type === 'error') {
               throw new Error(evt.error || 'Chat error');
             }
@@ -240,6 +281,16 @@ function ChatPanel({ nodes, companies, onApplyFilters, onHighlightContacts, onCl
             >
               {m.content || (busy && i === messages.length - 1 ? '…' : '')}
             </div>
+            {m.role === 'assistant' && m.toolResult && (
+              <div className="mt-2">
+                <ChatResultCard
+                  result={m.toolResult}
+                  infoByContact={infoByContact}
+                  nodes={nodes}
+                  onFocusNode={onFocusNode}
+                />
+              </div>
+            )}
           </div>
         ))}
 
@@ -291,6 +342,213 @@ function describeToolCall(
     return 'Reset to full graph.';
   }
   return null;
+}
+
+// ─── Tool result → structured payload ───────────────────────────────────────
+
+function buildToolResult(tool: string, input: Record<string, unknown>): ToolResult | null {
+  if (tool === 'highlight_contacts') {
+    const ids = Array.isArray(input.contact_ids) ? (input.contact_ids as string[]) : [];
+    if (ids.length === 0) return null; // no card for empty highlights
+    return {
+      tool: 'highlight_contacts',
+      contact_ids: ids,
+      reason: typeof input.reason === 'string' ? input.reason : '',
+    };
+  }
+  if (tool === 'filter_graph') {
+    const c: FilterCriteria = {};
+    if (Array.isArray(input.industries)) c.industries = input.industries as string[];
+    if (Array.isArray(input.companies)) c.companies = input.companies as string[];
+    if (Array.isArray(input.locations)) c.locations = input.locations as string[];
+    if (typeof input.title_contains === 'string' && input.title_contains.trim()) c.title_contains = input.title_contains;
+    if (typeof input.has_email === 'boolean') c.has_email = input.has_email;
+    if (typeof input.has_linkedin === 'boolean') c.has_linkedin = input.has_linkedin;
+    if (typeof input.has_prospect === 'boolean') c.has_prospect = input.has_prospect;
+    if (typeof input.has_deal === 'boolean') c.has_deal = input.has_deal;
+    if (typeof input.last_contacted === 'string') c.last_contacted = input.last_contacted as FilterCriteria['last_contacted'];
+    return {
+      tool: 'filter_graph',
+      criteria: c,
+      explanation: typeof input.explanation === 'string' ? input.explanation : 'Filter applied.',
+    };
+  }
+  if (tool === 'clear_view') return { tool: 'clear_view' };
+  return null;
+}
+
+// ─── Result card UI ─────────────────────────────────────────────────────────
+
+function ChatResultCard({
+  result,
+  infoByContact,
+  nodes,
+  onFocusNode,
+}: {
+  result: ToolResult;
+  infoByContact: Map<string, { name: string; title: string | null; company: string | null }>;
+  nodes: GraphNode[];
+  onFocusNode: (nodeId: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (result.tool === 'clear_view') return null;
+
+  if (result.tool === 'highlight_contacts') {
+    const ids = result.contact_ids;
+    const visibleCount = expanded ? ids.length : Math.min(20, ids.length);
+    return (
+      <div className="space-y-1.5">
+        {ids.slice(0, visibleCount).map((id) => {
+          const info = infoByContact.get(id);
+          const subtitle = info
+            ? [info.title, info.company].filter(Boolean).join(' · ')
+            : '';
+          return (
+            <ItemBtn key={id} onClick={() => onFocusNode(`contact:${id}`)}>
+              <strong>{info?.name ?? `Contact …${id.slice(0, 8)}`}</strong>
+              {subtitle && (
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{subtitle}</p>
+              )}
+            </ItemBtn>
+          );
+        })}
+        {ids.length > 20 && !expanded && (
+          <button
+            onClick={() => setExpanded(true)}
+            className="w-full text-xs px-2 py-1.5 rounded border hover:bg-white/5"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+          >
+            +{ids.length - 20} more
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // filter_graph
+  const c = result.criteria;
+  const matched = countMatchingContacts(nodes, c);
+
+  return (
+    <div className="space-y-2 p-2 rounded border" style={{ borderColor: 'var(--border)' }}>
+      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+        <strong style={{ color: 'var(--text)' }}>{matched}</strong>{' '}
+        contact{matched === 1 ? '' : 's'} match
+      </p>
+
+      {c.industries && c.industries.length > 0 && (
+        <ChipRow label="Industry">
+          {c.industries.map((ind) => (
+            <Chip key={ind} onClick={() => onFocusNode(`industry:${ind}`)}>{ind}</Chip>
+          ))}
+        </ChipRow>
+      )}
+      {c.companies && c.companies.length > 0 && (
+        <ChipRow label="Company">
+          {c.companies.map((co) => <Chip key={co}>{co}</Chip>)}
+        </ChipRow>
+      )}
+      {c.locations && c.locations.length > 0 && (
+        <ChipRow label="Location">
+          {c.locations.map((loc) => (
+            <Chip key={loc} onClick={() => onFocusNode(`location:${loc}`)}>{loc}</Chip>
+          ))}
+        </ChipRow>
+      )}
+      {c.title_contains && (
+        <ChipRow label="Title contains"><Chip>{c.title_contains}</Chip></ChipRow>
+      )}
+      {(c.has_email !== undefined || c.has_linkedin !== undefined ||
+        c.has_prospect !== undefined || c.has_deal !== undefined) && (
+        <ChipRow label="Has">
+          {c.has_email !== undefined && <Chip>{c.has_email ? 'email' : 'no email'}</Chip>}
+          {c.has_linkedin !== undefined && <Chip>{c.has_linkedin ? 'LinkedIn' : 'no LinkedIn'}</Chip>}
+          {c.has_prospect !== undefined && <Chip>{c.has_prospect ? 'prospect' : 'no prospect'}</Chip>}
+          {c.has_deal !== undefined && <Chip>{c.has_deal ? 'deal' : 'no deal'}</Chip>}
+        </ChipRow>
+      )}
+      {c.last_contacted && c.last_contacted !== 'any' && (
+        <ChipRow label="Last contacted">
+          <Chip>{LAST_CONTACTED_LABELS[c.last_contacted]}</Chip>
+        </ChipRow>
+      )}
+    </div>
+  );
+}
+
+const LAST_CONTACTED_LABELS: Record<NonNullable<FilterCriteria['last_contacted']>, string> = {
+  any: 'any',
+  never: 'never',
+  lt30: 'within 30 days',
+  gt30: '>30 days ago',
+  gt90: '>90 days ago',
+};
+
+function ChipRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{label}:</span>
+      {children}
+    </div>
+  );
+}
+
+function Chip({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {
+  const isClickable = !!onClick;
+  return (
+    <button
+      onClick={onClick}
+      disabled={!isClickable}
+      className="text-xs px-2 py-0.5 rounded-full border"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'var(--bg-input)',
+        color: 'var(--text)',
+        cursor: isClickable ? 'pointer' : 'default',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+// Mirror the structural-filter logic from app/network/page.tsx so the card
+// can show a live "N contacts match" count without refactoring that helper
+// out of the page module.
+function countMatchingContacts(nodes: GraphNode[], c: FilterCriteria): number {
+  const titleQ = c.title_contains?.trim().toLowerCase() ?? '';
+  let n = 0;
+  for (const node of nodes) {
+    if (node.type !== 'contact') continue;
+    const meta = node.metadata as Record<string, unknown>;
+    const industry = (meta.industry as string) ?? null;
+    const company = (meta.company as string) ?? null;
+    const location = (meta.location as string) ?? null;
+    const title = ((meta.title as string) ?? '').toLowerCase();
+    const has_email = !!meta.email;
+    const has_linkedin = !!meta.linkedin_url;
+    const has_prospect = !!meta.prospect_id;
+    const has_deal = !!meta.deal_id;
+    const last = meta.last_contacted_at as string | null;
+    const ageDays = last ? Math.floor((Date.now() - Date.parse(last)) / 86400_000) : null;
+
+    if (c.industries && c.industries.length && (!industry || !c.industries.includes(industry))) continue;
+    // companies on the criteria are *names* (Claude's output) — match by company name.
+    if (c.companies && c.companies.length && (!company || !c.companies.includes(company))) continue;
+    if (c.locations && c.locations.length && (!location || !c.locations.includes(location))) continue;
+    if (titleQ && !title.includes(titleQ)) continue;
+    if (c.has_email !== undefined && has_email !== c.has_email) continue;
+    if (c.has_linkedin !== undefined && has_linkedin !== c.has_linkedin) continue;
+    if (c.has_prospect !== undefined && has_prospect !== c.has_prospect) continue;
+    if (c.has_deal !== undefined && has_deal !== c.has_deal) continue;
+    if (c.last_contacted === 'never' && ageDays !== null) continue;
+    if (c.last_contacted === 'lt30' && (ageDays === null || ageDays >= 30)) continue;
+    if (c.last_contacted === 'gt30' && (ageDays !== null && ageDays <= 30)) continue;
+    if (c.last_contacted === 'gt90' && (ageDays !== null && ageDays <= 90)) continue;
+    n++;
+  }
+  return n;
 }
 
 function buildSummary(nodes: GraphNode[], companies: { id: string; name: string }[]) {

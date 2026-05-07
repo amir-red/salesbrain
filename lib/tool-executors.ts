@@ -236,6 +236,32 @@ export async function exec_update_deal(input: {
         console.error('[Telegram] Failed to send gate advance notification:', err);
       }
     }
+
+    // ─── Auto-create the post-G9 client onboarding ───────────────────
+    // When a sales deal hits G9 (Project Handover), spin up an onboarding
+    // row so the internal team can take it through the 8-stage workflow.
+    // Idempotent via the UNIQUE constraint on client_onboardings.deal_id.
+    if (isWon && deal?.deal_type === 'sales') {
+      try {
+        const { rows: existingOnb } = await pool.query(
+          'SELECT id FROM client_onboardings WHERE deal_id = $1', [deal_id]
+        );
+        if (existingOnb.length === 0) {
+          const fields = (deal.fields as Record<string, unknown>) || {};
+          const website = (fields.website as string) || null;
+          await pool.query(
+            `INSERT INTO client_onboardings
+              (deal_id, pm_user_id, company_name, website, description)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [deal_id, deal.lead_id ?? null, deal.company, website, (deal.notes as string | null) ?? null]
+          );
+        }
+      } catch (err) {
+        // Don't fail the deal advance if onboarding creation hiccups —
+        // the user can manually create one from /onboarding.
+        console.error('[onboarding auto-create] Failed for deal', deal_id, err);
+      }
+    }
   }
 
   // Recalculate missing fields
@@ -383,7 +409,7 @@ export async function exec_prep_meeting(input: {
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 2048,
-    system: `You are a meeting prep specialist for B2B sales. The company sells Mate — a work intelligence and automation readiness platform. Generate a structured, actionable briefing. Use markdown formatting. Include these sections:
+    system: `You are a meeting prep specialist for B2B sales. The company sells Zeami — a work intelligence and automation readiness platform. Generate a structured, actionable briefing. Use markdown formatting. Include these sections:
 
 ## Executive Summary
 One paragraph — what this deal is about and where it stands.

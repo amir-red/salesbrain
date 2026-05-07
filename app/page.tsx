@@ -164,7 +164,7 @@ export default function Home() {
                 color: newDealType === 'sales' ? '#fff' : 'var(--text-muted)',
               }}
             >
-              Sales (Mate)
+              Sales (Zeami)
             </button>
             <button
               onClick={() => setNewDealType('grant')}
