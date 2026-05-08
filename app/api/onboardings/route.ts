@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { prefillFromDeal } from '@/lib/onboarding';
 import { sendOnboardingKickoffEmail } from '@/lib/onboarding-server';
 
 /**
@@ -81,25 +82,28 @@ export async function POST(req: NextRequest) {
   );
   if (existing[0]) return NextResponse.json(existing[0]);
 
-  const fields = (deal.fields as Record<string, unknown>) || {};
-  const website = (fields.website as string) || null;
-  const rawPlan = (fields.deployment_plan as string | null) ?? null;
-  const deploymentPlan = rawPlan === 'on_premise' || rawPlan === 'saas_cloud' ? rawPlan : null;
+  const pf = prefillFromDeal({
+    company: deal.company as string,
+    contact_email: (deal.contact_email as string | null) ?? null,
+    notes: (deal.notes as string | null) ?? null,
+    fields: (deal.fields as Record<string, unknown> | null) ?? null,
+  });
 
   const pmUserId = deal.lead_id ?? session.userId;
   const { rows } = await pool.query(
     `INSERT INTO client_onboardings
-      (deal_id, pm_user_id, company_name, website, description, deployment_plan, primary_contact_email)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+      (deal_id, pm_user_id, company_name, website, company_size, description, deployment_plan, primary_contact_email)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
     [
       deal_id,
       pmUserId,
-      deal.company,
-      website,
-      (deal.notes as string | null) ?? null,
-      deploymentPlan,
-      (deal.contact_email as string | null) ?? null,
+      pf.company_name,
+      pf.website,
+      pf.company_size,
+      pf.description,
+      pf.deployment_plan,
+      pf.primary_contact_email,
     ]
   );
   const inserted = rows[0];
