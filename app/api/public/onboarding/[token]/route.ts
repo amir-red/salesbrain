@@ -125,8 +125,14 @@ interface TokenRecord {
   onboarding_id: string;
   expires_at: string;
   used_at: string | null;
-  company_name: string;
   current_stage: number;
+  // Editable Stage-1 / company fields exposed to the client form
+  company_name: string;
+  website: string | null;
+  company_size: string | null;
+  description: string | null;
+  deployment_plan: 'on_premise' | 'saas_cloud' | null;
+  primary_contact_email: string | null;
 }
 
 async function lookupToken(rawToken: string): Promise<{ ok: true; data: TokenRecord } | { ok: false; status: number; error: string }> {
@@ -134,7 +140,9 @@ async function lookupToken(rawToken: string): Promise<{ ok: true; data: TokenRec
   const tokenHash = hashToken(rawToken);
   const { rows } = await pool.query(
     `SELECT l.id, l.onboarding_id, l.expires_at, l.used_at,
-            o.company_name, o.stage as current_stage
+            o.stage as current_stage,
+            o.company_name, o.website, o.company_size, o.description,
+            o.deployment_plan, o.primary_contact_email
      FROM onboarding_form_links l
      JOIN client_onboardings o ON o.id = l.onboarding_id
      WHERE l.token_hash = $1 LIMIT 1`,
@@ -153,8 +161,13 @@ async function lookupToken(rawToken: string): Promise<{ ok: true; data: TokenRec
 
 /**
  * GET /api/public/onboarding/[token]
- * Returns the onboarding's company name so the form can prefill its header.
- * Does NOT return any prior contact data (write-only from the client side).
+ * Returns prefill values the client can review/update on the form: company
+ * profile fields + the deployment plan + the primary contact email.
+ *
+ * The 3 contact-role fields (executive / project manager / IT admin) are
+ * INTENTIONALLY NOT returned here — they are write-only from the client
+ * side. This prevents a stale browser tab from leaking who was previously
+ * submitted, and keeps the form a clean fresh-fill UX.
  */
 export async function GET(req: NextRequest, { params }: { params: { token: string } }) {
   const denial = requireApiKey(req);
@@ -162,12 +175,22 @@ export async function GET(req: NextRequest, { params }: { params: { token: strin
 
   const result = await lookupToken(params.token);
   if (!result.ok) return jsonWithCors(req, { error: result.error }, result.status);
-  return jsonWithCors(req, { company_name: result.data.company_name });
+  const d = result.data;
+  return jsonWithCors(req, {
+    company_name: d.company_name,
+    website: d.website,
+    company_size: d.company_size,
+    description: d.description,
+    deployment_plan: d.deployment_plan,
+    primary_contact_email: d.primary_contact_email,
+    expires_at: d.expires_at,
+  });
 }
 
 // ─── POST: submit ───────────────────────────────────────────────────────────
 
 const SubmitSchema = z.object({
+  // 3 role contacts (required — primary purpose of the form)
   executive_name: z.string().min(1).max(255),
   executive_email: z.string().email(),
   executive_role: z.string().max(255).optional(),
@@ -175,6 +198,12 @@ const SubmitSchema = z.object({
   project_manager_email: z.string().email(),
   it_admin_name: z.string().min(1).max(255),
   it_admin_email: z.string().email(),
+  // Stage-1 / company-profile fields (optional — client may confirm or correct)
+  website: z.string().max(512).nullable().optional(),
+  company_size: z.string().max(64).nullable().optional(),
+  description: z.string().max(2000).nullable().optional(),
+  deployment_plan: z.enum(['on_premise', 'saas_cloud']).nullable().optional(),
+  primary_contact_email: z.union([z.string().email(), z.literal('')]).nullable().optional(),
 });
 
 export async function POST(req: NextRequest, { params }: { params: { token: string } }) {
@@ -210,19 +239,41 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
 
     const advance = current_stage === 2;
 
+    // Build the UPDATE dynamically. Required role-contact fields always set;
+    // optional company-profile fields only when present in the body so the
+    // client can leave them blank without nulling existing values.
+    const sets: string[] = [
+      'executive_name = $1', 'executive_email = $2', 'executive_role = $3',
+      'project_manager_name = $4', 'project_manager_email = $5',
+      'it_admin_name = $6', 'it_admin_email = $7',
+    ];
+    const params: unknown[] = [
+      d.executive_name, d.executive_email, d.executive_role || null,
+      d.project_manager_name, d.project_manager_email,
+      d.it_admin_name, d.it_admin_email,
+    ];
+    let nextIdx = 8;
+    const addOptional = (col: string, val: unknown) => {
+      if (val !== undefined) {
+        sets.push(`${col} = $${nextIdx++}`);
+        params.push(val);
+      }
+    };
+    // empty-string emails → null so we never persist ''
+    const normEmail = (v: string | null | undefined) =>
+      v === undefined ? undefined : v === '' ? null : v;
+    addOptional('website',               d.website);
+    addOptional('company_size',          d.company_size);
+    addOptional('description',           d.description);
+    addOptional('deployment_plan',       d.deployment_plan);
+    addOptional('primary_contact_email', normEmail(d.primary_contact_email));
+
+    if (advance) sets.push(`stage = 3, stage2_completed_at = COALESCE(stage2_completed_at, now())`);
+
+    params.push(onboarding_id);
     await pool.query(
-      `UPDATE client_onboardings SET
-         executive_name = $1, executive_email = $2, executive_role = $3,
-         project_manager_name = $4, project_manager_email = $5,
-         it_admin_name = $6, it_admin_email = $7
-         ${advance ? `, stage = 3, stage2_completed_at = COALESCE(stage2_completed_at, now())` : ''}
-       WHERE id = $8`,
-      [
-        d.executive_name, d.executive_email, d.executive_role || null,
-        d.project_manager_name, d.project_manager_email,
-        d.it_admin_name, d.it_admin_email,
-        onboarding_id,
-      ]
+      `UPDATE client_onboardings SET ${sets.join(', ')} WHERE id = $${nextIdx}`,
+      params
     );
 
     await pool.query('COMMIT');

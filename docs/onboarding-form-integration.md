@@ -25,12 +25,29 @@ X-API-Key: <ONBOARDING_API_KEY>
 ```
 
 Responses:
-- `200 OK` → `{ "company_name": "Acme Inc." }` — render this in the page header.
+- `200 OK` → prefill payload (see schema below).
 - `404` → invalid/unknown token. Show "this link is invalid".
 - `410` → used or expired. Show "this link can no longer be used; ask your project manager to send a new one".
 - `401` / `403` → API key missing or wrong (server-side bug).
 
-### `POST …/<token>` — Submit the contacts
+Prefill schema (`200 OK`):
+```json
+{
+  "company_name":          "Acme Inc.",
+  "website":               "https://acme.com",
+  "company_size":          "50-200",
+  "description":           "Mid-market manufacturing co. with a 22-person ops team.",
+  "deployment_plan":       "on_premise",
+  "primary_contact_email": "ops@acme.com",
+  "expires_at":            "2026-06-08T12:00:00Z"
+}
+```
+
+Any field except `company_name` may be `null` if it wasn't captured upstream. `deployment_plan` is `'on_premise' | 'saas_cloud' | null`. Render the prefill values into the form so the client can review/correct them.
+
+> **Note:** the 3 role contacts (executive / project_manager / it_admin) are intentionally NOT returned. They're write-only — fresh form every time, no leak of who was previously submitted from a stale tab.
+
+### `POST …/<token>` — Submit the form
 
 Headers:
 ```
@@ -47,9 +64,18 @@ Body:
   "project_manager_name":   "Sam Lee",
   "project_manager_email":  "sam@acme.com",
   "it_admin_name":          "Alex Kim",
-  "it_admin_email":         "alex@acme.com"
+  "it_admin_email":         "alex@acme.com",
+
+  // Company-profile fields (all optional — pass only the ones the client edited)
+  "website":               "https://acme.com",
+  "company_size":          "200-500",
+  "description":           "Updated company blurb…",
+  "deployment_plan":       "saas_cloud",          // 'on_premise' | 'saas_cloud'
+  "primary_contact_email": "ops@acme.com"
 }
 ```
+
+The 7 role-contact fields (3 contacts × name/email/role) are **required**. The 5 company-profile fields are **optional** — omit any field the client didn't change to avoid overwriting existing values with blanks.
 
 Responses:
 - `200 OK` → `{ "ok": true }`. Show the success page.

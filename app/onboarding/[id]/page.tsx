@@ -128,6 +128,7 @@ export default function OnboardingDetailPage() {
               <Field label="Website"      value={row.website ?? ''}      onChange={(v) => patch({ website: v || null })} disabled={ro} />
               <Field label="Company size" value={row.company_size ?? ''} onChange={(v) => patch({ company_size: v || null })} disabled={ro} placeholder="e.g. 50–200" />
               <Field label="Description"  value={row.description ?? ''}  onChange={(v) => patch({ description: v || null })} disabled={ro} multiline />
+              <Field label="Primary contact email" value={row.primary_contact_email ?? ''} onChange={(v) => patch({ primary_contact_email: v })} disabled={ro} type="email" placeholder="primary point of contact on the client side" />
               <AdvanceBtn row={row} stage={1} onAdvance={async () => { const r = await patch({ advance: true }); if (r) flash('Advanced to Stage 2'); }} disabled={ro} />
             </Section>
 

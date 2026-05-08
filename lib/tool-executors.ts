@@ -258,10 +258,18 @@ export async function exec_update_deal(input: {
           const deploymentPlan = rawPlan === 'on_premise' || rawPlan === 'saas_cloud' ? rawPlan : null;
           const { rows: insertedRows } = await pool.query(
             `INSERT INTO client_onboardings
-              (deal_id, pm_user_id, company_name, website, description, deployment_plan)
-             VALUES ($1, $2, $3, $4, $5, $6)
+              (deal_id, pm_user_id, company_name, website, description, deployment_plan, primary_contact_email)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
              RETURNING id`,
-            [deal_id, deal.lead_id ?? null, deal.company, website, (deal.notes as string | null) ?? null, deploymentPlan]
+            [
+              deal_id,
+              deal.lead_id ?? null,
+              deal.company,
+              website,
+              (deal.notes as string | null) ?? null,
+              deploymentPlan,
+              (deal.contact_email as string | null) ?? null,
+            ]
           );
           const onboardingId = insertedRows[0]?.id as string | undefined;
 

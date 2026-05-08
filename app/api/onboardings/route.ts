@@ -88,10 +88,19 @@ export async function POST(req: NextRequest) {
 
   const pmUserId = deal.lead_id ?? session.userId;
   const { rows } = await pool.query(
-    `INSERT INTO client_onboardings (deal_id, pm_user_id, company_name, website, description, deployment_plan)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO client_onboardings
+      (deal_id, pm_user_id, company_name, website, description, deployment_plan, primary_contact_email)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING *`,
-    [deal_id, pmUserId, deal.company, website, (deal.notes as string | null) ?? null, deploymentPlan]
+    [
+      deal_id,
+      pmUserId,
+      deal.company,
+      website,
+      (deal.notes as string | null) ?? null,
+      deploymentPlan,
+      (deal.contact_email as string | null) ?? null,
+    ]
   );
   const inserted = rows[0];
 
