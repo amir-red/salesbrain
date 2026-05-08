@@ -125,7 +125,6 @@ interface TokenRecord {
   onboarding_id: string;
   expires_at: string;
   used_at: string | null;
-  current_stage: number;
   // Editable Stage-1 / company fields exposed to the client form
   company_name: string;
   website: string | null;
@@ -133,16 +132,40 @@ interface TokenRecord {
   description: string | null;
   deployment_plan: 'on_premise' | 'saas_cloud' | null;
   primary_contact_email: string | null;
+  // Onboarding progress (used to render the timeline UI on the client side)
+  current_stage: number;
+  status: 'in_progress' | 'completed' | 'paused';
+  stage1_completed_at: string | null;
+  stage2_completed_at: string | null;
+  stage3_completed_at: string | null;
+  stage4_completed_at: string | null;
+  stage5_completed_at: string | null;
+  stage6_completed_at: string | null;
+  stage7_completed_at: string | null;
+  stage8_completed_at: string | null;
 }
 
-async function lookupToken(rawToken: string): Promise<{ ok: true; data: TokenRecord } | { ok: false; status: number; error: string }> {
+/**
+ * Lookup with two modes:
+ *   - mode='read'  → reject only on expiry. Used by GET so the client can
+ *                    keep checking progress on the same link AFTER submitting.
+ *   - mode='write' → reject on expiry OR used_at. Used by POST to keep the
+ *                    submission single-use.
+ */
+async function lookupToken(
+  rawToken: string,
+  mode: 'read' | 'write' = 'read',
+): Promise<{ ok: true; data: TokenRecord } | { ok: false; status: number; error: string }> {
   if (!rawToken || rawToken.length < 10) return { ok: false, status: 400, error: 'Invalid token' };
   const tokenHash = hashToken(rawToken);
   const { rows } = await pool.query(
     `SELECT l.id, l.onboarding_id, l.expires_at, l.used_at,
-            o.stage as current_stage,
             o.company_name, o.website, o.company_size, o.description,
-            o.deployment_plan, o.primary_contact_email
+            o.deployment_plan, o.primary_contact_email,
+            o.stage as current_stage, o.status,
+            o.stage1_completed_at, o.stage2_completed_at, o.stage3_completed_at,
+            o.stage4_completed_at, o.stage5_completed_at, o.stage6_completed_at,
+            o.stage7_completed_at, o.stage8_completed_at
      FROM onboarding_form_links l
      JOIN client_onboardings o ON o.id = l.onboarding_id
      WHERE l.token_hash = $1 LIMIT 1`,
@@ -150,9 +173,11 @@ async function lookupToken(rawToken: string): Promise<{ ok: true; data: TokenRec
   );
   const r = rows[0];
   if (!r) return { ok: false, status: 404, error: 'Invalid or unknown link' };
-  if (r.used_at) return { ok: false, status: 410, error: 'This link has already been used' };
   if (new Date(r.expires_at).getTime() < Date.now()) {
     return { ok: false, status: 410, error: 'This link has expired' };
+  }
+  if (mode === 'write' && r.used_at) {
+    return { ok: false, status: 410, error: 'This link has already been used' };
   }
   return { ok: true, data: r as TokenRecord };
 }
@@ -161,29 +186,47 @@ async function lookupToken(rawToken: string): Promise<{ ok: true; data: TokenRec
 
 /**
  * GET /api/public/onboarding/[token]
- * Returns prefill values the client can review/update on the form: company
- * profile fields + the deployment plan + the primary contact email.
+ *
+ * Returns BOTH prefill values (for the form) AND live progress (for the
+ * timeline). Works for the same token before AND after submission — once
+ * the client has filled the form, the same link continues to return live
+ * stage updates so they can keep an eye on where their onboarding is at.
  *
  * The 3 contact-role fields (executive / project manager / IT admin) are
- * INTENTIONALLY NOT returned here — they are write-only from the client
- * side. This prevents a stale browser tab from leaking who was previously
- * submitted, and keeps the form a clean fresh-fill UX.
+ * INTENTIONALLY NOT returned — write-only from the client side. Prevents a
+ * stale browser tab from leaking who was previously submitted.
  */
 export async function GET(req: NextRequest, { params }: { params: { token: string } }) {
   const denial = requireApiKey(req);
   if (denial) return denial;
 
-  const result = await lookupToken(params.token);
+  const result = await lookupToken(params.token, 'read');
   if (!result.ok) return jsonWithCors(req, { error: result.error }, result.status);
   const d = result.data;
   return jsonWithCors(req, {
+    // Editable / prefill fields
     company_name: d.company_name,
     website: d.website,
     company_size: d.company_size,
     description: d.description,
     deployment_plan: d.deployment_plan,
     primary_contact_email: d.primary_contact_email,
+    // Token meta
     expires_at: d.expires_at,
+    submitted_at: d.used_at,             // null until the form is submitted
+    // Live progress — drives the client-side timeline / status UI
+    stage: d.current_stage,
+    status: d.status,
+    stage_completions: {
+      stage1: d.stage1_completed_at,
+      stage2: d.stage2_completed_at,
+      stage3: d.stage3_completed_at,
+      stage4: d.stage4_completed_at,
+      stage5: d.stage5_completed_at,
+      stage6: d.stage6_completed_at,
+      stage7: d.stage7_completed_at,
+      stage8: d.stage8_completed_at,
+    },
   });
 }
 
@@ -221,7 +264,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
   }
   const d = parsed.data;
 
-  const result = await lookupToken(params.token);
+  const result = await lookupToken(params.token, 'write');
   if (!result.ok) return jsonWithCors(req, { error: result.error }, result.status);
   const { id: linkId, onboarding_id, current_stage } = result.data;
 
