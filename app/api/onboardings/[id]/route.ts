@@ -41,6 +41,8 @@ const PatchSchema = z.object({
   website: z.string().max(512).nullable().optional(),
   company_size: z.string().max(64).nullable().optional(),
   description: z.string().max(2000).nullable().optional(),
+  primary_contact_email: z.union([z.string().email(), z.literal('')]).nullable().optional(),
+  deployment_plan: z.enum(['on_premise', 'saas_cloud']).nullable().optional(),
 
   // Stage 2
   executive_name: z.string().max(255).nullable().optional(),
@@ -127,6 +129,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (d.website !== undefined)               set('website', d.website);
   if (d.company_size !== undefined)          set('company_size', d.company_size);
   if (d.description !== undefined)           set('description', d.description);
+  if (d.primary_contact_email !== undefined) set('primary_contact_email', normEmail(d.primary_contact_email));
+  if (d.deployment_plan !== undefined)       set('deployment_plan', d.deployment_plan);
   if (d.executive_name !== undefined)        set('executive_name', d.executive_name);
   if (d.executive_email !== undefined)       set('executive_email', normEmail(d.executive_email));
   if (d.executive_role !== undefined)        set('executive_role', d.executive_role);

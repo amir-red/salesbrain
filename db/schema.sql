@@ -164,6 +164,7 @@ CREATE TABLE IF NOT EXISTS client_onboardings (
   executive_name TEXT, executive_email TEXT, executive_role TEXT,
   project_manager_name TEXT, project_manager_email TEXT,
   it_admin_name TEXT, it_admin_email TEXT,
+  primary_contact_email TEXT,
   deployment_plan TEXT CHECK (deployment_plan IN ('on_premise', 'saas_cloud')),
   server_setup_done BOOLEAN NOT NULL DEFAULT false,
   app_setup_done    BOOLEAN NOT NULL DEFAULT false,

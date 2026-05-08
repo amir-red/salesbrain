@@ -26,6 +26,9 @@ export interface OnboardingRow {
   project_manager_email: string | null;
   it_admin_name: string | null;
   it_admin_email: string | null;
+  /** Primary client-side email for the project. Seeded from deal.contact_email
+   *  at creation; the client can later confirm/update via the public form. */
+  primary_contact_email: string | null;
   /** Carried over from the deal at G9. 'on_premise' | 'saas_cloud' | null. */
   deployment_plan: 'on_premise' | 'saas_cloud' | null;
 
