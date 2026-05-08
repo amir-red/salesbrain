@@ -30,7 +30,7 @@ Responses:
 - `410` → used or expired. Show "this link can no longer be used; ask your project manager to send a new one".
 - `401` / `403` → API key missing or wrong (server-side bug).
 
-Prefill schema (`200 OK`):
+Response shape (`200 OK`):
 ```json
 {
   "company_name":          "Acme Inc.",
@@ -39,13 +39,36 @@ Prefill schema (`200 OK`):
   "description":           "Mid-market manufacturing co. with a 22-person ops team.",
   "deployment_plan":       "on_premise",
   "primary_contact_email": "ops@acme.com",
-  "expires_at":            "2026-06-08T12:00:00Z"
+
+  "expires_at":            "2026-06-08T12:00:00Z",
+  "submitted_at":          null,                    // ISO timestamp once the form is submitted
+
+  "stage":  1,                                      // 1..8, current onboarding stage
+  "status": "in_progress",                          // 'in_progress' | 'completed' | 'paused'
+  "stage_completions": {
+    "stage1": null,                                 // ISO timestamp when stage 1 was completed
+    "stage2": null,
+    "stage3": null,
+    "stage4": null,
+    "stage5": null,
+    "stage6": null,
+    "stage7": null,
+    "stage8": null
+  }
 }
 ```
 
-Any field except `company_name` may be `null` if it wasn't captured upstream. `deployment_plan` is `'on_premise' | 'saas_cloud' | null`. Render the prefill values into the form so the client can review/correct them.
+The same endpoint serves **both** "fetch prefill for the form" (when `submitted_at == null`) and "fetch live progress for the timeline" (when `submitted_at != null`). After the client submits, this endpoint keeps responding 200 with the latest stage and completion timestamps — poll it (e.g. every 30 s) to update the UI without a refresh.
+
+Any field except `company_name`, `expires_at`, `stage`, `status`, and `stage_completions` may be `null` if it wasn't captured upstream. `deployment_plan` is `'on_premise' | 'saas_cloud' | null`.
 
 > **Note:** the 3 role contacts (executive / project_manager / it_admin) are intentionally NOT returned. They're write-only — fresh form every time, no leak of who was previously submitted from a stale tab.
+
+### UX recommendation for zeami.io
+
+Render two views off the same response:
+- If `submitted_at == null` → render the **form** (prefilled with the editable fields).
+- If `submitted_at != null` → render the **timeline / status view** with the 8 stages, marking stage N as ✓ when `stage_completions.stageN` is non-null and stage N+1 as "in progress" when `stage === N+1`. Poll the endpoint every 30 s (or when the page regains focus) to keep it live.
 
 ### `POST …/<token>` — Submit the form
 
