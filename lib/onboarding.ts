@@ -258,3 +258,74 @@ export function canMutate(
 
 // Server-only token + email orchestration lives in `lib/onboarding-server.ts`
 // so this file stays import-safe for client components.
+
+// ─── Deal → onboarding prefill ──────────────────────────────────────────────
+
+interface DealForPrefill {
+  company: string;
+  contact_email: string | null;
+  notes: string | null;
+  fields: Record<string, unknown> | null;
+}
+
+interface OnboardingPrefill {
+  company_name: string;
+  website: string | null;
+  company_size: string | null;
+  description: string | null;
+  deployment_plan: 'on_premise' | 'saas_cloud' | null;
+  primary_contact_email: string | null;
+}
+
+/**
+ * Computes the values to seed a new client_onboardings row from a sales deal
+ * at G9. Pulls from `deals.fields` (the agent's captured info) first, then
+ * from a few sensible fallbacks (e.g. inferring website from the email domain
+ * when sales never explicitly captured it).
+ *
+ * Used by both the G9 auto-create (lib/tool-executors.ts) and the manual
+ * create endpoint (app/api/onboardings/route.ts) so they stay in sync.
+ */
+export function prefillFromDeal(deal: DealForPrefill): OnboardingPrefill {
+  const fields = deal.fields ?? {};
+  const get = (k: string): string | null => {
+    const v = fields[k];
+    if (v === null || v === undefined) return null;
+    if (typeof v === 'string') return v.trim() || null;
+    return String(v);
+  };
+
+  // Website: explicit field wins; otherwise infer from the contact email
+  // domain (e.g. bruk@chipchip.social → https://chipchip.social). Agent
+  // doesn't currently capture website explicitly, so this fallback covers
+  // the common case.
+  let website = get('website');
+  if (!website && deal.contact_email) {
+    const at = deal.contact_email.indexOf('@');
+    if (at > 0) {
+      const domain = deal.contact_email.slice(at + 1).trim().toLowerCase();
+      if (domain && !/^(gmail|yahoo|hotmail|outlook|icloud|proton|aol)\./i.test(domain)) {
+        website = `https://${domain}`;
+      }
+    }
+  }
+
+  // Description: prefer a concise sales field; fall back to the company name
+  // alone. Avoid `deal.notes` — it often contains a long internal concept
+  // draft the client shouldn't see.
+  const description = get('business_model')
+    || get('pain_point')
+    || null;
+
+  const rawPlan = get('deployment_plan');
+  const deployment_plan = rawPlan === 'on_premise' || rawPlan === 'saas_cloud' ? rawPlan : null;
+
+  return {
+    company_name: deal.company,
+    website,
+    company_size: get('company_size'),
+    description,
+    deployment_plan,
+    primary_contact_email: deal.contact_email?.trim() || null,
+  };
+}

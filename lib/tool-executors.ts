@@ -250,25 +250,29 @@ export async function exec_update_deal(input: {
           'SELECT id FROM client_onboardings WHERE deal_id = $1', [deal_id]
         );
         if (existingOnb.length === 0) {
-          const fields = (deal.fields as Record<string, unknown>) || {};
-          const website = (fields.website as string) || null;
-          // Carry forward the deployment plan picked at G7 Negotiation.
-          // Values must match the CHECK constraint: 'on_premise' | 'saas_cloud'.
-          const rawPlan = (fields.deployment_plan as string | null) ?? null;
-          const deploymentPlan = rawPlan === 'on_premise' || rawPlan === 'saas_cloud' ? rawPlan : null;
+          // Pull as much as we can from the deal's captured fields. Single
+          // helper keeps this in sync with the manual-create endpoint.
+          const { prefillFromDeal } = await import('./onboarding');
+          const pf = prefillFromDeal({
+            company: deal.company as string,
+            contact_email: (deal.contact_email as string | null) ?? null,
+            notes: (deal.notes as string | null) ?? null,
+            fields: (deal.fields as Record<string, unknown> | null) ?? null,
+          });
           const { rows: insertedRows } = await pool.query(
             `INSERT INTO client_onboardings
-              (deal_id, pm_user_id, company_name, website, description, deployment_plan, primary_contact_email)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
+              (deal_id, pm_user_id, company_name, website, company_size, description, deployment_plan, primary_contact_email)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              RETURNING id`,
             [
               deal_id,
               deal.lead_id ?? null,
-              deal.company,
-              website,
-              (deal.notes as string | null) ?? null,
-              deploymentPlan,
-              (deal.contact_email as string | null) ?? null,
+              pf.company_name,
+              pf.website,
+              pf.company_size,
+              pf.description,
+              pf.deployment_plan,
+              pf.primary_contact_email,
             ]
           );
           const onboardingId = insertedRows[0]?.id as string | undefined;
