@@ -14,6 +14,13 @@ interface DetailRow extends OnboardingRow {
   pm_name: string | null;
   pm_email: string | null;
   can_edit: boolean;
+  is_admin: boolean;
+}
+
+interface UserOption {
+  id: string;
+  name: string;
+  email: string;
 }
 
 export default function OnboardingDetailPage() {
@@ -23,6 +30,7 @@ export default function OnboardingDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [savingStage, setSavingStage] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [users, setUsers] = useState<UserOption[]>([]);
 
   async function load() {
     setLoading(true);
@@ -39,6 +47,18 @@ export default function OnboardingDetailPage() {
     }
   }
   useEffect(() => { load(); }, [id]);
+
+  // Lazily fetch the user list when the row tells us we're an admin —
+  // populates the PM-reassignment dropdown.
+  useEffect(() => {
+    if (!row?.is_admin || users.length > 0) return;
+    (async () => {
+      try {
+        const res = await fetch('/api/users');
+        if (res.ok) setUsers(await res.json());
+      } catch { /* non-fatal */ }
+    })();
+  }, [row?.is_admin, users.length]);
 
   async function patch(updates: Record<string, unknown>): Promise<DetailRow | null> {
     setSavingStage(row?.stage ?? null);
@@ -84,9 +104,32 @@ export default function OnboardingDetailPage() {
           <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
             From deal: <Link href={`/?deal=${row.deal_id}`} className="hover:underline" style={{ color: 'var(--accent)' }}>{row.deal_name ?? row.deal_id.slice(0, 8)}</Link>
           </p>
-          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-            PM: {row.pm_name || 'Unassigned'}
-          </p>
+          {row.is_admin ? (
+            <div className="mt-2">
+              <label className="text-[10px] uppercase tracking-wider block" style={{ color: 'var(--text-muted)' }}>
+                Project Manager
+              </label>
+              <select
+                value={row.pm_user_id ?? ''}
+                onChange={async (e) => {
+                  const next = e.target.value || null;
+                  const result = await patch({ pm_user_id: next });
+                  if (result) flash(next ? 'PM reassigned' : 'PM cleared');
+                }}
+                className="mt-1 w-full px-2 py-1 rounded border text-xs"
+                style={{ background: 'var(--bg-input)', borderColor: 'var(--border)', color: 'var(--text)' }}
+              >
+                <option value="">— Unassigned —</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name || u.email}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+              PM: {row.pm_name || 'Unassigned'}
+            </p>
+          )}
           {ro && (
             <p className="text-[11px] mt-2 px-2 py-1 rounded" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>
               Read-only — only the assigned PM or an admin can edit.
