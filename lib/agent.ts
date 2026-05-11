@@ -64,10 +64,19 @@ ChipChip is an Ethiopian **agri-commerce and supply-chain technology platform** 
 
 **Grant verdicts:** ≥75 = STRONG_FIT, 60-74 = PROCEED_WITH_CAUTION, 40-59 = WEAK_FIT, <40 = DO_NOT_PURSUE.`;
 
+/**
+ * Returns the system prompt split into two parts so the stable region can
+ * be marked `cache_control: ephemeral` at the call site:
+ *  - `stable`: product KB + personality + pipeline + rules + field hints.
+ *    Only depends on `deal_type` so it cache-hits across all turns of a
+ *    deal within the 5-minute TTL.
+ *  - `dynamic`: current-deal state, missing-field warnings, board hints,
+ *    `extraContext`. Changes every turn — never cached.
+ */
 export function buildSystemPrompt(
   deal: Record<string, unknown> | null,
   extraContext?: string
-): string {
+): { stable: string; dynamic: string } {
   const dealType = (deal?.deal_type as DealType) || 'sales';
   const pipeline = getPipeline(dealType);
   const productKB = dealType === 'grant' ? CHIPCHIP_KB : ZEAMI_KB;
@@ -142,7 +151,10 @@ ${dealType === 'sales' ? `
 - Verdict enum for grants: STRONG_FIT / PROCEED_WITH_CAUTION / WEAK_FIT / DO_NOT_PURSUE.` : `- For concept drafts (G4+), produce thorough, structured documents.`}`;
 
   if (!deal) {
-    return base + '\n\nNo deal is currently selected. Help the user create or select a deal.';
+    return {
+      stable: base,
+      dynamic: '\n\nNo deal is currently selected. Help the user create or select a deal.',
+    };
   }
 
   const gate = getGate(deal.gate as number, dealType);
@@ -171,7 +183,10 @@ ${dealType === 'sales' ? `
     !flags.includes('board_sent_g3') &&
     missingMoney.length === 0;
 
-  return `${base}
+  // ─── Dynamic per-turn block (deal state + actionables) ──────────
+  // Keep this isolated from `base` so the system prompt array in
+  // anthropic.messages.create() can place a cache breakpoint between them.
+  const dynamic = `
 
 ## Current Deal State
 - **Type**: ${dealType === 'grant' ? 'GRANT (ChipChip pipeline)' : 'SALES (Zeami pipeline)'}
@@ -210,22 +225,40 @@ ${gate?.isBoard && !(deal.flags as string[])?.includes(`board_sent_g${deal.gate}
     ? `1. Board review has been sent for G${deal.gate}. Waiting for executive votes (5/8 needed to proceed). Do NOT advance the deal until the board vote resolves.`
     : ''}
 ${extraContext ? `\n${extraContext}` : ''}`;
+
+  return { stable: base, dynamic };
 }
 
 // ─── Load Conversation History ──────────────────────────────────
 
 export async function loadHistory(dealId: string): Promise<Anthropic.MessageParam[]> {
+  // LIMIT 200: months of typical deal history. Well inside Sonnet 4's 200k
+  // context window, and prompt caching (in runAgent) keeps the cost bounded
+  // on repeat calls. The cycle trim below ensures the window starts at a
+  // real cycle boundary so the trailing safety shift can never orphan a
+  // tool pair (the root cause of the recurring messages.0.content.0 400).
   const { rows } = await pool.query(
     `SELECT role, content, tool_name, tool_input
      FROM conversations
      WHERE deal_id = $1
      ORDER BY created_at DESC
-     LIMIT 60`,
+     LIMIT 200`,
     [dealId]
   );
 
+  // Phase 0: Cycle-aware row cutoff
+  // The LIMIT can land mid-tool-cycle, leaving the window starting with
+  // assistant/tool_use/tool_result whose paired rows fall outside the
+  // window. Skip leading non-`user` rows so Phase 1 always starts at a
+  // clean conversation boundary.
+  const all = rows.reverse();
+  let start = 0;
+  while (start < all.length && all[start].role !== 'user') start++;
+  // Defensive fallback: if every row is non-user (practically impossible
+  // for real chats), keep the full set rather than emptying the history.
+  const ordered = start < all.length ? all.slice(start) : all;
+
   // Phase 1: Reconstruct Anthropic message format from flat DB rows
-  const ordered = rows.reverse();
   const rawMessages: Anthropic.MessageParam[] = [];
   let toolIdCounter = 0;
   const pendingToolIds: string[] = [];
@@ -441,9 +474,27 @@ export async function loadHistory(dealId: string): Promise<Anthropic.MessagePara
     safe.push(msg);
   }
 
-  // Ensure first message is 'user' (API requirement)
-  while (safe.length > 0 && safe[0].role !== 'user') {
-    safe.shift();
+  // Phase 5: Trim the front until safe[0] is a "clean" user message.
+  // The previous version only checked role, but shifting off a leading
+  // assistant could leave a user(tool_result) at the front whose matching
+  // tool_use was just removed → Anthropic 400. Now we also drop any
+  // leading user whose content is purely tool_result blocks.
+  while (safe.length > 0) {
+    const first = safe[0];
+    if (first.role !== 'user') {
+      safe.shift();
+      continue;
+    }
+    if (Array.isArray(first.content)) {
+      const blocks = first.content as Array<{ type?: string }>;
+      const allToolResult = blocks.length > 0
+        && blocks.every((b) => b.type === 'tool_result');
+      if (allToolResult) {
+        safe.shift();
+        continue;
+      }
+    }
+    break;
   }
 
   return safe;
@@ -633,7 +684,11 @@ export async function* runAgent(
     }
   }
 
-  const systemPrompt = buildSystemPrompt(deal, extraContext);
+  // Split the system prompt so the stable region (product KB, personality,
+  // pipeline, rules, field hints) can be marked as cacheable. Subsequent
+  // turns of the same deal session within 5 minutes hit the cache, paying
+  // ~10× less for that prefix — important now that LIMIT is 200.
+  const { stable: stableSystem, dynamic: dynamicSystem } = buildSystemPrompt(deal, extraContext);
 
   let iterations = 0;
 
@@ -643,7 +698,13 @@ export async function* runAgent(
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4096,
-      system: systemPrompt,
+      system: [
+        // Stable prefix — cacheable. The cache_control breakpoint after this
+        // block also captures `tools` (which is the same array every call).
+        { type: 'text', text: stableSystem, cache_control: { type: 'ephemeral' } },
+        // Per-turn deal state — small, never cached.
+        { type: 'text', text: dynamicSystem },
+      ],
       tools: TOOLS,
       messages,
     });
