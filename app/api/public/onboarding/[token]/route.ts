@@ -1,117 +1,22 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import crypto from 'crypto';
 import pool from '@/lib/db';
+import { requireApiKey, jsonWithCors, corsOptions } from '@/lib/public-api';
 
 /**
- * Token-protected, UNAUTHENTICATED-by-session endpoints for the Stage-2 client form.
+ * Token-protected, UNAUTHENTICATED-by-session endpoints for the Stage-2
+ * client onboarding form.
  *
  * Two-layer auth:
- *   1. **API key** (`x-api-key` or `Authorization: Bearer …`) — gates *who* can
- *      call this endpoint at all. Set `ONBOARDING_API_KEY` in env. The form is
- *      hosted on zeami.io; zeami.io's backend stores the key and proxies the
- *      request. The salesbrain in-app form (dev fallback) is served by the
- *      same Next process so the call comes from `localhost`/the app origin —
- *      we exempt same-origin calls to keep the local form working.
- *
+ *   1. **API key** — see lib/public-api.ts. Gates *who* can call.
  *   2. **Per-link token** (path param) — gates *which* onboarding row this
  *      caller may read/write. Atomic single-use validation mirrors
  *      app/api/auth/reset-password/route.ts.
- *
- * Plus CORS so zeami.io can call cross-origin if it ever needs to.
  */
-
-// ─── API-key check ──────────────────────────────────────────────────────────
-
-function extractApiKey(req: NextRequest): string | null {
-  const headerKey = req.headers.get('x-api-key');
-  if (headerKey) return headerKey.trim();
-  const auth = req.headers.get('authorization') ?? '';
-  const m = auth.match(/^Bearer\s+(.+)$/i);
-  return m ? m[1].trim() : null;
-}
-
-function constantTimeEqual(a: string, b: string): boolean {
-  const ab = Buffer.from(a);
-  const bb = Buffer.from(b);
-  if (ab.length !== bb.length) return false;
-  return crypto.timingSafeEqual(ab, bb);
-}
-
-/** True if the request originates from the same origin as the salesbrain
- *  app (the in-app dev fallback at /forms/onboarding/...). */
-function isSameOriginRequest(req: NextRequest): boolean {
-  const origin = req.headers.get('origin');
-  if (!origin) {
-    // No Origin header → same-origin GET (browser navigation) or curl. We
-    // still accept this if there's a Referer pointing at the same host.
-    const referer = req.headers.get('referer');
-    if (!referer) return false;
-    try {
-      const refUrl = new URL(referer);
-      const host = req.headers.get('x-forwarded-host')?.split(',')[0]?.trim()
-        || req.headers.get('host');
-      return host !== null && refUrl.host === host;
-    } catch { return false; }
-  }
-  const host = req.headers.get('x-forwarded-host')?.split(',')[0]?.trim()
-    || req.headers.get('host');
-  if (!host) return false;
-  try {
-    const o = new URL(origin);
-    return o.host === host;
-  } catch { return false; }
-}
-
-/**
- * Returns null if the request is authorized to use the public form API.
- * Otherwise returns a 401/403 response.
- *
- * Authorization rule:
- *   - If `ONBOARDING_API_KEY` is set: callers must present the matching key,
- *     OR be same-origin (in-app dev fallback form).
- *   - If unset: every caller is allowed (development convenience).
- */
-function requireApiKey(req: NextRequest): NextResponse | null {
-  const expected = process.env.ONBOARDING_API_KEY;
-  if (!expected) return null;                                 // unconfigured = open
-  if (isSameOriginRequest(req)) return null;                  // in-app form fallback
-  const provided = extractApiKey(req);
-  if (!provided) {
-    return jsonWithCors(req, { error: 'Missing API key' }, 401);
-  }
-  if (!constantTimeEqual(provided, expected)) {
-    return jsonWithCors(req, { error: 'Invalid API key' }, 403);
-  }
-  return null;
-}
-
-// ─── CORS ───────────────────────────────────────────────────────────────────
-
-function corsHeaders(req: NextRequest): Record<string, string> {
-  // Allow only the configured public-form origin (zeami.io). If it's unset,
-  // mirror the request's Origin (development) — never use a permissive `*`
-  // alongside credentials.
-  const allowed = process.env.PUBLIC_FORM_ALLOWED_ORIGIN;
-  const origin = req.headers.get('origin') ?? '';
-  const allowOrigin = allowed || origin || '*';
-  return {
-    'Access-Control-Allow-Origin': allowOrigin,
-    'Vary': 'Origin',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
-    'Access-Control-Max-Age': '86400',
-  };
-}
-
-function jsonWithCors(req: NextRequest, body: unknown, status = 200): NextResponse {
-  const res = NextResponse.json(body, { status });
-  for (const [k, v] of Object.entries(corsHeaders(req))) res.headers.set(k, v);
-  return res;
-}
 
 export function OPTIONS(req: NextRequest) {
-  return new NextResponse(null, { status: 204, headers: corsHeaders(req) });
+  return corsOptions(req);
 }
 
 // ─── Token lookup (unchanged) ───────────────────────────────────────────────
