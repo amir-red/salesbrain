@@ -25,7 +25,12 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   );
   const row = rows[0];
   if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  return NextResponse.json({ ...row, can_edit: canMutate(session, row) });
+  return NextResponse.json({
+    ...row,
+    can_edit: canMutate(session, row),
+    // Admin override flag for the UI — admins get the PM-reassignment dropdown.
+    is_admin: session.role === 'admin',
+  });
 }
 
 // ─── PATCH: update fields and/or advance stage ──────────────────────────────
