@@ -351,17 +351,82 @@ X-API-Key: <ONBOARDING_API_KEY>
   },
   "onboarding": {
     "id":                    "bee03340-7e8b-4a24-b0a8-a04d8ce1e0d0",
-    "stage":                 1,
+    "stage":                 3,
     "status":                "in_progress",
     "deployment_plan":       "saas_cloud",
     "primary_contact_email": "bruk@chipchip.social",
+    "created_at":            "2026-05-08T12:30:00Z",
+    "updated_at":            "2026-05-09T11:20:00Z",
+
+    "pm": {
+      "name":  "Amir",
+      "email": "amir@chipchip.social"
+    },
+
+    "company_profile": {
+      "company_name":          "ChipChip",
+      "website":               "https://chipchip.social",
+      "company_size":          "22",
+      "description":           "Social commerce marketplace",
+      "primary_contact_email": "bruk@chipchip.social"
+    },
+
+    "contacts": {
+      "executive":       { "name": "Bruk",  "email": "bruk@chipchip.social",  "role": "CEO" },
+      "project_manager": { "name": "Sarah", "email": "sarah@chipchip.social", "role": null },
+      "it_admin":        { "name": "Dan",   "email": "dan@chipchip.social",   "role": null }
+    },
+
+    "access": {
+      "server_setup_done": true,
+      "app_setup_done":    true,
+      "download_url":      "https://downloads.zeami.io/chipchip/installer.dmg",
+      "email_sent_at":     "2026-05-09T10:30:00Z"
+    },
+
+    "briefing": {
+      "meeting_at": null,
+      "notes":      null
+    },
+
+    "employees": {
+      "count":       null,
+      "setup_notes": null
+    },
+
+    "deployment": {
+      "started_at": null
+    },
+
+    "audit": {
+      "started_at": null,
+      "notes":      null
+    },
+
+    "pnl": {
+      "ready_at":   null,
+      "report_url": null
+    },
+
     "stage_completions": {
-      "stage1": null, "stage2": null, "stage3": null, "stage4": null,
-      "stage5": null, "stage6": null, "stage7": null, "stage8": null
+      "stage1": "2026-05-08T12:35:00Z",
+      "stage2": "2026-05-08T15:00:00Z",
+      "stage3": null, "stage4": null, "stage5": null,
+      "stage6": null, "stage7": null, "stage8": null
     }
   }
 }
 ```
+
+#### Notes on the onboarding block
+
+- `onboarding` is `null` if the deal hasn't reached G9 yet (or hasn't been manually onboarded).
+- `pm` is the **internal** project manager managing this client on the SalesBrain side. `name` + `email` only — the internal `user_id` is never exposed. Null if no PM is assigned.
+- `company_profile` is the onboarding row's *own* copy of the company info. It diverges from the top-level `company` block once the client edits it via the public form. Use `onboarding.company_profile` if you want what the client confirmed; use `company` if you want what sales captured.
+- Each `contacts.*` is null if that role wasn't submitted yet.
+- `access.app_credentials` is **never** returned — sensitive. We do return `email_sent_at` so you can show "IT-admin email sent on X".
+- The grouped stage blocks (`briefing`, `employees`, `deployment`, `audit`, `pnl`) hold the data the PM captures as they work each stage. Most fields are `null` until that stage is in progress or done.
+- `stage_completions.stageN` is the timestamp when stage N was marked complete (null if not yet). Combined with the top-level `stage` field, this drives a checklist / timeline UI.
 
 - `onboarding` is `null` if the deal hasn't reached G9 yet.
 - `value` is a JSON number (cast from `numeric` in the DB).

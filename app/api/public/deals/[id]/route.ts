@@ -60,8 +60,45 @@ interface OnboardingRow {
   id: string;
   stage: number;
   status: string;
-  deployment_plan: string | null;
+  deployment_plan: 'on_premise' | 'saas_cloud' | null;
   primary_contact_email: string | null;
+  // PM (joined from users table)
+  pm_name: string | null;
+  pm_email: string | null;
+  // Stage 1: company profile (the onboarding's own copy — may diverge from
+  // the sales-side `deals.company` if the client edited via the public form)
+  company_name: string;
+  website: string | null;
+  company_size: string | null;
+  description: string | null;
+  // Stage 2: contacts
+  executive_name: string | null;
+  executive_email: string | null;
+  executive_role: string | null;
+  project_manager_name: string | null;
+  project_manager_email: string | null;
+  it_admin_name: string | null;
+  it_admin_email: string | null;
+  // Stage 3: access & comms (NEVER exposes app_credentials — sensitive)
+  server_setup_done: boolean;
+  app_setup_done: boolean;
+  download_url: string | null;
+  email_sent_at: string | null;
+  // Stage 4: briefing
+  briefing_meeting_at: string | null;
+  briefing_notes: string | null;
+  // Stage 5: employee setup
+  employee_count: number | null;
+  employee_setup_notes: string | null;
+  // Stage 6: deployment
+  deployment_started_at: string | null;
+  // Stage 7: audit
+  audit_started_at: string | null;
+  audit_notes: string | null;
+  // Stage 8: P&L
+  pnl_ready_at: string | null;
+  pnl_report_url: string | null;
+  // Per-stage completion timestamps
   stage1_completed_at: string | null;
   stage2_completed_at: string | null;
   stage3_completed_at: string | null;
@@ -70,6 +107,8 @@ interface OnboardingRow {
   stage6_completed_at: string | null;
   stage7_completed_at: string | null;
   stage8_completed_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
@@ -103,12 +142,30 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const acct = acctRows[0] ?? null;
 
     // Pull the onboarding row if one exists (sales deals at G9 will have one).
+    // Joined with users for the PM's name/email (the internal user_id stays
+    // server-side; only the human-readable identity is exposed).
+    // `app_credentials` is intentionally OMITTED — sensitive even if it was
+    // cleared after the Stage-3 email send.
     const { rows: onbRows } = await pool.query<OnboardingRow>(
-      `SELECT id, stage, status, deployment_plan, primary_contact_email,
-              stage1_completed_at, stage2_completed_at, stage3_completed_at,
-              stage4_completed_at, stage5_completed_at, stage6_completed_at,
-              stage7_completed_at, stage8_completed_at
-       FROM client_onboardings WHERE deal_id = $1 LIMIT 1`,
+      `SELECT o.id, o.stage, o.status, o.deployment_plan, o.primary_contact_email,
+              u.name AS pm_name, u.email AS pm_email,
+              o.company_name, o.website, o.company_size, o.description,
+              o.executive_name, o.executive_email, o.executive_role,
+              o.project_manager_name, o.project_manager_email,
+              o.it_admin_name, o.it_admin_email,
+              o.server_setup_done, o.app_setup_done, o.download_url, o.email_sent_at,
+              o.briefing_meeting_at, o.briefing_notes,
+              o.employee_count, o.employee_setup_notes,
+              o.deployment_started_at,
+              o.audit_started_at, o.audit_notes,
+              o.pnl_ready_at, o.pnl_report_url,
+              o.stage1_completed_at, o.stage2_completed_at, o.stage3_completed_at,
+              o.stage4_completed_at, o.stage5_completed_at, o.stage6_completed_at,
+              o.stage7_completed_at, o.stage8_completed_at,
+              o.created_at, o.updated_at
+       FROM client_onboardings o
+       LEFT JOIN users u ON u.id = o.pm_user_id
+       WHERE o.deal_id = $1 LIMIT 1`,
       [id]
     );
     const onb = onbRows[0] ?? null;
@@ -168,11 +225,82 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       },
       insights,
       onboarding: onb ? {
+        // Top-level identity + progress (unchanged from prior schema —
+        // existing callers keep working).
         id: onb.id,
         stage: onb.stage,
         status: onb.status,
         deployment_plan: onb.deployment_plan,
         primary_contact_email: onb.primary_contact_email,
+        created_at: onb.created_at,
+        updated_at: onb.updated_at,
+
+        // Assigned internal project manager — human-readable only.
+        pm: (onb.pm_name || onb.pm_email) ? {
+          name: onb.pm_name,
+          email: onb.pm_email,
+        } : null,
+
+        // The onboarding row's *own* copy of the company profile. Editable
+        // by the client via the public form, so it may diverge from the
+        // sales-side `company` block above.
+        company_profile: {
+          company_name: onb.company_name,
+          website: onb.website,
+          company_size: onb.company_size,
+          description: onb.description,
+          primary_contact_email: onb.primary_contact_email,
+        },
+
+        // Stage 2 — the 3 role contacts the client submitted (or that the
+        // PM filled inline).
+        contacts: {
+          executive: contactBlock(onb.executive_name, onb.executive_email, onb.executive_role),
+          project_manager: contactBlock(onb.project_manager_name, onb.project_manager_email, null),
+          it_admin: contactBlock(onb.it_admin_name, onb.it_admin_email, null),
+        },
+
+        // Stage 3 — access & comms. `app_credentials` is intentionally
+        // not exposed (sensitive). `email_sent_at` tells you when the
+        // IT-admin email went out.
+        access: {
+          server_setup_done: onb.server_setup_done,
+          app_setup_done: onb.app_setup_done,
+          download_url: onb.download_url,
+          email_sent_at: onb.email_sent_at,
+        },
+
+        // Stage 4 — briefing meeting
+        briefing: {
+          meeting_at: onb.briefing_meeting_at,
+          notes: onb.briefing_notes,
+        },
+
+        // Stage 5 — employee setup
+        employees: {
+          count: onb.employee_count,
+          setup_notes: onb.employee_setup_notes,
+        },
+
+        // Stage 6 — deployment
+        deployment: {
+          started_at: onb.deployment_started_at,
+        },
+
+        // Stage 7 — automated audit
+        audit: {
+          started_at: onb.audit_started_at,
+          notes: onb.audit_notes,
+        },
+
+        // Stage 8 — P&L
+        pnl: {
+          ready_at: onb.pnl_ready_at,
+          report_url: onb.pnl_report_url,
+        },
+
+        // Per-stage completion timestamps (unchanged — drives the timeline
+        // checkmarks in the UI).
         stage_completions: {
           stage1: onb.stage1_completed_at,
           stage2: onb.stage2_completed_at,
@@ -197,6 +325,18 @@ function getStr(v: unknown): string | null {
   if (v === null || v === undefined) return null;
   if (typeof v === 'string') return v.trim() || null;
   return String(v);
+}
+
+/** Helper for the 3 contact blocks in the onboarding response. Returns null
+ *  when all three values are empty so the caller can easily detect "this
+ *  contact wasn't submitted yet". */
+function contactBlock(
+  name: string | null,
+  email: string | null,
+  role: string | null,
+): { name: string | null; email: string | null; role: string | null } | null {
+  if (!name && !email && !role) return null;
+  return { name, email, role };
 }
 
 const PUBLIC_MAIL_DOMAINS = /^(gmail|yahoo|hotmail|outlook|icloud|proton|aol)\./i;
