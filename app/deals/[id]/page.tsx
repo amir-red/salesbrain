@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import Timeline from '@/components/Timeline';
+import DealPricingPanel from '@/components/DealPricingPanel';
 import { GATES } from '@/lib/gates';
 
 interface Deal {
@@ -340,6 +341,21 @@ export default function DealViewPage() {
                   </span>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Pricing & Quotes panel (sales deals only) */}
+          {deal.deal_type === 'sales' && (
+            <div className="mb-6">
+              <DealPricingPanel
+                deal={{
+                  id: deal.id,
+                  company: deal.company,
+                  contact_email: deal.contact_email,
+                  fields: deal.fields,
+                  currency: deal.currency,
+                }}
+              />
             </div>
           )}
 
