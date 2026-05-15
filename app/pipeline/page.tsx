@@ -93,6 +93,11 @@ function buildGateData(deals: DealRow[], gates: typeof SALES_GATES, colors: Reco
       number: g.number,
       name: g.name,
       color: colors[g.number] || '#1D4ED8',
+      // Forward gate metadata to the kanban column header (info-icon tooltip + SLA badge)
+      sla_days: g.slaDays,
+      is_board: g.isBoard,
+      description: g.description ?? null,
+      required_fields: g.requiredFields ?? [],
       deals: gateDeals,
     };
   });

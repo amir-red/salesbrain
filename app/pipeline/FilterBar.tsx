@@ -25,6 +25,10 @@ interface Gate {
   number: number;
   name: string;
   color: string;
+  sla_days: number;
+  is_board: boolean;
+  description: string | null;
+  required_fields: string[];
   deals: Deal[];
 }
 
@@ -154,11 +158,14 @@ export default function FilterBar({ salesGates, grantGates, currentUserId }: Fil
           <div key={g.number} className="flex-shrink-0 w-56 flex flex-col">
             {/* Column header */}
             <div
-              className="rounded-t-lg px-3 py-2 flex items-center justify-between"
+              className="rounded-t-lg px-3 py-2 flex items-center justify-between gap-1"
               style={{ background: g.color }}
             >
-              <span className="text-xs font-medium text-white">G{g.number}: {g.name}</span>
-              <span className="text-[10px] bg-white/20 text-white px-1.5 py-0.5 rounded-full">
+              <span className="text-xs font-medium text-white truncate flex-1" title={`G${g.number}: ${g.name}`}>
+                G{g.number}: {g.name}
+              </span>
+              <GateInfoTooltip gate={g} />
+              <span className="text-[10px] bg-white/20 text-white px-1.5 py-0.5 rounded-full flex-shrink-0">
                 {g.deals.length}
               </span>
             </div>
@@ -176,6 +183,86 @@ export default function FilterBar({ salesGates, grantGates, currentUserId }: Fil
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Small `ⓘ` icon on a kanban column header. Hover opens a styled tooltip with
+ * the gate's description, SLA, board-gate badge, and required fields.
+ *
+ * CSS-only hover (no JS state) so it stays cheap to render and works on every
+ * column. Positioned absolutely below the icon so it doesn't push siblings.
+ */
+function GateInfoTooltip({ gate }: { gate: Gate }) {
+  return (
+    <div className="relative group flex-shrink-0">
+      <button
+        type="button"
+        aria-label={`What is G${gate.number}?`}
+        tabIndex={0}
+        className="w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold text-white bg-white/20 hover:bg-white/40 transition-colors cursor-help"
+      >
+        i
+      </button>
+
+      {/* Tooltip — appears on hover OR keyboard focus. Pointer-events disabled
+          so the tooltip itself can't accidentally re-trigger hover loops. */}
+      <div
+        role="tooltip"
+        className="absolute right-0 top-full mt-2 w-72 z-30 rounded-lg p-3 text-left
+                   opacity-0 invisible group-hover:opacity-100 group-hover:visible
+                   group-focus-within:opacity-100 group-focus-within:visible
+                   transition-opacity duration-150 pointer-events-none shadow-lg"
+        style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
+      >
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xs font-semibold" style={{ color: 'var(--text)' }}>
+            G{gate.number}: {gate.name}
+          </span>
+          {gate.is_board && (
+            <span
+              className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold"
+              style={{ background: 'rgba(109, 40, 217, 0.2)', color: '#a78bfa' }}
+            >
+              Board
+            </span>
+          )}
+        </div>
+
+        {gate.description ? (
+          <p className="text-xs leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+            {gate.description}
+          </p>
+        ) : (
+          <p className="text-xs italic" style={{ color: 'var(--text-muted)' }}>
+            No description set for this gate.
+          </p>
+        )}
+
+        <div className="flex items-center gap-3 mt-2 pt-2 border-t text-[10px]"
+             style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+          <span>SLA: <strong style={{ color: 'var(--text)' }}>{gate.sla_days}d</strong></span>
+          {gate.required_fields.length > 0 && (
+            <span>
+              Required: <strong style={{ color: 'var(--text)' }}>{gate.required_fields.length}</strong> field{gate.required_fields.length === 1 ? '' : 's'}
+            </span>
+          )}
+        </div>
+
+        {gate.required_fields.length > 0 && (
+          <details className="mt-2">
+            <summary className="text-[10px] cursor-pointer pointer-events-auto" style={{ color: 'var(--text-muted)' }}>
+              Show required fields
+            </summary>
+            <ul className="mt-1 text-[10px] space-y-0.5" style={{ color: 'var(--text)' }}>
+              {gate.required_fields.map((f) => (
+                <li key={f} className="font-mono">· {f}</li>
+              ))}
+            </ul>
+          </details>
+        )}
       </div>
     </div>
   );
