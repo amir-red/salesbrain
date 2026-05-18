@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
       try {
         // Admins can chat with any deal (no userId scoping)
         const agentUserId = session.role === 'admin' ? undefined : session.userId;
-        for await (const event of runAgent(deal_id, message, agentUserId, attachment_ids)) {
+        for await (const event of runAgent(deal_id, message, agentUserId, attachment_ids, session.email)) {
           controller.enqueue(encoder.encode(JSON.stringify(event) + '\n'));
         }
       } catch (err) {
