@@ -7,6 +7,7 @@ import { executeTool } from './tool-executors';
 import { getPipeline, getGate, getMissingFields, getSLAStatus, GRANT_MONEY_FIELDS, type DealType } from './gates';
 import { computeGrantPipelineRank, formatRankForPrompt } from './grant-pipeline-rank';
 import { classify } from './file-extractor';
+import { loadMemoriesForPrompt, formatMemoryBlock } from './memory';
 
 const anthropic = new Anthropic();
 
@@ -75,7 +76,8 @@ ChipChip is an Ethiopian **agri-commerce and supply-chain technology platform** 
  */
 export function buildSystemPrompt(
   deal: Record<string, unknown> | null,
-  extraContext?: string
+  extraContext?: string,
+  memoryBlock?: string
 ): { stable: string; dynamic: string } {
   const dealType = (deal?.deal_type as DealType) || 'sales';
   const pipeline = getPipeline(dealType);
@@ -135,6 +137,7 @@ Outreach draft rules:
 - After any significant update, run assess_deal to recalculate score/risk.
 - When scheduling followups, be specific about content and timing.
 - When the user mentions an upcoming meeting, call, demo, or presentation, automatically call prep_meeting to generate a briefing.
+- **Memory**: when the user explicitly says "remember X" / "in the future, always Y" / "next time..." OR when a clear cross-deal lesson emerges that isn't deal-specific, call \`remember\`. Pick scope="org" for team-wide lessons ("we always...", "the team should..."), scope="user" for the current user's personal preference ("I prefer...", "for me always..."). NEVER use \`remember\` for deal-specific facts — those go in \`update_deal\` (fields/notes). When the user says "forget mem_xxxx", call \`forget\` with that id. The system loads existing memories into the prompt under "## Memory" with their ids in brackets — apply them whenever relevant, without announcing the memory system unless asked.
 ${dealType === 'sales' ? `
 ## Sales-specific field hints
 - **deployment_plan** (required at G7 Negotiation, before Close): the client must pick how Zeami will be deployed for them. Two valid values ONLY:
@@ -153,7 +156,7 @@ ${dealType === 'sales' ? `
   if (!deal) {
     return {
       stable: base,
-      dynamic: '\n\nNo deal is currently selected. Help the user create or select a deal.',
+      dynamic: '\n\nNo deal is currently selected. Help the user create or select a deal.' + (memoryBlock || ''),
     };
   }
 
@@ -224,7 +227,7 @@ ${gate?.isBoard && !(deal.flags as string[])?.includes(`board_sent_g${deal.gate}
   : gate?.isBoard && (deal.flags as string[])?.includes(`board_sent_g${deal.gate}`)
     ? `1. Board review has been sent for G${deal.gate}. Waiting for executive votes (5/8 needed to proceed). Do NOT advance the deal until the board vote resolves.`
     : ''}
-${extraContext ? `\n${extraContext}` : ''}`;
+${extraContext ? `\n${extraContext}` : ''}${memoryBlock || ''}`;
 
   return { stable: base, dynamic };
 }
@@ -586,7 +589,8 @@ export async function* runAgent(
   dealId: string,
   userMessage: string,
   userId?: string,
-  attachmentIds?: string[]
+  attachmentIds?: string[],
+  userEmail?: string
 ): AsyncGenerator<StreamEvent> {
   // Load deal. If userId is provided (non-admin caller), scope to the user's
   // visible deals: those they created (user_id) OR are assigned as lead on
@@ -684,11 +688,22 @@ export async function* runAgent(
     }
   }
 
+  // Load shared agent memories (org + per-user). Lives in the dynamic half
+  // of the prompt so it never invalidates the cached stable prefix. Failure
+  // here is non-fatal — agent still runs without memories.
+  let memoryBlock = '';
+  try {
+    const mem = await loadMemoriesForPrompt(userEmail);
+    memoryBlock = formatMemoryBlock(mem);
+  } catch (err) {
+    console.warn('[runAgent] memory load failed:', err);
+  }
+
   // Split the system prompt so the stable region (product KB, personality,
   // pipeline, rules, field hints) can be marked as cacheable. Subsequent
   // turns of the same deal session within 5 minutes hit the cache, paying
   // ~10× less for that prefix — important now that LIMIT is 200.
-  const { stable: stableSystem, dynamic: dynamicSystem } = buildSystemPrompt(deal, extraContext);
+  const { stable: stableSystem, dynamic: dynamicSystem } = buildSystemPrompt(deal, extraContext, memoryBlock);
 
   let iterations = 0;
 
@@ -752,7 +767,7 @@ export async function* runAgent(
 
         let result: Record<string, unknown>;
         try {
-          result = await executeTool(block.name, toolInput, { userId });
+          result = await executeTool(block.name, toolInput, { userId, userEmail, dealId });
         } catch (err) {
           result = { error: err instanceof Error ? err.message : 'Tool execution failed' };
         }

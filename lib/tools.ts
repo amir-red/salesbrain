@@ -173,5 +173,46 @@ const DEAL_TOOLS: Tool[] = [
   },
 ];
 
-// Union of deal tools + prospect tools. The agent sees all of them at once.
-export const TOOLS: Tool[] = [...DEAL_TOOLS, ...PROSPECT_TOOLS];
+// ─── Memory tools (durable cross-conversation facts) ────────────
+// `remember` appends a bullet to memory/org.md (team-wide) or
+// memory/users/<localpart>.md (per-user). The bullet survives every
+// future chat — it's loaded into the system prompt's dynamic section
+// on every turn. `forget` removes a bullet by its short id.
+const MEMORY_TOOLS: Tool[] = [
+  {
+    name: 'remember',
+    description:
+      'Save a durable lesson the agent should recall in future conversations across deals. Use when the user explicitly says "remember X" / "in the future, always Y", OR when a clear cross-deal lesson emerges that isn\'t deal-specific. Do NOT use for deal-specific facts (those belong in update_deal). Choose scope="org" for team-wide rules ("we always...", "the team should..."), scope="user" for the current user\'s personal preference ("I prefer...", "for me always..."). Returns a short mem id (e.g. mem_a1b2) the user can later reference with forget.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        scope: {
+          type: 'string',
+          enum: ['org', 'user'],
+          description: 'org = team-wide lesson everyone sees. user = personal preference visible only to the current user.',
+        },
+        fact: {
+          type: 'string',
+          maxLength: 500,
+          description: 'One concise sentence. Phrase as a universal rule, not a deal-specific note. E.g. "Never quote on-prem without a 20% security premium." (good) vs "For ChipChip, charge 20% extra" (bad — belongs in deal.notes).',
+        },
+      },
+      required: ['scope', 'fact'],
+    },
+  },
+  {
+    name: 'forget',
+    description:
+      'Remove a memory by its short id (e.g. "mem_a1b2"). The id is shown bracketed in the system prompt and was returned by the matching remember call.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        mem_id: { type: 'string', description: 'Short id like mem_a1b2.' },
+      },
+      required: ['mem_id'],
+    },
+  },
+];
+
+// Union of deal tools + prospect tools + memory tools. The agent sees them all.
+export const TOOLS: Tool[] = [...DEAL_TOOLS, ...PROSPECT_TOOLS, ...MEMORY_TOOLS];

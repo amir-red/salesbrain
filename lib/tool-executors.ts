@@ -4,6 +4,7 @@ import { sendTelegramMessage, formatBoardReviewMessage } from './telegram';
 import { sendEmail } from './email';
 import { getMissingFields, getGate, GRANT_MONEY_FIELDS } from './gates';
 import { executeProspectTool, PROSPECT_TOOL_NAMES } from './prospect-executors';
+import { appendMemory, removeMemory } from './memory';
 
 const anthropic = new Anthropic();
 
@@ -495,12 +496,48 @@ Be specific — reference actual data from the deal, not generic advice.`,
   };
 }
 
+// ─── remember / forget ─────────────────────────────────────────
+
+export async function exec_remember(
+  input: { scope: 'org' | 'user'; fact: string },
+  ctx: { userEmail?: string; dealId?: string }
+): Promise<Record<string, unknown>> {
+  if (input.scope === 'user' && !ctx.userEmail) {
+    return { error: 'Cannot save a user-scoped memory: no user context (this likely fired from a cron/webhook). Use scope="org" instead.' };
+  }
+  try {
+    const memId = await appendMemory(input.scope, input.fact, {
+      userEmail: ctx.userEmail,
+      byEmail: ctx.userEmail,
+      sourceDealId: ctx.dealId,
+    });
+    return { saved: true, mem_id: memId, scope: input.scope, fact: input.fact };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'remember failed' };
+  }
+}
+
+export async function exec_forget(
+  input: { mem_id: string },
+  ctx: { userEmail?: string }
+): Promise<Record<string, unknown>> {
+  try {
+    const result = await removeMemory(input.mem_id, { userEmail: ctx.userEmail, byEmail: ctx.userEmail });
+    if (!result.removed) {
+      return { removed: false, error: `No memory found with id ${input.mem_id}` };
+    }
+    return { removed: true, scope: result.scope };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'forget failed' };
+  }
+}
+
 // ─── Dispatcher ─────────────────────────────────────────────────
 
 export async function executeTool(
   name: string,
   input: Record<string, unknown>,
-  context?: { userId?: string }
+  context?: { userId?: string; userEmail?: string; dealId?: string }
 ): Promise<Record<string, unknown>> {
   // Route prospecting tools to the prospect-executors module
   if (PROSPECT_TOOL_NAMES.has(name)) {
@@ -522,6 +559,16 @@ export async function executeTool(
       return exec_draft_concept(input as Parameters<typeof exec_draft_concept>[0]);
     case 'prep_meeting':
       return exec_prep_meeting(input as Parameters<typeof exec_prep_meeting>[0]);
+    case 'remember':
+      return exec_remember(
+        input as Parameters<typeof exec_remember>[0],
+        { userEmail: context?.userEmail, dealId: context?.dealId }
+      );
+    case 'forget':
+      return exec_forget(
+        input as Parameters<typeof exec_forget>[0],
+        { userEmail: context?.userEmail }
+      );
     default:
       return { error: `Unknown tool: ${name}` };
   }
