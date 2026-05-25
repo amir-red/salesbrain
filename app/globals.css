@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --bg: #0a0a0f;
   --bg-card: #12121a;
@@ -13,6 +15,21 @@
   --yellow: #eab308;
   --red: #ef4444;
   --orange: #f97316;
+}
+
+.light {
+  --bg: #f5f5f9;
+  --bg-card: #ffffff;
+  --bg-input: #e8e8ee;
+  --border: #d0d0da;
+  --text: #1a1a2e;
+  --text-muted: #6b6b80;
+  --accent: #2563eb;
+  --accent-glow: rgba(37, 99, 235, 0.1);
+  --green: #16a34a;
+  --yellow: #ca8a04;
+  --red: #dc2626;
+  --orange: #ea580c;
 }
 
 * {
@@ -57,7 +74,7 @@ body {
   font-size: 0.9em;
 }
 .markdown-body strong {
-  color: #fff;
+  color: var(--text);
 }
 
 /* Mic pulse animation */
