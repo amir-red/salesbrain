@@ -8,6 +8,7 @@ import { getPipeline, getGate, getMissingFields, getSLAStatus, GRANT_MONEY_FIELD
 import { computeGrantPipelineRank, formatRankForPrompt } from './grant-pipeline-rank';
 import { classify } from './file-extractor';
 import { loadMemoriesForPrompt, formatMemoryBlock } from './memory';
+import { MODEL, webSearchTool } from './llm';
 
 const anthropic = new Anthropic();
 
@@ -138,6 +139,7 @@ Outreach draft rules:
 - When scheduling followups, be specific about content and timing.
 - When the user mentions an upcoming meeting, call, demo, or presentation, automatically call prep_meeting to generate a briefing.
 - **Memory**: when the user explicitly says "remember X" / "in the future, always Y" / "next time..." OR when a clear cross-deal lesson emerges that isn't deal-specific, call \`remember\`. Pick scope="org" for team-wide lessons ("we always...", "the team should..."), scope="user" for the current user's personal preference ("I prefer...", "for me always..."). NEVER use \`remember\` for deal-specific facts — those go in \`update_deal\` (fields/notes). When the user says "forget mem_xxxx", call \`forget\` with that id. The system loads existing memories into the prompt under "## Memory" with their ids in brackets — apply them whenever relevant, without announcing the memory system unless asked.
+- **Web search**: you have access to a live \`web_search\` tool (Anthropic-hosted). Use it when the user asks about a real-world organization, person, market, donor, or current event that you can't answer reliably from training data alone — e.g. "who's the CEO of Ethiopia Investment Holdings", "recent news on this donor", "what's this company's headcount?", "what does this org do?". Don't search for things you obviously know (basic concepts, ChipChip's own pipeline, our own product, the deal's own captured fields). Don't search to pad a confident answer. When you do search, cite the source URL(s) in your reply so the user can verify. Cap yourself at a few targeted searches per turn — it's a paid tool.
 ${dealType === 'sales' ? `
 ## Sales-specific field hints
 - **deployment_plan** (required at G7 Negotiation, before Close): the client must pick how Zeami will be deployed for them. Two valid values ONLY:
@@ -711,7 +713,7 @@ export async function* runAgent(
     iterations++;
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: MODEL,
       max_tokens: 4096,
       system: [
         // Stable prefix — cacheable. The cache_control breakpoint after this
@@ -720,7 +722,11 @@ export async function* runAgent(
         // Per-turn deal state — small, never cached.
         { type: 'text', text: dynamicSystem },
       ],
-      tools: TOOLS,
+      // Function tools (our `executeTool` dispatcher) + Anthropic's hosted
+      // web_search server tool. The model picks `web_search` when it needs
+      // a live fact it can't answer from training data; results come back
+      // as `web_search_tool_result` blocks the SDK handles transparently.
+      tools: [...TOOLS, webSearchTool],
       messages,
     });
 
