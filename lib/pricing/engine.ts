@@ -10,6 +10,7 @@
  */
 
 import fs from 'fs/promises';
+import path from 'path';
 import * as XLSX from 'xlsx';
 import { HyperFormula } from 'hyperformula';
 import {
@@ -33,7 +34,13 @@ export async function calculatePricing(
   toolPath: string,
   inputs: Partial<PricingInputs>,
 ): Promise<PricingCalcResult> {
-  const buf = await fs.readFile(toolPath);
+  // Resolve the DB-stored path against the project root so a relative path
+  // (the new format — host-portable) works the same everywhere. Old rows
+  // that still carry an absolute path are passed through unchanged.
+  const resolvedPath = path.isAbsolute(toolPath)
+    ? toolPath
+    : path.join(process.cwd(), toolPath);
+  const buf = await fs.readFile(resolvedPath);
   const wb = XLSX.read(buf, { type: 'buffer', cellNF: true, cellFormula: true });
 
   // ── Convert each SheetJS sheet to a 2D array suitable for HyperFormula ──

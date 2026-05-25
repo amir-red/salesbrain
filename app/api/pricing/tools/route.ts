@@ -70,12 +70,20 @@ export async function POST(req: NextRequest) {
   );
   const version = vRows[0].next_v;
 
-  // Store on disk under uploads/pricing-tools/v<N>.xlsx
-  const uploadDir = path.join(process.cwd(), 'uploads', 'pricing-tools');
+  // Store on disk under uploads/pricing-tools/v<N>-<ts>.xlsx.
+  // CRITICAL: persist a path RELATIVE to the project root in the DB. Storing
+  // the absolute path breaks the moment the row leaves the machine that
+  // uploaded it (laptop → server, container restart on a different volume
+  // mount, etc.). At read time the engine resolves the relative path against
+  // `process.cwd()`, so the same DB row works on every host.
+  const relDir = path.join('uploads', 'pricing-tools');
+  const uploadDir = path.join(process.cwd(), relDir);
   await fs.mkdir(uploadDir, { recursive: true });
-  const storagePath = path.join(uploadDir, `v${version}-${Date.now()}.xlsx`);
+  const filename = `v${version}-${Date.now()}.xlsx`;
+  const absPath = path.join(uploadDir, filename);
+  const storagePath = path.join(relDir, filename);  // <- what we save in DB
   const buf = Buffer.from(await file.arrayBuffer());
-  await fs.writeFile(storagePath, buf);
+  await fs.writeFile(absPath, buf);
 
   // Insert + auto-activate if this is the very first upload.
   const { rows: existing } = await pool.query<{ n: string }>(
