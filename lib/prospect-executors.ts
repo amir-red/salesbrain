@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import pool from './db';
 import { sendEmail } from './email';
 import { normalizeDomain, normalizeCompanyName, fitLabelFromScore, type ProspectStage } from './prospecting';
+import { MODEL, webSearchTool } from './llm';
 
 const anthropic = new Anthropic();
 
@@ -616,9 +617,15 @@ Be specific and grounded in the actual messages. Don't invent patterns.
 Messages:
 ${msgs.map((m, i) => `--- ${i + 1} (${m.direction}${m.sent_at ? ', ' + new Date(m.sent_at).toISOString().slice(0, 10) : ''}) ---\n${m.subject ? 'Subject: ' + m.subject + '\n' : ''}${m.body}`).join('\n\n')}`;
 
+  // Communication-style analysis is purely about the messages we already
+  // have — but we pass web_search anyway for consistency with the rest of
+  // the LLM call sites. Anthropic executes server tools inline, so the
+  // final response.content still contains text we can extract; the model
+  // almost certainly won't call web_search for this prompt.
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: MODEL,
     max_tokens: 1500,
+    tools: [webSearchTool],
     messages: [{ role: 'user', content: prompt }],
   });
 
@@ -717,9 +724,14 @@ Return ONLY JSON (no preamble):
   "risks": "objections or disqualifiers"
 }`;
 
+  // Research-brief generation actively benefits from web search: the model
+  // can pull recent press, leadership announcements, or product news beyond
+  // what we scraped from the company's own site. Anthropic runs the search
+  // server-side and returns the final text directly in response.content.
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: MODEL,
     max_tokens: 1500,
+    tools: [webSearchTool],
     messages: [{ role: 'user', content: prompt }],
   });
 
