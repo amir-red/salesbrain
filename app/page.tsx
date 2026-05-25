@@ -5,6 +5,7 @@ import Chat from '@/components/Chat';
 import DealPanel from '@/components/DealPanel';
 import Sidebar from '@/components/Sidebar';
 import { GATES } from '@/lib/gates';
+import ThemeToggle from '@/components/ThemeToggle';
 
 interface Deal {
   id: string;
@@ -128,7 +129,9 @@ export default function Home() {
             <h1 className="text-lg font-bold">SalesBrain</h1>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Agentic B2B CRM</p>
           </div>
-          <button
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <button
             onClick={async () => {
               await fetch('/api/auth/logout', { method: 'POST' });
               window.location.href = '/login';
