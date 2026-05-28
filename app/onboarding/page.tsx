@@ -10,6 +10,8 @@ interface OnboardingCard {
   deal_id: string;
   pm_user_id: string | null;
   pm_name: string | null;
+  assistant_user_id: string | null;
+  assistant_name: string | null;
   stage: number;
   status: 'in_progress' | 'completed' | 'paused';
   company_name: string;
@@ -164,8 +166,9 @@ function OnboardingCardView({ row }: { row: OnboardingCard }) {
         </span>
       )}
       <div className="flex items-center justify-between mt-1.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
-        <span className="truncate" title={row.pm_name ?? ''}>
+        <span className="truncate" title={[row.pm_name, row.assistant_name].filter(Boolean).join(' + ')}>
           PM: {row.pm_name || 'Unassigned'}
+          {row.assistant_name ? <span> · +{row.assistant_name.split(' ')[0]}</span> : null}
         </span>
         <span style={{ color: days > 7 ? '#fb7185' : 'var(--text-muted)' }}>
           {isCompleted ? '✓ Done' : `${days}d`}

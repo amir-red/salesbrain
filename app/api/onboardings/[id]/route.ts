@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { canMutate, canAdvanceFrom, type OnboardingRow } from '@/lib/onboarding';
+import { canMutate, canAssignAssistant, canAdvanceFrom, type OnboardingRow } from '@/lib/onboarding';
 
 /**
  * GET /api/onboardings/[id]
@@ -16,10 +16,12 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     `SELECT o.*,
             d.name as deal_name, d.company as deal_company, d.contact_email as deal_contact_email,
             d.contact_name as deal_contact_name,
-            u.name as pm_name, u.email as pm_email
+            u.name as pm_name, u.email as pm_email,
+            a.name as assistant_name, a.email as assistant_email
      FROM client_onboardings o
      LEFT JOIN deals d ON d.id = o.deal_id
      LEFT JOIN users u ON u.id = o.pm_user_id
+     LEFT JOIN users a ON a.id = o.assistant_user_id
      WHERE o.id = $1`,
     [params.id]
   );
@@ -30,6 +32,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     can_edit: canMutate(session, row),
     // Admin override flag for the UI — admins get the PM-reassignment dropdown.
     is_admin: session.role === 'admin',
+    // Whether the viewer can pick/swap the assistant (PM or admin).
+    can_assign_assistant: canAssignAssistant(session, row),
   });
 }
 
@@ -38,7 +42,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 // All editable fields. Stage isn't directly settable — use `advance: true`
 // to bump the stage (server enforces canAdvanceFrom).
 const PatchSchema = z.object({
-  pm_user_id: z.string().uuid().nullable().optional(),  // admin-only
+  pm_user_id: z.string().uuid().nullable().optional(),         // admin-only
+  assistant_user_id: z.string().uuid().nullable().optional(),  // PM or admin
   status: z.enum(['in_progress', 'completed', 'paused']).optional(),
 
   // Stage 1
@@ -115,6 +120,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (d.pm_user_id !== undefined && session.role !== 'admin') {
     return NextResponse.json({ error: 'Only admins can reassign the PM' }, { status: 403 });
   }
+  // assistant_user_id is PM-or-admin (the PM picks their own helper).
+  if (d.assistant_user_id !== undefined && !canAssignAssistant(session, existing)) {
+    return NextResponse.json({ error: 'Only the PM or an admin can assign the assistant' }, { status: 403 });
+  }
+  // Prevent the PM from assigning themselves as their own assistant
+  // (no-op + confusing for the UI).
+  if (d.assistant_user_id !== undefined && d.assistant_user_id !== null) {
+    const effectivePm = d.pm_user_id !== undefined ? d.pm_user_id : existing.pm_user_id;
+    if (d.assistant_user_id === effectivePm) {
+      return NextResponse.json({ error: 'Assistant cannot be the same person as the PM' }, { status: 400 });
+    }
+  }
 
   // ── Build dynamic UPDATE for the editable fields ──
   const sets: string[] = [];
@@ -129,6 +146,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       : v;
 
   if (d.pm_user_id !== undefined)            set('pm_user_id', d.pm_user_id);
+  if (d.assistant_user_id !== undefined)     set('assistant_user_id', d.assistant_user_id);
   if (d.status !== undefined)                set('status', d.status);
   if (d.company_name !== undefined)          set('company_name', d.company_name);
   if (d.website !== undefined)               set('website', d.website);
@@ -204,10 +222,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // Return latest row
   const { rows: outRows } = await pool.query(
     `SELECT o.*, d.name as deal_name, d.company as deal_company, d.contact_email as deal_contact_email,
-            u.name as pm_name, u.email as pm_email
+            u.name as pm_name, u.email as pm_email,
+            a.name as assistant_name, a.email as assistant_email
      FROM client_onboardings o
      LEFT JOIN deals d ON d.id = o.deal_id
      LEFT JOIN users u ON u.id = o.pm_user_id
+     LEFT JOIN users a ON a.id = o.assistant_user_id
      WHERE o.id = $1`,
     [params.id]
   );
