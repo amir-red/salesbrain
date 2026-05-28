@@ -17,10 +17,12 @@ export async function GET() {
     const { rows } = await pool.query(
       `SELECT o.*,
               d.name as deal_name, d.company as deal_company, d.contact_email as deal_contact_email,
-              u.name as pm_name, u.email as pm_email
+              u.name as pm_name, u.email as pm_email,
+              a.name as assistant_name, a.email as assistant_email
        FROM client_onboardings o
        LEFT JOIN deals d ON d.id = o.deal_id
        LEFT JOIN users u ON u.id = o.pm_user_id
+       LEFT JOIN users a ON a.id = o.assistant_user_id
        ORDER BY o.updated_at DESC`
     );
     return NextResponse.json(rows);

@@ -13,8 +13,11 @@ interface DetailRow extends OnboardingRow {
   deal_contact_name: string | null;
   pm_name: string | null;
   pm_email: string | null;
+  assistant_name: string | null;
+  assistant_email: string | null;
   can_edit: boolean;
   is_admin: boolean;
+  can_assign_assistant: boolean;
 }
 
 interface UserOption {
@@ -130,9 +133,39 @@ export default function OnboardingDetailPage() {
               PM: {row.pm_name || 'Unassigned'}
             </p>
           )}
+          {/* Assistant slot — co-PM with the same edit rights. PM or admin
+              can pick; everyone else sees a read-only label. */}
+          {row.can_assign_assistant ? (
+            <div className="mt-2">
+              <label className="text-[10px] uppercase tracking-wider block" style={{ color: 'var(--text-muted)' }}>
+                Assistant
+              </label>
+              <select
+                value={row.assistant_user_id ?? ''}
+                onChange={async (e) => {
+                  const next = e.target.value || null;
+                  const result = await patch({ assistant_user_id: next });
+                  if (result) flash(next ? 'Assistant assigned' : 'Assistant cleared');
+                }}
+                className="mt-1 w-full px-2 py-1 rounded border text-xs"
+                style={{ background: 'var(--bg-input)', borderColor: 'var(--border)', color: 'var(--text)' }}
+              >
+                <option value="">— None —</option>
+                {users
+                  .filter((u) => u.id !== row.pm_user_id)
+                  .map((u) => (
+                    <option key={u.id} value={u.id}>{u.name || u.email}</option>
+                  ))}
+              </select>
+            </div>
+          ) : row.assistant_name ? (
+            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+              Assistant: {row.assistant_name}
+            </p>
+          ) : null}
           {ro && (
             <p className="text-[11px] mt-2 px-2 py-1 rounded" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>
-              Read-only — only the assigned PM or an admin can edit.
+              Read-only — only the assigned PM, the assistant, or an admin can edit.
             </p>
           )}
 

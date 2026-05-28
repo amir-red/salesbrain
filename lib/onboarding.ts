@@ -11,6 +11,9 @@ export interface OnboardingRow {
   id: string;
   deal_id: string;
   pm_user_id: string | null;
+  /** Optional co-PM with the same edit rights as the PM. Lets a single
+   *  onboarding be driven by two people without bottlenecking on one. */
+  assistant_user_id: string | null;
   stage: number;
   status: 'in_progress' | 'completed' | 'paused';
 
@@ -245,9 +248,24 @@ function escapeHtml(s: string): string {
 
 /**
  * True if the session can mutate this onboarding (advance stages, fill fields,
- * send emails, generate form links). PM or admin only.
+ * send emails, generate form links). PM, assigned assistant, or admin.
  */
 export function canMutate(
+  session: { userId: string; role?: string } | null,
+  row: { pm_user_id: string | null; assistant_user_id?: string | null }
+): boolean {
+  if (!session) return false;
+  if (session.role === 'admin') return true;
+  if (session.userId === row.pm_user_id) return true;
+  return session.userId === (row.assistant_user_id ?? null);
+}
+
+/**
+ * True if the session can reassign the PM or the assistant. Reassigning PM is
+ * still admin-only (canonical owner change), but the PM themselves (or an admin)
+ * can pick/swap their assistant without escalating.
+ */
+export function canAssignAssistant(
   session: { userId: string; role?: string } | null,
   row: { pm_user_id: string | null }
 ): boolean {
