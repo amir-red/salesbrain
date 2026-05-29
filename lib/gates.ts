@@ -71,7 +71,10 @@ export const SALES_GATES: Gate[] = [
   },
   {
     number: 7,
-    name: 'Negotiation',
+    // Renamed from "Negotiation" → "Review Board 2" to match the G3
+    // "Review Board 1" labelling convention. The description below still
+    // explains the actual work (negotiate terms + lock deployment plan).
+    name: 'Review Board 2',
     slaDays: 21,
     // Second sales board gate. The board reviews the negotiated terms
     // (pricing, payment, scope) AND the deployment plan locked at this
@@ -212,7 +215,11 @@ export const GRANT_GATES: Gate[] = [
   },
   {
     number: 7,
-    name: 'Partner and Approval Lock',
+    // Renamed from "Partner and Approval Lock" → "Review Board 2" to match
+    // the G3 "Review Board 1" labelling convention. The description still
+    // explains the actual work (internal sign-off + partner confirmations
+    // before producing the proposal pack).
+    name: 'Review Board 2',
     slaDays: 7,
     isBoard: true,
     objective: 'Secure internal and external commitments before full submission.',
