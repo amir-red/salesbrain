@@ -173,6 +173,47 @@ const DEAL_TOOLS: Tool[] = [
   },
 ];
 
+// ─── Deal lifecycle: lost + lesson capture ──────────────────────
+// One tool that does two writes in a single transaction:
+//   1) flips deals.status = 'lost'
+//   2) inserts a structured row into lessons_learned
+// The agent fills the structured fields from the user's natural-language
+// "we lost this — they wanted cheaper" instead of forcing the user to
+// click through a modal in chat.
+const LOSS_TOOLS: Tool[] = [
+  {
+    name: 'mark_deal_lost',
+    description:
+      'Mark a deal as lost AND record the structured lesson learned in one atomic step. Call when the user says they lost a deal, got rejected, walked away with a real reason, or asks you to record a loss. NEVER use for deals the user is just frustrated about — only when the loss is final and the user wants it recorded. Captures: free-text reason (what happened), root_cause enum (price / timeline / fit / decision_maker / capability / competition / budget / eligibility / other), optional competitor name, and the lesson for next time. For grants, prefer "eligibility" when the donor\'s entity/geography/sector rules disqualified us before merits were assessed — distinct from "fit" which is about narrative/intervention mismatch.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        deal_id: { type: 'string', description: 'UUID of the deal' },
+        reason: {
+          type: 'string',
+          maxLength: 4000,
+          description: 'What happened. Concise narrative paragraph. Example: "Donor only funds registered NGOs in West Africa; we\'re a private company in East Africa. Hard eligibility no — they emailed a polite decline two weeks after submission."',
+        },
+        root_cause: {
+          type: 'string',
+          enum: ['price', 'timeline', 'fit', 'decision_maker', 'capability', 'competition', 'budget', 'eligibility', 'other'],
+          description: 'Single category that best explains the loss.',
+        },
+        competitor: {
+          type: 'string',
+          description: 'Optional — who won / what they chose instead.',
+        },
+        lesson: {
+          type: 'string',
+          maxLength: 4000,
+          description: 'The takeaway — what to do differently on the next similar deal. Concrete and actionable. Example: "Always check donor eligibility rules at G1 before any concept work; budget at least 30 minutes for an entity/geography compliance check."',
+        },
+      },
+      required: ['deal_id', 'reason', 'root_cause', 'lesson'],
+    },
+  },
+];
+
 // ─── Memory tools (durable cross-conversation facts) ────────────
 // `remember` appends a bullet to memory/org.md (team-wide) or
 // memory/users/<localpart>.md (per-user). The bullet survives every
@@ -214,5 +255,6 @@ const MEMORY_TOOLS: Tool[] = [
   },
 ];
 
-// Union of deal tools + prospect tools + memory tools. The agent sees them all.
-export const TOOLS: Tool[] = [...DEAL_TOOLS, ...PROSPECT_TOOLS, ...MEMORY_TOOLS];
+// Union of deal tools + prospect tools + memory tools + loss tools.
+// The agent sees them all.
+export const TOOLS: Tool[] = [...DEAL_TOOLS, ...PROSPECT_TOOLS, ...MEMORY_TOOLS, ...LOSS_TOOLS];
