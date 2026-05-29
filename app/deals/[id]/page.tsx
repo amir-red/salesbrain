@@ -6,6 +6,7 @@ import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import Timeline from '@/components/Timeline';
 import DealPricingPanel from '@/components/DealPricingPanel';
+import MarkAsLostModal from '@/components/MarkAsLostModal';
 import { GATES } from '@/lib/gates';
 
 interface Deal {
@@ -31,6 +32,7 @@ interface Deal {
   gate_entered_at: string;
   user_id: string;
   deal_type: 'sales' | 'grant';
+  status?: 'active' | 'lost';
   created_at: string;
   updated_at: string;
 }
@@ -88,6 +90,11 @@ export default function DealViewPage() {
   const [deal, setDeal] = useState<Deal | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [markLostOpen, setMarkLostOpen] = useState(false);
+
+  const reload = () => {
+    fetch(`/api/deals/${dealId}`).then((r) => r.ok ? r.json() : null).then(setDeal);
+  };
 
   useEffect(() => {
     Promise.all([
@@ -120,6 +127,13 @@ export default function DealViewPage() {
 
   const isAdmin = currentUser?.role === 'admin';
   const isOwner = currentUser?.userId === deal.user_id || isAdmin;
+  // Wider than `isOwner` — the lead can also mark lost / chat. Matches the
+  // POST /api/deals/:id/mark-lost permission rule.
+  const canMutate =
+    isAdmin ||
+    currentUser?.userId === deal.user_id ||
+    currentUser?.userId === deal.lead_id;
+  const isLost = deal.status === 'lost';
   const gate = GATES[deal.gate - 1];
   const fields = deal.fields || {};
 
@@ -157,19 +171,49 @@ export default function DealViewPage() {
               ← Pipeline
             </Link>
             <div>
-              <h1 className="text-xl font-bold">{deal.name}</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-bold">{deal.name}</h1>
+                {isLost && (
+                  <span
+                    className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded font-semibold"
+                    style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
+                    title="This deal was marked lost — see /lessons for the captured lesson"
+                  >
+                    Lost
+                  </span>
+                )}
+              </div>
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{deal.company}</p>
             </div>
           </div>
-          {isOwner && (
-            <Link
-              href={`/?deal=${deal.id}`}
-              className="px-4 py-2 rounded-lg text-sm font-medium"
-              style={{ background: 'var(--accent)', color: '#fff' }}
-            >
-              Open Chat →
-            </Link>
-          )}
+          <div className="flex items-center gap-2">
+            {/* Mark as Lost: only shown on active deals to anyone with mutate rights.
+                Sits next to Open Chat so it\'s discoverable but visually de-emphasized
+                (outlined red, not solid) to avoid accidental clicks. */}
+            {!isLost && canMutate && (
+              <button
+                onClick={() => setMarkLostOpen(true)}
+                className="px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                style={{
+                  background: 'transparent',
+                  color: '#ef4444',
+                  border: '1px solid rgba(239,68,68,0.4)',
+                }}
+                title="Mark this deal lost and capture a lesson"
+              >
+                Mark as Lost
+              </button>
+            )}
+            {isOwner && (
+              <Link
+                href={`/?deal=${deal.id}`}
+                className="px-4 py-2 rounded-lg text-sm font-medium"
+                style={{ background: 'var(--accent)', color: '#fff' }}
+              >
+                Open Chat →
+              </Link>
+            )}
+          </div>
         </div>
 
         {/* Money-fields-missing banner for grants */}
@@ -390,6 +434,17 @@ export default function DealViewPage() {
           </div>
         </div>
       </div>
+
+      {/* Mount the Mark-as-Lost modal once at the page root so it can overlay
+          everything. Hidden until `markLostOpen=true`. */}
+      <MarkAsLostModal
+        dealId={deal.id}
+        dealName={deal.name}
+        dealType={deal.deal_type}
+        isOpen={markLostOpen}
+        onClose={() => setMarkLostOpen(false)}
+        onMarked={() => { reload(); }}
+      />
     </div>
   );
 }

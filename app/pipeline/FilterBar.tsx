@@ -19,6 +19,9 @@ interface Deal {
   sla_days: number;
   is_overdue: boolean;
   is_board: boolean;
+  /** Lost deals are excluded from 'All' / 'My deals' / 'Overdue' /
+   *  'Board pending'. The 'Lost' chip shows only lost ones. */
+  is_lost: boolean;
 }
 
 interface Gate {
@@ -32,7 +35,7 @@ interface Gate {
   deals: Deal[];
 }
 
-const FILTERS = ['All', 'My deals', 'Overdue', 'Board pending'] as const;
+const FILTERS = ['All', 'My deals', 'Overdue', 'Board pending', 'Lost'] as const;
 
 function DealCard({ deal }: { deal: Deal }) {
   const slaRatio = deal.days_in_gate / deal.sla_days;
@@ -43,12 +46,27 @@ function DealCard({ deal }: { deal: Deal }) {
       href={`/deals/${deal.id}`}
       className="block rounded-lg p-3 mb-2 transition-colors"
       style={{
-        background: 'var(--bg-input)',
+        // Lost cards: dim background + red left-border so they're visually
+        // distinct from active overdue ones (which are red border + normal bg).
+        background: deal.is_lost ? 'rgba(239,68,68,0.05)' : 'var(--bg-input)',
         border: '1px solid var(--border)',
-        borderLeft: deal.is_overdue ? '3px solid var(--red)' : '3px solid transparent',
+        borderLeft: deal.is_lost
+          ? '3px solid #ef4444'
+          : deal.is_overdue
+            ? '3px solid var(--red)'
+            : '3px solid transparent',
+        opacity: deal.is_lost ? 0.75 : 1,
       }}
     >
-      <p className="text-sm font-medium truncate">{deal.name}</p>
+      <div className="flex items-center gap-1.5">
+        {deal.is_lost && (
+          <span className="text-[9px] uppercase tracking-wider px-1 py-0.5 rounded font-semibold flex-shrink-0"
+                style={{ background: 'rgba(239,68,68,0.18)', color: '#ef4444' }}>
+            Lost
+          </span>
+        )}
+        <p className="text-sm font-medium truncate">{deal.name}</p>
+      </div>
       <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{deal.company}</p>
       <div className="flex items-center justify-between mt-2">
         {deal.value && (
@@ -95,6 +113,10 @@ export default function FilterBar({ salesGates, grantGates, currentUserId }: Fil
   const filteredGates = activeGates.map((g) => ({
     ...g,
     deals: g.deals.filter((d) => {
+      // The 'Lost' chip is the ONLY way to see lost deals — every other
+      // filter hides them so the active board stays clean.
+      if (filter === 'Lost') return d.is_lost;
+      if (d.is_lost) return false;
       if (filter === 'All') return true;
       if (filter === 'My deals') return d.lead_id === currentUserId;
       if (filter === 'Overdue') return d.is_overdue;
@@ -103,8 +125,10 @@ export default function FilterBar({ salesGates, grantGates, currentUserId }: Fil
     }),
   }));
 
-  const salesCount = salesGates.reduce((sum, g) => sum + g.deals.length, 0);
-  const grantCount = grantGates.reduce((sum, g) => sum + g.deals.length, 0);
+  // Header counts: total active (excluding lost) so the pipeline tabs reflect
+  // the *board* size, not the all-time count.
+  const salesCount = salesGates.reduce((sum, g) => sum + g.deals.filter((d) => !d.is_lost).length, 0);
+  const grantCount = grantGates.reduce((sum, g) => sum + g.deals.filter((d) => !d.is_lost).length, 0);
 
   return (
     <div>

@@ -9,6 +9,7 @@ import { computeGrantPipelineRank, formatRankForPrompt } from './grant-pipeline-
 import { classify } from './file-extractor';
 import { loadMemoriesForPrompt, formatMemoryBlock } from './memory';
 import { MODEL, webSearchTool } from './llm';
+import { loadRelevantLessons, formatLessonsBlock } from './lessons';
 
 const anthropic = new Anthropic();
 
@@ -78,7 +79,8 @@ ChipChip is an Ethiopian **agri-commerce and supply-chain technology platform** 
 export function buildSystemPrompt(
   deal: Record<string, unknown> | null,
   extraContext?: string,
-  memoryBlock?: string
+  memoryBlock?: string,
+  lessonsBlock?: string
 ): { stable: string; dynamic: string } {
   const dealType = (deal?.deal_type as DealType) || 'sales';
   const pipeline = getPipeline(dealType);
@@ -140,6 +142,8 @@ Outreach draft rules:
 - When the user mentions an upcoming meeting, call, demo, or presentation, automatically call prep_meeting to generate a briefing.
 - **Memory**: when the user explicitly says "remember X" / "in the future, always Y" / "next time..." OR when a clear cross-deal lesson emerges that isn't deal-specific, call \`remember\`. Pick scope="org" for team-wide lessons ("we always...", "the team should..."), scope="user" for the current user's personal preference ("I prefer...", "for me always..."). NEVER use \`remember\` for deal-specific facts — those go in \`update_deal\` (fields/notes). When the user says "forget mem_xxxx", call \`forget\` with that id. The system loads existing memories into the prompt under "## Memory" with their ids in brackets — apply them whenever relevant, without announcing the memory system unless asked.
 - **Web search**: you have access to a live \`web_search\` tool (Anthropic-hosted). Use it when the user asks about a real-world organization, person, market, donor, or current event that you can't answer reliably from training data alone — e.g. "who's the CEO of Ethiopia Investment Holdings", "recent news on this donor", "what's this company's headcount?", "what does this org do?". Don't search for things you obviously know (basic concepts, ChipChip's own pipeline, our own product, the deal's own captured fields). Don't search to pad a confident answer. When you do search, cite the source URL(s) in your reply so the user can verify. Cap yourself at a few targeted searches per turn — it's a paid tool.
+- **Marking deals lost + lessons**: when the user says they lost a deal, got rejected, walked away with a real reason, or asks you to record a loss, call \`mark_deal_lost\` with structured fields parsed from their message (reason, root_cause, optional competitor, lesson). NEVER call this for vague frustration or speculation — only when the loss is final. After marking, briefly summarize what got recorded and remind them the lesson will surface on similar future deals.
+- **Lessons from past losses**: if a "## Lessons from similar past losses" section appears in the prompt, those are real past deals like this one where we lost. Apply them PROACTIVELY: if the current deal is heading toward the same root cause (price pressure, eligibility mismatch, decision-maker missing, etc.), say so directly and name the past company so the user can dig in. Don't repeat the lesson verbatim — synthesize the warning in the current context. If the pattern doesn't apply, ignore the lessons section. For grants specifically, if past losses show repeated eligibility losses, ask the eligibility question explicitly at G1: donor's entity rules, geography, sector, org-age, registration status — confirm before investing more time.
 ${dealType === 'sales' ? `
 ## Sales-specific field hints
 - **deployment_plan** (required at G7 Negotiation, before Close): the client must pick how Zeami will be deployed for them. Two valid values ONLY:
@@ -158,7 +162,9 @@ ${dealType === 'sales' ? `
   if (!deal) {
     return {
       stable: base,
-      dynamic: '\n\nNo deal is currently selected. Help the user create or select a deal.' + (memoryBlock || ''),
+      dynamic: '\n\nNo deal is currently selected. Help the user create or select a deal.'
+        + (memoryBlock || '')
+        + (lessonsBlock || ''),
     };
   }
 
@@ -229,7 +235,7 @@ ${gate?.isBoard && !(deal.flags as string[])?.includes(`board_sent_g${deal.gate}
   : gate?.isBoard && (deal.flags as string[])?.includes(`board_sent_g${deal.gate}`)
     ? `1. Board review has been sent for G${deal.gate}. Waiting for executive votes (5/8 needed to proceed). Do NOT advance the deal until the board vote resolves.`
     : ''}
-${extraContext ? `\n${extraContext}` : ''}${memoryBlock || ''}`;
+${extraContext ? `\n${extraContext}` : ''}${memoryBlock || ''}${lessonsBlock || ''}`;
 
   return { stable: base, dynamic };
 }
@@ -701,11 +707,33 @@ export async function* runAgent(
     console.warn('[runAgent] memory load failed:', err);
   }
 
+  // Load up to 3 most-relevant past losses (same deal_type, adjacent gate,
+  // similar value). The agent uses these to proactively warn about repeat
+  // patterns — the "we always lose when we do X" feedback loop. Empty when
+  // there are no matching lessons; the block is omitted entirely.
+  let lessonsBlock = '';
+  try {
+    const lessons = await loadRelevantLessons({
+      id: deal.id as string,
+      deal_type: (deal.deal_type as 'sales' | 'grant') || 'sales',
+      gate: deal.gate as number,
+      value: deal.value as string | null,
+    });
+    lessonsBlock = formatLessonsBlock(lessons);
+  } catch (err) {
+    console.warn('[runAgent] lessons load failed:', err);
+  }
+
   // Split the system prompt so the stable region (product KB, personality,
   // pipeline, rules, field hints) can be marked as cacheable. Subsequent
   // turns of the same deal session within 5 minutes hit the cache, paying
   // ~10× less for that prefix — important now that LIMIT is 200.
-  const { stable: stableSystem, dynamic: dynamicSystem } = buildSystemPrompt(deal, extraContext, memoryBlock);
+  const { stable: stableSystem, dynamic: dynamicSystem } = buildSystemPrompt(
+    deal,
+    extraContext,
+    memoryBlock,
+    lessonsBlock,
+  );
 
   let iterations = 0;
 

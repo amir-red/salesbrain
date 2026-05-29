@@ -64,6 +64,7 @@ interface DealRow {
   gate_entered_at: string;
   deal_type: 'sales' | 'grant';
   days_in_gate_raw: string;
+  status: 'active' | 'lost';
 }
 
 function buildGateData(deals: DealRow[], gates: typeof SALES_GATES, colors: Record<number, string>) {
@@ -87,6 +88,9 @@ function buildGateData(deals: DealRow[], gates: typeof SALES_GATES, colors: Reco
         sla_days: g.slaDays,
         is_overdue: Math.floor(Number(d.days_in_gate_raw)) > g.slaDays,
         is_board: g.isBoard,
+        // Forward to FilterBar so it can hide lost from the default view
+        // and surface them on a dedicated "Lost" chip.
+        is_lost: d.status === 'lost',
       }));
 
     return {
@@ -111,6 +115,7 @@ interface PipelineSummary {
   weighted_value_by_currency: Record<string, number>; // value × score/100, for deals with score
   won_count: number;
   won_value_by_currency: Record<string, number>;
+  lost_count: number;
   board_pending_count: number;
   overdue_count: number;
 }
@@ -123,6 +128,7 @@ function summarize(deals: DealRow[], gates: typeof SALES_GATES): PipelineSummary
     weighted_value_by_currency: {},
     won_count: 0,
     won_value_by_currency: {},
+    lost_count: 0,
     board_pending_count: 0,
     overdue_count: 0,
   };
@@ -135,6 +141,14 @@ function summarize(deals: DealRow[], gates: typeof SALES_GATES): PipelineSummary
     const days = Math.floor(Number(d.days_in_gate_raw));
     const slaDays = gates.find((g) => g.number === d.gate)?.slaDays || 0;
     const isWon = d.gate === finalGate;
+    const isLost = d.status === 'lost';
+
+    // Lost deals don't count as active OR won — they're a separate terminal
+    // state. Tallied so SummaryCard can show "N lost" alongside active/won.
+    if (isLost) {
+      summary.lost_count++;
+      continue;
+    }
 
     if (isWon) {
       summary.won_count++;
@@ -184,9 +198,11 @@ export default async function PipelinePage() {
   // everyone is at. Per-user filtering ("My deals") is handled client-side
   // in FilterBar via the currentUserId prop. Detail page (`/deals/[id]`) is
   // also org-wide so any card on the kanban stays clickable.
+  // Includes lost deals — the FilterBar's "Lost" chip toggles them in/out
+  // client-side. Default view ("All") excludes lost.
   const { rows: deals } = await pool.query<DealRow>(
     `SELECT d.id, d.name, d.company, d.gate, d.score, d.risk, d.value, d.currency,
-     d.owner, d.gate_entered_at, d.lead_id, d.deal_type,
+     d.owner, d.gate_entered_at, d.lead_id, d.deal_type, d.status,
      u.name as lead_name,
      EXTRACT(EPOCH FROM (now() - d.gate_entered_at))/86400 as days_in_gate_raw
      FROM deals d
@@ -264,7 +280,7 @@ function SummaryCard({ label, accent, summary }: { label: string; accent: string
         />
       </div>
 
-      {(summary.board_pending_count > 0 || summary.overdue_count > 0) && (
+      {(summary.board_pending_count > 0 || summary.overdue_count > 0 || summary.lost_count > 0) && (
         <div className="mt-3 flex gap-3 text-[10px]" style={{ color: 'var(--text-muted)' }}>
           {summary.board_pending_count > 0 && (
             <span>
@@ -274,6 +290,13 @@ function SummaryCard({ label, accent, summary }: { label: string; accent: string
           {summary.overdue_count > 0 && (
             <span>
               <span style={{ color: 'var(--red)', fontWeight: 600 }}>{summary.overdue_count}</span> overdue SLA
+            </span>
+          )}
+          {summary.lost_count > 0 && (
+            <span>
+              <span style={{ color: '#ef4444', fontWeight: 600 }}>{summary.lost_count}</span>
+              {' '}
+              lost · <a href="/lessons" className="hover:underline" style={{ color: 'var(--text-muted)' }}>see lessons</a>
             </span>
           )}
         </div>

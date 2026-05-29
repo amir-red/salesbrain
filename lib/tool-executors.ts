@@ -6,6 +6,7 @@ import { getMissingFields, getGate, GRANT_MONEY_FIELDS } from './gates';
 import { executeProspectTool, PROSPECT_TOOL_NAMES } from './prospect-executors';
 import { appendMemory, removeMemory } from './memory';
 import { MODEL, webSearchTool } from './llm';
+import { markDealLost, type RootCause } from './lessons';
 
 const anthropic = new Anthropic();
 
@@ -541,6 +542,47 @@ export async function exec_forget(
   }
 }
 
+// ─── mark_deal_lost ────────────────────────────────────────────
+
+export async function exec_mark_deal_lost(
+  input: {
+    deal_id: string;
+    reason: string;
+    root_cause: RootCause;
+    competitor?: string;
+    lesson: string;
+  },
+  ctx: { userId?: string }
+): Promise<Record<string, unknown>> {
+  if (!ctx.userId) {
+    return { error: 'mark_deal_lost requires a signed-in user context (no userId on call).' };
+  }
+  try {
+    const result = await markDealLost({
+      dealId: input.deal_id,
+      byUserId: ctx.userId,
+      byTriggeredBy: 'agent',
+      input: {
+        reason: input.reason,
+        root_cause: input.root_cause,
+        competitor: input.competitor || null,
+        lesson: input.lesson,
+      },
+    });
+    if (result.status === 'already_lost') {
+      return { already_lost: true, deal_id: input.deal_id, message: 'Deal was already marked lost; no new lesson recorded.' };
+    }
+    return {
+      marked_lost: true,
+      deal_id: input.deal_id,
+      lesson_id: result.lesson_id,
+      message: `Deal flipped to status='lost', lesson recorded (root_cause=${input.root_cause}). View at /lessons.`,
+    };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'mark_deal_lost failed' };
+  }
+}
+
 // ─── Dispatcher ─────────────────────────────────────────────────
 
 export async function executeTool(
@@ -577,6 +619,11 @@ export async function executeTool(
       return exec_forget(
         input as Parameters<typeof exec_forget>[0],
         { userEmail: context?.userEmail }
+      );
+    case 'mark_deal_lost':
+      return exec_mark_deal_lost(
+        input as Parameters<typeof exec_mark_deal_lost>[0],
+        { userId: context?.userId }
       );
     default:
       return { error: `Unknown tool: ${name}` };
