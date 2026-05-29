@@ -144,7 +144,6 @@ export default function Home() {
           </button>
         </div>
       </div>
-      </div>
 
       <div className="p-3">
         <button
@@ -272,6 +271,7 @@ export default function Home() {
           </button>
         ))}
       </div>
+    </div>
     </div>
   );
 
