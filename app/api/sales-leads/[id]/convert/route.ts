@@ -40,9 +40,35 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const dealName = `${lead.company} — Demo request`;
   const missing = getMissingFields(1, {}, 'sales');
-  const notes = lead.description
-    ? `Demo request from zeami.io.\n\n--- Their message ---\n${lead.description}`
-    : 'Demo request from zeami.io. No description provided.';
+
+  // Append the preferred demo time as a single structured line so the agent
+  // can spot it on the next chat turn (predictable prefix → easy to parse).
+  // Skipped when the form didn't include the demo-time fields.
+  const demoLine = (() => {
+    if (!lead.preferred_demo_date) return null;
+    const time = (lead.preferred_demo_time as string | null) || '00:00:00';
+    const tz = (lead.preferred_demo_timezone as string | null) || 'UTC';
+    try {
+      const t = time.length === 5 ? `${time}:00` : time;
+      const d = new Date(`${lead.preferred_demo_date}T${t}Z`);
+      if (isNaN(d.getTime())) return null;
+      const dateFmt = new Intl.DateTimeFormat('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC',
+      });
+      const timeFmt = new Intl.DateTimeFormat('en-US', {
+        hour: 'numeric', minute: '2-digit', timeZone: 'UTC',
+      });
+      return `Preferred demo: ${dateFmt.format(d)} · ${timeFmt.format(d)} · ${tz}`;
+    } catch {
+      return `Preferred demo: ${lead.preferred_demo_date} · ${time} · ${tz}`;
+    }
+  })();
+
+  const noteParts: string[] = ['Demo request from zeami.io.'];
+  if (demoLine) noteParts.push(demoLine);
+  if (lead.description) noteParts.push('--- Their message ---', lead.description);
+  else if (!demoLine) noteParts[0] = 'Demo request from zeami.io. No description provided.';
+  const notes = noteParts.join('\n');
 
   // Best-effort transaction: deal + lead update in one shot. Postgres autocommits
   // each statement separately when not in a transaction; using a single client
