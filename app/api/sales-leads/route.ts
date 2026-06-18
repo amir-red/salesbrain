@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
   const { rows } = await pool.query(
     `SELECT l.id, l.full_name, l.company, l.email, l.description, l.source,
             l.status, l.created_at, l.converted_at, l.converted_deal_id,
+            l.preferred_demo_date, l.preferred_demo_time, l.preferred_demo_timezone,
             d.name AS converted_deal_name, d.gate AS converted_deal_gate
      FROM sales_leads l
      LEFT JOIN deals d ON d.id = l.converted_deal_id

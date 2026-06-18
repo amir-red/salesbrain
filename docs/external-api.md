@@ -6,6 +6,7 @@ Server-to-server endpoints under `/api/public/*` for integrations with external 
 
 | Endpoint | Method | Purpose |
 |---|---|---|
+| `/api/public/sales-leads` | POST | Inbound demo / contact requests from the zeami.io "Request Demo" form |
 | `/api/public/onboarding/<token>` | GET / POST | Client onboarding form — prefill + submit + live progress |
 | `/api/public/deals` | GET | List deals (slim summaries) with filters + pagination |
 | `/api/public/deals/<deal_id>` | GET | Full deal context (company info, pipeline state, captured insights, onboarding pointer) |
@@ -16,6 +17,121 @@ Common headers for all calls:
 X-API-Key: <ONBOARDING_API_KEY>      # required in prod; same key gates every /api/public/* route
 Content-Type: application/json       # on POST only
 ```
+
+---
+
+## Demo request — zeami.io "Request Demo" form
+
+The marketing form at `zeami.io` (full name + work email + company + preferred demo date/time/timezone + optional infrastructure details) POSTs to this endpoint. Each submission creates a row in `sales_leads` with `status='new'`. The CRM surfaces it at `/sales-leads` and any rep can convert it to a G1 sales deal with one click.
+
+### `POST /api/public/sales-leads`
+
+Base: `https://salescrm.chipchip.social/api/public/sales-leads`
+
+Headers:
+```
+X-API-Key: <ONBOARDING_API_KEY>
+Content-Type: application/json
+```
+
+Body (JSON):
+
+```json
+{
+  "full_name": "Bereket Solomon",
+  "company": "ChipChip",
+  "email": "becksol.bs@gmail.com",
+  "description": "i want to automate our team and find out which tasks are eating up time",
+
+  "preferred_demo_date": "2026-06-18",
+  "preferred_demo_time": "09:00",
+  "preferred_demo_timezone": "Africa/Nairobi"
+}
+```
+
+### Field rules
+
+| Field | Required? | Format | Notes |
+|---|---|---|---|
+| `full_name` | ✅ yes | string, 1–200 chars | Trimmed server-side |
+| `company` | ✅ yes | string, 1–200 chars | |
+| `email` | ✅ yes | valid email, ≤320 chars | Lowercased server-side |
+| `description` | ⛔ optional | string ≤5000 chars or `null` | The "Infrastructure Details" textarea on the form |
+| `preferred_demo_date` | ⛔ optional | **ISO `YYYY-MM-DD`** | Use `<input type="date">` |
+| `preferred_demo_time` | ⛔ optional | **`HH:MM` or `HH:MM:SS` (24-hour)** | Use `<input type="time">` — never AM/PM |
+| `preferred_demo_timezone` | ⛔ optional | IANA timezone string, ≤64 chars | Get from `Intl.DateTimeFormat().resolvedOptions().timeZone` |
+| `source` | ⛔ optional | string ≤120 chars | Overrides the default `"zeami.io:request-demo"` if you need to tag a campaign |
+
+All three preferred-demo fields are optional and independent. If only `preferred_demo_date` is sent, time defaults to midnight in the supplied tz; if only `preferred_demo_timezone` is sent, date defaults to NULL and no demo line will be shown to the rep.
+
+### Critical format gotchas
+
+1. **Time must be 24-hour, no AM/PM.** Sending `"9:00 AM"` returns `400 Validation failed`. The browser's `<input type="time">` always sends 24-hour — use it as-is, do not reformat before submitting.
+2. **Date must be ISO `YYYY-MM-DD`.** Sending `"06/18/2026"` or `"Jun 18, 2026"` returns `400`. `<input type="date">` always sends ISO.
+3. **Timezone is the IANA name, not a UTC offset.** Send `"Africa/Nairobi"`, NOT `"GMT+3"` / `"+03:00"` / `"EAT"`. The official list lives at [the IANA tz database](https://www.iana.org/time-zones); any value `Intl.DateTimeFormat().resolvedOptions().timeZone` returns is valid.
+
+### Response
+
+`201 Created`:
+```json
+{ "id": "9a3f...uuid...", "created_at": "2026-06-18T06:00:00.000Z" }
+```
+
+`400 Validation failed`: invalid format on a field. The response body's `details` array names the offending field.
+
+`401 Missing API key` / `403 Invalid API key`: see the API key section below.
+
+### Drop-in client code (zeami.io)
+
+```ts
+async function submitDemoRequest(form: {
+  fullName: string;
+  email: string;
+  company: string;
+  description?: string;
+  demoDate?: string;       // 'YYYY-MM-DD' from <input type="date">
+  demoTime?: string;       // 'HH:MM'      from <input type="time">
+  demoTimezone?: string;   // IANA, default from Intl
+}) {
+  const res = await fetch('https://salescrm.chipchip.social/api/public/sales-leads', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key': process.env.SALESBRAIN_API_KEY!,
+    },
+    body: JSON.stringify({
+      full_name: form.fullName,
+      email:     form.email,
+      company:   form.company,
+      description: form.description || null,
+
+      preferred_demo_date:     form.demoDate || null,
+      preferred_demo_time:     form.demoTime || null,
+      preferred_demo_timezone:
+        form.demoTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || `Demo request failed (${res.status})`);
+  }
+  return res.json() as Promise<{ id: string; created_at: string }>;
+}
+```
+
+### What happens after submission (inside the CRM)
+
+1. Row inserted into `sales_leads` with `status='new'`, the demo time fields preserved verbatim (no UTC conversion at intake — we keep the prospect's intent).
+2. `/sales-leads` page shows the lead immediately with a 📅 callout: *Preferred demo: Thu, Jun 18 2026 · 9:00 AM · Africa/Nairobi* (rendered IN the prospect's tz, not the rep's).
+3. Any signed-in rep can **Convert to deal** → new G1 sales deal seeded with the lead's company/contact and the demo time line appended to `deal.notes`. The agent reads this on the next chat turn, so "when does the prospect want a demo?" works from the get-go.
+
+### Verifying the integration end-to-end
+
+1. Submit a demo from the live zeami.io form.
+2. Open `/sales-leads` in the CRM. The new lead should show the 📅 callout line with the time you picked.
+3. If the line is missing: the request body is missing the three new keys (inspect zeami.io's network panel).
+4. If the API returns `400`: a field's format is wrong (most commonly `9:00 AM` instead of `09:00`).
 
 ---
 

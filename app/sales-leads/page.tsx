@@ -17,6 +17,47 @@ interface SalesLead {
   converted_deal_id: string | null;
   converted_deal_name: string | null;
   converted_deal_gate: number | null;
+  // Preferred demo time captured from zeami.io's "Request Demo" form.
+  // All three optional — old leads + non-demo submissions have these null.
+  preferred_demo_date: string | null;       // YYYY-MM-DD (pg DATE → string)
+  preferred_demo_time: string | null;       // HH:MM:SS  (pg TIME → string)
+  preferred_demo_timezone: string | null;   // IANA, e.g. 'Africa/Nairobi'
+}
+
+/**
+ * Render the preferred demo line — preserves the prospect's local time.
+ * Example: "Thu, Jun 18 2026 · 9:00 AM · Africa/Nairobi"
+ *
+ * The trick: we have date + time as wall-clock values in the prospect's tz.
+ * We compose them as a "fake UTC" Date, then ask Intl.DateTimeFormat to
+ * render IN that tz. Since Intl treats the Date as UTC and shifts to the
+ * target tz, we have to pre-shift by inserting "Z" — i.e. treat the
+ * composed wall-clock string as if it were already UTC. That way the
+ * formatter doesn't re-apply the rep's local offset.
+ */
+function formatDemoTime(lead: SalesLead): string | null {
+  if (!lead.preferred_demo_date) return null;
+  const timeRaw = lead.preferred_demo_time || '00:00:00';
+  const time = timeRaw.length === 5 ? `${timeRaw}:00` : timeRaw;
+  const tz = lead.preferred_demo_timezone || 'UTC';
+  try {
+    // Treat the composed wall-clock string as UTC. Intl will then render
+    // it AT `tz` — and since both sides use the same wall-clock numbers,
+    // the rendered output equals the prospect's intended local time.
+    const date = new Date(`${lead.preferred_demo_date}T${time}Z`);
+    if (isNaN(date.getTime())) return null;
+    const dateFmt = new Intl.DateTimeFormat('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+      timeZone: 'UTC',
+    });
+    const timeFmt = new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric', minute: '2-digit',
+      timeZone: 'UTC',
+    });
+    return `${dateFmt.format(date)} · ${timeFmt.format(date)} · ${tz}`;
+  } catch {
+    return `${lead.preferred_demo_date} · ${lead.preferred_demo_time || '?'} · ${tz}`;
+  }
 }
 
 type StatusFilter = 'new' | 'contacted' | 'converted' | 'archived' | 'all';
@@ -162,6 +203,18 @@ export default function SalesLeadsPage() {
                         <a href={`mailto:${l.email}`} className="hover:underline">{l.email}</a>
                         <span> · {l.source} · {new Date(l.created_at).toLocaleString()}</span>
                       </p>
+                      {(() => {
+                        const demoLine = formatDemoTime(l);
+                        return demoLine ? (
+                          <p
+                            className="text-xs mt-1.5 inline-flex items-center gap-1.5 px-2 py-1 rounded"
+                            style={{ background: 'rgba(34,211,238,0.1)', color: 'var(--text)', border: '1px solid rgba(34,211,238,0.25)' }}
+                          >
+                            <span style={{ color: '#22d3ee' }}>📅</span>
+                            <span><strong>Preferred demo:</strong> {demoLine}</span>
+                          </p>
+                        ) : null;
+                      })()}
                       {l.description && (
                         <p className="text-xs mt-2 whitespace-pre-wrap" style={{ color: 'var(--text)' }}>
                           {l.description}
