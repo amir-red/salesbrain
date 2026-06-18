@@ -15,13 +15,13 @@
  * exact: paper #FAFAFA, card #FFFFFF, border #E2E8F0, text #0F172A/#475569,
  * accent #00E5FF on obsidian #0D0D14, Poppins, hosted logo URL.
  *
- * Recipient policy (during the rollout):
+ * Recipient policy:
  *   - Lead-confirmation reply-to: tesfa@zeami.io (monitored).
  *   - Team-notification reply-to: the lead's own email (so anyone on the team
  *     can hit Reply and respond directly to the prospect).
- *   - Default team to: beck@zeami.io until LEAD_NOTIFY_TO is set in env.
- *     Intended full list (set later): TO=tesfa@zeami.io, CC=beck,mateo —
- *     os@ explicitly excluded.
+ *   - Team notification TO: tesfa@zeami.io (overridable via LEAD_NOTIFY_TO).
+ *     CC: os@zeami.io, mateo@zeami.io, beck@zeami.io (overridable via
+ *     LEAD_NOTIFY_CC). Either env var, if set, replaces the default entirely.
  */
 
 import { Resend } from 'resend';
@@ -170,13 +170,12 @@ export async function sendDemoEmails(form: DemoForm): Promise<void> {
     });
 
     // (2) Internal team notification.
-    // Rollout: defaults to beck@ only until LEAD_NOTIFY_TO / LEAD_NOTIFY_CC
-    // are populated in env. Intended full list later:
-    //   LEAD_NOTIFY_TO=tesfa@zeami.io
-    //   LEAD_NOTIFY_CC=beck@zeami.io,mateo@zeami.io
-    const teamTo = (process.env.LEAD_NOTIFY_TO || 'beck@zeami.io')
+    // Default routing: TO=tesfa@zeami.io · CC=os, mateo, beck. Override either
+    // via LEAD_NOTIFY_TO / LEAD_NOTIFY_CC (comma-separated). A set env var
+    // replaces the default entirely — not appended.
+    const teamTo = (process.env.LEAD_NOTIFY_TO || 'tesfa@zeami.io')
       .split(',').map((s) => s.trim()).filter(Boolean);
-    const teamCc = (process.env.LEAD_NOTIFY_CC || '')
+    const teamCc = (process.env.LEAD_NOTIFY_CC || 'os@zeami.io,mateo@zeami.io,beck@zeami.io')
       .split(',').map((s) => s.trim()).filter(Boolean);
 
     await client.emails.send({
