@@ -20,7 +20,7 @@
  *   - Team-notification reply-to: the lead's own email (so anyone on the team
  *     can hit Reply and respond directly to the prospect).
  *   - Team notification TO: tesfa@zeami.io (overridable via LEAD_NOTIFY_TO).
- *     CC: os@zeami.io, mateo@zeami.io, beck@zeami.io (overridable via
+ *     CC: osman@zeami.io, mateo@zeami.io, beck@zeami.io (overridable via
  *     LEAD_NOTIFY_CC). Either env var, if set, replaces the default entirely.
  */
 
@@ -175,7 +175,7 @@ export async function sendDemoEmails(form: DemoForm): Promise<void> {
     // replaces the default entirely — not appended.
     const teamTo = (process.env.LEAD_NOTIFY_TO || 'tesfa@zeami.io')
       .split(',').map((s) => s.trim()).filter(Boolean);
-    const teamCc = (process.env.LEAD_NOTIFY_CC || 'os@zeami.io,mateo@zeami.io,beck@zeami.io')
+    const teamCc = (process.env.LEAD_NOTIFY_CC || 'osman@zeami.io,mateo@zeami.io,beck@zeami.io')
       .split(',').map((s) => s.trim()).filter(Boolean);
 
     await client.emails.send({
