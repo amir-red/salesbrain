@@ -7,6 +7,7 @@ Server-to-server endpoints under `/api/public/*` for integrations with external 
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/api/public/sales-leads` | POST | Inbound demo / contact requests from the zeami.io "Request Demo" form |
+| `/api/public/calendly-webhook` | POST | Calendly webhook — receives `invitee.created` + `invitee.canceled` events (Phase 2: requires Calendly Standard) |
 | `/api/public/onboarding/<token>` | GET / POST | Client onboarding form — prefill + submit + live progress |
 | `/api/public/deals` | GET | List deals (slim summaries) with filters + pagination |
 | `/api/public/deals/<deal_id>` | GET | Full deal context (company info, pipeline state, captured insights, onboarding pointer) |
@@ -132,6 +133,157 @@ async function submitDemoRequest(form: {
 2. Open `/sales-leads` in the CRM. The new lead should show the 📅 callout line with the time you picked.
 3. If the line is missing: the request body is missing the three new keys (inspect zeami.io's network panel).
 4. If the API returns `400`: a field's format is wrong (most commonly `9:00 AM` instead of `09:00`).
+
+---
+
+## Calendly booking — professional demo scheduling
+
+Prospects book real available slots via an embedded Calendly widget on the zeami.io demo-request page. Calendly sends the prospect the confirmation (with .ics, Meet link, reschedule + cancel URLs), and — once the workspace is on the Standard plan — fires a webhook back to SalesBrain so the CRM auto-syncs the booking status.
+
+### Rollout: start on Calendly Free, upgrade to Standard when ready
+
+| Feature | Free | Standard (~$12/mo) |
+|---|---|---|
+| Widget embed on zeami.io | ✅ | ✅ |
+| Real availability from `demos@zeami.io` calendar | ✅ | ✅ |
+| Google Meet link auto-generation | ✅ | ✅ |
+| Prospect confirmation email (.ics + reschedule + cancel links) | ✅ | ✅ |
+| Webhook back to SalesBrain (auto-sync `booked_at` / `meet_link` / status) | ❌ | ✅ |
+| Internal team notification auto-fires on booking | ❌ | ✅ |
+
+**Phase 1 (Free)**: build the code path, embed the widget on zeami.io, test the prospect UX. `sales_leads` rows are created by the form POST but `booked_at` / `meet_link` / `booking_status` stay NULL — someone can eyeball `demos@` calendar or update the row via SQL.
+
+**Phase 2 (Standard)**: paste the webhook URL + signing secret. No code change, no re-deploy. The dormant handler starts firing.
+
+### Setup on Calendly
+
+1. Sign up (Free is fine to start). One seat, connected to `demos@zeami.io`'s Google Calendar. Enable **Google Meet** auto-generation.
+2. Create the event type — "Zeami Demo (30 min)":
+   - Duration: 30 minutes, 10-min buffer before/after
+   - Availability: weekdays 9–17 EAT (adjust as needed)
+   - Custom questions:
+     - **Company** (required, single-line) — Calendly's `questions_and_answers[i].answer` maps to `sales_leads.company` on the backend
+     - **Anything specific you'd like to see?** (optional, multi-line)
+3. **(Phase 2 only)** Configure webhook subscription:
+   - URL: `https://salescrm.chipchip.social/api/public/calendly-webhook`
+   - Events: `invitee.created`, `invitee.canceled`
+   - Copy the signing secret → paste into `CALENDLY_WEBHOOK_SECRET` env on the CRM prod → PM2 restart.
+
+### Setup on zeami.io — embed the widget
+
+Replace the current date/time/tz picker on the demo-request page with the Calendly inline widget. Prefill from the form fields above the widget so the prospect doesn't retype:
+
+```html
+<div id="calendly-inline" style="min-width: 320px; height: 630px;"></div>
+<link rel="stylesheet" href="https://assets.calendly.com/assets/external/widget.css"/>
+<script src="https://assets.calendly.com/assets/external/widget.js" async></script>
+<script>
+  window.addEventListener('load', () => {
+    Calendly.initInlineWidget({
+      url: 'https://calendly.com/zeami-demos/30min?hide_gdpr_banner=1',
+      parentElement: document.getElementById('calendly-inline'),
+      prefill: {
+        name:  document.getElementById('fullName').value,
+        email: document.getElementById('workEmail').value,
+        customAnswers: {
+          a1: document.getElementById('company').value,  // maps to "Company" question
+        },
+      },
+    });
+  });
+</script>
+```
+
+Prefill values re-hydrate every time the widget mounts. Reactive updates from user typing → widget prefill are up to your form-state code (React `useEffect` on the prefill values, etc.).
+
+### Webhook shape (Phase 2 reference)
+
+Calendly POSTs `Content-Type: application/json` to the webhook URL with:
+
+```json
+{
+  "event": "invitee.created",
+  "payload": {
+    "uri": "https://api.calendly.com/scheduled_events/EVENT_UUID/invitees/INVITEE_UUID",
+    "name": "Bereket Solomon",
+    "email": "becksol.bs@gmail.com",
+    "questions_and_answers": [
+      { "position": 0, "question": "Company", "answer": "ChipChip" }
+    ],
+    "scheduled_event": {
+      "uri": "https://api.calendly.com/scheduled_events/EVENT_UUID",
+      "start_time": "2026-07-02T14:30:00.000000Z",
+      "end_time":   "2026-07-02T15:00:00.000000Z",
+      "location": {
+        "type": "google_conference",
+        "join_url": "https://meet.google.com/xxx-yyyy-zzz"
+      }
+    },
+    "reschedule_url": "https://calendly.com/reschedulings/…",
+    "cancel_url":     "https://calendly.com/cancellations/…"
+  }
+}
+```
+
+`invitee.canceled` uses the same shape.
+
+### Signature verification
+
+Every request includes a `Calendly-Webhook-Signature` header of the form:
+```
+t=1719937200,v1=<64-char-hex-hmac>
+```
+
+The handler verifies via HMAC-SHA256 on the literal string `<t>.<raw-body>` using `CALENDLY_WEBHOOK_SECRET`, with a 5-minute skew allowance. Bad signature → `401` with no DB write. Missing secret → `401` (safe default so an unconfigured route can't be spammed).
+
+### What happens on `invitee.created`
+
+1. Handler verifies signature, parses payload.
+2. Matches the `sales_leads` row by (in order):
+   - `calendly_event_uuid` (re-delivery of an already-recorded booking → no-op UPDATE)
+   - Most recent row with same email, no prior booking, status ∈ {new, contacted}
+   - Falls through to INSERT a fresh row (cold-start — prospect skipped the zeami.io form and hit Calendly directly)
+3. UPDATE/INSERT with `booking_status='scheduled'`, `booked_at`, `meet_link`, `reschedule_url`, `cancel_url`, event/invitee uuids. Backfills `full_name` + `company` from Calendly if empty.
+4. Fires **one** internal email — "Demo booked: <Company> — <Name>" — to `LEAD_NOTIFY_TO` (default `tesfa@zeami.io`) + CC. Reply-to = the prospect's email so anyone on the team can reply directly.
+5. Prospect's own confirmation email is sent by **Calendly directly** — polished, branded, with `.ics` attachment + reschedule + cancel URLs. We do NOT duplicate it.
+
+### What happens on `invitee.canceled`
+
+1. Handler verifies signature, parses payload.
+2. UPDATEs the matching row: `booking_status='canceled'`.
+3. Fires "Demo canceled: <Company> — <Name>" to the team. Idempotent — a re-delivery hits the `IS DISTINCT FROM 'canceled'` guard and skips the extra email.
+
+### Reschedule flow
+
+Calendly's reschedule fires `invitee.canceled` (old event) + `invitee.created` (new event with a new `calendly_event_uuid`). Order-independent handling:
+- If `canceled` arrives first: row → `booking_status='canceled'`. Then `created` → row overwrites to `scheduled` with the new uuid + slot.
+- If `created` arrives first: row overwrites with the new booking data. Then `canceled` for the OLD uuid — no match, no action.
+
+Either way, the `/sales-leads` UI ends up reflecting the new slot.
+
+### Verifying the integration end-to-end
+
+**Phase 1 (Free plan) checks:**
+1. Book a test slot via the embedded widget → Calendly's confirmation email lands in your inbox with `.ics`.
+2. Reschedule from Calendly's email → Google Calendar reflects the new slot on `demos@`.
+3. Cancel from Calendly's email → event disappears from `demos@` calendar.
+4. `sales_leads` row is created by the initial form POST but `booking_status` stays NULL — expected on Free.
+
+**Phase 2 (Standard plan) checks:**
+5. Book a test slot → within ~1s, `/sales-leads` shows a green "Scheduled" badge + Meet link + Reschedule button. Team gets "Demo booked" email.
+6. Reschedule from prospect side → CRM row updates to the new time. Team gets a second email.
+7. Cancel from prospect side → CRM badge turns red. Team gets cancellation email.
+8. Convert a scheduled lead to a deal → deal.notes contain the booked slot + Meet link + reschedule URL. Ask the agent "when is the demo?" — it reads notes and responds correctly.
+
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Widget doesn't render on zeami.io | `widget.js` blocked by CSP or `Calendly` global not ready | Load `widget.js` in `<head>` OR listen for `load` event before calling `initInlineWidget` |
+| Prospect books but SalesBrain doesn't update | You're on Free plan (no webhooks) | Upgrade to Standard, paste secret, PM2 restart |
+| Webhook returns 401 with "signature mismatch" | Wrong secret in `CALENDLY_WEBHOOK_SECRET` | Copy the secret again from Calendly's UI — regenerate if unsure |
+| Webhook returns 401 with "timestamp outside acceptable skew" | Server clock drift or captured replay | Fix NTP / check for suspicious replay attempts |
+| Booking creates a duplicate `sales_leads` row | The prospect used a different email in the widget than in the form | Match logic uses email — reconcile manually in DB or update `sales_leads.email` |
 
 ---
 

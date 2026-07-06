@@ -22,6 +22,40 @@ interface SalesLead {
   preferred_demo_date: string | null;       // YYYY-MM-DD (pg DATE → string)
   preferred_demo_time: string | null;       // HH:MM:SS  (pg TIME → string)
   preferred_demo_timezone: string | null;   // IANA, e.g. 'Africa/Nairobi'
+
+  // Calendly booking columns — populated by /api/public/calendly-webhook
+  // once the prospect actually books a slot. On Calendly Free (webhooks
+  // gated) these stay NULL — the row still shows the preferred_demo_*
+  // fallback line.
+  calendly_event_uuid: string | null;
+  meet_link: string | null;
+  reschedule_url: string | null;
+  cancel_url: string | null;
+  booked_at: string | null;                 // ISO 8601 UTC of the confirmed slot
+  booking_status: 'scheduled' | 'canceled' | 'no_show' | null;
+}
+
+/**
+ * Format an absolute UTC timestamp as a slot label in the prospect's
+ * preferred timezone. Used to render `booked_at` in a human-friendly way
+ * that respects where the prospect actually is.
+ */
+function formatBookedTime(lead: SalesLead): string | null {
+  if (!lead.booked_at) return null;
+  const d = new Date(lead.booked_at);
+  if (isNaN(d.getTime())) return null;
+  const tz = lead.preferred_demo_timezone || 'UTC';
+  try {
+    const dateFmt = new Intl.DateTimeFormat('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: tz,
+    });
+    const timeFmt = new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric', minute: '2-digit', timeZone: tz,
+    });
+    return `${dateFmt.format(d)} · ${timeFmt.format(d)} · ${tz}`;
+  } catch {
+    return lead.booked_at;
+  }
 }
 
 /**
@@ -198,12 +232,80 @@ export default function SalesLeadsPage() {
                         >
                           {l.status}
                         </span>
+                        {/* Booking status pill — separate from lead status.
+                            Only appears when Calendly webhook has fired
+                            (scheduled or canceled). No pill = not booked. */}
+                        {l.booking_status === 'scheduled' && (
+                          <span
+                            className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold"
+                            style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e' }}
+                          >
+                            Scheduled
+                          </span>
+                        )}
+                        {l.booking_status === 'canceled' && (
+                          <span
+                            className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold"
+                            style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
+                          >
+                            Canceled
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
                         <a href={`mailto:${l.email}`} className="hover:underline">{l.email}</a>
                         <span> · {l.source} · {new Date(l.created_at).toLocaleString()}</span>
                       </p>
-                      {(() => {
+                      {/* Booking card — takes priority over the preferred-time
+                          fallback when a real slot has been booked. */}
+                      {l.booking_status === 'scheduled' && (() => {
+                        const bookedLine = formatBookedTime(l);
+                        return (
+                          <div
+                            className="mt-2 rounded p-2 text-xs"
+                            style={{
+                              background: 'rgba(34,197,94,0.08)',
+                              border: '1px solid rgba(34,197,94,0.3)',
+                              color: 'var(--text)',
+                            }}
+                          >
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <span>✅</span>
+                              <strong style={{ color: '#22c55e' }}>Booked demo:</strong>
+                              <span>{bookedLine || 'time TBD'}</span>
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {l.meet_link && (
+                                <a
+                                  href={l.meet_link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-2 py-1 rounded text-[11px] font-medium text-white"
+                                  style={{ background: '#22c55e' }}
+                                >
+                                  Join meeting →
+                                </a>
+                              )}
+                              {l.reschedule_url && (
+                                <a
+                                  href={l.reschedule_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-2 py-1 rounded text-[11px] font-medium"
+                                  style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }}
+                                >
+                                  Prospect reschedule link
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      {/* Preferred-time fallback — shown when Calendly hasn't
+                          confirmed a slot yet. Once Standard is enabled and
+                          the webhook fires, this line is replaced by the
+                          booking card above. */}
+                      {l.booking_status !== 'scheduled' && (() => {
                         const demoLine = formatDemoTime(l);
                         return demoLine ? (
                           <p
