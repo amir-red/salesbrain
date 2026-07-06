@@ -34,6 +34,15 @@ export interface DemoForm {
   preferredTime?: string;
   timeZone?: string;
   details?: string;
+
+  // Optional booking-confirmation extras. Present when the Calendly webhook
+  // fires; absent for legacy "lead capture only" flows. When set, the team
+  // notification renders extra rows for Meet link + reschedule URL.
+  bookedSlotLabel?: string;    // Pre-formatted human-readable slot, e.g.
+                               // "Thu, Jul 2 2026 · 9:00 AM · Africa/Nairobi"
+  meetLink?: string;           // Google Meet URL from Calendly's payload
+  rescheduleUrl?: string;      // Prospect's self-serve reschedule link
+  cancelUrl?: string;          // Prospect's self-serve cancel link
 }
 
 // Escape user-supplied values before interpolating into HTML.
@@ -90,16 +99,36 @@ const leadConfirmationHtml = ({
 </body></html>`;
 };
 
-const teamNotificationHtml = (f: DemoForm) => {
+/**
+ * `subjectPrefix` differentiates the two email variants:
+ *   'New demo request'   — legacy lead-capture path (no Calendly booking yet)
+ *   'Demo booked'        — post-Calendly-webhook confirmation with Meet link
+ *
+ * When bookedSlotLabel / meetLink / rescheduleUrl are set, the template
+ * renders additional rows so the recipient team gets a click-to-join card
+ * instead of a generic "someone submitted the form" message.
+ */
+const teamNotificationHtml = (f: DemoForm, headline: string) => {
   const row = (label: string, val?: string) =>
     val
       ? `<tr><td style="padding:6px 16px 6px 0;font-size:12px;font-weight:600;color:#64748B;white-space:nowrap;vertical-align:top;">${label}</td><td style="padding:6px 0;font-size:14px;color:#0F172A;">${esc(
           val,
         )}</td></tr>`
       : '';
-  const slot =
+  // Row variant for URL fields — renders as a truncated hyperlink so the
+  // team notification is scannable without a wall of URL text.
+  const linkRow = (label: string, url?: string, linkText?: string) =>
+    url
+      ? `<tr><td style="padding:6px 16px 6px 0;font-size:12px;font-weight:600;color:#64748B;white-space:nowrap;vertical-align:top;">${label}</td><td style="padding:6px 0;font-size:14px;color:#0F172A;"><a href="${esc(url)}" style="color:#00A3B8;text-decoration:underline;">${esc(linkText || url)}</a></td></tr>`
+      : '';
+  // Fallback slot label from preferred-time fields when no booking has
+  // happened yet (legacy path).
+  const legacySlot =
     [f.preferredDate, f.preferredTime].filter(Boolean).join(' at ') +
     (f.timeZone ? ` (${esc(f.timeZone)})` : '');
+  const displaySlot = f.bookedSlotLabel || (legacySlot.trim() || undefined);
+  const slotLabel = f.bookedSlotLabel ? 'Booked time' : 'Preferred time';
+
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"/></head>
 <body style="margin:0;padding:0;background:#FAFAFA;font-family:'Poppins','Segoe UI',Arial,sans-serif;">
@@ -107,7 +136,7 @@ const teamNotificationHtml = (f: DemoForm) => {
     <table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;background:#FFFFFF;border:1px solid #E2E8F0;border-radius:16px;overflow:hidden;">
       <tr><td style="height:4px;background:#00E5FF;font-size:0;line-height:0;">&nbsp;</td></tr>
       <tr><td style="padding:28px 40px 8px;">
-        <p style="margin:0 0 8px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:2px;color:#64748B;">New demo request</p>
+        <p style="margin:0 0 8px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:2px;color:#64748B;">${esc(headline)}</p>
         <h1 style="margin:0;font-size:20px;line-height:28px;font-weight:600;color:#0F172A;">${esc(f.company)} — ${esc(f.fullName)}</h1>
       </td></tr>
       <tr><td style="padding:12px 40px 32px;">
@@ -115,7 +144,9 @@ const teamNotificationHtml = (f: DemoForm) => {
           ${row('Name', f.fullName)}
           ${row('Work email', f.workEmail)}
           ${row('Company', f.company)}
-          ${slot.trim() ? row('Preferred time', slot) : ''}
+          ${displaySlot ? row(slotLabel, displaySlot) : ''}
+          ${linkRow('Meet link', f.meetLink, 'Join the demo')}
+          ${linkRow('Reschedule', f.rescheduleUrl, 'Prospect reschedule link')}
           ${row('Details', f.details)}
         </table>
         <p style="margin:20px 0 0;font-size:13px;line-height:20px;color:#64748B;">Reply to this email to respond to the lead directly.</p>
@@ -137,11 +168,30 @@ function getResend(): Resend | null {
 }
 
 /**
- * Fire-and-forget: lead confirmation + internal team notification.
+ * Read the team recipient list from env (with defaults).
+ * TO defaults to tesfa@zeami.io; CC defaults to osman, mateo, beck.
+ * Setting either LEAD_NOTIFY_TO / LEAD_NOTIFY_CC replaces the default entirely.
+ */
+function teamRecipients(): { to: string[]; cc: string[] } {
+  const to = (process.env.LEAD_NOTIFY_TO || 'tesfa@zeami.io')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  const cc = (process.env.LEAD_NOTIFY_CC || 'osman@zeami.io,mateo@zeami.io,beck@zeami.io')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  return { to, cc };
+}
+
+/**
+ * Fire-and-forget: legacy dual-email path (prospect confirmation + team
+ * notification). Kept for the pre-Calendly flow — a marketing campaign
+ * that doesn't embed the Calendly widget still lands on the sales-leads
+ * POST endpoint and can opt into this path explicitly.
  *
- * NEVER throws — missing API key or Resend errors are logged and
- * swallowed so the upstream lead-save flow always succeeds. Call as
- * `void sendDemoEmails(...)` from the route handler.
+ * Under the Calendly flow this is NOT called — Calendly's own confirmation
+ * email (with .ics + reschedule/cancel) covers the prospect, and the team
+ * notification fires from the webhook once the slot is actually booked
+ * (see `sendTeamBookingNotification` below).
+ *
+ * NEVER throws.
  */
 export async function sendDemoEmails(form: DemoForm): Promise<void> {
   const client = getResend();
@@ -152,6 +202,7 @@ export async function sendDemoEmails(form: DemoForm): Promise<void> {
 
   const firstName = (form.fullName || '').trim().split(/\s+/)[0] || 'there';
   const logoUrl = process.env.EMAIL_LOGO_URL || 'https://zeami.io/zeami-email-logo.png';
+  const { to: teamTo, cc: teamCc } = teamRecipients();
 
   try {
     // (1) Lead confirmation → the prospect.
@@ -170,24 +221,77 @@ export async function sendDemoEmails(form: DemoForm): Promise<void> {
     });
 
     // (2) Internal team notification.
-    // Default routing: TO=tesfa@zeami.io · CC=os, mateo, beck. Override either
-    // via LEAD_NOTIFY_TO / LEAD_NOTIFY_CC (comma-separated). A set env var
-    // replaces the default entirely — not appended.
-    const teamTo = (process.env.LEAD_NOTIFY_TO || 'tesfa@zeami.io')
-      .split(',').map((s) => s.trim()).filter(Boolean);
-    const teamCc = (process.env.LEAD_NOTIFY_CC || 'osman@zeami.io,mateo@zeami.io,beck@zeami.io')
-      .split(',').map((s) => s.trim()).filter(Boolean);
-
     await client.emails.send({
       from: 'Zeami <noreply@zeami.io>',
       to: teamTo,
       cc: teamCc.length ? teamCc : undefined,
-      // Replies go straight back to the prospect.
       replyTo: form.workEmail,
       subject: `New demo request: ${form.company} — ${form.fullName}`,
-      html: teamNotificationHtml(form),
+      html: teamNotificationHtml(form, 'New demo request'),
     });
   } catch (err) {
     console.warn('[demo-emails] send failed (non-blocking):', err);
+  }
+}
+
+/**
+ * Fire-and-forget team notification for a CONFIRMED booking. Called from
+ * the Calendly webhook after `invitee.created`. The prospect's own
+ * confirmation email is sent by Calendly directly (native .ics + reschedule
+ * + cancel links) — we don't duplicate it.
+ *
+ * The team gets a click-to-join card with the Meet link, the reschedule
+ * URL, the booked slot rendered in the prospect's tz, and reply-to =
+ * prospect so anyone can respond directly.
+ *
+ * NEVER throws.
+ */
+export async function sendTeamBookingNotification(form: DemoForm): Promise<void> {
+  const client = getResend();
+  if (!client) {
+    console.warn('[demo-emails] RESEND_API_KEY unset — skipping team notification.');
+    return;
+  }
+
+  const { to: teamTo, cc: teamCc } = teamRecipients();
+
+  try {
+    await client.emails.send({
+      from: 'Zeami <noreply@zeami.io>',
+      to: teamTo,
+      cc: teamCc.length ? teamCc : undefined,
+      replyTo: form.workEmail,
+      subject: `Demo booked: ${form.company} — ${form.fullName}`,
+      html: teamNotificationHtml(form, 'Demo booked'),
+    });
+  } catch (err) {
+    console.warn('[demo-emails] booking notification failed (non-blocking):', err);
+  }
+}
+
+/**
+ * Fire-and-forget team notification when a prospect cancels via Calendly's
+ * cancel link. Reuses the same template with a "Demo canceled" headline so
+ * the team can react quickly.
+ *
+ * NEVER throws.
+ */
+export async function sendTeamCancellationNotification(form: DemoForm): Promise<void> {
+  const client = getResend();
+  if (!client) return;
+
+  const { to: teamTo, cc: teamCc } = teamRecipients();
+
+  try {
+    await client.emails.send({
+      from: 'Zeami <noreply@zeami.io>',
+      to: teamTo,
+      cc: teamCc.length ? teamCc : undefined,
+      replyTo: form.workEmail,
+      subject: `Demo canceled: ${form.company} — ${form.fullName}`,
+      html: teamNotificationHtml(form, 'Demo canceled'),
+    });
+  } catch (err) {
+    console.warn('[demo-emails] cancellation notification failed (non-blocking):', err);
   }
 }

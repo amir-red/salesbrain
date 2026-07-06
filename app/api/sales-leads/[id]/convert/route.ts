@@ -64,10 +64,40 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
   })();
 
+  // Booked-slot line if Calendly has confirmed a slot. Rendered in the
+  // prospect's timezone. Takes priority over the preferred-time fallback
+  // for the agent's context.
+  const bookedLine = (() => {
+    if (!lead.booked_at || lead.booking_status !== 'scheduled') return null;
+    const d = new Date(lead.booked_at as string);
+    if (isNaN(d.getTime())) return null;
+    const tz = (lead.preferred_demo_timezone as string | null) || 'UTC';
+    try {
+      const dateFmt = new Intl.DateTimeFormat('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: tz,
+      });
+      const timeFmt = new Intl.DateTimeFormat('en-US', {
+        hour: 'numeric', minute: '2-digit', timeZone: tz,
+      });
+      const label = `${dateFmt.format(d)} · ${timeFmt.format(d)} · ${tz}`;
+      const meetPart = lead.meet_link ? ` · Meet: ${lead.meet_link}` : '';
+      return `Booked demo: ${label}${meetPart}`;
+    } catch {
+      return `Booked demo: ${lead.booked_at}`;
+    }
+  })();
+
+  const rescheduleLine = lead.reschedule_url
+    ? `Reschedule: ${lead.reschedule_url}`
+    : null;
+
   const noteParts: string[] = ['Demo request from zeami.io.'];
-  if (demoLine) noteParts.push(demoLine);
+  // Prefer booked slot over preferred time — booked is definitive.
+  if (bookedLine) noteParts.push(bookedLine);
+  else if (demoLine) noteParts.push(demoLine);
+  if (rescheduleLine) noteParts.push(rescheduleLine);
   if (lead.description) noteParts.push('--- Their message ---', lead.description);
-  else if (!demoLine) noteParts[0] = 'Demo request from zeami.io. No description provided.';
+  else if (!bookedLine && !demoLine) noteParts[0] = 'Demo request from zeami.io. No description provided.';
   const notes = noteParts.join('\n');
 
   // Best-effort transaction: deal + lead update in one shot. Postgres autocommits

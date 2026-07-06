@@ -21,7 +21,6 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import pool from '@/lib/db';
 import { requireApiKey, jsonWithCors, corsOptions } from '@/lib/public-api';
-import { sendDemoEmails } from '@/lib/demo-emails';
 
 const BodySchema = z.object({
   full_name: z.string().trim().min(1).max(200),
@@ -84,18 +83,15 @@ export async function POST(req: NextRequest) {
     ],
   );
 
-  // Fire-and-forget: lead-confirmation + team-notification emails. NEVER
-  // awaited and `sendDemoEmails` never throws — a Resend outage or missing
-  // RESEND_API_KEY can't break lead capture. Errors are logged.
-  void sendDemoEmails({
-    fullName: full_name,
-    workEmail: email,
-    company,
-    preferredDate: preferred_demo_date ?? undefined,
-    preferredTime: preferred_demo_time ?? undefined,
-    timeZone: preferred_demo_timezone?.trim() || undefined,
-    details: description ?? undefined,
-  });
+  // NOTE: no confirmation email is fired here. Under the Calendly flow,
+  // Calendly sends the prospect's confirmation (with .ics + reschedule +
+  // cancel), and the team notification fires only after `invitee.created`
+  // hits our webhook (`/api/public/calendly-webhook`) — so the team is
+  // only notified when a slot is ACTUALLY booked, not on empty form drops.
+  //
+  // If a marketing campaign ever needs the pre-Calendly dual-email flow
+  // (prospect + team both notified at lead capture), import `sendDemoEmails`
+  // from lib/demo-emails.ts and call it here — it remains available.
 
   return jsonWithCors(req, { id: rows[0].id, created_at: rows[0].created_at }, 201);
 }
