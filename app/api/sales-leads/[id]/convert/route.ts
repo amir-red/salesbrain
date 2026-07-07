@@ -96,6 +96,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (bookedLine) noteParts.push(bookedLine);
   else if (demoLine) noteParts.push(demoLine);
   if (rescheduleLine) noteParts.push(rescheduleLine);
+  // Website goes in as a standalone line so the agent + humans can see it
+  // at a glance without hunting through JSON fields.
+  if (lead.website) noteParts.push(`Website: ${lead.website}`);
   if (lead.description) noteParts.push('--- Their message ---', lead.description);
   else if (!bookedLine && !demoLine) noteParts[0] = 'Demo request from zeami.io. No description provided.';
   const notes = noteParts.join('\n');

@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
 
   const { rows } = await pool.query(
     `SELECT l.id, l.full_name, l.company, l.email, l.description, l.source,
+            l.website,
             l.status, l.created_at, l.converted_at, l.converted_deal_id,
             l.preferred_demo_date, l.preferred_demo_time, l.preferred_demo_timezone,
             l.calendly_event_uuid, l.meet_link, l.reschedule_url, l.cancel_url,

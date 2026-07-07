@@ -1,381 +1,366 @@
-# zeami.io — Demo Request Form Integration Spec
+# zeami.io — Demo Request Page Integration Spec
 
 **Audience:** whoever builds/maintains the `zeami.io/request-demo` (or equivalent) page.
 **Backend:** SalesBrain CRM at `https://salescrm.chipchip.social`.
-**Scheduling:** Calendly (Free plan → Standard plan for auto-sync).
-**Date:** 2026-06-18
+**Scheduling:** Calendly (Standard plan — **webhook auto-sync is LIVE**).
+**Date:** 2026-07-07
+
+**Current status:** SalesBrain-side integration is complete and deployed. The only remaining work is on **zeami.io** — embed the Calendly widget. Everything else auto-syncs.
 
 ---
 
-## 1. What we're building
+## 1. Current state — what's already working
 
-Replace the current preferred-date/time/timezone picker on zeami.io's demo-request form with a real booking flow driven by **Calendly**. The prospect:
+Prospects on `zeami.io/request-demo` (once the widget is embedded) will see the Calendly widget showing real available slots on `amir@zeami.io`'s Google Calendar. They pick a slot, fill in Calendly's booking form, and:
 
-1. Fills out a short form (name, work email, company, optional details).
-2. Picks a real available slot from a Calendly inline widget (or clicks through to Calendly's page).
-3. Gets Calendly's confirmation email with a `.ics` invite, Google Meet link, and reschedule/cancel links.
+- ✅ Prospect gets Calendly's confirmation email with `.ics`, Google Meet link, reschedule + cancel URLs
+- ✅ Event lands on Amir's Google Calendar with Meet link auto-attached
+- ✅ Calendly's webhook fires to `https://salescrm.chipchip.social/api/public/calendly-webhook`
+- ✅ SalesBrain verifies the HMAC signature and either UPDATEs an existing `sales_leads` row (if the prospect submitted the zeami.io form first) or INSERTs a fresh one (if they booked directly)
+- ✅ `sales_leads` gains: `booking_status='scheduled'`, `booked_at`, `meet_link`, `reschedule_url`, `cancel_url`, `calendly_event_uuid` + all the form fields (see field mapping below)
+- ✅ Internal team gets a "Demo booked" email to `amir@zeami.io` with reply-to = the prospect's email
+- ✅ `/sales-leads` in the CRM shows the row with a green "Scheduled" badge, "Join meeting" button, and "Reschedule" link
+- ✅ Rescheduling from Calendly's link updates the same CRM row automatically
+- ✅ Canceling from Calendly's link flips `booking_status='canceled'` and fires a cancellation notification
 
-Meanwhile, SalesBrain captures the lead as soon as the form is submitted (even if the prospect bails before booking) and — on the paid Calendly plan — auto-syncs the booking details (confirmed time, Meet link, reschedule URL) to the CRM the moment the prospect books.
+**None of this needs any code on zeami.io.** The webhook handler already exists in SalesBrain and is production-active.
 
-### Why this is better than the current form
-
-| Old flow | New flow |
-|---|---|
-| Prospect picks a "preferred" time that may not be available | Prospect picks from **actually available** slots on Amir's calendar |
-| Someone on the team manually emails back to confirm/reschedule | Calendly handles confirmations + `.ics` + reschedule/cancel links automatically |
-| Prospect has no self-serve way to reschedule | Prospect clicks Calendly's reschedule link — no email ping-pong |
-| CRM has "preferred_demo_time" fields that need manual triage | CRM auto-populates `booked_at`, `meet_link`, `reschedule_url` (on Standard) |
-
----
-
-## 2. Recommended UX pattern
-
-Two-step, single-page:
+## 2. Data flow — from prospect click to CRM row
 
 ```
-┌─────────────────────────────────────────┐
-│  Step 1: Contact info                    │
-│  ┌──────────────┐  ┌───────────────┐    │
-│  │ Full name    │  │ Work email    │    │
-│  └──────────────┘  └───────────────┘    │
-│  ┌──────────────────────────────────┐   │
-│  │ Company                          │   │
-│  └──────────────────────────────────┘   │
-│  ┌──────────────────────────────────┐   │
-│  │ What you'd like to see (optional)│   │
-│  └──────────────────────────────────┘   │
-│                                          │
-│  [Continue → Pick a time]                │
-└─────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  Prospect on zeami.io/request-demo                                  │
+│  ┌──────────────────────────────────────────────┐                   │
+│  │  Calendly inline widget (embedded, 3 lines)  │                   │
+│  │  Shows real availability from Amir's cal     │                   │
+│  │  Prospect fills: Name, Email,                │                   │
+│  │                  Company, Website,           │                   │
+│  │                  Company Description         │                   │
+│  │  Picks slot → clicks Confirm                 │                   │
+│  └────────────────────────┬─────────────────────┘                   │
+└───────────────────────────┼─────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  Calendly's servers                                                 │
+│  ┌────────────────────┐  ┌──────────────────────┐                   │
+│  │  Sends prospect    │  │  Adds event to       │                   │
+│  │  confirmation      │  │  demos@ Google Cal   │                   │
+│  │  email with .ics   │  │  with Meet link      │                   │
+│  └────────────────────┘  └──────────────────────┘                   │
+│  ┌──────────────────────────────────────────────┐                   │
+│  │  Fires webhook POST with HMAC signature      │                   │
+│  │  to SalesBrain: invitee.created              │                   │
+│  └────────────────────────┬─────────────────────┘                   │
+└───────────────────────────┼─────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  SalesBrain: POST /api/public/calendly-webhook                      │
+│  ┌───────────────────────────────────────────┐                      │
+│  │ 1. Read raw body, verify HMAC signature   │                      │
+│  │ 2. Parse invitee.created payload          │                      │
+│  │ 3. Match sales_leads by                   │                      │
+│  │      calendly_event_uuid (idempotency),   │                      │
+│  │    then by email + status IN (new,        │                      │
+│  │      contacted), OR insert fresh row      │                      │
+│  │ 4. UPDATE / INSERT with all fields        │                      │
+│  │ 5. Fire "Demo booked" email to team       │                      │
+│  └───────────────┬───────────────────────────┘                      │
+└──────────────────┼──────────────────────────────────────────────────┘
+                   │
+                   ▼
+         `/sales-leads` in CRM shows row within a few seconds.
 ```
 
-Clicking **Continue** POSTs to SalesBrain (creates the `sales_leads` row) then reveals Step 2 in the same page (no full navigation):
+## 3. Calendly's booking form — exact fields captured
 
-```
-┌─────────────────────────────────────────┐
-│  Step 2: Pick a time                     │
-│  ← Back to details                       │
-│                                          │
-│  ┌──────────────────────────────────┐   │
-│  │                                  │   │
-│  │   [ Calendly inline widget ]     │   │
-│  │   Real availability from Amir's  │   │
-│  │   Google Calendar. Prefilled     │   │
-│  │   with name/email/company.       │   │
-│  │                                  │   │
-│  └──────────────────────────────────┘   │
-└─────────────────────────────────────────┘
-```
+Calendly's form asks 5 fields on every booking (Amir configured these). Each one maps to a specific column in the `sales_leads` table via the webhook handler:
 
-**Why this pattern:**
-- Minimal friction on step 1 (highest funnel conversion)
-- Lead is captured **before** the prospect sees the widget — even if they drop off, we have their contact
-- Widget is always in a known-good state (prefilled) — no half-typed name lands in Calendly
+| Calendly form field | Required? | Maps to `sales_leads` column | Behavior on repeat bookings |
+|---|---|---|---|
+| **Name** | ✅ built-in | `full_name` | COALESCE — kept from prior form submit if already set |
+| **Email** | ✅ built-in | `email` | Match key — used to find existing row |
+| **Company** | ✅ custom Q | `company` | COALESCE — kept from prior form submit if already set |
+| **Website** | custom Q | `website` (new col.) | COALESCE — populated from Calendly if empty |
+| **Company Description** | optional | `description` | COALESCE — kept from prior form submit if already set |
 
-An alternative pattern — **single-page inline with form + widget simultaneously visible** — also works. Slightly worse funnel metrics but simpler to build. Pick whichever fits zeami.io's design language better.
+Also automatically stored:
 
----
-
-## 3. API contract
-
-### Step 1 — POST to SalesBrain
-
-Whenever the user completes the contact-info step (before opening the Calendly widget), fire one request:
-
-```http
-POST https://salescrm.chipchip.social/api/public/sales-leads
-Content-Type: application/json
-X-API-Key: <ONBOARDING_API_KEY>
-```
-
-Body (JSON):
-
-```json
-{
-  "full_name": "Bereket Solomon",
-  "company": "ChipChip",
-  "email": "becksol.bs@gmail.com",
-  "description": "i want to automate our team and find out which tasks are eating up time"
-}
-```
-
-**Field rules:**
-
-| Field | Required | Format |
+| Field | `sales_leads` column | Source |
 |---|---|---|
-| `full_name` | ✅ | string, 1–200 chars |
-| `email` | ✅ | valid email, ≤320 chars |
-| `company` | ✅ | string, 1–200 chars |
-| `description` | ⛔ optional | string ≤5000 chars or `null` |
+| Booked slot start | `booked_at` (TIMESTAMPTZ, UTC) | Calendly payload `scheduled_event.start_time` |
+| Google Meet link | `meet_link` | Calendly payload `scheduled_event.location.join_url` |
+| Reschedule URL | `reschedule_url` | Calendly payload `reschedule_url` |
+| Cancel URL | `cancel_url` | Calendly payload `cancel_url` |
+| Booking state | `booking_status` = `'scheduled'` \| `'canceled'` | Webhook event type |
+| Calendly event uuid | `calendly_event_uuid` (UNIQUE) | For idempotency + matching |
 
-**Response:**
+## 4. Decision — which flow does zeami.io implement?
 
-- `201 Created` → `{ "id": "...uuid...", "created_at": "..." }`
-- `400 Validation failed` → the response body's `details` array names the offending field
-- `401 / 403` → API key missing or wrong
+Two options depending on how much lead-capture you want:
 
-Handle a `4xx` gracefully — show the prospect an error message and don't proceed to step 2.
+- **Option A — Pure Calendly widget (recommended)**: page is essentially a wrapper around the Calendly widget. No custom form, no fetch calls to SalesBrain, no API key. Simplest to build, best conversion, zero maintenance.
+- **Option B — Two-step (form → widget)**: minimal form on zeami.io captures the lead into SalesBrain **before** they see the widget, so drop-offs are still tracked. More code, more moving parts.
 
-> **Note:** the old `preferred_demo_date` / `preferred_demo_time` / `preferred_demo_timezone` fields are still accepted by the endpoint but you should **stop sending them** — Calendly is now the source of truth for time. Sending them doesn't error, they just get stored as legacy fallback data.
-
-### Step 2 — Calendly widget
-
-The widget takes over from here. No further HTTP calls from zeami.io are needed — Calendly's own systems email the prospect and (on Standard plan) POST a webhook to SalesBrain to auto-sync the booking.
+For early-stage traffic, **Option A wins**. Sections 5 and 7 are everything you need — skip section 6 unless you specifically want Option B.
 
 ---
 
-## 4. The Calendly widget embed
+### 4.1 Why Option A is the recommended pattern
 
-### Prerequisites (Amir handles these once)
+| Consideration | Option A (pure Calendly) | Option B (form + widget) |
+|---|---|---|
+| Prospect fills in fields once | ✅ Only Calendly asks | ❌ Same fields duplicated |
+| Lead captured if prospect bails before booking | ❌ No row created | ✅ Row created on form submit |
+| Code on zeami.io | ~10 lines of HTML | ~150 lines (React + fetch + state) |
+| Vendor lock-in | Higher (fields live in Calendly) | Lower (fields live in SalesBrain) |
+| Prospect UX | Cleaner (one form) | Slightly disjointed |
+| Conversion (industry data) | Higher | Lower |
 
-1. Sign in to Calendly with `amir@zeami.io` (or the chosen demo owner's email).
-2. Connect the Google Calendar under Amir's account.
-3. Create an event type — recommended settings:
-   - **Name**: "Zeami Demo (30 min)"
-   - **Duration**: 30 minutes
-   - **Buffer**: 10 min before + 10 min after
-   - **Availability**: weekdays 9–17 (Africa/Nairobi)
-   - **Custom questions** (in this exact order — the CRM webhook maps by position):
-     - Q1: `Company` (short answer, required)
-     - Q2: `Anything specific you'd like to see?` (long answer, optional)
-   - **Notifications → Reply-to**: `amir@zeami.io`
-4. Note the event type URL — e.g. `https://calendly.com/amir-zeami/30min`. This URL goes into the widget embed below.
+Unless zeami.io needs to track drop-offs (which requires meaningful follow-up capacity), Option A is strictly better.
 
-### The embed snippet
+---
 
-Drop this into the Step 2 container on zeami.io:
+## 5. Option A — Pure Calendly widget (recommended path)
+
+### 5.1 Where the widget lives
+
+Anywhere on `zeami.io`. Common patterns:
+- Dedicated page: `zeami.io/request-demo` or `zeami.io/book-a-demo`
+- Modal triggered by a "Get a demo" CTA on the homepage
+- Bottom section of the pricing page
+
+### 5.2 The embed snippet (drop this in as-is)
 
 ```html
-<!-- Somewhere in <head> -->
+<!-- 1. Calendly's stylesheet — load once, ideally in <head> -->
 <link rel="stylesheet" href="https://assets.calendly.com/assets/external/widget.css"/>
 
-<!-- The container where the widget renders -->
-<div id="calendly-inline"
-     style="min-width: 320px; height: 700px; background: transparent;"></div>
+<!-- 2. The widget container. Calendly reads the `data-url` attribute and
+        auto-mounts the inline booking widget inside this div. -->
+<div class="calendly-inline-widget"
+     data-url="https://calendly.com/amir-zeami/zeami-demo-30-min?hide_gdpr_banner=1&background_color=0d0d14&text_color=ffffff&primary_color=00E5FF"
+     style="min-width: 320px; height: 800px;">
+</div>
 
-<!-- Loader -->
+<!-- 3. Calendly's loader — attach at end of <body>, async. Auto-detects
+        the `.calendly-inline-widget` divs on the page and mounts them. -->
 <script src="https://assets.calendly.com/assets/external/widget.js" async></script>
-
-<script>
-  // Wait for the script to load, then mount the widget with prefilled values
-  // pulled from the form data captured in Step 1.
-  function mountCalendly(formData) {
-    if (typeof Calendly === 'undefined') {
-      // widget.js hasn't loaded yet — retry once
-      setTimeout(() => mountCalendly(formData), 200);
-      return;
-    }
-    Calendly.initInlineWidget({
-      url: 'https://calendly.com/amir-zeami/30min?hide_gdpr_banner=1&background_color=0d0d14&text_color=ffffff&primary_color=00E5FF',
-      parentElement: document.getElementById('calendly-inline'),
-      prefill: {
-        name: formData.fullName,
-        email: formData.email,
-        // Custom question answers — position-indexed (a1 = Q1, a2 = Q2)
-        customAnswers: {
-          a1: formData.company,
-          a2: formData.description || '',
-        },
-      },
-      // Optional: pass UTM / campaign context so it appears in Calendly's
-      // event details for later attribution
-      utm: {
-        utmSource: 'zeami.io',
-        utmMedium: 'demo-form',
-      },
-    });
-  }
-</script>
 ```
 
-### Widget URL parameters worth knowing
+That's the entire integration. Three tags. No JavaScript to write. No API keys. No CORS setup.
+
+### 5.3 What the URL parameters do
 
 | Param | Purpose |
 |---|---|
-| `hide_gdpr_banner=1` | Suppresses the "Powered by Calendly" GDPR banner |
-| `background_color=0d0d14` | Match Zeami dark theme (obsidian) |
-| `text_color=ffffff` | Body text color inside the widget |
-| `primary_color=00E5FF` | Zeami cyan accent — used for buttons and highlights inside the widget |
-| `hide_landing_page_details=1` | Skip the "About Amir" intro screen and jump straight to slot picker (only use if the intro adds no value) |
+| `hide_gdpr_banner=1` | Suppresses the "Powered by Calendly" GDPR banner at the bottom of the widget |
+| `background_color=0d0d14` | Widget background — Zeami's obsidian dark (`#0D0D14` without the `#`) |
+| `text_color=ffffff` | Body text inside the widget |
+| `primary_color=00E5FF` | Buttons, highlights, selected states — Zeami cyan (`#00E5FF` without the `#`) |
+
+Optional flags you can add:
+| Param | Effect |
+|---|---|
+| `hide_landing_page_details=1` | Skip the "About Amir" intro card and go straight to the calendar |
 | `hide_event_type_details=1` | Skip the "30-min demo" description card |
 
----
+### 5.4 React / Next.js version (if zeami.io is a SPA)
 
-## 5. React / Next.js example (single-file)
-
-If the zeami.io site is React-based (Next.js, Astro with React islands, plain React SPA), here's a complete self-contained component:
+Same three tags, wrapped in a component. Handles the case where React's `<head>` might mount the stylesheet after the widget script tries to render:
 
 ```tsx
 'use client';
-import { useState } from 'react';
+import { useEffect } from 'react';
 
-const SALESBRAIN_API = 'https://salescrm.chipchip.social/api/public/sales-leads';
-const CALENDLY_URL = 'https://calendly.com/amir-zeami/30min'
-  + '?hide_gdpr_banner=1'
-  + '&background_color=0d0d14'
-  + '&text_color=ffffff'
-  + '&primary_color=00E5FF';
+const CALENDLY_URL =
+  'https://calendly.com/amir-zeami/zeami-demo-30-min' +
+  '?hide_gdpr_banner=1' +
+  '&background_color=0d0d14' +
+  '&text_color=ffffff' +
+  '&primary_color=00E5FF';
 
-interface FormData {
-  fullName: string;
-  email: string;
-  company: string;
-  description: string;
-}
-
-export default function DemoRequestForm() {
-  const [step, setStep] = useState<1 | 2>(1);
-  const [form, setForm] = useState<FormData>({
-    fullName: '', email: '', company: '', description: '',
-  });
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submitStep1(e: React.FormEvent) {
-    e.preventDefault();
-    if (submitting) return;
-
-    setSubmitting(true);
-    setError(null);
-    try {
-      const res = await fetch(SALESBRAIN_API, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': process.env.NEXT_PUBLIC_SALESBRAIN_API_KEY!,
-        },
-        body: JSON.stringify({
-          full_name: form.fullName.trim(),
-          company:   form.company.trim(),
-          email:     form.email.trim().toLowerCase(),
-          description: form.description.trim() || null,
-        }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || `Server returned ${res.status}`);
-      }
-      // Success — move to step 2 and mount the Calendly widget
-      setStep(2);
-      // Give React a tick to render the container before Calendly reads it
-      setTimeout(() => mountCalendly(form), 0);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  function mountCalendly(data: FormData) {
-    // @ts-expect-error - loaded via <script> tag in _app or layout
-    if (typeof Calendly === 'undefined') {
-      setTimeout(() => mountCalendly(data), 200);
-      return;
-    }
-    // @ts-expect-error - global Calendly.initInlineWidget
-    Calendly.initInlineWidget({
-      url: CALENDLY_URL,
-      parentElement: document.getElementById('calendly-inline'),
-      prefill: {
-        name:  data.fullName,
-        email: data.email,
-        customAnswers: {
-          a1: data.company,
-          a2: data.description || '',
-        },
-      },
-      utm: { utmSource: 'zeami.io', utmMedium: 'demo-form' },
-    });
-  }
-
-  if (step === 2) {
-    return (
-      <div>
-        <button onClick={() => setStep(1)} style={{ marginBottom: 16 }}>
-          ← Back to details
-        </button>
-        <p style={{ marginBottom: 16, color: '#94A3B8' }}>
-          Pick a 30-minute slot that works for you. Calendly will send you a
-          confirmation with the Google Meet link.
-        </p>
-        <div id="calendly-inline"
-             style={{ minWidth: 320, height: 700, background: 'transparent' }} />
-      </div>
-    );
-  }
+export default function DemoRequestPage() {
+  useEffect(() => {
+    // Widget script self-mounts. If it's already loaded (e.g. user navigated
+    // away and came back), calling initInlineWidget again re-mounts cleanly.
+    const script = document.createElement('script');
+    script.src = 'https://assets.calendly.com/assets/external/widget.js';
+    script.async = true;
+    document.body.appendChild(script);
+    return () => { script.remove(); };
+  }, []);
 
   return (
-    <form onSubmit={submitStep1}>
-      {/* … form fields (same as your current design) … */}
-      {/* Full Name, Work Email, Company, Infrastructure Details */}
-      <button type="submit" disabled={submitting || !form.fullName || !form.email || !form.company}>
-        {submitting ? 'Saving…' : 'Continue → Pick a time'}
-      </button>
-      {error && <p style={{ color: '#ef4444' }}>{error}</p>}
-    </form>
+    <>
+      <link rel="stylesheet" href="https://assets.calendly.com/assets/external/widget.css" />
+      <div
+        className="calendly-inline-widget"
+        data-url={CALENDLY_URL}
+        style={{ minWidth: 320, height: 800 }}
+      />
+    </>
   );
 }
 ```
 
-The `<script src="https://assets.calendly.com/assets/external/widget.js" async>` and its matching `<link rel="stylesheet">` should be loaded once at the app/layout level (or via Next.js's `<Script strategy="lazyOnload">`) so they're available when the component mounts.
+### 5.5 What SalesBrain receives (automatic — no zeami.io code)
+
+The moment the prospect completes a booking, Calendly's webhook fires to `https://salescrm.chipchip.social/api/public/calendly-webhook`. SalesBrain verifies the HMAC signature and (within ~1 second) writes the row to `sales_leads`. Full lifecycle:
+
+**Booking created:**
+- `sales_leads` row inserted (or updated if it existed from a prior form submit)
+- Booking columns populated: `booked_at`, `meet_link`, `reschedule_url`, `cancel_url`, `calendly_event_uuid`, `booking_status='scheduled'`
+- Custom-question columns populated: `full_name`, `email`, `company`, `website`, `description` (see section 3 for full mapping)
+- `/sales-leads` UI shows the row with a green "**Scheduled**" badge, "Join meeting" button (opens Meet), "Reschedule" button (opens Calendly's reschedule page)
+- Internal team gets a "**Demo booked: <Company> — <Name>**" email at `amir@zeami.io` with reply-to = prospect's email
+- Prospect gets Calendly's own confirmation with `.ics`, Meet link, reschedule + cancel URLs (Calendly sends this — SalesBrain doesn't duplicate)
+
+**Booking rescheduled** (prospect uses the reschedule URL):
+- Calendly fires `canceled` (old event) + `created` (new event) in sequence
+- SalesBrain UPDATEs the same `sales_leads` row — new `calendly_event_uuid`, new `booked_at`, same lead
+- Team gets a second "Demo booked" notification (with the new time)
+
+**Booking canceled** (prospect uses the cancel URL):
+- `booking_status='canceled'`
+- Row badge in `/sales-leads` turns red
+- Team gets a "Demo canceled: <Company> — <Name>" notification
+
+**Zero code needed on zeami.io to make any of this work.** The widget embed handles the prospect experience; the webhook handles everything else.
 
 ---
 
-## 6. Environment variables on zeami.io
+## 6. Option B — Two-step form + widget (alternative — skip if using Option A)
 
-Add to zeami.io's environment (Vercel / Netlify / server env, whatever hosts it):
+Only pick this if you specifically need to capture leads that abandon before booking. Otherwise, skip to section 7.
 
-| Variable | Value | Notes |
+### 6.1 The flow
+
+1. Prospect lands on `zeami.io/request-demo` and sees a short form: **Name + Email** (2 fields, that's it).
+2. Prospect clicks "Continue → Pick a time".
+3. `POST /api/public/sales-leads` fires with `{full_name, email}`. Creates the `sales_leads` row at `status='new'`. Response is `201 { id, created_at }`.
+4. Same page transitions to show the Calendly widget with prefilled name + email.
+5. Prospect books a slot → Calendly webhook UPDATEs the same row with company, website, description, booking details.
+
+### 6.2 The API call
+
+Endpoint: `POST https://salescrm.chipchip.social/api/public/sales-leads`
+
+Headers:
+```
+Content-Type: application/json
+X-API-Key: <ONBOARDING_API_KEY>
+```
+
+Body:
+```json
+{
+  "full_name": "Bereket Solomon",
+  "email": "becksol.bs@gmail.com"
+}
+```
+
+Response: `201 { "id": "uuid", "created_at": "..." }`.
+
+Only `full_name` and `email` are required in this minimal flow — company, website, description all come from Calendly's form later.
+
+### 6.3 API key
+
+Add to zeami.io's environment as `NEXT_PUBLIC_SALESBRAIN_API_KEY`. Get the value from Amir (it's stored as `ONBOARDING_API_KEY` in SalesBrain's GitHub Secrets). The `NEXT_PUBLIC_` prefix makes it available to client-side JS.
+
+Security note: this key is sent from a public form, so it's a shared bearer, not a strict secret. That's by design — the SalesBrain endpoint validates other things (CORS, rate-limiting via cron) beyond just the key.
+
+### 6.4 The prefill
+
+When mounting the Calendly widget in step 4, pass the form values as prefill so the prospect isn't retyping:
+
+```js
+Calendly.initInlineWidget({
+  url: CALENDLY_URL,
+  parentElement: document.getElementById('calendly-inline'),
+  prefill: {
+    name:  formData.fullName,
+    email: formData.email,
+    // Company, website, description come from Calendly's own form
+  },
+  utm: { utmSource: 'zeami.io', utmMedium: 'demo-form' },
+});
+```
+
+---
+
+## 7. Calendly-side setup — status: ✅ Complete
+
+For reference, so the zeami.io dev knows what to expect on the other end of the widget. **All of this is done and live** — no action needed.
+
+- ✅ Calendly account under `amir@zeami.io` — **Standard plan** (webhooks enabled)
+- ✅ Connected to Amir's Google Calendar → availability + auto-adds events
+- ✅ Event type live at **`https://calendly.com/amir-zeami/zeami-demo-30-min`**
+  - Duration: 30 minutes
+  - Google Meet auto-generated per booking
+  - Buffer + availability configured
+  - Custom questions on the booking form (order matters — matches SalesBrain's parser):
+    - **Company** — required
+    - **Website** — optional
+    - **Company Description** — optional
+  - Reply-to on confirmation email: `amir@zeami.io` (organizer default on Standard)
+- ✅ Webhook subscription active
+  - URL: `https://salescrm.chipchip.social/api/public/calendly-webhook`
+  - Events: `invitee.created`, `invitee.canceled`
+  - Signing key stored as `CALENDLY_WEBHOOK_SECRET` in SalesBrain's GitHub Secrets → propagated to prod `.env.production` on every deploy
+- ✅ SalesBrain webhook handler deployed at `POST /api/public/calendly-webhook`
+  - HMAC-SHA256 signature verification with 5-min replay window
+  - Idempotent: re-delivered webhooks are no-ops
+  - Handles reschedule via `canceled → created` in any order
+
+---
+
+## 8. Design tokens — match Zeami brand
+
+The Calendly widget's colors are set via URL params. Use these for consistency with the rest of `zeami.io`:
+
+| Design token | Value | Calendly URL param |
 |---|---|---|
-| `NEXT_PUBLIC_SALESBRAIN_API_KEY` | The `ONBOARDING_API_KEY` value that SalesBrain expects | Prefix `NEXT_PUBLIC_` so client-side JS can read it (Next.js convention). This is a **shared bearer key** — it's sent from the browser to SalesBrain, so it's not a strict server-side secret. Rotate it if it leaks widely, but exposing it in client JS is by design for public forms. |
+| Widget background | `#0D0D14` (obsidian) | `background_color=0d0d14` |
+| Text color | `#FFFFFF` | `text_color=ffffff` |
+| Accent (buttons, highlights) | `#00E5FF` (cyan) | `primary_color=00E5FF` |
+| Font | Poppins | Widget inherits page font family |
 
-Get the API key value from Amir (it's stored in SalesBrain's GitHub Secrets as `ONBOARDING_API_KEY`).
-
----
-
-## 7. Design tokens — match Zeami brand
-
-Match the widget's colors to the site's existing dark theme so it blends visually:
-
-| Token | Value | Where |
-|---|---|---|
-| Background | `#0D0D14` (obsidian) | Widget `background_color=0d0d14` |
-| Text | `#FFFFFF` | Widget `text_color=ffffff` |
-| Accent (buttons, highlights) | `#00E5FF` (cyan) | Widget `primary_color=00E5FF` |
-| Body font | Poppins | Set on the containing page — widget respects the parent's Poppins if declared |
-| Card border | `#E2E8F0` (light UI parts) | Not directly settable in widget; leaves defaults |
-
-The current form's fields (full name, email, etc.) already use these tokens — keep them consistent so the step-1 → step-2 transition feels seamless.
+Note: no `#` prefix in Calendly's params — pass `0d0d14`, not `#0D0D14`.
 
 ---
 
-## 8. What Calendly handles automatically
+## 9. Testing checklist
 
-Once the prospect books through the widget:
+Before shipping:
 
-1. **Confirmation email** to the prospect — from `noreply@zeami.io` (or Calendly's default if SPF/DKIM isn't configured for `zeami.io` in Calendly — check the outgoing sender in Calendly's settings). Includes:
-   - `.ics` attachment (adds to Google Calendar / Outlook / Apple Calendar in one click)
-   - Google Meet link
-   - Reschedule + cancel links
-2. **Calendar event** on Amir's Google Calendar with the Meet link auto-attached.
-3. **Reminder emails** to both parties (24h + 1h before, if configured in Calendly's event type notifications).
-4. **Webhook** to SalesBrain (Standard plan only) — SalesBrain updates the `sales_leads` row and fires the internal team notification email.
+- [ ] **Widget renders** — Calendly shows real availability from Amir's Google Calendar. Busy blocks on his calendar don't appear as available slots.
+- [ ] **Zeami brand colors applied** — obsidian bg, white text, cyan buttons. No white-flash on load.
+- [ ] **Mobile-responsive** — widget height and width work on phone-sized viewports. Set `min-height: 600px` on small screens if needed.
+- [ ] **A live booking test**: pick a real slot in an incognito window as a test prospect. Verify:
+  - Calendly sends the confirmation email with `.ics`, Meet link, reschedule + cancel URLs
+  - Event lands on Amir's Google Calendar with the Meet link attached
+  - Amir receives the internal team "Demo booked" email at `amir@zeami.io`
+  - `/sales-leads` in the SalesBrain CRM shows a new row with the booking within a few seconds
 
-zeami.io's page can just show a static "Thanks — check your email for the confirmation" message after the widget's booking-complete callback (or just let the widget's own success screen do the job).
+If all checks pass, the flow is production-ready.
 
-### Wiring the booking-complete callback (optional polish)
+---
 
-If you want to trigger something on zeami.io when the booking completes (analytics event, redirect, thank-you screen), Calendly emits a `postMessage` you can listen for:
+## 10. Analytics / postMessage listener (optional polish)
 
-```ts
+If zeami.io wants to trigger something when the booking completes (fire a GA/Segment event, redirect to a thank-you page, etc.), Calendly emits `postMessage` events you can listen for:
+
+```js
 window.addEventListener('message', (e) => {
-  // Only accept messages from Calendly's origin
   if (e.origin !== 'https://calendly.com') return;
-
   if (e.data.event === 'calendly.event_scheduled') {
-    // Booking is confirmed. Fire analytics, redirect, show success screen…
-    console.log('Booking confirmed:', e.data.payload);
-    // e.data.payload contains { event: { uri }, invitee: { uri } }
+    // Booking confirmed
+    // e.data.payload has { event: { uri }, invitee: { uri } }
+    fbq && fbq('track', 'Lead');
+    gtag && gtag('event', 'demo_booked');
+    // Or window.location.href = '/thank-you';
   }
 });
 ```
@@ -384,88 +369,56 @@ Other events worth listening for: `calendly.event_type_viewed`, `calendly.date_a
 
 ---
 
-## 9. Testing checklist
-
-Before shipping the new form to production:
-
-- [ ] **Widget renders** — the Calendly widget shows real availability from Amir's Google Calendar (busy blocks in his calendar should not appear as available slots).
-- [ ] **Prefill works** — after step-1 submit, the widget's "Your name" / "Your email" / "Company" fields are already filled with what the prospect typed. They can edit but shouldn't have to.
-- [ ] **Zeami styling** — background, text color, and accent match the rest of the zeami.io page. No jarring white flash.
-- [ ] **Lead capture on step 1 works** — check SalesBrain's `/sales-leads` page after submitting the form once. A new row should appear immediately, before the prospect books through Calendly.
-- [ ] **Booking through the widget works** — pick a real slot in a test capacity. Verify:
-  - Calendly sends a confirmation email to the test prospect address
-  - Google Meet link is included and works
-  - The event appears on Amir's Google Calendar
-  - Reschedule + cancel links in the email work
-- [ ] **Field validation** — try invalid inputs (empty name, invalid email, oversized description) and confirm the form catches them before hitting SalesBrain.
-- [ ] **API failure handling** — with SalesBrain temporarily unreachable (simulate via network throttle), the form should show an error message and NOT let the prospect proceed to step 2.
-- [ ] **Mobile / responsive** — the widget's iframe must be `min-height: 700px` on mobile too. Consider `height: 100vh` on small screens.
-
-### Post-launch spot-checks (weekly)
-
-- Are bookings actually landing on Amir's Google Calendar?
-- Are `/sales-leads` rows appearing for every submit?
-- On Calendly Standard: does the `booked_at` column populate on the same row within a few seconds of the prospect completing the booking? If not, check the webhook subscription in Calendly's dashboard.
-
----
-
-## 10. Free vs Standard plan behavior (recap)
-
-**On Calendly Free (current):**
-
-| Feature | Works? |
-|---|---|
-| Widget on zeami.io | ✅ |
-| Prefill from form values | ✅ |
-| Real availability from Amir's calendar | ✅ |
-| `.ics` + Meet link + reschedule/cancel in prospect's email | ✅ |
-| SalesBrain auto-sync (`booked_at`, `meet_link`, etc.) | ❌ — webhooks gated |
-| Internal team "Demo booked" email from CRM | ❌ — fires only on webhook |
-
-**On Calendly Standard (after upgrade):**
-
-Everything above plus:
-
-- Bookings auto-sync into `sales_leads` (`booked_at`, `meet_link`, `reschedule_url`, `booking_status='scheduled'`)
-- Team gets a "Demo booked: <Company> — <Name>" email immediately
-- Reschedule / cancel from prospect side auto-updates the CRM row
-
-**No zeami.io code changes needed when upgrading.** Just flip the plan in Calendly's billing UI + configure the webhook subscription. All zeami.io code stays the same.
-
----
-
 ## 11. Troubleshooting
 
-| Symptom | Likely cause | Fix |
+| Symptom | Cause | Fix |
 |---|---|---|
-| Widget doesn't render on the page | `widget.js` blocked by CSP, or the `<div id="calendly-inline">` isn't in the DOM yet when `initInlineWidget` is called | Load `widget.js` in `<head>` OR use `defer` / `async` correctly; wrap the call in a `DOMContentLoaded` / `useEffect` |
-| Prefill values don't populate | Custom answer keys `a1` / `a2` don't match Calendly's question order | In Calendly, ensure "Company" is Question 1 and "Anything specific" is Question 2. `a1` maps to Q1, `a2` to Q2 (position-indexed) |
-| POST to SalesBrain returns 401 | Missing / wrong `X-API-Key` header | Set `NEXT_PUBLIC_SALESBRAIN_API_KEY` correctly, redeploy zeami.io |
-| POST to SalesBrain returns 403 | The API key is set but CORS is locked to a different origin | On SalesBrain, `PUBLIC_FORM_ALLOWED_ORIGIN` must be `https://zeami.io` |
-| Widget colors don't match brand | URL params not URL-encoded properly | Colors are 6-char hex without `#` — pass `00E5FF`, not `#00E5FF` or `%2300E5FF` |
-| Booking works but the prospect doesn't get a confirmation email | Amir's Calendly account isn't configured to send from a verified domain, or the prospect email bounced | Check Calendly's outgoing email settings — verify SPF/DKIM for `zeami.io` or fall back to Calendly's default sender |
+| Widget shows a spinner forever | `widget.js` blocked by CSP or ad-blocker | Check browser console; whitelist `assets.calendly.com` in CSP |
+| Widget colors default (blue instead of cyan) | URL params malformed (e.g. `#` prefix, spaces, missing `?`) | Match the snippet in section 3.2 exactly |
+| Booking works but `/sales-leads` doesn't update | Webhook signature mismatch OR webhook not active | Check Calendly's webhook delivery log; verify `CALENDLY_WEBHOOK_SECRET` in SalesBrain env matches Calendly's signing key |
+| Prospect doesn't get confirmation email | Their spam filter caught it, OR `zeami.io` not fully verified in Resend/Calendly | Check spam folder; check Calendly's outgoing email settings |
 
 ---
 
-## 12. Reference
+## 12. Summary — what zeami.io needs to change
+
+**Everything else is done and live** — the only remaining work is on zeami.io.
+
+**Recommended (Option A):** replace the current demo-request page contents with 3 lines of HTML:
+```html
+<link rel="stylesheet" href="https://assets.calendly.com/assets/external/widget.css"/>
+<div class="calendly-inline-widget" data-url="https://calendly.com/amir-zeami/zeami-demo-30-min?hide_gdpr_banner=1&background_color=0d0d14&text_color=ffffff&primary_color=00E5FF" style="min-width:320px;height:800px;"></div>
+<script src="https://assets.calendly.com/assets/external/widget.js" async></script>
+```
+
+**Post-deploy checks (should all pass immediately):**
+- Widget renders inside the container with Zeami colors
+- Real availability from Amir's Google Calendar shown
+- Booking a test slot from an incognito window: prospect gets Calendly's confirmation, Amir gets the internal notification email, `/sales-leads` row shows within a few seconds with green "Scheduled" badge
+
+That's the whole integration. Nothing else on zeami.io needs to change.
+
+Estimated dev effort: **10 minutes** including styling to match the surrounding page.
+
+### Status recap (SalesBrain + Calendly side)
+
+| Component | Status |
+|---|---|
+| SalesBrain webhook endpoint deployed | ✅ Live |
+| HMAC signature verification wired | ✅ Live |
+| `sales_leads` schema (`booked_at`, `meet_link`, `website`, etc.) | ✅ Migrated to prod |
+| `/sales-leads` UI (booking card, Join meeting, Reschedule) | ✅ Live |
+| Convert-to-deal preserves Meet link + reschedule URL + website | ✅ Live |
+| Calendly Standard plan | ✅ Active |
+| Calendly event type + custom questions | ✅ Configured |
+| Calendly webhook subscription | ✅ Active, signing key deployed |
+| **Widget embed on zeami.io** | ⏳ **Pending — zeami.io dev work** |
+
+---
+
+## 13. Reference
 
 - SalesBrain public API doc: `docs/external-api.md` (in the SalesBrain repo)
 - Calendly widget docs: https://help.calendly.com/hc/en-us/articles/223147027
-- Calendly widget URL params: https://developer.calendly.com/api-docs/8be1de55c73dd-embed-a-calendly-inline-widget
-
----
-
-## Summary
-
-**What zeami.io needs to change:**
-
-1. Remove the current preferred-date/time/timezone picker.
-2. Add a two-step page: form → widget.
-3. On step-1 submit, POST to `https://salescrm.chipchip.social/api/public/sales-leads` with `{full_name, email, company, description}` and the `X-API-Key` header.
-4. On step-2, mount Calendly's inline widget for `https://calendly.com/amir-zeami/30min` with prefill from the form data.
-5. Match the widget colors to Zeami's dark theme (obsidian bg, white text, cyan accent).
-6. Add the API key to zeami.io's env as `NEXT_PUBLIC_SALESBRAIN_API_KEY`.
-
-**No other integration work** — Calendly handles the confirmation email, the .ics, the Meet link, the reschedule/cancel, and (on Standard plan) the webhook back to the CRM.
-
-Estimated implementation effort: **1–2 hours** for a familiar developer, including styling to match the current form's design.
+- Calendly widget URL params reference: https://developer.calendly.com/api-docs/8be1de55c73dd-embed-a-calendly-inline-widget
+- Calendly postMessage events: https://developer.calendly.com/docs/embed-options-overview
