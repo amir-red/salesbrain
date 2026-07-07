@@ -138,8 +138,8 @@ The widget takes over from here. No further HTTP calls from zeami.io are needed 
    - **Custom questions** (in this exact order — the CRM webhook maps by position):
      - Q1: `Company` (short answer, required)
      - Q2: `Anything specific you'd like to see?` (long answer, optional)
-   - **Notifications → Reply-to**: `amir@zeami.io`
-4. Note the event type URL — e.g. `https://calendly.com/amir-zeami/30min`. This URL goes into the widget embed below.
+   - **Reply-to**: not configurable on Calendly Free — but not a problem. Calendly automatically routes replies to the organizer's account email (`amir@zeami.io`) by default. If/when upgrading to Standard, custom reply-to lives at Account settings → Communication preferences.
+4. Note the event type URL — e.g. `https://calendly.com/amir-zeami/zeami-demo-30-min`. This URL goes into the widget embed below.
 
 ### The embed snippet
 
@@ -166,7 +166,7 @@ Drop this into the Step 2 container on zeami.io:
       return;
     }
     Calendly.initInlineWidget({
-      url: 'https://calendly.com/amir-zeami/30min?hide_gdpr_banner=1&background_color=0d0d14&text_color=ffffff&primary_color=00E5FF',
+      url: 'https://calendly.com/amir-zeami/zeami-demo-30-min?hide_gdpr_banner=1&background_color=0d0d14&text_color=ffffff&primary_color=00E5FF',
       parentElement: document.getElementById('calendly-inline'),
       prefill: {
         name: formData.fullName,
@@ -210,7 +210,7 @@ If the zeami.io site is React-based (Next.js, Astro with React islands, plain Re
 import { useState } from 'react';
 
 const SALESBRAIN_API = 'https://salescrm.chipchip.social/api/public/sales-leads';
-const CALENDLY_URL = 'https://calendly.com/amir-zeami/30min'
+const CALENDLY_URL = 'https://calendly.com/amir-zeami/zeami-demo-30-min'
   + '?hide_gdpr_banner=1'
   + '&background_color=0d0d14'
   + '&text_color=ffffff'
@@ -462,7 +462,7 @@ Everything above plus:
 1. Remove the current preferred-date/time/timezone picker.
 2. Add a two-step page: form → widget.
 3. On step-1 submit, POST to `https://salescrm.chipchip.social/api/public/sales-leads` with `{full_name, email, company, description}` and the `X-API-Key` header.
-4. On step-2, mount Calendly's inline widget for `https://calendly.com/amir-zeami/30min` with prefill from the form data.
+4. On step-2, mount Calendly's inline widget for `https://calendly.com/amir-zeami/zeami-demo-30-min` with prefill from the form data.
 5. Match the widget colors to Zeami's dark theme (obsidian bg, white text, cyan accent).
 6. Add the API key to zeami.io's env as `NEXT_PUBLIC_SALESBRAIN_API_KEY`.
 

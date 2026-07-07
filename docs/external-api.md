@@ -180,7 +180,7 @@ Replace the current date/time/tz picker on the demo-request page with the Calend
 <script>
   window.addEventListener('load', () => {
     Calendly.initInlineWidget({
-      url: 'https://calendly.com/zeami-demos/30min?hide_gdpr_banner=1',
+      url: 'https://calendly.com/amir-zeami/zeami-demo-30-min?hide_gdpr_banner=1',
       parentElement: document.getElementById('calendly-inline'),
       prefill: {
         name:  document.getElementById('fullName').value,
