@@ -17,6 +17,7 @@ interface SalesLead {
   converted_deal_id: string | null;
   converted_deal_name: string | null;
   converted_deal_gate: number | null;
+  website: string | null;                   // From Calendly's "Website" custom question
   // Preferred demo time captured from zeami.io's "Request Demo" form.
   // All three optional — old leads + non-demo submissions have these null.
   preferred_demo_date: string | null;       // YYYY-MM-DD (pg DATE → string)
@@ -254,6 +255,20 @@ export default function SalesLeadsPage() {
                       </div>
                       <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
                         <a href={`mailto:${l.email}`} className="hover:underline">{l.email}</a>
+                        {l.website && (
+                          <>
+                            {' · '}
+                            <a
+                              href={l.website.startsWith('http') ? l.website : `https://${l.website}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="hover:underline"
+                              style={{ color: 'var(--accent)' }}
+                            >
+                              {l.website.replace(/^https?:\/\//, '')}
+                            </a>
+                          </>
+                        )}
                         <span> · {l.source} · {new Date(l.created_at).toLocaleString()}</span>
                       </p>
                       {/* Booking card — takes priority over the preferred-time

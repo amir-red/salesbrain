@@ -84,7 +84,9 @@ export interface CalendlyCreatedEvent {
   invitee_uuid: string;         // Calendly invitee uuid
   email: string;                // Prospect's email (matches sales_leads.email)
   name: string;                 // Prospect's name (fallback if the row was created cold)
-  company?: string;             // From a custom question, if configured
+  company?: string;             // From "Company" custom question
+  website?: string;             // From "Website" custom question
+  description?: string;         // From "Company Description" custom question
   meet_link?: string;           // Google Meet URL from `location.join_url`
   reschedule_url: string;       // Full URL prospect can hit to reschedule
   cancel_url: string;           // Full URL prospect can hit to cancel
@@ -138,24 +140,42 @@ export function parseCreatedEvent(body: Record<string, unknown>): CalendlyCreate
   const inviteeUri = String(payload?.uri ?? '');
   const scheduledEventUri = String(scheduledEvent?.uri ?? '');
 
-  // Custom questions — the sales form on zeami.io is expected to have
-  // "Company" as one of the questions Calendly asks. We match on the
-  // literal question text (case-insensitive) so setup changes are
-  // low-risk. If the answer isn't present we leave company undefined
-  // (the sales_leads row already has it from the form submit).
+  // Custom questions — Calendly's booking form asks:
+  //   Company / Website / Company Description (optional)
+  //
+  // We case-insensitively classify each question by its text. Order matters:
+  // "Company Description" contains both "description" AND "company", so we
+  // check for description FIRST to avoid misfiling it as company. Website is
+  // unambiguous.
   const qa = Array.isArray(payload?.questions_and_answers)
     ? (payload.questions_and_answers as Array<Record<string, unknown>>)
     : [];
-  const companyAnswer = qa.find(
-    (q) => String(q?.question ?? '').toLowerCase().includes('company'),
-  );
+  const answers = { company: undefined as string | undefined,
+                    website: undefined as string | undefined,
+                    description: undefined as string | undefined };
+  for (const q of qa) {
+    const text = String(q?.question ?? '').toLowerCase();
+    const val = String(q?.answer ?? '').trim() || undefined;
+    if (!val) continue;
+    if (text.includes('description')) {
+      answers.description = val;
+    } else if (text.includes('website')) {
+      answers.website = val;
+    } else if (text.includes('company')) {
+      answers.company = val;
+    }
+    // Anything else (custom questions we don't know about) is preserved
+    // in raw_payload on the sales_leads row for post-hoc extraction.
+  }
 
   return {
     event_uuid: uuidFromUri(scheduledEventUri),
     invitee_uuid: uuidFromUri(inviteeUri),
     email: String(payload?.email ?? '').toLowerCase(),
     name: String(payload?.name ?? ''),
-    company: companyAnswer ? String(companyAnswer.answer ?? '') || undefined : undefined,
+    company: answers.company,
+    website: answers.website,
+    description: answers.description,
     meet_link: location?.join_url ? String(location.join_url) : undefined,
     reschedule_url: String(payload?.reschedule_url ?? ''),
     cancel_url: String(payload?.cancel_url ?? ''),

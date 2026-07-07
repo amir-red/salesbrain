@@ -158,8 +158,10 @@ async function handleCreated(body: Record<string, unknown>): Promise<void> {
   if (existing[0]?.id) {
     leadId = existing[0].id as string;
 
-    // Update the row with booking details. Preserve full_name / company from
-    // the form submit if they existed; only backfill from Calendly if empty.
+    // Update the row with booking details. Preserve values captured earlier
+    // via the zeami.io form (full_name, company, description) if they exist;
+    // only backfill from Calendly if the existing field is empty. Website
+    // was never captured by the zeami.io form, so straight write is fine.
     const { rows: updated } = await pool.query(
       `UPDATE sales_leads
        SET calendly_event_uuid   = $1,
@@ -171,8 +173,10 @@ async function handleCreated(body: Record<string, unknown>): Promise<void> {
            booking_status        = 'scheduled',
            -- Backfill any values Calendly gave us that our row is missing.
            company               = COALESCE(NULLIF(company, ''), $7),
-           full_name             = COALESCE(NULLIF(full_name, ''), $8)
-       WHERE id = $9
+           full_name             = COALESCE(NULLIF(full_name, ''), $8),
+           description           = COALESCE(NULLIF(description, ''), $9),
+           website               = COALESCE(NULLIF(website, ''), $10)
+       WHERE id = $11
        RETURNING full_name, company, preferred_demo_timezone`,
       [
         e.event_uuid, e.invitee_uuid,
@@ -182,6 +186,8 @@ async function handleCreated(body: Record<string, unknown>): Promise<void> {
         bookedAt,
         e.company || 'Unknown',
         e.name,
+        e.description || null,
+        e.website || null,
         leadId,
       ],
     );
@@ -192,17 +198,19 @@ async function handleCreated(body: Record<string, unknown>): Promise<void> {
     // Cold-start: no form row, just Calendly. Seed a new sales_leads.
     const { rows: inserted } = await pool.query(
       `INSERT INTO sales_leads
-         (full_name, company, email, source, status,
+         (full_name, company, email, website, description, source, status,
           calendly_event_uuid, calendly_invitee_uuid,
           meet_link, reschedule_url, cancel_url,
           booked_at, booking_status)
-       VALUES ($1, $2, $3, 'zeami.io:calendly-direct', 'new',
-               $4, $5, $6, $7, $8, $9, 'scheduled')
+       VALUES ($1, $2, $3, $4, $5, 'zeami.io:calendly-direct', 'new',
+               $6, $7, $8, $9, $10, $11, 'scheduled')
        RETURNING id`,
       [
         e.name || 'Unknown',
         e.company || 'Unknown',
         e.email,
+        e.website || null,
+        e.description || null,
         e.event_uuid, e.invitee_uuid,
         e.meet_link || null,
         e.reschedule_url || null,
