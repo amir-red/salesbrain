@@ -174,6 +174,19 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
+  {
+    href: '/settings/mcp',
+    label: 'MCP',
+    icon: (
+      // Plug/socket — signals "external tool connection"
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 2v6" />
+        <path d="M15 2v6" />
+        <path d="M6 8h12v4a6 6 0 0 1-12 0z" />
+        <path d="M12 18v4" />
+      </svg>
+    ),
+  },
 ];
 
 export default function Sidebar() {
