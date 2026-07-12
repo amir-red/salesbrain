@@ -47,6 +47,9 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!login|signup|forgot-password|reset-password|forms|api/auth|api/cron|api/telegram|api/health|api/public|_next/static|_next/image|favicon\\.ico).*)',
+    // /api/mcp is bearer-authed (not cookie-authed) — the route handler
+    // enforces token auth. /api/mcp/tokens IS cookie-authed and NOT excluded,
+    // handled by getSession() inside the tokens route.
+    '/((?!login|signup|forgot-password|reset-password|forms|api/auth|api/cron|api/telegram|api/health|api/public|api/mcp$|_next/static|_next/image|favicon\\.ico).*)',
   ],
 };
