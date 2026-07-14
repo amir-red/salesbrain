@@ -95,6 +95,19 @@ export async function GET(req: NextRequest) {
     stats.errors++;
   }
 
+  // ─── 2b. Batched Telegram SLA-breach notifications to linked users ──
+  // Runs after the agent-based SLA loop. Groups all breached deals per
+  // linked user into a single Telegram message so we don't spam. Best-
+  // effort — Telegram outages don't break the cron.
+  try {
+    const { notifySlaBreachesForAllUsers } = await import('@/lib/telegram-notifications');
+    const summary = await notifySlaBreachesForAllUsers();
+    console.log(`[cron] telegram SLA notifications: ${summary.notified} users, ${summary.deals} deals`);
+  } catch (err) {
+    console.error('[cron] telegram SLA notifications failed:', err);
+    stats.errors++;
+  }
+
   // ─── 3. Deal decay detection ─────────────────────────────────
 
   try {

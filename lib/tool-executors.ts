@@ -130,19 +130,23 @@ export async function exec_update_deal(input: {
   const values: unknown[] = [];
   let paramIdx = 1;
 
-  // Track gate change for audit + load deal_type/fields for grant guard
+  // Track gate change for audit + load deal_type/fields for grant guard.
+  // Also track the OLD lead_id so we can push a "you've been assigned"
+  // notification to the new lead over Telegram if it changes.
   let oldGate: number | null = null;
   let dealType: string | null = null;
   let currentFields: Record<string, unknown> = {};
-  if (updates.gate !== undefined) {
+  let oldLeadId: string | null = null;
+  if (updates.gate !== undefined || updates.lead_id !== undefined) {
     const { rows } = await pool.query(
-      'SELECT gate, deal_type, fields FROM deals WHERE id = $1',
+      'SELECT gate, deal_type, fields, lead_id FROM deals WHERE id = $1',
       [deal_id]
     );
     if (rows[0]) {
       oldGate = rows[0].gate;
       dealType = rows[0].deal_type;
       currentFields = (rows[0].fields as Record<string, unknown>) || {};
+      oldLeadId = rows[0].lead_id ?? null;
     }
   }
 
@@ -320,6 +324,33 @@ export async function exec_update_deal(input: {
       await pool.query('UPDATE deals SET missing = $1 WHERE id = $2', [missing, deal_id]);
       deal.missing = missing;
     }
+  }
+
+  // Fire-and-forget: notify the new lead over Telegram if the assignment
+  // changed. Only fires when lead_id was in the update AND actually changed.
+  if (
+    updates.lead_id !== undefined &&
+    deal?.lead_id &&
+    deal.lead_id !== oldLeadId
+  ) {
+    (async () => {
+      try {
+        const { notifyDealAssigned } = await import('./telegram-notifications');
+        const { getGate } = await import('./gates');
+        const gate = getGate(deal.gate, deal.deal_type ?? 'sales');
+        await notifyDealAssigned(deal.lead_id, {
+          id: deal.id,
+          name: deal.name,
+          company: deal.company,
+          gate: deal.gate,
+          gate_name: gate?.name ?? null,
+          score: deal.score,
+          risk: deal.risk,
+        });
+      } catch (err) {
+        console.warn('[exec_update_deal] telegram assignment notification failed:', err);
+      }
+    })();
   }
 
   return { updated: true, deal };

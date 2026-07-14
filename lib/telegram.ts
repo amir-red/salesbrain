@@ -8,6 +8,50 @@ interface TelegramResponse {
   description?: string;
 }
 
+/**
+ * Send a message to an arbitrary chat_id via the bot. Used for direct
+ * messages to individual users (personal SalesBrain bot flow) and for the
+ * board group. Throws on any Telegram-side error.
+ */
+export async function sendChatMessage(
+  chatId: number | string,
+  text: string,
+  opts?: { replyToMessageId?: number; parseMode?: 'Markdown' | 'MarkdownV2' | 'HTML' },
+): Promise<{ messageId: number }> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) throw new Error('TELEGRAM_BOT_TOKEN must be set');
+
+  const body: Record<string, unknown> = {
+    chat_id: chatId,
+    text,
+    disable_web_page_preview: true,
+  };
+  if (opts?.replyToMessageId) body.reply_to_message_id = opts.replyToMessageId;
+  if (opts?.parseMode) body.parse_mode = opts.parseMode;
+
+  const url = `${TELEGRAM_API}${token}/sendMessage`;
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    throw new Error(`Telegram network error: ${err instanceof Error ? err.message : 'fetch failed'}`);
+  }
+
+  if (!res.ok) {
+    const rawBody = await res.text();
+    throw new Error(`Telegram HTTP ${res.status}: ${rawBody}`);
+  }
+
+  const data = (await res.json()) as TelegramResponse;
+  if (!data.ok) throw new Error(`Telegram API: ${data.description}`);
+  return { messageId: data.result!.message_id };
+}
+
 export async function sendTelegramMessage(text: string, replyToMessageId?: number): Promise<{ messageId: number }> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_BOARD_CHAT_ID;
