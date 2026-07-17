@@ -262,13 +262,16 @@ const WRITE_TOOLS: McpToolDef[] = [
   },
 ];
 
-// ─── Admin tools ───────────────────────────────────────────────────
+// ─── Additional write tools (deal-scoped side effects) ────────────
+// Previously "admin-only" but the visibility scope (creator OR lead on
+// the deal) is a sufficient guard — same rule the web UI enforces.
+// Rate limits stay tight to prevent runaway loops (see auth.ts).
 
-const ADMIN_TOOLS: McpToolDef[] = [
+const SIDE_EFFECT_TOOLS: McpToolDef[] = [
   {
     name: 'send_telegram',
     description:
-      'Send a board-review request to the Telegram executive group. Admin-only. Rate-limited to 10 per rolling minute.',
+      'Send a board-review request to the Telegram executive group for a deal you own or lead. Rate-limited to 10 per rolling minute per token.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -278,12 +281,12 @@ const ADMIN_TOOLS: McpToolDef[] = [
       },
       required: ['deal_id', 'message', 'gate'],
     },
-    _meta: { access: 'admin', dispatches_to: 'exec_send_telegram' },
+    _meta: { access: 'write', dispatches_to: 'exec_send_telegram' },
   },
   {
     name: 'send_email',
     description:
-      'Send an email now via Resend, or draft as a followup. Admin-only. Rate-limited to 20 per rolling minute.',
+      'Send an email now via Resend, or draft as a followup, for a deal you own or lead. Rate-limited to 20 per rolling minute per token.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -295,12 +298,12 @@ const ADMIN_TOOLS: McpToolDef[] = [
       },
       required: ['deal_id', 'to', 'subject', 'body', 'send_immediately'],
     },
-    _meta: { access: 'admin', dispatches_to: 'exec_send_email' },
+    _meta: { access: 'write', dispatches_to: 'exec_send_email' },
   },
   {
     name: 'advance_gate',
     description:
-      'Advance a deal to a specific gate. Convenience wrapper around update_deal with only the gate change. Applies the same gate-advance guards (grant money-field check, missing fields, etc.). Admin-only.',
+      'Advance a deal to a specific gate. Convenience wrapper around update_deal with only the gate change. Applies the same gate-advance guards (grant money-field check, missing fields, gate_events audit). Non-admins can advance their own deals — same as the web UI.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -310,7 +313,7 @@ const ADMIN_TOOLS: McpToolDef[] = [
       },
       required: ['deal_id', 'new_gate'],
     },
-    _meta: { access: 'admin' },
+    _meta: { access: 'write' },
   },
   {
     name: 'convert_lead_to_deal',
@@ -327,7 +330,7 @@ const ADMIN_TOOLS: McpToolDef[] = [
   },
 ];
 
-export const MCP_TOOLS: McpToolDef[] = [...READ_TOOLS, ...WRITE_TOOLS, ...ADMIN_TOOLS];
+export const MCP_TOOLS: McpToolDef[] = [...READ_TOOLS, ...WRITE_TOOLS, ...SIDE_EFFECT_TOOLS];
 
 export const TOOL_BY_NAME: Map<string, McpToolDef> = new Map(
   MCP_TOOLS.map((t) => [t.name, t] as const),

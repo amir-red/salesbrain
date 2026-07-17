@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { runAgent } from '@/lib/agent';
-import { sendTelegramMessage, formatVoteTallyReply, formatBoardResolution } from '@/lib/telegram';
+import { sendTelegramMessage, sendChatMessage, formatVoteTallyReply, formatBoardResolution } from '@/lib/telegram';
+import { consumeLinkToken, lookupTelegramLink } from '@/lib/telegram-links';
+import { processMessage as runAgentBridge } from '@/lib/telegram-agent';
 
 interface TelegramUpdate {
   message?: {
     message_id: number;
+    chat?: {
+      id: number;
+      type?: 'private' | 'group' | 'supergroup' | 'channel';
+    };
     from?: {
       id: number;
       first_name?: string;
@@ -35,7 +41,64 @@ export async function POST(req: NextRequest) {
   const update: TelegramUpdate = await req.json();
   const message = update.message;
 
-  if (!message?.text || !message.reply_to_message || !message.from) {
+  if (!message?.text || !message.from) {
+    return NextResponse.json({ ok: true, skipped: true });
+  }
+
+  const text = message.text.trim();
+  const chatId = message.chat?.id ?? message.from.id;
+  const isPrivateChat = message.chat?.type === 'private';
+
+  // ─── Route 1: /start linking command ─────────────────────────────
+  // Format: "/start LINK-XXXXXX" (case-insensitive). Only in private chats
+  // to avoid leaking codes in group logs.
+  const startMatch = text.match(/^\/start(?:@\w+)?\s+(LINK-[A-Z0-9]+)$/i);
+  if (startMatch && isPrivateChat) {
+    const rawToken = startMatch[1].toUpperCase();
+    try {
+      const result = await consumeLinkToken(rawToken, {
+        telegram_user_id: message.from.id,
+        telegram_chat_id: chatId,
+        telegram_username: message.from.username,
+        telegram_first_name: message.from.first_name,
+        telegram_last_name: message.from.last_name,
+      });
+      if (!result.ok) {
+        await sendChatMessage(chatId, `❌ ${result.reason}\n\nGenerate a fresh code at /settings/telegram and try again.`);
+      } else {
+        await sendChatMessage(chatId,
+          `✅ Linked as ${message.from.first_name || message.from.username || 'you'}.\n\n` +
+          `You can now message me in natural language to look up deals, add notes, and more. ` +
+          `Try: "what's on my sales pipeline?"`
+        );
+      }
+    } catch (err) {
+      console.error('[Telegram] link consume failed:', err);
+      await sendChatMessage(chatId, '⚠️ Something went wrong linking your account. Try again shortly.').catch(() => {});
+    }
+    return NextResponse.json({ ok: true, handled: 'link' });
+  }
+
+  // /start with no token (fresh chat with the bot) — a hint back
+  if (/^\/start(?:@\w+)?$/i.test(text) && isPrivateChat) {
+    await sendChatMessage(chatId,
+      `👋 Hi ${message.from.first_name || 'there'}!\n\n` +
+      `I'm the SalesBrain assistant. To use me, link your SalesBrain account:\n\n` +
+      `1. Log in at https://salescrm.chipchip.social\n` +
+      `2. Go to Settings → Telegram → Generate linking code\n` +
+      `3. Send me the /start LINK-XXXXXX code\n\n` +
+      `Once linked, you can ask me anything about your deals.`
+    ).catch(() => {});
+    return NextResponse.json({ ok: true, handled: 'start_hint' });
+  }
+
+  // ─── Route 2: Board vote (reply-to in the group chat) ────────────
+  // Existing behavior — untouched. Requires the message to be a reply.
+  if (!message.reply_to_message) {
+    // No reply → not a board vote. Fall through to Route 3 (private chat agent).
+    if (isPrivateChat) {
+      return handlePrivateChatMessage(chatId, message.from.id, text);
+    }
     return NextResponse.json({ ok: true, skipped: true });
   }
 
@@ -168,4 +231,52 @@ export async function POST(req: NextRequest) {
     tally,
     resolved,
   });
+}
+
+/**
+ * Route 3: free-text message in a private DM from a linked user →
+ * dispatch to the Claude+MCP agent bridge, send reply back.
+ *
+ * If the sender isn't linked, we send a friendly nudge to /settings/telegram.
+ * Non-linked users can't use the bot for read/write access — deliberate.
+ */
+async function handlePrivateChatMessage(
+  chatId: number,
+  telegramUserId: number,
+  text: string,
+): Promise<NextResponse> {
+  const linked = await lookupTelegramLink(telegramUserId);
+  if (!linked) {
+    await sendChatMessage(chatId,
+      `👋 You're not linked to a SalesBrain account yet.\n\n` +
+      `Log in at https://salescrm.chipchip.social → Settings → Telegram → Generate linking code, ` +
+      `then send me /start LINK-XXXXXX to connect.`
+    ).catch(() => {});
+    return NextResponse.json({ ok: true, handled: 'not_linked' });
+  }
+
+  // Fire the agent in the background so we don't hold Telegram's webhook
+  // waiting for Claude. Telegram's timeout is ~60s, well within Claude's
+  // response time, but returning 200 fast keeps us safely under it.
+  (async () => {
+    try {
+      // Show "typing..." while we compute — best-effort, don't fail on it.
+      try {
+        await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendChatAction`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: chatId, action: 'typing' }),
+        });
+      } catch { /* ignore */ }
+
+      const reply = await runAgentBridge(linked, text);
+      await sendChatMessage(chatId, reply.text);
+      console.log(`[Telegram] Agent reply to user ${linked.user_email}: ${reply.tool_calls} tool call(s), ${reply.duration_ms}ms`);
+    } catch (err) {
+      console.error('[Telegram] agent bridge failed:', err);
+      await sendChatMessage(chatId, '⚠️ Something went wrong. Try again shortly.').catch(() => {});
+    }
+  })();
+
+  return NextResponse.json({ ok: true, handled: 'agent_bridge' });
 }
