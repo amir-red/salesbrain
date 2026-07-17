@@ -101,9 +101,9 @@ async function run(
     case 'remember':                return exec_remember({ scope: args.scope as 'org' | 'user', fact: String(args.fact) }, { userEmail: ctx.user_email });
     case 'forget':                  return exec_forget({ mem_id: String(args.mem_id) }, { userEmail: ctx.user_email });
 
-    // ── Admin tools ────────────────────────────────────────────
-    case 'send_telegram':           return exec_send_telegram({ deal_id: String(args.deal_id), message: String(args.message), gate: Number(args.gate) });
-    case 'send_email':              return exec_send_email({ deal_id: String(args.deal_id), to: String(args.to), subject: String(args.subject), body: String(args.body), send_immediately: Boolean(args.send_immediately) });
+    // ── Deal-scoped side effects (visibility-scoped, not admin-gated) ─
+    case 'send_telegram':           return sendTelegram(args, ctx);
+    case 'send_email':              return sendEmail(args, ctx);
     case 'advance_gate':            return advanceGate(args, ctx);
     case 'convert_lead_to_deal':    return convertLeadToDeal(String(args.lead_id), ctx);
 
@@ -351,6 +351,38 @@ async function scheduleFollowup(args: Record<string, unknown>, ctx: AuthContext)
   );
   if (rows.length === 0) throw new Error('Deal not found or not accessible');
   return exec_schedule_followup(args as Parameters<typeof exec_schedule_followup>[0]);
+}
+
+async function sendTelegram(args: Record<string, unknown>, ctx: AuthContext) {
+  const dealId = String(args.deal_id);
+  const vis = dealVisibility(ctx, 2);
+  const { rows } = await pool.query(
+    `SELECT 1 FROM deals d WHERE d.id = $1 AND ${vis.sql}`,
+    [dealId, ...vis.params],
+  );
+  if (rows.length === 0) throw new Error('Deal not found or not accessible');
+  return exec_send_telegram({
+    deal_id: dealId,
+    message: String(args.message),
+    gate: Number(args.gate),
+  });
+}
+
+async function sendEmail(args: Record<string, unknown>, ctx: AuthContext) {
+  const dealId = String(args.deal_id);
+  const vis = dealVisibility(ctx, 2);
+  const { rows } = await pool.query(
+    `SELECT 1 FROM deals d WHERE d.id = $1 AND ${vis.sql}`,
+    [dealId, ...vis.params],
+  );
+  if (rows.length === 0) throw new Error('Deal not found or not accessible');
+  return exec_send_email({
+    deal_id: dealId,
+    to: String(args.to),
+    subject: String(args.subject),
+    body: String(args.body),
+    send_immediately: Boolean(args.send_immediately),
+  });
 }
 
 async function advanceGate(args: Record<string, unknown>, ctx: AuthContext) {

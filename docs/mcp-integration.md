@@ -178,27 +178,21 @@ Grouped by access level. Every tool respects your visibility scope.
 | `remember` | Persist a durable cross-conversation lesson (org or user scope) |
 | `forget` | Remove a memory by short id |
 | `convert_lead_to_deal` | Turn a sales_leads row into a G1 sales deal |
+| `advance_gate` | Advance to a specific gate (sugar over update_deal + guards). Same rule as clicking Advance in the web UI. |
+| `send_telegram` | Board review request to the executive Telegram group, for a deal you own or lead. Rate-limited to 10/min per token. |
+| `send_email` | Send email now via Resend, or draft as followup, for a deal you own or lead. Rate-limited to 20/min per token. |
 
-### Admin tools — require admin role
+## 6. Visibility rules (the only guard)
 
-| Tool | Purpose |
-|---|---|
-| `send_telegram` | Board review request to executive Telegram group |
-| `send_email` | Send email now via Resend, or draft as followup |
-| `advance_gate` | Advance to a specific gate (sugar over update_deal + guards) |
-
-## 6. Visibility rules (the important part)
-
-**Non-admins**: every deal query runs with `WHERE user_id = <you> OR lead_id = <you>`. You can't see, update, or comment on someone else's deals through MCP — same as when you log into the web UI.
+**Non-admins**: every deal-touching call runs with `WHERE user_id = <you> OR lead_id = <you>`. You can't see, update, comment on, advance, send-email-about, or board-review someone else's deals through MCP — same rule the web UI enforces.
 
 **Admins**: no scope filter. Full access to every deal.
 
-The check happens on **every request** — role changes take effect immediately, no session cache.
+The check happens on **every request** — role changes take effect immediately, no session cache. There's no separate admin gate anywhere; visibility scope is the sole check.
 
 If you try to access a deal outside your scope:
 - Read tools return `null` / empty results (as if the deal doesn't exist)
 - Write tools return `"Deal not found or not accessible"`
-- Admin-only tools called by non-admins return `"This tool requires admin access"`
 
 ## 7. Rate limits
 
@@ -249,7 +243,7 @@ Examples of how a natural-language Hermes prompt turns into MCP tool calls:
 | `401 Invalid or revoked token` | Token doesn't exist, was revoked, or has a typo | Verify at `/settings/mcp`; regenerate if needed |
 | `429 Rate limit exceeded` | Too many requests in 60s | Backoff for ~60s; consider batching requests |
 | `Tool not found: X` | Typo in tool name | Call `tools/list` to see the exact names |
-| `This tool requires admin access` | Non-admin called `send_telegram` / `send_email` / `advance_gate` | Ask an admin, or add the change via the web UI |
+| `Deal not found or not accessible` (on advance_gate / send_telegram / send_email) | You're trying to act on a deal you don't own or lead | The deal must have you as `user_id` (creator) or `lead_id` (assigned lead). Ask its owner to add you as lead. |
 | `Deal not found or not accessible` | The deal doesn't exist OR isn't in your visibility scope | If the deal exists but you're not on it, ask its owner to add you as `lead_id` |
 | Tool succeeds but nothing happens in the web UI | Browser cache | Reload — the DB row is definitely updated (check `mcp_audit_log`) |
 
