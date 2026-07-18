@@ -600,3 +600,50 @@ CREATE INDEX IF NOT EXISTS idx_deals_active
 CREATE INDEX IF NOT EXISTS idx_deals_deleted
   ON deals(deleted_at DESC)
   WHERE deleted_at IS NOT NULL;
+-- Migration 018: track when we last nudged a pending board decision.
+--
+-- The scheduled nudge (cron on Mon/Wed/Fri) and the on-demand
+-- `nudge_pending_votes` MCP tool both post a fresh reminder in the board
+-- group and rewire `telegram_message_id` to the new message so
+-- reply-to-vote keeps working. `last_nudged_at` gives us a 4-hour
+-- throttle so accidental double-fires don't spam the group.
+
+ALTER TABLE board_decisions
+  ADD COLUMN IF NOT EXISTS last_nudged_at TIMESTAMPTZ;
+
+-- Small partial index scoped to pending decisions — the only rows we
+-- ever consider for a nudge. Keeps the scan cheap on the cron path.
+CREATE INDEX IF NOT EXISTS idx_board_decisions_pending_nudge
+  ON board_decisions (last_nudged_at)
+  WHERE status = 'pending';
+
+-- Migration 019: mark stale board decisions "superseded".
+--
+-- Problem: a deal that advances past a gate through a *second*, successful
+-- board review leaves the earlier pending row behind in the table. Nothing
+-- ever closes those rows, so tooling like `list_pending_board_decisions`
+-- surfaces them as if they still need votes.
+--
+-- Solution:
+--   1. Extend the status CHECK constraint to include 'superseded'.
+--   2. Backfill: every pending row whose gate is now < the deal's gate is
+--      obsolete by definition — the deal has already left that gate. Mark
+--      them 'superseded' + set resolved_at so audit trail stays intact.
+
+ALTER TABLE board_decisions
+  DROP CONSTRAINT IF EXISTS board_decisions_status_check;
+
+ALTER TABLE board_decisions
+  ADD CONSTRAINT board_decisions_status_check
+    CHECK (status IN ('pending', 'approved', 'rejected', 'amended', 'superseded'));
+
+-- One-shot backfill. Safe to re-run — WHERE clause only matches rows still
+-- in the wrong state.
+UPDATE board_decisions bd
+SET status = 'superseded',
+    resolved_at = COALESCE(bd.resolved_at, now())
+FROM deals d
+WHERE bd.deal_id = d.id
+  AND bd.status = 'pending'
+  AND bd.gate < d.gate;
+

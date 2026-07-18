@@ -4,6 +4,7 @@ import { runAgent } from '@/lib/agent';
 import { sendTelegramMessage, sendChatMessage, formatVoteTallyReply, formatBoardResolution } from '@/lib/telegram';
 import { consumeLinkToken, lookupTelegramLink } from '@/lib/telegram-links';
 import { processMessage as runAgentBridge, type AnonymousCaller } from '@/lib/telegram-agent';
+import { nudgePendingBoardDecisions } from '@/lib/telegram-notifications';
 
 // Per-user-per-chat rate limit for group mentions (in-process, sliding window).
 const MENTION_WINDOW_MS = 60 * 1000;
@@ -146,6 +147,34 @@ export async function POST(req: NextRequest) {
   );
 
   if (rows.length === 0) {
+    // Vote lands with nowhere to go — either the target message is a tally
+    // reply / resolution / scrolled-off post, or the decision has already
+    // resolved. If the text actually parses as a vote AND we're in the
+    // board group, tell the voter what happened instead of failing silent.
+    const vote = parseDecision(text);
+    const boardChatId = process.env.TELEGRAM_BOARD_CHAT_ID ? Number(process.env.TELEGRAM_BOARD_CHAT_ID) : null;
+    if (vote && boardChatId !== null && chatId === boardChatId) {
+      console.warn('[Telegram] vote miss', {
+        replyToId,
+        voter: voterName,
+        textPrefix: text.slice(0, 40),
+      });
+      const first = message.from.first_name || message.from.username || 'there';
+      // Any pending decisions to redirect them to?
+      const nudge = await nudgePendingBoardDecisions({ force: true });
+      if (nudge.nudged === 0) {
+        await sendChatMessage(chatId,
+          `Thanks ${first} — nothing pending right now, no votes to cast.`,
+          { replyToMessageId: message.message_id },
+        ).catch(() => {});
+      } else {
+        await sendChatMessage(chatId,
+          `👋 ${first}, that message isn't the current pending vote. I just posted the active one${nudge.nudged > 1 ? 's' : ''} above — reply to that message to cast your vote.`,
+          { replyToMessageId: message.message_id },
+        ).catch(() => {});
+      }
+      return NextResponse.json({ ok: true, handled: 'vote_miss_redirect', nudged: nudge.nudged });
+    }
     return NextResponse.json({ ok: true, skipped: true, reason: 'No matching pending decision' });
   }
 

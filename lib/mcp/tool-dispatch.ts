@@ -35,6 +35,7 @@ import {
 import { TOOL_BY_NAME } from './tool-definitions';
 import type { AuthContext } from './auth';
 import { enforceToolLimit } from './auth';
+import { nudgePendingBoardDecisions } from '../telegram-notifications';
 
 // ─── Public API ────────────────────────────────────────────────────
 
@@ -118,6 +119,7 @@ async function run(
     case 'convert_lead_to_deal':    return convertLeadToDeal(String(args.lead_id), ctx);
     case 'delete_deal':             return deleteDeal(String(args.deal_id), ctx);
     case 'restore_deal':            return restoreDeal(String(args.deal_id), ctx);
+    case 'nudge_pending_votes':     return nudgePendingVotes(args, ctx);
 
     default:
       throw new Error(`Handler missing for tool: ${name}`);
@@ -287,7 +289,7 @@ async function listPendingBoardDecisions() {
      FROM board_decisions bd
      JOIN deals d ON d.id = bd.deal_id AND d.deleted_at IS NULL
      LEFT JOIN board_votes bv ON bv.board_decision_id = bd.id
-     WHERE bd.status = 'pending'
+     WHERE bd.status = 'pending' AND bd.gate >= d.gate
      GROUP BY bd.id, d.id
      ORDER BY bd.created_at ASC`,
   );
@@ -473,6 +475,23 @@ async function restoreDeal(dealId: string, ctx: AuthContext) {
   );
   if (rowCount === 0) throw new Error('Deal not found or not currently deleted');
   return { restored: true, deal_id: dealId };
+}
+
+async function nudgePendingVotes(args: Record<string, unknown>, ctx: AuthContext) {
+  // Admin-gated in the dispatcher (access: 'admin') — belt-and-braces here.
+  if (!ctx.is_admin) throw new Error('Only admins can post board nudges');
+  const onlyDealId = args.deal_id ? String(args.deal_id) : undefined;
+  const result = await nudgePendingBoardDecisions({ onlyDealId, force: true });
+  return {
+    nudged_count: result.nudged,
+    deal_ids: result.deal_ids,
+    skipped: result.skipped,
+    message: result.nudged === 0
+      ? (onlyDealId
+        ? 'No pending board decision for that deal — nothing to nudge.'
+        : 'No pending board decisions — nothing to nudge.')
+      : `Posted ${result.nudged} fresh reminder${result.nudged === 1 ? '' : 's'} in the board group.`,
+  };
 }
 
 async function convertLeadToDeal(leadId: string, ctx: AuthContext) {

@@ -220,6 +220,21 @@ export async function exec_update_deal(input: {
       [deal_id, oldGate, updates.gate, updates.notes || `Advanced to gate ${updates.gate}`]
     );
 
+    // If the deal advanced forward, close any pending board_decisions that
+    // are now stale (same deal, gate < new gate). Prevents the "graveyard"
+    // pattern where a fresh board review supersedes an earlier stalled one
+    // but the old row stays pending forever. Idempotent — noop if nothing
+    // matches.
+    if ((updates.gate as number) > oldGate) {
+      await pool.query(
+        `UPDATE board_decisions
+         SET status = 'superseded',
+             resolved_at = COALESCE(resolved_at, now())
+         WHERE deal_id = $1 AND status = 'pending' AND gate < $2`,
+        [deal_id, updates.gate],
+      );
+    }
+
     // Send Telegram notification for board gate completions and significant advances
     const newGate = updates.gate as number;
     // Sales board gates: G3 → G4 (Review Board 1) and G7 → G8 (Review Board 2).

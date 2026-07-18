@@ -361,6 +361,18 @@ const SIDE_EFFECT_TOOLS: McpToolDef[] = [
     },
     _meta: { access: 'write' },
   },
+  {
+    name: 'nudge_pending_votes',
+    description:
+      "Post a fresh reminder in the board Telegram group for pending decisions — includes current tally, votes still needed, and voting instructions. Replies to the new message become the vote anchor. Omit deal_id to nudge every pending decision. Admin-only because it posts to the shared board group. Bypasses the 4h throttle since a human is explicitly asking.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        deal_id: { type: 'string', description: 'Optional — nudge only this deal.' },
+      },
+    },
+    _meta: { access: 'admin' },
+  },
 ];
 
 export const MCP_TOOLS: McpToolDef[] = [...READ_TOOLS, ...WRITE_TOOLS, ...SIDE_EFFECT_TOOLS];

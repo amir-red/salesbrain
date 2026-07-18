@@ -65,6 +65,20 @@ Who can ask:
 
 Rate limit: 10 mentions per user per group per rolling 60 seconds. The board vote-reply flow keeps priority — a reply-to a pending decision is scored as a vote even if it @mentions the bot.
 
+### Board-vote nudge
+
+The bot re-posts a compressed reminder in the board group for every pending decision on **Mon / Wed / Fri at 11:00 EAT** (08:00 UTC). Each reminder shows the running tally (`proceed 4/5 · stop 1/4 · amend 0/4`), who's voted so far, and how many more "proceed" votes will advance the deal. Replies to the reminder count as votes exactly like replies to the original post — internally we update `board_decisions.telegram_message_id` to the new message so Route 2 keeps working.
+
+Two additional triggers:
+
+- **On-demand from the group**: an admin @mentions the bot with something like *"@salesbrain nudge the votes on ChipChip"* → the `nudge_pending_votes` MCP tool fires. Omit the deal name to nudge every pending decision.
+- **Vote-miss safety net**: if someone replies "proceed" to a message that isn't the current vote anchor (e.g., a scrolled-off post or a tally reply), the bot posts a fresh nudge and tells them where to reply.
+
+Cadence + throttle:
+- Cron throttle: any decision nudged in the last **4 hours** is skipped.
+- Age filter (cron only): decisions younger than **6 hours** are left alone so the original board post has room to work first.
+- Admin `nudge_pending_votes` bypasses both filters (`force: true`).
+
 Required env: `TELEGRAM_BOT_USERNAME` (without the leading `@`).
 
 ## Push notifications
