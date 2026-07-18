@@ -289,7 +289,7 @@ async function listPendingBoardDecisions() {
      FROM board_decisions bd
      JOIN deals d ON d.id = bd.deal_id AND d.deleted_at IS NULL
      LEFT JOIN board_votes bv ON bv.board_decision_id = bd.id
-     WHERE bd.status = 'pending'
+     WHERE bd.status = 'pending' AND bd.gate >= d.gate
      GROUP BY bd.id, d.id
      ORDER BY bd.created_at ASC`,
   );

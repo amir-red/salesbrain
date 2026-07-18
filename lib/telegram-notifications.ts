@@ -191,7 +191,7 @@ export async function nudgePendingBoardDecisions(
   const { onlyDealId, force = false } = opts;
 
   const params: unknown[] = [];
-  const clauses: string[] = [`bd.status = 'pending'`, `d.deleted_at IS NULL`];
+  const clauses: string[] = [`bd.status = 'pending'`, `d.deleted_at IS NULL`, `bd.gate >= d.gate`];
 
   if (!force) {
     clauses.push(`bd.created_at < now() - interval '6 hours'`);
