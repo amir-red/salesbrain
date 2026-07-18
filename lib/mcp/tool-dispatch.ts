@@ -61,6 +61,15 @@ export async function dispatchTool(
     return { status: 'error', error: 'This tool requires admin access' };
   }
 
+  // Anonymous group-chat callers get read-only access. Any write/admin tool
+  // is refused with a friendly hint the agent can relay in-thread.
+  if (ctx.read_only && def._meta.access !== 'read') {
+    return {
+      status: 'error',
+      error: 'read_only_context: link your SalesBrain account (DM me /start LINK-XXXXXX) to change data.',
+    };
+  }
+
   // Per-tool rate limits (send_telegram / send_email have tighter caps).
   if (!enforceToolLimit(ctx.token_id, toolName)) {
     return { status: 'rate_limited', error: `Per-tool rate limit exceeded for ${toolName}` };
@@ -90,6 +99,7 @@ async function run(
     case 'get_memories':            return getMemories(String(args.scope || 'both'), ctx);
     case 'list_sales_leads':        return listSalesLeads(args);
     case 'get_sales_lead':          return getSalesLead(String(args.id));
+    case 'list_pending_board_decisions': return listPendingBoardDecisions();
 
     // ── Write tools ────────────────────────────────────────────
     case 'update_deal':             return updateDeal(args, ctx);
@@ -261,6 +271,44 @@ async function getSalesLead(id: string) {
     [id],
   );
   return rows[0] || null;
+}
+
+async function listPendingBoardDecisions() {
+  const { rows } = await pool.query(
+    `SELECT bd.id, bd.gate, bd.votes_required, bd.votes_to_block, bd.created_at,
+            d.id AS deal_id, d.name AS deal_name, d.company,
+            COALESCE(
+              json_agg(
+                json_build_object('name', bv.voter_name, 'vote', bv.vote)
+                ORDER BY bv.created_at
+              ) FILTER (WHERE bv.id IS NOT NULL),
+              '[]'::json
+            ) AS voters
+     FROM board_decisions bd
+     JOIN deals d ON d.id = bd.deal_id AND d.deleted_at IS NULL
+     LEFT JOIN board_votes bv ON bv.board_decision_id = bd.id
+     WHERE bd.status = 'pending'
+     GROUP BY bd.id, d.id
+     ORDER BY bd.created_at ASC`,
+  );
+  return rows.map((r) => {
+    const voters = r.voters as Array<{ name: string; vote: 'proceed' | 'stop' | 'amend' }>;
+    const tally = { proceed: 0, stop: 0, amend: 0 };
+    for (const v of voters) tally[v.vote] = (tally[v.vote] ?? 0) + 1;
+    const daysPending = Math.floor((Date.now() - new Date(r.created_at).getTime()) / 86400000);
+    return {
+      deal_id: r.deal_id,
+      deal_name: r.deal_name,
+      company: r.company,
+      gate: r.gate,
+      votes_required: r.votes_required,
+      votes_to_block: r.votes_to_block,
+      tally,
+      voters,
+      votes_still_needed_to_proceed: Math.max(0, r.votes_required - tally.proceed),
+      days_pending: daysPending,
+    };
+  });
 }
 
 // ─── Write handlers ───────────────────────────────────────────────
