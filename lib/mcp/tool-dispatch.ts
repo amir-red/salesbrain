@@ -106,6 +106,8 @@ async function run(
     case 'send_email':              return sendEmail(args, ctx);
     case 'advance_gate':            return advanceGate(args, ctx);
     case 'convert_lead_to_deal':    return convertLeadToDeal(String(args.lead_id), ctx);
+    case 'delete_deal':             return deleteDeal(String(args.deal_id), ctx);
+    case 'restore_deal':            return restoreDeal(String(args.deal_id), ctx);
 
     default:
       throw new Error(`Handler missing for tool: ${name}`);
@@ -117,14 +119,17 @@ async function run(
 /**
  * Build the visibility SQL fragment + params for scoping deal queries.
  * Non-admins see only deals they created or lead. Admins see everything.
+ * ALWAYS excludes soft-deleted rows (`deleted_at IS NULL`) — no MCP
+ * client ever sees a deleted deal, even admins (they use the web UI's
+ * trash view for restore).
  *
  * Returns the WHERE fragment (without the leading "WHERE") plus the
  * bind values, so callers can compose it with additional filters.
  */
 function dealVisibility(ctx: AuthContext, paramStartIdx = 1): { sql: string; params: unknown[]; nextIdx: number } {
-  if (ctx.is_admin) return { sql: 'TRUE', params: [], nextIdx: paramStartIdx };
+  if (ctx.is_admin) return { sql: 'd.deleted_at IS NULL', params: [], nextIdx: paramStartIdx };
   return {
-    sql: `(d.user_id = $${paramStartIdx} OR d.lead_id = $${paramStartIdx})`,
+    sql: `d.deleted_at IS NULL AND (d.user_id = $${paramStartIdx} OR d.lead_id = $${paramStartIdx})`,
     params: [ctx.user_id],
     nextIdx: paramStartIdx + 1,
   };
@@ -397,6 +402,29 @@ async function advanceGate(args: Record<string, unknown>, ctx: AuthContext) {
   );
   if (rows.length === 0) throw new Error('Deal not found or not accessible');
   return exec_update_deal({ deal_id: dealId, updates: { gate: newGate, notes: reason } });
+}
+
+async function deleteDeal(dealId: string, ctx: AuthContext) {
+  const permClause = ctx.is_admin ? '' : 'AND (user_id = $2 OR lead_id = $2)';
+  const params: unknown[] = ctx.is_admin ? [dealId, ctx.user_id] : [dealId, ctx.user_id];
+  const { rowCount } = await pool.query(
+    `UPDATE deals SET deleted_at = now(), deleted_by = $2
+     WHERE id = $1 AND deleted_at IS NULL ${permClause}`,
+    params,
+  );
+  if (rowCount === 0) throw new Error('Deal not found, already deleted, or permission denied');
+  return { deleted: true, deal_id: dealId };
+}
+
+async function restoreDeal(dealId: string, ctx: AuthContext) {
+  if (!ctx.is_admin) throw new Error('Only admins can restore deleted deals');
+  const { rowCount } = await pool.query(
+    `UPDATE deals SET deleted_at = NULL, deleted_by = NULL
+     WHERE id = $1 AND deleted_at IS NOT NULL`,
+    [dealId],
+  );
+  if (rowCount === 0) throw new Error('Deal not found or not currently deleted');
+  return { restored: true, deal_id: dealId };
 }
 
 async function convertLeadToDeal(leadId: string, ctx: AuthContext) {

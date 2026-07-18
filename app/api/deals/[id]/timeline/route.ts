@@ -12,7 +12,7 @@ export async function GET(
   // Check if deal exists and whether the caller can see chat history.
   // Visibility for the conversation entries: creator, assigned lead, or admin.
   const { rows: dealRows } = await pool.query(
-    'SELECT id, user_id, lead_id FROM deals WHERE id = $1',
+    'SELECT id, user_id, lead_id FROM deals WHERE id = $1 AND deleted_at IS NULL',
     [params.id]
   );
   if (dealRows.length === 0) {

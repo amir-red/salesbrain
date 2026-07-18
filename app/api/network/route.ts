@@ -85,7 +85,7 @@ export async function GET() {
     const dealValues = isAdmin ? [names] : [names, session.userId];
     const { rows } = await pool.query(
       `SELECT id, name, company, gate, deal_type
-       FROM deals WHERE LOWER(company) = ANY($1::text[])${dealFilter}`,
+       FROM deals WHERE LOWER(company) = ANY($1::text[]) AND deleted_at IS NULL${dealFilter}`,
       dealValues
     );
     deals = rows as DealRow[];

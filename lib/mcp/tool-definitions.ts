@@ -316,6 +316,32 @@ const SIDE_EFFECT_TOOLS: McpToolDef[] = [
     _meta: { access: 'write' },
   },
   {
+    name: 'delete_deal',
+    description:
+      'Soft-delete a deal — hides it everywhere. Reversible via restore_deal (admin only). Same permission as the web UI: creator, lead, or admin.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        deal_id: { type: 'string' },
+      },
+      required: ['deal_id'],
+    },
+    _meta: { access: 'write' },
+  },
+  {
+    name: 'restore_deal',
+    description:
+      'Restore a previously soft-deleted deal. Admin only.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        deal_id: { type: 'string' },
+      },
+      required: ['deal_id'],
+    },
+    _meta: { access: 'admin' },
+  },
+  {
     name: 'convert_lead_to_deal',
     description:
       "Turn a sales_leads row into a G1 sales deal. Same atomic operation as the /sales-leads Convert button.",

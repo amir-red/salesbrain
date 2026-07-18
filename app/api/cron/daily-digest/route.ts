@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
               d.gate_entered_at, d.flags, u.name as lead_name
        FROM deals d
        LEFT JOIN users u ON u.id = d.lead_id
-       WHERE d.gate < 9
+       WHERE d.gate < 9 AND d.deleted_at IS NULL
        ORDER BY d.gate DESC, d.gate_entered_at ASC`
     );
 
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
     const { rows: quietDeals } = await pool.query(
       `SELECT d.id, d.name, d.company, d.gate
        FROM deals d
-       WHERE d.gate < 9
+       WHERE d.gate < 9 AND d.deleted_at IS NULL
          AND NOT EXISTS (
            SELECT 1 FROM conversations c
            WHERE c.deal_id = d.id AND c.created_at > now() - interval '7 days'

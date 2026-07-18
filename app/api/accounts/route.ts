@@ -22,7 +22,7 @@ export async function GET() {
     `SELECT a.*,
        (SELECT COUNT(*)::int FROM contacts WHERE account_id = a.id) as contact_count,
        (SELECT COUNT(*)::int FROM prospects WHERE account_id = a.id) as prospect_count,
-       (SELECT COUNT(*)::int FROM deals WHERE LOWER(company) = LOWER(a.name)) as deal_count
+       (SELECT COUNT(*)::int FROM deals WHERE LOWER(company) = LOWER(a.name) AND deleted_at IS NULL) as deal_count
      FROM accounts a
      ORDER BY a.updated_at DESC LIMIT 200`
   );

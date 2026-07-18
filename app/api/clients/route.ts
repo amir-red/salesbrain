@@ -17,6 +17,7 @@ export async function GET() {
        MAX(COALESCE(updated_at, created_at)) as last_activity,
        (array_agg(currency ORDER BY value DESC NULLS LAST))[1] as currency
      FROM deals
+     WHERE deleted_at IS NULL
      GROUP BY company
      ORDER BY last_activity DESC`
   );

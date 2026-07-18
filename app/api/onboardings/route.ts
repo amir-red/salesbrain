@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
 
   // Verify the deal exists and is a sales deal at G9.
   const { rows: dealRows } = await pool.query(
-    `SELECT id, company, notes, fields, lead_id, gate, deal_type, contact_email FROM deals WHERE id = $1`,
+    `SELECT id, company, notes, fields, lead_id, gate, deal_type, contact_email FROM deals WHERE id = $1 AND deleted_at IS NULL`,
     [deal_id]
   );
   const deal = dealRows[0];

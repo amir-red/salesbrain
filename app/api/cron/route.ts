@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
     const { rows: activeDeals } = await pool.query(
       `SELECT id, name, gate, gate_entered_at, flags
        FROM deals
-       WHERE gate < 9
+       WHERE gate < 9 AND deleted_at IS NULL
        ORDER BY gate_entered_at ASC`
     );
 
@@ -114,7 +114,7 @@ export async function GET(req: NextRequest) {
     const { rows: decayCandidates } = await pool.query(
       `SELECT id, name, gate, flags
        FROM deals
-       WHERE gate BETWEEN 2 AND 8
+       WHERE gate BETWEEN 2 AND 8 AND deleted_at IS NULL
        ORDER BY gate_entered_at ASC`
     );
 
