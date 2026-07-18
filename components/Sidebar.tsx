@@ -208,10 +208,16 @@ export default function Sidebar() {
       className="w-16 flex-shrink-0 flex flex-col items-center py-4 gap-1 border-r"
       style={{ background: '#0F1F3D', borderColor: 'var(--border)' }}
     >
-      {/* Logo */}
-      <div className="mb-4 w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold" style={{ background: 'var(--accent)' }}>
-        SB
-      </div>
+      {/* Logo — neural-node SB monogram. SVG lives at public/logo.svg. */}
+      <Link href="/" className="mb-4 block" title="SalesBrain — home">
+        <img
+          src="/logo.svg"
+          alt="SalesBrain"
+          width={40}
+          height={40}
+          className="w-10 h-10 rounded-xl block"
+        />
+      </Link>
 
       {/* Nav items */}
       {NAV_ITEMS.map((item) => {
