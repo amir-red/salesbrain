@@ -47,6 +47,26 @@ Everything obeys your visibility scope — non-admins only see/edit deals they c
 
 Note: reply-to-message voting on board review pings continues to work exactly as before, independently of the linked-user chat flow.
 
+### Group @mentions
+
+In any group where the bot is a member, `@<TELEGRAM_BOT_USERNAME> <question>` runs the same agent bridge and replies as a thread reply. Typical questions:
+
+- "@salesbrain what's stuck at the board?" → uses `list_pending_board_decisions`
+- "@salesbrain who voted on ChipChip and how many more do we need?" → same tool
+- "@salesbrain how's the pipeline this week?" → `get_pipeline_overview`
+
+Who can ask:
+
+| Caller | Scope | Writes? |
+|---|---|---|
+| Linked user (any group) | Their normal per-user scope (or admin org-wide) | Yes — same as DM |
+| Unlinked user, in the allowlisted board chat (`TELEGRAM_BOARD_CHAT_ID`) | Org-wide, read-only | No — gets a "link your account" reply |
+| Unlinked user, any other group | Nothing — bot only replies with a linking hint | No |
+
+Rate limit: 10 mentions per user per group per rolling 60 seconds. The board vote-reply flow keeps priority — a reply-to a pending decision is scored as a vote even if it @mentions the bot.
+
+Required env: `TELEGRAM_BOT_USERNAME` (without the leading `@`).
+
 ## Push notifications
 
 ### SLA breach (daily)

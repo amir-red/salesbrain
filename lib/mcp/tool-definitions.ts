@@ -124,6 +124,13 @@ const READ_TOOLS: McpToolDef[] = [
     },
     _meta: { access: 'read' },
   },
+  {
+    name: 'list_pending_board_decisions',
+    description:
+      "Every board decision currently awaiting votes. For each: deal name, gate, votes_required to proceed, votes_to_block, tally {proceed/stop/amend}, voters {name, vote}, and days_pending. Ideal for 'what's stuck at board' and 'who has/hasn't voted' questions.",
+    inputSchema: { type: 'object', properties: {} },
+    _meta: { access: 'read' },
+  },
 ];
 
 // ─── Write tools (still respect user's visibility scope) ─────────
@@ -314,6 +321,32 @@ const SIDE_EFFECT_TOOLS: McpToolDef[] = [
       required: ['deal_id', 'new_gate'],
     },
     _meta: { access: 'write' },
+  },
+  {
+    name: 'delete_deal',
+    description:
+      'Soft-delete a deal — hides it everywhere. Reversible via restore_deal (admin only). Same permission as the web UI: creator, lead, or admin.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        deal_id: { type: 'string' },
+      },
+      required: ['deal_id'],
+    },
+    _meta: { access: 'write' },
+  },
+  {
+    name: 'restore_deal',
+    description:
+      'Restore a previously soft-deleted deal. Admin only.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        deal_id: { type: 'string' },
+      },
+      required: ['deal_id'],
+    },
+    _meta: { access: 'admin' },
   },
   {
     name: 'convert_lead_to_deal',

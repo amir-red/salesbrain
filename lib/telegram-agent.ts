@@ -29,6 +29,19 @@ import { dispatchTool } from './mcp/tool-dispatch';
 import type { AuthContext } from './mcp/auth';
 import type { LinkedUser } from './telegram-links';
 
+// Anonymous group caller — used when an unlinked user @mentions the bot
+// inside the allowlisted board chat. Read-only, org-wide visibility.
+export interface AnonymousCaller {
+  kind: 'anonymous';
+  telegram_first_name: string;
+}
+
+type Caller = LinkedUser | AnonymousCaller;
+
+function isAnonymous(caller: Caller): caller is AnonymousCaller {
+  return 'kind' in caller && caller.kind === 'anonymous';
+}
+
 const anthropic = new Anthropic();
 
 const MAX_ITERATIONS = 6;
@@ -39,11 +52,37 @@ const TELEGRAM_MAX_MSG_LEN = 3900;
 
 // ─── System prompt tailored for phone-first UX ────────────────────
 
-function systemPrompt(user: LinkedUser): string {
-  return `You are the SalesBrain assistant answering ${user.user_name} (${user.user_email}) via Telegram DM.
+function systemPrompt(caller: Caller, channel: 'dm' | 'group'): string {
+  const today = new Date().toISOString().slice(0, 10);
+  const groupRules = channel === 'group'
+    ? `\nYou are in a SHARED GROUP CHAT (the board group). Rules for this channel:
+- Reply in 2–4 SHORT lines. This is read on a phone by multiple people.
+- Address the sender by first name once, then get to the answer.
+- Never expose contact emails/phones or MCP tokens.
+- If you're not certain of an answer, say so briefly.\n`
+    : '';
+
+  if (isAnonymous(caller)) {
+    return `You are the SalesBrain assistant answering ${caller.telegram_first_name} in the board Telegram group.
+${groupRules}
+You do NOT know who this user is in SalesBrain — they haven't linked their account. You have READ-ONLY, org-wide visibility. Any write attempt will fail with a "link your account" hint.
+
+Best tools for typical board questions:
+- list_pending_board_decisions — "what's stuck at board?", "who voted?", "how many more votes?"
+- get_pipeline_overview — "how's the pipeline?"
+- list_deals — recent deals across the org
+- get_deal — details on one deal
+
+If asked to change data, tell them: "I can only look things up here. DM me /start LINK-XXXXXX after generating a code at Settings → Telegram." Don't attempt the write.
+
+Do NOT use Markdown formatting other than simple bullets. Today is ${today}.`;
+  }
+
+  const user = caller;
+  return `You are the SalesBrain assistant answering ${user.user_name} (${user.user_email}) via Telegram ${channel === 'group' ? 'board group' : 'DM'}.
 
 Role: help them think about their deals — brainstorm, look up context, update records when asked.
-
+${groupRules}
 Constraints:
 - You act with ${user.user_name}'s identity and visibility scope. Non-admins only see deals they created or are assigned to lead.
 - Keep replies SHORT — Telegram messages are read on a phone. 3-6 short lines is ideal. Bullet points OK.
@@ -52,13 +91,13 @@ Constraints:
 - Do NOT write in Markdown formatting other than simple bullets. Telegram renders plain text — asterisks and underscores WILL show as literal characters.
 
 Available tools:
-- Read tools (safe, always allowed): get_deal, list_deals, get_pipeline_overview, get_relevant_lessons, get_memories, list_sales_leads, get_sales_lead
+- Read tools (safe, always allowed): get_deal, list_deals, get_pipeline_overview, get_relevant_lessons, get_memories, list_sales_leads, get_sales_lead, list_pending_board_decisions
 - Write tools (change data): update_deal, add_deal_note, create_deal, mark_deal_lost, assess_deal, schedule_followup, remember, forget, convert_lead_to_deal
 - Admin tools (only if ${user.user_role} = 'admin'): send_telegram, send_email, advance_gate
 
 Before any write action, briefly confirm what you're about to do in one line and proceed. Don't ask a confirming question for read tools.
 
-Today is ${new Date().toISOString().slice(0, 10)}.`;
+Today is ${today}.`;
 }
 
 // ─── Public entry point ──────────────────────────────────────────
@@ -75,18 +114,31 @@ export interface AgentReply {
  * surfaced in the reply itself so the user knows what happened.
  */
 export async function processMessage(
-  user: LinkedUser,
+  caller: Caller,
   messageText: string,
+  opts: { channel?: 'dm' | 'group' } = {},
 ): Promise<AgentReply> {
+  const channel = opts.channel ?? 'dm';
   const started = Date.now();
-  const ctx: AuthContext = {
-    token_id: `telegram:${user.link_id}`,   // synthetic — no MCP token row
-    user_id: user.user_id,
-    user_email: user.user_email,
-    user_role: user.user_role,
-    user_name: user.user_name,
-    is_admin: user.user_role === 'admin',
-  };
+  const ctx: AuthContext = isAnonymous(caller)
+    ? {
+        // Synthetic token id per Telegram user so rate limits are per-caller.
+        token_id: `telegram:anon:${caller.telegram_first_name}`,
+        user_id: '00000000-0000-0000-0000-000000000000',
+        user_email: 'anon@telegram.group',
+        user_role: 'anonymous',
+        user_name: caller.telegram_first_name,
+        is_admin: true,             // org-wide READ scope (guarded by read_only below)
+        read_only: true,
+      }
+    : {
+        token_id: `telegram:${caller.link_id}`,   // synthetic — no MCP token row
+        user_id: caller.user_id,
+        user_email: caller.user_email,
+        user_role: caller.user_role,
+        user_name: caller.user_name,
+        is_admin: caller.user_role === 'admin',
+      };
 
   // Convert MCP tool defs to Anthropic tool shape
   const tools: Anthropic.Tool[] = MCP_TOOLS.map((t) => ({
@@ -110,7 +162,7 @@ export async function processMessage(
       const response = await anthropic.messages.create({
         model: MODEL,
         max_tokens: 2048,
-        system: systemPrompt(user),
+        system: systemPrompt(caller, channel),
         tools,
         messages,
       });

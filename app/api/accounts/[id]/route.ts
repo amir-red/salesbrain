@@ -34,7 +34,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     // On the account page we show ALL deals for this company since deals are org-visible in pipeline/reports.
     pool.query(
       `SELECT id, name, gate, score, verdict, value, currency, deal_type, created_at
-       FROM deals WHERE LOWER(company) = LOWER($1) ORDER BY updated_at DESC`,
+       FROM deals WHERE LOWER(company) = LOWER($1) AND deleted_at IS NULL ORDER BY updated_at DESC`,
       [accountRows[0].name]
     ),
   ]);

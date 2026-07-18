@@ -5,6 +5,16 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'SalesBrain — Agentic B2B Sales CRM',
   description: 'AI-powered sales pipeline management with Claude',
+  // Neural-node SB monogram lives at /public/logo.svg. Browsers render SVG
+  // favicons at native resolution — no separate favicon.ico needed.
+  icons: {
+    icon: [
+      { url: '/logo.svg', type: 'image/svg+xml' },
+    ],
+    // apple-touch-icon uses PNG. If a PNG variant is added at
+    // public/logo-192.png later, uncomment the next block.
+    // apple: [{ url: '/logo-192.png', sizes: '192x192', type: 'image/png' }],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

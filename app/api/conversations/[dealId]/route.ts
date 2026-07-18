@@ -15,8 +15,8 @@ export async function GET(
   const isAdmin = session.role === 'admin';
   const { rows: dealRows } = await pool.query(
     isAdmin
-      ? 'SELECT id FROM deals WHERE id = $1'
-      : 'SELECT id FROM deals WHERE id = $1 AND (user_id = $2 OR lead_id = $2)',
+      ? 'SELECT id FROM deals WHERE id = $1 AND deleted_at IS NULL'
+      : 'SELECT id FROM deals WHERE id = $1 AND deleted_at IS NULL AND (user_id = $2 OR lead_id = $2)',
     isAdmin ? [params.dealId] : [params.dealId, session.userId]
   );
   if (dealRows.length === 0) {

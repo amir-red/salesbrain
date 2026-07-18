@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import Timeline from '@/components/Timeline';
@@ -33,6 +33,8 @@ interface Deal {
   user_id: string;
   deal_type: 'sales' | 'grant';
   status?: 'active' | 'lost';
+  deleted_at?: string | null;
+  deleted_by_name?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -86,26 +88,52 @@ function Badge({ label, color }: { label: string; color: string }) {
 
 export default function DealViewPage() {
   const params = useParams();
+  const router = useRouter();
   const dealId = params.id as string;
   const [deal, setDeal] = useState<Deal | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [markLostOpen, setMarkLostOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  const reload = () => {
-    fetch(`/api/deals/${dealId}`).then((r) => r.ok ? r.json() : null).then(setDeal);
-  };
+  const fetchDeal = () =>
+    fetch(`/api/deals/${dealId}?include_deleted=1`).then((r) => (r.ok ? r.json() : null));
+
+  const reload = () => { fetchDeal().then(setDeal); };
 
   useEffect(() => {
     Promise.all([
-      fetch(`/api/deals/${dealId}`).then((r) => r.ok ? r.json() : null),
+      fetchDeal(),
       fetch('/api/auth/me').then((r) => r.ok ? r.json() : null),
     ]).then(([dealData, userData]) => {
       setDeal(dealData);
       setCurrentUser(userData);
       setLoading(false);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dealId]);
+
+  async function handleDelete() {
+    if (!deal) return;
+    const ok = window.confirm(
+      `Delete "${deal.name}"?\n\nThe deal will be hidden everywhere. An admin can restore it later.`,
+    );
+    if (!ok) return;
+    setBusy(true);
+    const res = await fetch(`/api/deals/${dealId}`, { method: 'DELETE' });
+    setBusy(false);
+    if (res.ok) router.push('/pipeline');
+    else alert('Delete failed: ' + (await res.text()));
+  }
+
+  async function handleRestore() {
+    if (!deal) return;
+    setBusy(true);
+    const res = await fetch(`/api/deals/${dealId}/restore`, { method: 'POST' });
+    setBusy(false);
+    if (res.ok) reload();
+    else alert('Restore failed: ' + (await res.text()));
+  }
 
   if (loading) {
     return (
@@ -134,6 +162,7 @@ export default function DealViewPage() {
     currentUser?.userId === deal.user_id ||
     currentUser?.userId === deal.lead_id;
   const isLost = deal.status === 'lost';
+  const isDeleted = !!deal.deleted_at;
   const gate = GATES[deal.gate - 1];
   const fields = deal.fields || {};
 
@@ -182,6 +211,15 @@ export default function DealViewPage() {
                     Lost
                   </span>
                 )}
+                {isDeleted && (
+                  <span
+                    className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded font-semibold"
+                    style={{ background: 'rgba(148,163,184,0.2)', color: 'var(--text-muted)' }}
+                    title={`Deleted${deal.deleted_by_name ? ` by ${deal.deleted_by_name}` : ''} on ${new Date(deal.deleted_at as string).toLocaleDateString()}`}
+                  >
+                    Deleted
+                  </span>
+                )}
               </div>
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{deal.company}</p>
             </div>
@@ -190,7 +228,7 @@ export default function DealViewPage() {
             {/* Mark as Lost: only shown on active deals to anyone with mutate rights.
                 Sits next to Open Chat so it\'s discoverable but visually de-emphasized
                 (outlined red, not solid) to avoid accidental clicks. */}
-            {!isLost && canMutate && (
+            {!isLost && !isDeleted && canMutate && (
               <button
                 onClick={() => setMarkLostOpen(true)}
                 className="px-3 py-2 rounded-lg text-sm font-medium transition-colors"
@@ -202,6 +240,31 @@ export default function DealViewPage() {
                 title="Mark this deal lost and capture a lesson"
               >
                 Mark as Lost
+              </button>
+            )}
+            {!isDeleted && canMutate && (
+              <button
+                onClick={handleDelete}
+                disabled={busy}
+                className="px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                style={{
+                  background: 'transparent',
+                  color: 'var(--text-muted)',
+                  border: '1px solid var(--border)',
+                }}
+                title="Soft-delete this deal — an admin can restore it later"
+              >
+                Delete
+              </button>
+            )}
+            {isDeleted && isAdmin && (
+              <button
+                onClick={handleRestore}
+                disabled={busy}
+                className="px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                style={{ background: 'var(--accent)', color: '#fff' }}
+              >
+                Restore
               </button>
             )}
             {isOwner && (

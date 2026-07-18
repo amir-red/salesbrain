@@ -24,6 +24,9 @@ export interface AuthContext {
   user_role: string;
   user_name: string;
   is_admin: boolean;
+  // When true, dispatch rejects any tool whose _meta.access !== 'read'.
+  // Used for anonymous group-chat callers (see lib/telegram-agent.ts group mode).
+  read_only?: boolean;
 }
 
 export type AuthResult =

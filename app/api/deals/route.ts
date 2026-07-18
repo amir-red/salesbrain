@@ -22,11 +22,14 @@ export async function GET() {
     // the creator (user_id) OR the assigned project lead (lead_id) — so a
     // teammate-created deal that names you as lead is visible to you.
     const isAdmin = session.role === 'admin';
+    // Every list query filters out soft-deleted deals. Admins can view
+    // deleted rows via GET /api/deals/[id]?include_deleted=1 for restore.
     const { rows } = await pool.query(
       `SELECT d.*, u.name as lead_name, u.email as lead_email
        FROM deals d
        LEFT JOIN users u ON u.id = d.lead_id
-       ${isAdmin ? '' : 'WHERE d.user_id = $1 OR d.lead_id = $1'}
+       WHERE d.deleted_at IS NULL
+       ${isAdmin ? '' : 'AND (d.user_id = $1 OR d.lead_id = $1)'}
        ORDER BY d.updated_at DESC LIMIT 100`,
       isAdmin ? [] : [session.userId]
     );

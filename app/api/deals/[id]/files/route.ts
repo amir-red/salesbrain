@@ -21,8 +21,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const isAdmin = session.role === 'admin';
   const { rows: dealRows } = await pool.query(
     isAdmin
-      ? 'SELECT id FROM deals WHERE id = $1'
-      : 'SELECT id FROM deals WHERE id = $1 AND user_id = $2',
+      ? 'SELECT id FROM deals WHERE id = $1 AND deleted_at IS NULL'
+      : 'SELECT id FROM deals WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
     isAdmin ? [params.id] : [params.id, session.userId]
   );
   if (dealRows.length === 0) {
@@ -129,8 +129,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const isAdmin = session.role === 'admin';
   const { rows: dealRows } = await pool.query(
     isAdmin
-      ? 'SELECT id FROM deals WHERE id = $1'
-      : 'SELECT id FROM deals WHERE id = $1 AND user_id = $2',
+      ? 'SELECT id FROM deals WHERE id = $1 AND deleted_at IS NULL'
+      : 'SELECT id FROM deals WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
     isAdmin ? [params.id] : [params.id, session.userId]
   );
   if (dealRows.length === 0) {

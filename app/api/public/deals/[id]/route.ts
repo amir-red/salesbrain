@@ -126,7 +126,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       `SELECT id, name, company, contact_name, contact_email, contact_phone,
               gate, gate_entered_at, deal_type, value, currency, fields,
               created_at, updated_at
-       FROM deals WHERE id = $1 LIMIT 1`,
+       FROM deals WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
       [id]
     );
     const deal = rows[0];

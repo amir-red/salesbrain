@@ -128,7 +128,8 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+  const allClauses = ['d.deleted_at IS NULL', ...clauses];
+  const where = `WHERE ${allClauses.join(' AND ')}`;
 
   try {
     // Total count (same WHERE, no LIMIT/OFFSET) — only run when offset=0

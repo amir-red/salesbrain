@@ -38,11 +38,12 @@ export default async function ReportsPage() {
 
   // Metric queries (org-wide — all deals visible)
   const [activeRes, valueRes, overdueRes, wonRes, byGateRes, activityRes] = await Promise.all([
-    pool.query('SELECT COUNT(*)::int as count FROM deals WHERE gate < 9'),
-    pool.query('SELECT COALESCE(SUM(value), 0)::numeric as total FROM deals WHERE gate < 9'),
+    pool.query('SELECT COUNT(*)::int as count FROM deals WHERE gate < 9 AND deleted_at IS NULL'),
+    pool.query('SELECT COALESCE(SUM(value), 0)::numeric as total FROM deals WHERE gate < 9 AND deleted_at IS NULL'),
     pool.query(
       `SELECT COUNT(*)::int as count FROM deals
        WHERE gate < 9
+       AND deleted_at IS NULL
        AND EXTRACT(EPOCH FROM (now() - gate_entered_at))/86400 >
          CASE gate
            WHEN 1 THEN 3 WHEN 2 THEN 10 WHEN 3 THEN 5 WHEN 4 THEN 14
@@ -56,6 +57,7 @@ export default async function ReportsPage() {
     ),
     pool.query(
       `SELECT gate, COUNT(*)::int as count FROM deals
+       WHERE deleted_at IS NULL
        GROUP BY gate ORDER BY gate`
     ),
     pool.query(

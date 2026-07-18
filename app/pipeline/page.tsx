@@ -207,6 +207,7 @@ export default async function PipelinePage() {
      EXTRACT(EPOCH FROM (now() - d.gate_entered_at))/86400 as days_in_gate_raw
      FROM deals d
      LEFT JOIN users u ON u.id = d.lead_id
+     WHERE d.deleted_at IS NULL
      ORDER BY d.gate, d.score DESC NULLS LAST`
   );
 

@@ -3,7 +3,21 @@ import pool from '@/lib/db';
 import { runAgent } from '@/lib/agent';
 import { sendTelegramMessage, sendChatMessage, formatVoteTallyReply, formatBoardResolution } from '@/lib/telegram';
 import { consumeLinkToken, lookupTelegramLink } from '@/lib/telegram-links';
-import { processMessage as runAgentBridge } from '@/lib/telegram-agent';
+import { processMessage as runAgentBridge, type AnonymousCaller } from '@/lib/telegram-agent';
+
+// Per-user-per-chat rate limit for group mentions (in-process, sliding window).
+const MENTION_WINDOW_MS = 60 * 1000;
+const MENTION_LIMIT = 10;
+const mentionBuckets = new Map<string, number[]>();
+function mentionAllowed(chatId: number, fromId: number): boolean {
+  const key = `${chatId}:${fromId}`;
+  const now = Date.now();
+  const fresh = (mentionBuckets.get(key) ?? []).filter((ts) => ts > now - MENTION_WINDOW_MS);
+  if (fresh.length >= MENTION_LIMIT) { mentionBuckets.set(key, fresh); return false; }
+  fresh.push(now);
+  mentionBuckets.set(key, fresh);
+  return true;
+}
 
 interface TelegramUpdate {
   message?: {
@@ -20,6 +34,7 @@ interface TelegramUpdate {
     };
     text?: string;
     reply_to_message?: { message_id: number };
+    entities?: Array<{ type: string; offset: number; length: number }>;
   };
 }
 
@@ -90,6 +105,19 @@ export async function POST(req: NextRequest) {
       `Once linked, you can ask me anything about your deals.`
     ).catch(() => {});
     return NextResponse.json({ ok: true, handled: 'start_hint' });
+  }
+
+  // ─── Route 4: Group @mention → agent reply ───────────────────────
+  // Fires when a user @mentions the bot in a group. Vote replies (Route 2)
+  // still take priority for messages that reply-to a pending decision.
+  const isGroupChat = message.chat?.type === 'group' || message.chat?.type === 'supergroup';
+  const botUsername = process.env.TELEGRAM_BOT_USERNAME;
+  const mentionRegex = botUsername ? new RegExp(`@${botUsername}\\b`, 'i') : null;
+  const mentioned = isGroupChat && !!mentionRegex && mentionRegex.test(text);
+  const isVoteReply = !!message.reply_to_message;
+
+  if (mentioned && !isVoteReply) {
+    return handleGroupMention(message, text, botUsername!);
   }
 
   // ─── Route 2: Board vote (reply-to in the group chat) ────────────
@@ -279,4 +307,82 @@ async function handlePrivateChatMessage(
   })();
 
   return NextResponse.json({ ok: true, handled: 'agent_bridge' });
+}
+
+/**
+ * Route 4: an @mention of the bot inside a group chat.
+ *
+ * - Linked users act with their SalesBrain identity (full read + write scope).
+ * - Unlinked users are allowed ONLY in the allowlisted board chat
+ *   (`TELEGRAM_BOARD_CHAT_ID`), and only for read-only tools. Everywhere else
+ *   we reply with a short "link your account" nudge and stop.
+ */
+async function handleGroupMention(
+  message: NonNullable<TelegramUpdate['message']>,
+  text: string,
+  botUsername: string,
+): Promise<NextResponse> {
+  const chatId = message.chat!.id;
+  const fromId = message.from!.id;
+  const firstName = message.from!.first_name || message.from!.username || 'there';
+
+  // Strip @botname (all occurrences) and normalize whitespace.
+  const cleaned = text.replace(new RegExp(`@${botUsername}\\b`, 'gi'), '').replace(/\s+/g, ' ').trim();
+  if (!cleaned) {
+    await sendChatMessage(chatId,
+      `Hi ${firstName} — what would you like to know? Try "what's stuck at the board?" or "how's the pipeline?"`,
+      { replyToMessageId: message.message_id },
+    ).catch(() => {});
+    return NextResponse.json({ ok: true, handled: 'group_mention_empty' });
+  }
+
+  if (!mentionAllowed(chatId, fromId)) {
+    await sendChatMessage(chatId,
+      `${firstName}, you're asking a lot — I'll pause for a minute so I don't spam the group.`,
+      { replyToMessageId: message.message_id },
+    ).catch(() => {});
+    return NextResponse.json({ ok: true, handled: 'group_mention_rate_limited' });
+  }
+
+  // Resolve identity.
+  const linked = await lookupTelegramLink(fromId);
+  const boardChatId = process.env.TELEGRAM_BOARD_CHAT_ID
+    ? Number(process.env.TELEGRAM_BOARD_CHAT_ID)
+    : null;
+  const inAllowedGroup = boardChatId !== null && chatId === boardChatId;
+
+  if (!linked && !inAllowedGroup) {
+    await sendChatMessage(chatId,
+      `Hi ${firstName} — I don't know you here. DM me /start LINK-XXXXXX after generating a code at Settings → Telegram to link your SalesBrain account.`,
+      { replyToMessageId: message.message_id },
+    ).catch(() => {});
+    return NextResponse.json({ ok: true, handled: 'group_mention_unlinked_outside_allowlist' });
+  }
+
+  // Fire-and-forget so we return 200 quickly under Telegram's ~60s webhook cap.
+  (async () => {
+    try {
+      // Best-effort "typing…"
+      await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendChatAction`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, action: 'typing' }),
+      }).catch(() => {});
+
+      const reply = linked
+        ? await runAgentBridge(linked, cleaned, { channel: 'group' })
+        : await runAgentBridge(
+            { kind: 'anonymous', telegram_first_name: firstName } as AnonymousCaller,
+            cleaned,
+            { channel: 'group' },
+          );
+      await sendChatMessage(chatId, reply.text, { replyToMessageId: message.message_id });
+      console.log(`[Telegram] group mention reply (${linked ? linked.user_email : 'anonymous'}): ${reply.tool_calls} tool(s), ${reply.duration_ms}ms`);
+    } catch (err) {
+      console.error('[Telegram] group mention agent failed:', err);
+      await sendChatMessage(chatId, '⚠️ Something went wrong. Try again shortly.', { replyToMessageId: message.message_id }).catch(() => {});
+    }
+  })();
+
+  return NextResponse.json({ ok: true, handled: 'group_mention' });
 }

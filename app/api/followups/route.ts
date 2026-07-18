@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
 
   // Verify deal belongs to user
   const { rows: dealRows } = await pool.query(
-    'SELECT id FROM deals WHERE id = $1 AND user_id = $2',
+    'SELECT id FROM deals WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
     [deal_id, session.userId]
   );
   if (dealRows.length === 0) {

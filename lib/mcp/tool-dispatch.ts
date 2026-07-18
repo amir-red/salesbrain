@@ -61,6 +61,15 @@ export async function dispatchTool(
     return { status: 'error', error: 'This tool requires admin access' };
   }
 
+  // Anonymous group-chat callers get read-only access. Any write/admin tool
+  // is refused with a friendly hint the agent can relay in-thread.
+  if (ctx.read_only && def._meta.access !== 'read') {
+    return {
+      status: 'error',
+      error: 'read_only_context: link your SalesBrain account (DM me /start LINK-XXXXXX) to change data.',
+    };
+  }
+
   // Per-tool rate limits (send_telegram / send_email have tighter caps).
   if (!enforceToolLimit(ctx.token_id, toolName)) {
     return { status: 'rate_limited', error: `Per-tool rate limit exceeded for ${toolName}` };
@@ -90,6 +99,7 @@ async function run(
     case 'get_memories':            return getMemories(String(args.scope || 'both'), ctx);
     case 'list_sales_leads':        return listSalesLeads(args);
     case 'get_sales_lead':          return getSalesLead(String(args.id));
+    case 'list_pending_board_decisions': return listPendingBoardDecisions();
 
     // ── Write tools ────────────────────────────────────────────
     case 'update_deal':             return updateDeal(args, ctx);
@@ -106,6 +116,8 @@ async function run(
     case 'send_email':              return sendEmail(args, ctx);
     case 'advance_gate':            return advanceGate(args, ctx);
     case 'convert_lead_to_deal':    return convertLeadToDeal(String(args.lead_id), ctx);
+    case 'delete_deal':             return deleteDeal(String(args.deal_id), ctx);
+    case 'restore_deal':            return restoreDeal(String(args.deal_id), ctx);
 
     default:
       throw new Error(`Handler missing for tool: ${name}`);
@@ -117,14 +129,17 @@ async function run(
 /**
  * Build the visibility SQL fragment + params for scoping deal queries.
  * Non-admins see only deals they created or lead. Admins see everything.
+ * ALWAYS excludes soft-deleted rows (`deleted_at IS NULL`) — no MCP
+ * client ever sees a deleted deal, even admins (they use the web UI's
+ * trash view for restore).
  *
  * Returns the WHERE fragment (without the leading "WHERE") plus the
  * bind values, so callers can compose it with additional filters.
  */
 function dealVisibility(ctx: AuthContext, paramStartIdx = 1): { sql: string; params: unknown[]; nextIdx: number } {
-  if (ctx.is_admin) return { sql: 'TRUE', params: [], nextIdx: paramStartIdx };
+  if (ctx.is_admin) return { sql: 'd.deleted_at IS NULL', params: [], nextIdx: paramStartIdx };
   return {
-    sql: `(d.user_id = $${paramStartIdx} OR d.lead_id = $${paramStartIdx})`,
+    sql: `d.deleted_at IS NULL AND (d.user_id = $${paramStartIdx} OR d.lead_id = $${paramStartIdx})`,
     params: [ctx.user_id],
     nextIdx: paramStartIdx + 1,
   };
@@ -256,6 +271,44 @@ async function getSalesLead(id: string) {
     [id],
   );
   return rows[0] || null;
+}
+
+async function listPendingBoardDecisions() {
+  const { rows } = await pool.query(
+    `SELECT bd.id, bd.gate, bd.votes_required, bd.votes_to_block, bd.created_at,
+            d.id AS deal_id, d.name AS deal_name, d.company,
+            COALESCE(
+              json_agg(
+                json_build_object('name', bv.voter_name, 'vote', bv.vote)
+                ORDER BY bv.created_at
+              ) FILTER (WHERE bv.id IS NOT NULL),
+              '[]'::json
+            ) AS voters
+     FROM board_decisions bd
+     JOIN deals d ON d.id = bd.deal_id AND d.deleted_at IS NULL
+     LEFT JOIN board_votes bv ON bv.board_decision_id = bd.id
+     WHERE bd.status = 'pending'
+     GROUP BY bd.id, d.id
+     ORDER BY bd.created_at ASC`,
+  );
+  return rows.map((r) => {
+    const voters = r.voters as Array<{ name: string; vote: 'proceed' | 'stop' | 'amend' }>;
+    const tally = { proceed: 0, stop: 0, amend: 0 };
+    for (const v of voters) tally[v.vote] = (tally[v.vote] ?? 0) + 1;
+    const daysPending = Math.floor((Date.now() - new Date(r.created_at).getTime()) / 86400000);
+    return {
+      deal_id: r.deal_id,
+      deal_name: r.deal_name,
+      company: r.company,
+      gate: r.gate,
+      votes_required: r.votes_required,
+      votes_to_block: r.votes_to_block,
+      tally,
+      voters,
+      votes_still_needed_to_proceed: Math.max(0, r.votes_required - tally.proceed),
+      days_pending: daysPending,
+    };
+  });
 }
 
 // ─── Write handlers ───────────────────────────────────────────────
@@ -397,6 +450,29 @@ async function advanceGate(args: Record<string, unknown>, ctx: AuthContext) {
   );
   if (rows.length === 0) throw new Error('Deal not found or not accessible');
   return exec_update_deal({ deal_id: dealId, updates: { gate: newGate, notes: reason } });
+}
+
+async function deleteDeal(dealId: string, ctx: AuthContext) {
+  const permClause = ctx.is_admin ? '' : 'AND (user_id = $2 OR lead_id = $2)';
+  const params: unknown[] = ctx.is_admin ? [dealId, ctx.user_id] : [dealId, ctx.user_id];
+  const { rowCount } = await pool.query(
+    `UPDATE deals SET deleted_at = now(), deleted_by = $2
+     WHERE id = $1 AND deleted_at IS NULL ${permClause}`,
+    params,
+  );
+  if (rowCount === 0) throw new Error('Deal not found, already deleted, or permission denied');
+  return { deleted: true, deal_id: dealId };
+}
+
+async function restoreDeal(dealId: string, ctx: AuthContext) {
+  if (!ctx.is_admin) throw new Error('Only admins can restore deleted deals');
+  const { rowCount } = await pool.query(
+    `UPDATE deals SET deleted_at = NULL, deleted_by = NULL
+     WHERE id = $1 AND deleted_at IS NOT NULL`,
+    [dealId],
+  );
+  if (rowCount === 0) throw new Error('Deal not found or not currently deleted');
+  return { restored: true, deal_id: dealId };
 }
 
 async function convertLeadToDeal(leadId: string, ctx: AuthContext) {

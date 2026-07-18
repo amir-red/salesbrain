@@ -38,7 +38,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // need to be creator OR lead.
   if (session.role !== 'admin') {
     const { rows } = await pool.query(
-      `SELECT 1 FROM deals WHERE id = $1 AND (user_id = $2 OR lead_id = $2)`,
+      `SELECT 1 FROM deals WHERE id = $1 AND deleted_at IS NULL AND (user_id = $2 OR lead_id = $2)`,
       [dealId, session.userId],
     );
     if (rows.length === 0) {
