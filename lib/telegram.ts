@@ -173,6 +173,54 @@ export function formatVoteTallyReply(
   ].join('\n');
 }
 
+export interface BoardNudgeInput {
+  deal_name: string;
+  company: string;
+  gate: number;
+  value: string | number | null;
+  currency: string | null;
+  tally: { proceed: number; stop: number; amend: number };
+  votes_required: number;
+  votes_to_block: number;
+  total_voters: number;
+  voters: Array<{ name: string; vote: 'proceed' | 'stop' | 'amend' }>;
+  days_pending: number;
+}
+
+/**
+ * Compressed reminder posted to the board group when a decision has
+ * been sitting for a while. Users can reply directly to this message to
+ * cast their vote — the caller rewires `board_decisions.telegram_message_id`
+ * to the new message id after send.
+ */
+export function formatBoardNudge(d: BoardNudgeInput): string {
+  const gateName = GATES[d.gate - 1]?.name || `Gate ${d.gate}`;
+  const valueStr = d.value ? `${d.currency || 'USD'} ${Number(d.value).toLocaleString()}` : null;
+  const stillNeeded = Math.max(0, d.votes_required - d.tally.proceed);
+  const dayLabel = d.days_pending === 0 ? 'today' : `${d.days_pending} day${d.days_pending === 1 ? '' : 's'} pending`;
+
+  const voterLine = d.voters.length > 0
+    ? `Voters so far: ${d.voters.map((v) => `${v.name} (${v.vote})`).join(', ')}.`
+    : 'No votes yet.';
+
+  const outcomeLine = stillNeeded === 0
+    ? '(threshold already met — will resolve on the next vote)'
+    : `${stillNeeded} more "proceed" vote${stillNeeded === 1 ? '' : 's'} and the deal advances to G${d.gate + 1}.`;
+
+  const lines = [
+    `🗳️ Still needs a vote — ${d.deal_name} (G${d.gate} ${gateName})`,
+    valueStr ? `${d.company} · ${valueStr} · ${dayLabel}` : `${d.company} · ${dayLabel}`,
+    '',
+    `proceed ${d.tally.proceed}/${d.votes_required} · stop ${d.tally.stop}/${d.votes_to_block} · amend ${d.tally.amend}/${d.votes_to_block}`,
+    outcomeLine,
+    '',
+    voterLine,
+    '',
+    'Reply to THIS message: proceed | stop | amend',
+  ];
+  return lines.join('\n');
+}
+
 export function formatBoardResolution(
   status: 'approved' | 'rejected' | 'amended',
   dealName: string,
