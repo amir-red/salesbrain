@@ -69,6 +69,11 @@ jobs:
               "EMAIL_LOGO_URL=${EMAIL_LOGO_URL}" \
               > .env.production
 
+            # Relationship OS: append the server-local Hermes fragment
+            # (AGENT_RUNTIME, HERMES_API_URL, HERMES_API_KEY) — lives only on
+            # the box at /srv/salesbrain/.env.hermes, survives deploys.
+            [ -f .env.hermes ] && cat .env.hermes >> .env.production
+
             # Install all deps (including devDependencies for build)
             npm install
 

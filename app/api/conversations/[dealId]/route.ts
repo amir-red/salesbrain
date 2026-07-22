@@ -23,6 +23,22 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
+  // Relationship OS: when the Hermes runtime owns this user+deal's chat,
+  // hydrate from the Hermes session transcript instead of the legacy table.
+  const { hermesRuntimeEnabled, fetchHermesHistory } = await import('@/lib/hermes-proxy');
+  if (hermesRuntimeEnabled()) {
+    const { rows: sess } = await pool.query(
+      `SELECT hermes_session_id FROM agent_sessions
+       WHERE user_id = $1 AND deal_id = $2 AND channel = 'web'
+       ORDER BY created_at DESC LIMIT 1`,
+      [session.userId, params.dealId]
+    );
+    if (sess[0]) {
+      return NextResponse.json(await fetchHermesHistory(sess[0].hermes_session_id));
+    }
+    return NextResponse.json([]); // no Hermes session yet — fresh chat
+  }
+
   const { rows } = await pool.query(
     `SELECT role, content, tool_name, created_at
      FROM conversations

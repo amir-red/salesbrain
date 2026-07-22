@@ -48,3 +48,4 @@ node_modules/
 # user-uploaded chat attachments (stored on local FS)
 uploads/
 
+.env.hermes
