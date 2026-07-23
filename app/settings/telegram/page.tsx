@@ -24,6 +24,26 @@ export default function TelegramSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reveal, setReveal] = useState<TokenReveal | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // Clipboard with feedback + legacy fallback (some browsers gate
+  // navigator.clipboard behind permissions and fail silently).
+  const copyCode = useCallback(async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, []);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -185,22 +205,33 @@ export default function TelegramSettingsPage() {
                 </div>
               </div>
               <button
-                onClick={() => navigator.clipboard.writeText(`/start ${reveal.raw}`)}
-                className="w-full py-2 rounded text-sm font-medium"
-                style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }}
+                onClick={() => copyCode(`/start ${reveal.raw}`)}
+                className="w-full py-2 rounded text-sm font-medium transition-colors"
+                style={{
+                  background: copied ? 'var(--accent-glow)' : 'var(--bg-input)',
+                  border: `1px solid ${copied ? 'var(--accent)' : 'var(--border)'}`,
+                  color: copied ? 'var(--accent)' : 'var(--text)',
+                }}
               >
-                Copy to clipboard
+                {copied ? '✓ Copied' : 'Copy to clipboard'}
               </button>
               {reveal.botUsername && (
-                <a
-                  href={`https://t.me/${reveal.botUsername}?start=${reveal.raw}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block w-full py-2 rounded text-sm font-medium text-center text-white"
-                  style={{ background: 'var(--accent)' }}
-                >
-                  Open in Telegram →
-                </a>
+                <>
+                  <a
+                    href={`https://t.me/${reveal.botUsername}?start=${reveal.raw}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block w-full py-2 rounded text-sm font-medium text-center text-white"
+                    style={{ background: 'var(--accent)' }}
+                  >
+                    Open in Telegram →
+                  </a>
+                  <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                    Telegram shows the sent message as a bare “/start” — the code travels
+                    hidden inside it. If the bot doesn&apos;t confirm within a few seconds,
+                    paste the full message above manually.
+                  </p>
+                </>
               )}
             </div>
             <div className="px-4 py-3 border-t flex justify-end" style={{ borderColor: 'var(--border)' }}>
