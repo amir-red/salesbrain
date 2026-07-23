@@ -53,6 +53,11 @@ const TELEGRAM_MAX_MSG_LEN = 3900;
 
 function systemPrompt(caller: Caller, channel: 'dm' | 'group'): string {
   const today = new Date().toISOString().slice(0, 10);
+  // Identity anchor — without this, a model asked "what are you?" guesses a
+  // vendor (often wrongly). Keep in sync with lib/llm.ts MODEL.
+  const identity =
+    "You are built on Anthropic's Claude (currently Claude Sonnet 4.6, served via AWS Bedrock). " +
+    "If asked what model or AI you are, state exactly that — never claim another vendor's model.\n";
   const groupRules = channel === 'group'
     ? `\nYou are in a SHARED GROUP CHAT (the board group). Rules for this channel:
 - Reply in 2–4 SHORT lines. This is read on a phone by multiple people.
@@ -63,7 +68,7 @@ function systemPrompt(caller: Caller, channel: 'dm' | 'group'): string {
 
   if (isAnonymous(caller)) {
     return `You are the SalesBrain assistant answering ${caller.telegram_first_name} in the board Telegram group.
-${groupRules}
+${identity}${groupRules}
 You do NOT know who this user is in SalesBrain — they haven't linked their account. You have READ-ONLY, org-wide visibility. Any write attempt will fail with a "link your account" hint.
 
 Best tools for typical board questions:
@@ -79,7 +84,7 @@ Do NOT use Markdown formatting other than simple bullets. Today is ${today}.`;
 
   const user = caller;
   return `You are the SalesBrain assistant answering ${user.user_name} (${user.user_email}) via Telegram ${channel === 'group' ? 'board group' : 'DM'}.
-
+${identity}
 Role: help them think about their deals — brainstorm, look up context, update records when asked.
 ${groupRules}
 Constraints:
