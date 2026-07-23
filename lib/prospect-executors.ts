@@ -2,9 +2,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import pool from './db';
 import { sendEmail } from './email';
 import { normalizeDomain, normalizeCompanyName, fitLabelFromScore, type ProspectStage } from './prospecting';
-import { MODEL, webSearchTool } from './llm';
+import { MODEL, anthropic, webSearchTools } from './llm';
 
-const anthropic = new Anthropic();
 
 // ─── Helper: record a prospect_events row ───────────────────────
 
@@ -625,7 +624,7 @@ ${msgs.map((m, i) => `--- ${i + 1} (${m.direction}${m.sent_at ? ', ' + new Date(
   const response = await anthropic.messages.create({
     model: MODEL,
     max_tokens: 1500,
-    tools: [webSearchTool],
+    tools: [...webSearchTools],
     messages: [{ role: 'user', content: prompt }],
   });
 
@@ -731,7 +730,7 @@ Return ONLY JSON (no preamble):
   const response = await anthropic.messages.create({
     model: MODEL,
     max_tokens: 1500,
-    tools: [webSearchTool],
+    tools: [...webSearchTools],
     messages: [{ role: 'user', content: prompt }],
   });
 

@@ -23,7 +23,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { MODEL } from './llm';
+import { MODEL, anthropic } from './llm';
 import { MCP_TOOLS } from './mcp/tool-definitions';
 import { dispatchTool } from './mcp/tool-dispatch';
 import type { AuthContext } from './mcp/auth';
@@ -42,7 +42,6 @@ function isAnonymous(caller: Caller): caller is AnonymousCaller {
   return 'kind' in caller && caller.kind === 'anonymous';
 }
 
-const anthropic = new Anthropic();
 
 const MAX_ITERATIONS = 6;
 

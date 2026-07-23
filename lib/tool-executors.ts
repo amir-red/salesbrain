@@ -5,10 +5,9 @@ import { sendEmail } from './email';
 import { getMissingFields, getGate, GRANT_MONEY_FIELDS } from './gates';
 import { executeProspectTool, PROSPECT_TOOL_NAMES } from './prospect-executors';
 import { appendMemory, removeMemory } from './memory';
-import { MODEL, webSearchTool } from './llm';
+import { MODEL, anthropic, webSearchTools } from './llm';
 import { markDealLost, type RootCause } from './lessons';
 
-const anthropic = new Anthropic();
 
 // ─── assess_deal ────────────────────────────────────────────────
 
@@ -507,7 +506,7 @@ export async function exec_prep_meeting(input: {
     // Web search lets the briefing pull live context — recent press on the
     // client, public news about attendees' companies, donor announcements —
     // that's almost always more useful than guessing from training data.
-    tools: [webSearchTool],
+    tools: [...webSearchTools],
     system: `You are a meeting prep specialist for B2B sales. The company sells Zeami — a work intelligence and automation readiness platform. Generate a structured, actionable briefing. Use markdown formatting.
 
 You have access to a \`web_search\` tool. Use it sparingly to pull live facts the deal context doesn't already give you — e.g. recent company news, leadership changes, donor announcements, market events. Cite source URLs inline. Don't search for things already in the deal data.

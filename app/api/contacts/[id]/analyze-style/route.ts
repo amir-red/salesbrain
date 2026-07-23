@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { anthropic } from '@/lib/llm';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 
-const anthropic = new Anthropic();
 
 export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();

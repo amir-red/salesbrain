@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import Anthropic from '@anthropic-ai/sdk';
+import { anthropic } from '@/lib/llm';
 import { getSession } from '@/lib/auth';
 
-const anthropic = new Anthropic();
 
 const SummarySchema = z.object({
   contact_count: z.number().int().nonnegative(),

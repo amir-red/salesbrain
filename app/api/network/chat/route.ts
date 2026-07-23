@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import Anthropic from '@anthropic-ai/sdk';
+import { anthropic } from '@/lib/llm';
 import { getSession } from '@/lib/auth';
 
-const anthropic = new Anthropic();
 
 // Compact per-contact record. Keep this small — we send up to 400 of them per
 // request, so each extra field is paid 400×.

@@ -8,10 +8,9 @@ import { getPipeline, getGate, getMissingFields, getSLAStatus, GRANT_MONEY_FIELD
 import { computeGrantPipelineRank, formatRankForPrompt } from './grant-pipeline-rank';
 import { classify } from './file-extractor';
 import { loadMemoriesForPrompt, formatMemoryBlock } from './memory';
-import { MODEL, webSearchTool } from './llm';
+import { MODEL, anthropic, webSearchTools } from './llm';
 import { loadRelevantLessons, formatLessonsBlock } from './lessons';
 
-const anthropic = new Anthropic();
 
 const MAX_ITERATIONS = 6;
 
@@ -754,7 +753,7 @@ export async function* runAgent(
       // web_search server tool. The model picks `web_search` when it needs
       // a live fact it can't answer from training data; results come back
       // as `web_search_tool_result` blocks the SDK handles transparently.
-      tools: [...TOOLS, webSearchTool],
+      tools: [...TOOLS, ...webSearchTools],
       messages,
     });
 
