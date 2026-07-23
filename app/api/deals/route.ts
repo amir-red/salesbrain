@@ -61,8 +61,8 @@ export async function POST(req: NextRequest) {
 
   try {
     const { rows } = await pool.query(
-      `INSERT INTO deals (name, company, contact_name, contact_email, value, missing, user_id, deal_type)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO deals (name, company, contact_name, contact_email, value, missing, user_id, lead_id, deal_type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8)
        RETURNING *`,
       [name, company, contact_name || null, contact_email || null, value || null, missing, session.userId, deal_type]
     );

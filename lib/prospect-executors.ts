@@ -513,8 +513,8 @@ export async function exec_convert_prospect_to_deal(
   if (prospect.company_size) initialFields.company_size = prospect.company_size;
 
   const { rows: dealRows } = await pool.query(
-    `INSERT INTO deals (name, company, contact_name, contact_email, contact_phone, value, currency, fields, notes, user_id, deal_type, gate)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'sales', 1)
+    `INSERT INTO deals (name, company, contact_name, contact_email, contact_phone, value, currency, fields, notes, user_id, lead_id, deal_type, gate)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, 'sales', 1)
      RETURNING id`,
     [
       dealName,
