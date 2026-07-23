@@ -3,7 +3,7 @@ import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { dealId: string } }
 ) {
   const session = await getSession();
@@ -25,8 +25,15 @@ export async function GET(
 
   // Relationship OS: when the Hermes runtime owns this user+deal's chat,
   // hydrate from the Hermes session transcript instead of the legacy table.
+  // Same admin per-request override as /api/agent (?runtime=hermes|legacy),
+  // so a staged test hydrates history from the runtime it is actually using.
   const { hermesRuntimeEnabled, fetchHermesHistory } = await import('@/lib/hermes-proxy');
-  if (hermesRuntimeEnabled()) {
+  const override = req.nextUrl.searchParams.get('runtime');
+  const useHermes =
+    isAdmin && (override === 'hermes' || override === 'legacy')
+      ? override === 'hermes'
+      : hermesRuntimeEnabled();
+  if (useHermes) {
     const { rows: sess } = await pool.query(
       `SELECT hermes_session_id FROM agent_sessions
        WHERE user_id = $1 AND deal_id = $2 AND channel = 'web'
