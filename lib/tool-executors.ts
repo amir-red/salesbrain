@@ -298,9 +298,11 @@ export async function exec_update_deal(input: {
           );
           const onboardingId = insertedRows[0]?.id as string | undefined;
 
-          // Fire the welcome email to the deal's contact_email. Best-effort —
+          // Welcome email on G9 is OPT-IN (SALESBRAIN_AUTO_KICKOFF=on).
+          // Policy decision 2026-07-23: no automatic client emails — the team
+          // sends the kickoff deliberately from /onboarding. Best-effort —
           // the deal advance to G9 must still succeed even if Resend is down.
-          if (onboardingId) {
+          if (onboardingId && process.env.SALESBRAIN_AUTO_KICKOFF === 'on') {
             const { sendOnboardingKickoffEmail } = await import('./onboarding-server');
             // Look up the PM info if any — used as the personal sign-off.
             let pmName: string | null = null;
