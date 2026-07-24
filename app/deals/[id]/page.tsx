@@ -22,6 +22,8 @@ interface Deal {
   contact_name: string | null;
   contact_email: string | null;
   contact_phone: string | null;
+  linked_contact_name?: string | null;
+  linked_contact_org?: string | null;
   owner: string | null;
   lead_id: string | null;
   lead_name: string | null;
@@ -374,9 +376,14 @@ export default function DealViewPage() {
               </div>
               <div>
                 <p className="text-xs mb-1" style={{ color: 'var(--text-muted)' }}>Contact</p>
-                <p className="text-sm">{deal.contact_name || 'Unknown'}</p>
+                <p className="text-sm">{deal.contact_name || deal.linked_contact_name || 'Unknown'}</p>
                 {deal.contact_email && <p className="text-[10px]" style={{ color: 'var(--accent)' }}>{deal.contact_email}</p>}
                 {deal.contact_phone && <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{deal.contact_phone}</p>}
+                {!deal.contact_name && deal.linked_contact_name && (
+                  <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                    {deal.linked_contact_org ? `${deal.linked_contact_org} · ` : ''}from relationship graph
+                  </p>
+                )}
               </div>
             </div>
           </div>

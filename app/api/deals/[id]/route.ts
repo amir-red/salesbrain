@@ -19,10 +19,12 @@ export async function GET(
     // in their respective endpoints.
     const { rows } = await pool.query(
       `SELECT d.*, u.name as lead_name, u.email as lead_email,
-              del_u.name as deleted_by_name
+              del_u.name as deleted_by_name,
+              lp.full_name as linked_contact_name, lp.organization as linked_contact_org
        FROM deals d
        LEFT JOIN users u ON u.id = d.lead_id
        LEFT JOIN users del_u ON del_u.id = d.deleted_by
+       LEFT JOIN people lp ON lp.id = d.relationship_person_id
        WHERE d.id = $1 ${includeDeleted ? '' : 'AND d.deleted_at IS NULL'}`,
       [params.id]
     );

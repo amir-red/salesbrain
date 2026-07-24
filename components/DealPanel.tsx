@@ -16,6 +16,8 @@ interface Deal {
   currency: string;
   contact_name: string | null;
   contact_email: string | null;
+  linked_contact_name?: string | null;
+  linked_contact_org?: string | null;
   owner: string | null;
   lead_id: string | null;
   lead_name: string | null;
@@ -337,9 +339,14 @@ export default function DealPanel({ deal, onDealUpdate }: DealPanelProps) {
         <h3 className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
           Contact
         </h3>
-        <p className="text-sm">{deal.contact_name || 'Unknown'}</p>
+        <p className="text-sm">{deal.contact_name || deal.linked_contact_name || 'Unknown'}</p>
         {deal.contact_email && (
           <p className="text-xs" style={{ color: 'var(--accent)' }}>{deal.contact_email}</p>
+        )}
+        {!deal.contact_name && deal.linked_contact_name && (
+          <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+            {deal.linked_contact_org ? `${deal.linked_contact_org} · ` : ''}from relationship graph
+          </p>
         )}
       </div>
 

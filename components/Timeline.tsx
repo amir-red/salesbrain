@@ -5,10 +5,12 @@ import { relativeTime } from '@/lib/time';
 
 interface TimelineEvent {
   id: string;
-  type: 'gate_change' | 'board_decision' | 'followup_sent' | 'conversation';
+  type: 'gate_change' | 'board_decision' | 'followup_sent' | 'conversation'
+    | 'agent_action' | 'fact' | 'interaction';
   timestamp: string;
   title: string;
   detail: string | null;
+  actor?: string | null;
 }
 
 const TYPE_CONFIG: Record<string, { color: string; label: string }> = {
@@ -16,7 +18,31 @@ const TYPE_CONFIG: Record<string, { color: string; label: string }> = {
   board_decision: { color: 'var(--orange)', label: 'Board' },
   followup_sent: { color: 'var(--green)', label: 'Followup' },
   conversation: { color: 'var(--text-muted)', label: 'Message' },
+  agent_action: { color: 'var(--accent)', label: 'Action' },
+  fact: { color: '#a78bfa', label: 'Learned' },
+  interaction: { color: 'var(--green)', label: 'Touch' },
 };
+
+// Humanize an agent_action row (title arrives as the raw kernel command).
+const ACTION_LABELS: Record<string, string> = {
+  create_deal: 'Deal created',
+  update_deal: 'Deal updated',
+  record_note: 'Note added',
+  assess_deal: 'Deal assessed (score / risk / verdict)',
+  schedule_followup: 'Follow-up scheduled',
+  mark_deal_lost: 'Marked lost',
+  link_deal_person: 'Contact linked',
+  request_board_review: 'Board review requested',
+  board_vote_resolved: 'Board vote resolved',
+};
+
+function eventTitle(e: TimelineEvent): string {
+  if (e.type === 'agent_action') {
+    const label = ACTION_LABELS[e.title] || e.title;
+    return e.actor ? `${label} — ${e.actor}` : label;
+  }
+  return e.title;
+}
 
 export default function Timeline({ dealId }: { dealId: string }) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
@@ -77,7 +103,7 @@ export default function Timeline({ dealId }: { dealId: string }) {
                   {relativeTime(event.timestamp)}
                 </span>
               </div>
-              <p className="text-xs mt-0.5 truncate">{event.title}</p>
+              <p className="text-xs mt-0.5 truncate">{eventTitle(event)}</p>
               {event.detail && (
                 <p className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>{event.detail}</p>
               )}
