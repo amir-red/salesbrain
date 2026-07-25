@@ -137,17 +137,6 @@ interface PendingAttachment {
   size_bytes: number;
 }
 
-/**
- * Admin staging override: forward the page's ?runtime=hermes|legacy flag to
- * the API calls, so a staged test chats against — and hydrates history
- * from — the runtime the tester selected. Empty string for everyone else.
- */
-function runtimeParam(): string {
-  if (typeof window === 'undefined') return '';
-  const r = new URLSearchParams(window.location.search).get('runtime');
-  return r === 'hermes' || r === 'legacy' ? `?runtime=${r}` : '';
-}
-
 export default function Chat({ dealId, deal, onDealUpdate }: ChatProps) {
   const [messages, setMessages] = useState<MessageData[]>([]);
   const [input, setInput] = useState('');
@@ -233,7 +222,7 @@ export default function Chat({ dealId, deal, onDealUpdate }: ChatProps) {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/conversations/${dealId}${runtimeParam()}`);
+        const res = await fetch(`/api/conversations/${dealId}`);
         if (!res.ok) return;
         const rows: { role: string; content: string; created_at: string }[] = await res.json();
         if (cancelled) return;
@@ -295,7 +284,7 @@ export default function Chat({ dealId, deal, onDealUpdate }: ChatProps) {
     setMessages((prev) => [...prev, assistantMessage]);
 
     try {
-      const res = await fetch(`/api/agent${runtimeParam()}`, {
+      const res = await fetch(`/api/agent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

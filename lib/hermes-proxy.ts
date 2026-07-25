@@ -21,10 +21,6 @@ import pool from './db';
 const HERMES_URL = process.env.HERMES_API_URL || 'http://127.0.0.1:8642';
 const HERMES_KEY = process.env.HERMES_API_KEY || '';
 
-export function hermesRuntimeEnabled(): boolean {
-  return process.env.AGENT_RUNTIME === 'hermes';
-}
-
 function authHeaders(): Record<string, string> {
   return HERMES_KEY ? { Authorization: `Bearer ${HERMES_KEY}` } : {};
 }

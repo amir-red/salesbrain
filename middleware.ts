@@ -49,7 +49,9 @@ export const config = {
   matcher: [
     // /api/mcp is bearer-authed (not cookie-authed) — the route handler
     // enforces token auth. /api/mcp/tokens IS cookie-authed and NOT excluded,
-    // handled by getSession() inside the tokens route.
-    '/((?!login|signup|forgot-password|reset-password|forms|api/auth|api/cron|api/telegram|api/health|api/public|api/mcp$|_next/static|_next/image|favicon\\.ico).*)',
+    // handled by getSession() inside the tokens route. The legacy Telegram
+    // webhook and /api/cron/* endpoints were retired (Phase 5); the surviving
+    // /api/telegram/link* routes are cookie-authed and go through middleware.
+    '/((?!login|signup|forgot-password|reset-password|forms|api/auth|api/health|api/public|api/mcp$|_next/static|_next/image|favicon\\.ico).*)',
   ],
 };

@@ -3,7 +3,7 @@ import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: { dealId: string } }
 ) {
   const session = await getSession();
@@ -23,37 +23,17 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  // Relationship OS: when the Hermes runtime owns this user+deal's chat,
-  // hydrate from the Hermes session transcript instead of the legacy table.
-  // Same admin per-request override as /api/agent (?runtime=hermes|legacy),
-  // so a staged test hydrates history from the runtime it is actually using.
-  const { hermesRuntimeEnabled, fetchHermesHistory } = await import('@/lib/hermes-proxy');
-  const override = req.nextUrl.searchParams.get('runtime');
-  const useHermes =
-    isAdmin && (override === 'hermes' || override === 'legacy')
-      ? override === 'hermes'
-      : hermesRuntimeEnabled();
-  if (useHermes) {
-    const { rows: sess } = await pool.query(
-      `SELECT hermes_session_id FROM agent_sessions
-       WHERE user_id = $1 AND deal_id = $2 AND channel = 'web'
-       ORDER BY created_at DESC LIMIT 1`,
-      [session.userId, params.dealId]
-    );
-    if (sess[0]) {
-      return NextResponse.json(await fetchHermesHistory(sess[0].hermes_session_id));
-    }
-    return NextResponse.json([]); // no Hermes session yet — fresh chat
-  }
-
-  const { rows } = await pool.query(
-    `SELECT role, content, tool_name, created_at
-     FROM conversations
-     WHERE deal_id = $1 AND role IN ('user', 'assistant')
-     ORDER BY created_at ASC
-     LIMIT 100`,
-    [params.dealId]
+  // Relationship OS: web chat runs on Hermes; hydrate from the Hermes session
+  // transcript (the legacy conversations table is retired).
+  const { fetchHermesHistory } = await import('@/lib/hermes-proxy');
+  const { rows: sess } = await pool.query(
+    `SELECT hermes_session_id FROM agent_sessions
+     WHERE user_id = $1 AND deal_id = $2 AND channel = 'web'
+     ORDER BY created_at DESC LIMIT 1`,
+    [session.userId, params.dealId]
   );
-
-  return NextResponse.json(rows);
+  if (sess[0]) {
+    return NextResponse.json(await fetchHermesHistory(sess[0].hermes_session_id));
+  }
+  return NextResponse.json([]); // no Hermes session yet — fresh chat
 }
