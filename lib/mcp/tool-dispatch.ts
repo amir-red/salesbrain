@@ -21,17 +21,9 @@
 import pool from '../db';
 import { getMissingFields, SALES_GATES, GRANT_GATES } from '../gates';
 import { loadRelevantLessons } from '../lessons';
-import { loadMemoriesForPrompt } from '../memory';
-import {
-  exec_update_deal,
-  exec_mark_deal_lost,
-  exec_assess_deal,
-  exec_schedule_followup,
-  exec_remember,
-  exec_forget,
-  exec_send_telegram,
-  exec_send_email,
-} from '../tool-executors';
+import { appendMemory, removeMemory, loadMemoriesForPrompt } from '../memory';
+import { sendEmail } from '../email';
+import { kernelCall } from './kernel-rpc';
 import { TOOL_BY_NAME } from './tool-definitions';
 import type { AuthContext } from './auth';
 import { enforceToolLimit } from './auth';
@@ -109,12 +101,12 @@ async function run(
     case 'mark_deal_lost':          return markDealLost(args, ctx);
     case 'assess_deal':             return assessDeal(args, ctx);
     case 'schedule_followup':       return scheduleFollowup(args, ctx);
-    case 'remember':                return exec_remember({ scope: args.scope as 'org' | 'user', fact: String(args.fact) }, { userEmail: ctx.user_email });
-    case 'forget':                  return exec_forget({ mem_id: String(args.mem_id) }, { userEmail: ctx.user_email });
+    case 'remember':                return remember(args, ctx);
+    case 'forget':                  return forget(args, ctx);
 
     // ── Deal-scoped side effects (visibility-scoped, not admin-gated) ─
     case 'send_telegram':           return sendTelegram(args, ctx);
-    case 'send_email':              return sendEmail(args, ctx);
+    case 'send_email':              return handleSendEmail(args, ctx);
     case 'advance_gate':            return advanceGate(args, ctx);
     case 'convert_lead_to_deal':    return convertLeadToDeal(String(args.lead_id), ctx);
     case 'delete_deal':             return deleteDeal(String(args.deal_id), ctx);
@@ -243,6 +235,24 @@ async function getMemories(scope: string, ctx: AuthContext) {
   return mem;
 }
 
+// App feature (legacy org/user memory store — distinct from the Hermes
+// relationship graph). Kept in TS on memory.ts.
+async function remember(args: Record<string, unknown>, ctx: AuthContext) {
+  const scope: 'org' | 'user' = args.scope === 'user' ? 'user' : 'org';
+  if (scope === 'user' && !ctx.user_email) {
+    return { error: 'Cannot save a user-scoped memory: no user context. Use scope="org".' };
+  }
+  const fact = String(args.fact);
+  const memId = await appendMemory(scope, fact, { userEmail: ctx.user_email, byEmail: ctx.user_email });
+  return { saved: true, mem_id: memId, scope, fact };
+}
+
+async function forget(args: Record<string, unknown>, ctx: AuthContext) {
+  const result = await removeMemory(String(args.mem_id), { userEmail: ctx.user_email, byEmail: ctx.user_email });
+  if (!result.removed) return { removed: false, error: `No memory found with id ${String(args.mem_id)}` };
+  return { removed: true, scope: result.scope };
+}
+
 async function listSalesLeads(args: Record<string, unknown>) {
   const status = String(args.status || 'new');
   const limit = Math.min(100, Math.max(1, Number(args.limit) || 20));
@@ -316,16 +326,12 @@ async function listPendingBoardDecisions() {
 // ─── Write handlers ───────────────────────────────────────────────
 
 async function updateDeal(args: Record<string, unknown>, ctx: AuthContext) {
-  // Enforce visibility BEFORE calling the executor. The executor doesn't
-  // scope by user, so we double-check here.
-  const dealId = String(args.deal_id);
-  const vis = dealVisibility(ctx, 2);
-  const { rows } = await pool.query(
-    `SELECT 1 FROM deals d WHERE d.id = $1 AND ${vis.sql}`,
-    [dealId, ...vis.params],
-  );
-  if (rows.length === 0) throw new Error('Deal not found or not accessible');
-  return exec_update_deal({ deal_id: dealId, updates: (args.updates as Record<string, unknown>) || {} });
+  // Routed to the kernel: it enforces visibility (via the acting user) plus the
+  // grant money-first guard, gate events, and board/won notifications.
+  return kernelCall('crm_update_deal', {
+    deal_id: String(args.deal_id),
+    updates: (args.updates as Record<string, unknown>) || {},
+  }, ctx.user_id);
 }
 
 async function addDealNote(args: Record<string, unknown>, ctx: AuthContext) {
@@ -376,54 +382,49 @@ async function createDeal(args: Record<string, unknown>, ctx: AuthContext) {
 }
 
 async function markDealLost(args: Record<string, unknown>, ctx: AuthContext) {
-  const dealId = String(args.deal_id);
-  const vis = dealVisibility(ctx, 2);
-  const { rows } = await pool.query(
-    `SELECT 1 FROM deals d WHERE d.id = $1 AND ${vis.sql}`,
-    [dealId, ...vis.params],
-  );
-  if (rows.length === 0) throw new Error('Deal not found or not accessible');
-  return exec_mark_deal_lost(args as Parameters<typeof exec_mark_deal_lost>[0], { userId: ctx.user_id });
+  return kernelCall('crm_mark_deal_lost', {
+    deal_id: String(args.deal_id),
+    reason: String(args.reason),
+    root_cause: String(args.root_cause),
+    lesson: String(args.lesson),
+    competitor: args.competitor !== undefined ? String(args.competitor) : undefined,
+  }, ctx.user_id);
 }
 
 async function assessDeal(args: Record<string, unknown>, ctx: AuthContext) {
-  const dealId = String(args.deal_id);
-  const vis = dealVisibility(ctx, 2);
-  const { rows } = await pool.query(
-    `SELECT 1 FROM deals d WHERE d.id = $1 AND ${vis.sql}`,
-    [dealId, ...vis.params],
-  );
-  if (rows.length === 0) throw new Error('Deal not found or not accessible');
-  return exec_assess_deal(args as Parameters<typeof exec_assess_deal>[0]);
+  return kernelCall('crm_assess_deal', {
+    deal_id: String(args.deal_id),
+    score: Number(args.score),
+    risk: String(args.risk),
+    verdict: String(args.verdict),
+    risk_signals: (args.risk_signals as string[]) || [],
+    reasoning: String(args.reasoning),
+  }, ctx.user_id);
 }
 
 async function scheduleFollowup(args: Record<string, unknown>, ctx: AuthContext) {
-  const dealId = String(args.deal_id);
-  const vis = dealVisibility(ctx, 2);
-  const { rows } = await pool.query(
-    `SELECT 1 FROM deals d WHERE d.id = $1 AND ${vis.sql}`,
-    [dealId, ...vis.params],
-  );
-  if (rows.length === 0) throw new Error('Deal not found or not accessible');
-  return exec_schedule_followup(args as Parameters<typeof exec_schedule_followup>[0]);
+  return kernelCall('crm_schedule_followup', {
+    deal_id: String(args.deal_id),
+    type_: String(args.type),
+    body: String(args.body),
+    due_in_days: Number(args.due_in_days),
+    subject: args.subject !== undefined ? String(args.subject) : undefined,
+    to_email: args.to_email !== undefined ? String(args.to_email) : undefined,
+  }, ctx.user_id);
 }
 
 async function sendTelegram(args: Record<string, unknown>, ctx: AuthContext) {
-  const dealId = String(args.deal_id);
-  const vis = dealVisibility(ctx, 2);
-  const { rows } = await pool.query(
-    `SELECT 1 FROM deals d WHERE d.id = $1 AND ${vis.sql}`,
-    [dealId, ...vis.params],
-  );
-  if (rows.length === 0) throw new Error('Deal not found or not accessible');
-  return exec_send_telegram({
-    deal_id: dealId,
-    message: String(args.message),
-    gate: Number(args.gate),
-  });
+  // Legacy send_telegram posted a board review; that logic is now the kernel's
+  // request_board_review (dedup per gate + decision row + Telegram delivery).
+  return kernelCall('crm_request_board_review', {
+    deal_id: String(args.deal_id),
+    summary: String(args.message),
+  }, ctx.user_id);
 }
 
-async function sendEmail(args: Record<string, unknown>, ctx: AuthContext) {
+// App feature (no kernel equivalent): send a one-off email now, or draft it as
+// a followup. Visibility-scoped like the web UI; uses the app's own mailer.
+async function handleSendEmail(args: Record<string, unknown>, ctx: AuthContext) {
   const dealId = String(args.deal_id);
   const vis = dealVisibility(ctx, 2);
   const { rows } = await pool.query(
@@ -431,27 +432,29 @@ async function sendEmail(args: Record<string, unknown>, ctx: AuthContext) {
     [dealId, ...vis.params],
   );
   if (rows.length === 0) throw new Error('Deal not found or not accessible');
-  return exec_send_email({
-    deal_id: dealId,
-    to: String(args.to),
-    subject: String(args.subject),
-    body: String(args.body),
-    send_immediately: Boolean(args.send_immediately),
-  });
+
+  const to = String(args.to);
+  const subject = String(args.subject);
+  const body = String(args.body);
+  if (args.send_immediately) {
+    const { id } = await sendEmail({ to, subject, body });
+    return { sent: true, email_id: id };
+  }
+  const { rows: fr } = await pool.query(
+    `INSERT INTO followups (deal_id, type, subject, body, to_email, due_at)
+     VALUES ($1, 'email', $2, $3, $4, now()) RETURNING id`,
+    [dealId, subject, body, to],
+  );
+  return { drafted: true, followup_id: fr[0].id };
 }
 
 async function advanceGate(args: Record<string, unknown>, ctx: AuthContext) {
-  const dealId = String(args.deal_id);
   const newGate = Number(args.new_gate);
-  const reason = String(args.reason || `Advanced to G${newGate} via MCP`);
-  // Reuse update_deal logic (guards + gate_events audit).
-  const vis = dealVisibility(ctx, 2);
-  const { rows } = await pool.query(
-    `SELECT 1 FROM deals d WHERE d.id = $1 AND ${vis.sql}`,
-    [dealId, ...vis.params],
-  );
-  if (rows.length === 0) throw new Error('Deal not found or not accessible');
-  return exec_update_deal({ deal_id: dealId, updates: { gate: newGate, notes: reason } });
+  return kernelCall('crm_advance_gate', {
+    deal_id: String(args.deal_id),
+    gate: newGate,
+    reason: args.reason !== undefined ? String(args.reason) : `Advanced to G${newGate} via MCP`,
+  }, ctx.user_id);
 }
 
 async function deleteDeal(dealId: string, ctx: AuthContext) {
