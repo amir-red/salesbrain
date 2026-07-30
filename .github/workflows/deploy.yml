@@ -29,6 +29,13 @@ jobs:
           ONBOARDING_API_KEY: ${{ secrets.ONBOARDING_API_KEY }}
           PUBLIC_FORM_ALLOWED_ORIGIN: ${{ secrets.PUBLIC_FORM_ALLOWED_ORIGIN }}
           CALENDLY_WEBHOOK_SECRET: ${{ secrets.CALENDLY_WEBHOOK_SECRET }}
+          # LinkedIn via Unipile. NOTE: this action passes every value above on
+          # the remote process command line, so anyone with a shell on the box
+          # can read them from `ps`. UNIPILE_API_KEY is a live remote control
+          # for connected LinkedIn accounts — rotate it in the Unipile dashboard
+          # if shell access to the server is ever shared or suspected.
+          UNIPILE_DSN: ${{ secrets.UNIPILE_DSN }}
+          UNIPILE_API_KEY: ${{ secrets.UNIPILE_API_KEY }}
           # Optional demo-email overrides (empty is fine — code has defaults)
           LEAD_NOTIFY_TO: ${{ secrets.LEAD_NOTIFY_TO }}
           LEAD_NOTIFY_CC: ${{ secrets.LEAD_NOTIFY_CC }}
@@ -38,7 +45,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
-          envs: ANTHROPIC_API_KEY,DATABASE_URL,SESSION_SECRET,RESEND_API_KEY,EMAIL_FROM,TELEGRAM_BOT_TOKEN,TELEGRAM_BOARD_CHAT_ID,TELEGRAM_WEBHOOK_SECRET,TELEGRAM_BOT_USERNAME,CRON_SECRET,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GOOGLE_REDIRECT_URI,PUBLIC_FORM_BASE_URL,ONBOARDING_API_KEY,PUBLIC_FORM_ALLOWED_ORIGIN,CALENDLY_WEBHOOK_SECRET,LEAD_NOTIFY_TO,LEAD_NOTIFY_CC,EMAIL_LOGO_URL
+          envs: ANTHROPIC_API_KEY,DATABASE_URL,SESSION_SECRET,RESEND_API_KEY,EMAIL_FROM,TELEGRAM_BOT_TOKEN,TELEGRAM_BOARD_CHAT_ID,TELEGRAM_WEBHOOK_SECRET,TELEGRAM_BOT_USERNAME,CRON_SECRET,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GOOGLE_REDIRECT_URI,PUBLIC_FORM_BASE_URL,ONBOARDING_API_KEY,PUBLIC_FORM_ALLOWED_ORIGIN,CALENDLY_WEBHOOK_SECRET,UNIPILE_DSN,UNIPILE_API_KEY,LEAD_NOTIFY_TO,LEAD_NOTIFY_CC,EMAIL_LOGO_URL
           script: |
             set -e
             cd /srv/salesbrain
@@ -64,6 +71,8 @@ jobs:
               "ONBOARDING_API_KEY=${ONBOARDING_API_KEY}" \
               "PUBLIC_FORM_ALLOWED_ORIGIN=${PUBLIC_FORM_ALLOWED_ORIGIN}" \
               "CALENDLY_WEBHOOK_SECRET=${CALENDLY_WEBHOOK_SECRET}" \
+              "UNIPILE_DSN=${UNIPILE_DSN}" \
+              "UNIPILE_API_KEY=${UNIPILE_API_KEY}" \
               "LEAD_NOTIFY_TO=${LEAD_NOTIFY_TO}" \
               "LEAD_NOTIFY_CC=${LEAD_NOTIFY_CC}" \
               "EMAIL_LOGO_URL=${EMAIL_LOGO_URL}" \
