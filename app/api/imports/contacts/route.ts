@@ -3,6 +3,7 @@ import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { parseLinkedInContactsCsv } from '@/lib/message-parsers';
 import { normalizeCompanyName } from '@/lib/prospecting';
+import { kernelCall } from '@/lib/mcp/kernel-rpc';
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB cap
 
@@ -118,5 +119,19 @@ export async function POST(req: NextRequest) {
     stats.contacts_created++;
   }
 
-  return NextResponse.json(stats);
+  // Imported contacts used to stop here — they became rows and nothing else,
+  // never entering the pipeline (12,932 contacts had produced zero prospects).
+  // Score them against the user's active ICP and promote the fits; anything
+  // below the policy floor stays a contact rather than flooding the queue.
+  // Best-effort: a scoring hiccup must not fail an otherwise good import.
+  let qualified: Record<string, unknown> | null = null;
+  if (stats.contacts_created > 0) {
+    try {
+      qualified = await kernelCall('crm_prospect_auto_qualify', {}, session.userId);
+    } catch (err) {
+      qualified = { skipped: err instanceof Error ? err.message : 'auto-qualify unavailable' };
+    }
+  }
+
+  return NextResponse.json({ ...stats, qualified });
 }
