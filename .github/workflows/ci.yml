@@ -1,0 +1,31 @@
+name: ci
+
+# The app had no checks at all: the first signal that a change was broken was a
+# failed production deploy, after Production had already moved. Typecheck and
+# build on every PR so that lands on the PR instead.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Build
+        # Placeholders only — the build must not need real secrets, and nothing
+        # here reaches a live service. Values are shaped so Next's build-time
+        # env validation passes; the real ones are written by deploy.yml.
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/placeholder
+          SESSION_SECRET: ci-placeholder-session-secret-not-a-real-value
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+        run: npm run build
