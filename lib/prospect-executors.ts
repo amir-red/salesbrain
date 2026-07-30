@@ -112,10 +112,16 @@ export async function exec_create_or_import_prospect(
     };
   }
 
+  // owner_user_id is set HERE rather than patched by the caller. It used to be
+  // omitted, and only /api/prospects patched it afterwards — so every prospect
+  // created through Discovery's bulk import was ownerless. That made them
+  // visible to every user (the `OR owner_user_id IS NULL` scope) and silently
+  // skipped the per-user daily send cap, which only applies when an owner is set.
   const { rows: pRows } = await pool.query(
-    `INSERT INTO prospects (account_id, contact_id, campaign_id, stage, source_type, source_detail)
-     VALUES ($1, $2, $3, 'P0_IMPORTED', $4, $5) RETURNING *`,
-    [account.id, contact.id, input.campaign_id || null, input.source_type || 'manual', input.source_detail || null]
+    `INSERT INTO prospects (account_id, contact_id, owner_user_id, campaign_id, stage, source_type, source_detail)
+     VALUES ($1, $2, $3, $4, 'P0_IMPORTED', $5, $6) RETURNING *`,
+    [account.id, contact.id, ownerId, input.campaign_id || null,
+     input.source_type || 'manual', input.source_detail || null]
   );
   const prospect = pRows[0];
 
