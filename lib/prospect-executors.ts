@@ -1,7 +1,29 @@
+/**
+ * The four prospect executors that still have callers.
+ *
+ * This file once held fourteen, written for the in-app agent runtime that was
+ * deleted in dca686b. Ten of them — enrich, score, research-brief, draft,
+ * approve, schedule, classify-reply, recommend-next-step, archive,
+ * analyze-style — plus the `executeProspectTool` dispatcher and
+ * `PROSPECT_TOOL_NAMES` had no importer left, and were removed on 2026-07-30.
+ *
+ * What replaced them: prospecting now lives in the kernel (salesbrain-core
+ * `commands/prospecting.py` — ICP scoring, sourcing, qualification, engage,
+ * convert), and outreach runs through the value-first path rather than a second
+ * pipeline. Scoring in particular was never real here: `exec_score_prospect_fit`
+ * took the score as an *input*.
+ *
+ * What remains is app-owned work the kernel does not do:
+ *   - create_or_import_prospect  (the /prospects and Discovery forms)
+ *   - send_outreach_message      (the email send + its deliverability guards)
+ *   - convert_prospect_to_deal   (the UI's Convert button)
+ *   - research_company_from_url  (the Discovery "research all" button)
+ */
+
 import Anthropic from '@anthropic-ai/sdk';
 import pool from './db';
 import { sendEmail } from './email';
-import { normalizeDomain, normalizeCompanyName, fitLabelFromScore, type ProspectStage } from './prospecting';
+import { normalizeDomain, normalizeCompanyName, type ProspectStage } from './prospecting';
 import { MODEL, anthropic, webSearchTools } from './llm';
 
 
@@ -27,11 +49,6 @@ async function advanceStage(prospectId: string, fromStage: string, toStage: Pros
   if (fromStage === toStage) return;
   await pool.query(`UPDATE prospects SET stage = $1 WHERE id = $2`, [toStage, prospectId]);
   await recordProspectEvent(prospectId, 'stage_change', fromStage, toStage, reason, triggeredBy);
-}
-
-async function getProspectRow(prospectId: string) {
-  const { rows } = await pool.query(`SELECT * FROM prospects WHERE id = $1`, [prospectId]);
-  return rows[0] || null;
 }
 
 // ─── create_or_import_prospect ──────────────────────────────────
@@ -138,177 +155,6 @@ export async function exec_create_or_import_prospect(
   };
 }
 
-// ─── enrich_prospect ────────────────────────────────────────────
-
-export async function exec_enrich_prospect(input: {
-  prospect_id: string;
-  account_updates?: Record<string, unknown>;
-  contact_updates?: Record<string, unknown>;
-}): Promise<Record<string, unknown>> {
-  const prospect = await getProspectRow(input.prospect_id);
-  if (!prospect) return { error: 'Prospect not found' };
-
-  const ACCOUNT_COLS = new Set(['industry', 'subindustry', 'company_size', 'hq_location', 'geography', 'linkedin_url', 'website', 'fit_status', 'notes']);
-  const CONTACT_COLS = new Set(['title', 'department', 'seniority', 'linkedin_url', 'phone', 'persona_type', 'notes', 'email']);
-
-  if (input.account_updates && prospect.account_id) {
-    const entries = Object.entries(input.account_updates).filter(([k]) => ACCOUNT_COLS.has(k));
-    if (entries.length > 0) {
-      const sets = entries.map(([k], i) => `${k} = $${i + 2}`).join(', ');
-      const values = entries.map(([, v]) => v);
-      await pool.query(`UPDATE accounts SET ${sets} WHERE id = $1`, [prospect.account_id, ...values]);
-    }
-  }
-
-  if (input.contact_updates && prospect.contact_id) {
-    const entries = Object.entries(input.contact_updates).filter(([k]) => CONTACT_COLS.has(k));
-    if (entries.length > 0) {
-      const sets = entries.map(([k], i) => `${k} = $${i + 2}`).join(', ');
-      const values = entries.map(([, v]) => v);
-      await pool.query(`UPDATE contacts SET ${sets} WHERE id = $1`, [prospect.contact_id, ...values]);
-    }
-  }
-
-  await advanceStage(prospect.id, prospect.stage, 'P1_ENRICHED', 'Enrichment data captured');
-
-  return { enriched: true, prospect_id: prospect.id, stage: 'P1_ENRICHED' };
-}
-
-// ─── score_prospect_fit ─────────────────────────────────────────
-
-export async function exec_score_prospect_fit(input: {
-  prospect_id: string;
-  score: number;
-  verdict: string;
-  reason_codes?: string[];
-  disqualifiers?: string[];
-  qualification_reason: string;
-  criteria?: Record<string, unknown>;
-}): Promise<Record<string, unknown>> {
-  const prospect = await getProspectRow(input.prospect_id);
-  if (!prospect) return { error: 'Prospect not found' };
-
-  await pool.query(
-    `INSERT INTO qualification_scores (prospect_id, total_score, verdict, criteria_json, reason_codes, disqualifiers)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
-    [
-      input.prospect_id,
-      input.score,
-      input.verdict,
-      input.criteria ? JSON.stringify(input.criteria) : null,
-      input.reason_codes || [],
-      input.disqualifiers || [],
-    ]
-  );
-
-  await pool.query(
-    `UPDATE prospects SET icp_score = $1, fit_label = $2, qualification_reason = $3 WHERE id = $4`,
-    [input.score, fitLabelFromScore(input.score), input.qualification_reason, input.prospect_id]
-  );
-
-  await advanceStage(prospect.id, prospect.stage, 'P2_ICP_CHECKED', `Scored ${input.score}/100 (${input.verdict})`);
-
-  return {
-    scored: true,
-    prospect_id: input.prospect_id,
-    score: input.score,
-    verdict: input.verdict,
-    stage: 'P2_ICP_CHECKED',
-  };
-}
-
-// ─── generate_research_brief ────────────────────────────────────
-
-export async function exec_generate_research_brief(input: {
-  prospect_id: string;
-  summary: string;
-  pain_hypotheses?: string;
-  why_now_signals?: string;
-  outreach_angle: string;
-  talking_points?: string;
-  risks?: string;
-}): Promise<Record<string, unknown>> {
-  const prospect = await getProspectRow(input.prospect_id);
-  if (!prospect) return { error: 'Prospect not found' };
-
-  const { rows } = await pool.query(
-    `INSERT INTO research_briefs (prospect_id, account_id, contact_id, summary, pain_hypotheses, why_now_signals, outreach_angle, talking_points, risks, created_by_agent)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true) RETURNING id`,
-    [
-      input.prospect_id,
-      prospect.account_id,
-      prospect.contact_id,
-      input.summary,
-      input.pain_hypotheses || null,
-      input.why_now_signals || null,
-      input.outreach_angle,
-      input.talking_points || null,
-      input.risks || null,
-    ]
-  );
-
-  await pool.query(`UPDATE prospects SET research_summary = $1 WHERE id = $2`, [input.summary, input.prospect_id]);
-  await advanceStage(prospect.id, prospect.stage, 'P3_RESEARCH_READY', 'Research brief generated');
-
-  return { brief_id: rows[0].id, prospect_id: input.prospect_id, stage: 'P3_RESEARCH_READY' };
-}
-
-// ─── draft_outreach_message ─────────────────────────────────────
-
-export async function exec_draft_outreach_message(input: {
-  prospect_id: string;
-  step_type: string;
-  subject: string;
-  body: string;
-  sequence_step_id?: string;
-}): Promise<Record<string, unknown>> {
-  const prospect = await getProspectRow(input.prospect_id);
-  if (!prospect) return { error: 'Prospect not found' };
-
-  // Get to_email from contact
-  const { rows: contactRows } = await pool.query(`SELECT email FROM contacts WHERE id = $1`, [prospect.contact_id]);
-  const toEmail = contactRows[0]?.email || null;
-
-  const { rows } = await pool.query(
-    `INSERT INTO outreach_messages (prospect_id, campaign_id, sequence_step_id, direction, status, subject, body, to_email, ai_generated)
-     VALUES ($1, $2, $3, 'outbound', 'draft', $4, $5, $6, true) RETURNING id`,
-    [input.prospect_id, prospect.campaign_id, input.sequence_step_id || null, input.subject, input.body, toEmail]
-  );
-
-  await advanceStage(prospect.id, prospect.stage, 'P4_OUTREACH_DRAFTED', `${input.step_type} drafted`);
-
-  return {
-    message_id: rows[0].id,
-    status: 'draft',
-    step_type: input.step_type,
-    prospect_id: input.prospect_id,
-    stage: 'P4_OUTREACH_DRAFTED',
-  };
-}
-
-// ─── approve_outreach_message ───────────────────────────────────
-
-export async function exec_approve_outreach_message(input: { message_id: string }): Promise<Record<string, unknown>> {
-  const { rowCount } = await pool.query(
-    `UPDATE outreach_messages SET status = 'approved' WHERE id = $1 AND status = 'draft'`,
-    [input.message_id]
-  );
-  if (!rowCount) return { error: 'Message not found or not in draft state' };
-  return { approved: true, message_id: input.message_id };
-}
-
-// ─── schedule_outreach_step ─────────────────────────────────────
-
-export async function exec_schedule_outreach_step(input: { message_id: string; send_in_hours: number }): Promise<Record<string, unknown>> {
-  const scheduledFor = new Date(Date.now() + input.send_in_hours * 3600 * 1000).toISOString();
-  const { rowCount } = await pool.query(
-    `UPDATE outreach_messages SET status = 'scheduled', scheduled_for = $1 WHERE id = $2 AND status IN ('draft', 'approved')`,
-    [scheduledFor, input.message_id]
-  );
-  if (!rowCount) return { error: 'Message not found or in invalid state' };
-  return { scheduled: true, message_id: input.message_id, scheduled_for: scheduledFor };
-}
-
 // ─── send_outreach_message ──────────────────────────────────────
 
 const DAILY_SEND_LIMIT_PER_USER = parseInt(process.env.OUTREACH_DAILY_LIMIT || '50', 10);
@@ -386,75 +232,6 @@ export async function exec_send_outreach_message(input: { message_id: string }):
     await pool.query(`UPDATE outreach_messages SET status = 'failed' WHERE id = $1`, [input.message_id]);
     return { error: err instanceof Error ? err.message : 'Send failed' };
   }
-}
-
-// ─── classify_outreach_reply ────────────────────────────────────
-
-export async function exec_classify_outreach_reply(input: {
-  prospect_id: string;
-  reply_body: string;
-  classification: string;
-  objection_summary?: string;
-  next_action_recommendation?: string;
-  should_convert_to_deal?: boolean;
-}): Promise<Record<string, unknown>> {
-  const prospect = await getProspectRow(input.prospect_id);
-  if (!prospect) return { error: 'Prospect not found' };
-
-  // Record inbound message
-  await pool.query(
-    `INSERT INTO outreach_messages (prospect_id, direction, status, body, to_email, ai_generated)
-     VALUES ($1, 'inbound', 'replied', $2, NULL, false)`,
-    [input.prospect_id, input.reply_body]
-  );
-
-  // If unsubscribe, add to suppression and archive
-  if (input.classification === 'unsubscribe') {
-    const { rows: contactRows } = await pool.query(`SELECT email FROM contacts WHERE id = $1`, [prospect.contact_id]);
-    if (contactRows[0]?.email) {
-      await pool.query(
-        `INSERT INTO suppression_list (email, reason, source, contact_id) VALUES ($1, 'unsubscribe', 'reply', $2)`,
-        [contactRows[0].email, prospect.contact_id]
-      );
-    }
-  }
-
-  await pool.query(
-    `UPDATE prospects SET last_replied_at = now(), reply_status = $1 WHERE id = $2`,
-    [input.classification, input.prospect_id]
-  );
-
-  await advanceStage(prospect.id, prospect.stage, 'P6_REPLIED', `Reply classified: ${input.classification}`);
-
-  await recordProspectEvent(input.prospect_id, 'reply_classified', null, null, input.classification, 'agent', {
-    classification: input.classification,
-    objection_summary: input.objection_summary,
-    next_action_recommendation: input.next_action_recommendation,
-  });
-
-  return {
-    classified: true,
-    prospect_id: input.prospect_id,
-    classification: input.classification,
-    should_convert_to_deal: input.should_convert_to_deal || false,
-    stage: 'P6_REPLIED',
-  };
-}
-
-// ─── recommend_prospect_next_step ──────────────────────────────
-
-export async function exec_recommend_prospect_next_step(input: {
-  prospect_id: string;
-  recommendation: string;
-  next_action_at?: string;
-}): Promise<Record<string, unknown>> {
-  if (input.next_action_at) {
-    await pool.query(`UPDATE prospects SET next_action_at = $1 WHERE id = $2`, [input.next_action_at, input.prospect_id]);
-  }
-  await recordProspectEvent(input.prospect_id, 'recommendation', null, null, input.recommendation, 'agent', {
-    next_action_at: input.next_action_at,
-  });
-  return { recommended: true, prospect_id: input.prospect_id };
 }
 
 // ─── convert_prospect_to_deal ──────────────────────────────────
@@ -552,108 +329,6 @@ export async function exec_convert_prospect_to_deal(
   );
 
   return { converted: true, prospect_id: input.prospect_id, deal_id: dealId, stage: 'P7_QUALIFIED' };
-}
-
-// ─── archive_prospect ──────────────────────────────────────────
-
-export async function exec_archive_prospect(input: {
-  prospect_id: string;
-  reason: string;
-  disqualified?: boolean;
-}): Promise<Record<string, unknown>> {
-  const prospect = await getProspectRow(input.prospect_id);
-  if (!prospect) return { error: 'Prospect not found' };
-
-  const newStage: ProspectStage = input.disqualified ? 'P8_DISQUALIFIED' : 'P9_ARCHIVED';
-  await pool.query(
-    `UPDATE prospects SET stage = $1, archived_reason = $2 WHERE id = $3`,
-    [newStage, input.reason, input.prospect_id]
-  );
-  await recordProspectEvent(input.prospect_id, 'archived', prospect.stage, newStage, input.reason, 'agent');
-  return { archived: true, prospect_id: input.prospect_id, stage: newStage };
-}
-
-// ─── analyze_communication_style ────────────────────────────────
-
-export async function exec_analyze_communication_style(
-  input: { contact_id: string },
-  context?: { userId?: string }
-): Promise<Record<string, unknown>> {
-  const { rows: contactRows } = await pool.query(
-    `SELECT c.*, a.name as company_name FROM contacts c LEFT JOIN accounts a ON a.id = c.account_id WHERE c.id = $1`,
-    [input.contact_id]
-  );
-  if (contactRows.length === 0) return { error: 'Contact not found' };
-  const contact = contactRows[0];
-
-  // Only analyze messages belonging to the calling user. Each user trains their own profile.
-  const userFilter = context?.userId ? 'AND user_id = $2' : '';
-  const values = context?.userId ? [input.contact_id, context.userId] : [input.contact_id];
-
-  const { rows: msgs } = await pool.query(
-    `SELECT source, direction, sent_at, subject, LEFT(body, 2000) as body
-     FROM imported_messages WHERE contact_id = $1 ${userFilter}
-     ORDER BY COALESCE(sent_at, created_at) DESC LIMIT 30`,
-    values
-  );
-  if (msgs.length === 0) return { error: 'No imported messages for this contact. Import Gmail, WhatsApp, or paste messages first.' };
-
-  const prompt = `Analyze the communication style between the user and ${contact.full_name}${contact.title ? ' (' + contact.title + ')' : ''}${contact.company_name ? ' at ' + contact.company_name : ''}.
-
-"sent" = written by the user. "received" = written by the contact.
-
-Return ONLY this JSON (no preamble):
-{
-  "relationship_type": "peer | subordinate | senior | client | vendor | friend | unknown",
-  "formality": "formal | semi_formal | casual",
-  "typical_length": "short | medium | long",
-  "tone_patterns": ["direct","warm","consultative","transactional","..."],
-  "greeting_style": "how the user opens with this person",
-  "sign_off": "how the user signs off",
-  "common_topics": ["..."],
-  "quirks": ["..."],
-  "language": "en | es | fr | ...",
-  "sample_openers": ["...","..."],
-  "summary": "2-3 sentence description of communication style"
-}
-
-Be specific and grounded in the actual messages. Don't invent patterns.
-
-Messages:
-${msgs.map((m, i) => `--- ${i + 1} (${m.direction}${m.sent_at ? ', ' + new Date(m.sent_at).toISOString().slice(0, 10) : ''}) ---\n${m.subject ? 'Subject: ' + m.subject + '\n' : ''}${m.body}`).join('\n\n')}`;
-
-  // Communication-style analysis is purely about the messages we already
-  // have — but we pass web_search anyway for consistency with the rest of
-  // the LLM call sites. Anthropic executes server tools inline, so the
-  // final response.content still contains text we can extract; the model
-  // almost certainly won't call web_search for this prompt.
-  const response = await anthropic.messages.create({
-    model: MODEL,
-    max_tokens: 1500,
-    tools: [...webSearchTools],
-    messages: [{ role: 'user', content: prompt }],
-  });
-
-  const text = response.content
-    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-    .map((b) => b.text).join('');
-
-  let profile: Record<string, unknown>;
-  try {
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    profile = jsonMatch ? JSON.parse(jsonMatch[0]) : { raw: text };
-  } catch {
-    profile = { raw: text, parse_error: true };
-  }
-  profile.generated_at = new Date().toISOString();
-  profile.message_sample_size = msgs.length;
-
-  await pool.query(
-    `UPDATE contacts SET communication_profile = $1 WHERE id = $2`,
-    [JSON.stringify(profile), input.contact_id]
-  );
-
-  return { analyzed: true, contact_id: input.contact_id, profile, messages_analyzed: msgs.length };
 }
 
 // ─── research_company_from_url ──────────────────────────────────
@@ -821,56 +496,3 @@ Return ONLY JSON (no preamble):
   };
 }
 
-// ─── Dispatcher ────────────────────────────────────────────────
-
-export async function executeProspectTool(name: string, input: Record<string, unknown>, context?: { userId?: string }): Promise<Record<string, unknown>> {
-  switch (name) {
-    case 'create_or_import_prospect':
-      return exec_create_or_import_prospect(input as Parameters<typeof exec_create_or_import_prospect>[0], context);
-    case 'enrich_prospect':
-      return exec_enrich_prospect(input as Parameters<typeof exec_enrich_prospect>[0]);
-    case 'score_prospect_fit':
-      return exec_score_prospect_fit(input as Parameters<typeof exec_score_prospect_fit>[0]);
-    case 'generate_research_brief':
-      return exec_generate_research_brief(input as Parameters<typeof exec_generate_research_brief>[0]);
-    case 'draft_outreach_message':
-      return exec_draft_outreach_message(input as Parameters<typeof exec_draft_outreach_message>[0]);
-    case 'approve_outreach_message':
-      return exec_approve_outreach_message(input as Parameters<typeof exec_approve_outreach_message>[0]);
-    case 'schedule_outreach_step':
-      return exec_schedule_outreach_step(input as Parameters<typeof exec_schedule_outreach_step>[0]);
-    case 'send_outreach_message':
-      return exec_send_outreach_message(input as Parameters<typeof exec_send_outreach_message>[0]);
-    case 'classify_outreach_reply':
-      return exec_classify_outreach_reply(input as Parameters<typeof exec_classify_outreach_reply>[0]);
-    case 'recommend_prospect_next_step':
-      return exec_recommend_prospect_next_step(input as Parameters<typeof exec_recommend_prospect_next_step>[0]);
-    case 'convert_prospect_to_deal':
-      return exec_convert_prospect_to_deal(input as Parameters<typeof exec_convert_prospect_to_deal>[0], context);
-    case 'archive_prospect':
-      return exec_archive_prospect(input as Parameters<typeof exec_archive_prospect>[0]);
-    case 'analyze_communication_style':
-      return exec_analyze_communication_style(input as Parameters<typeof exec_analyze_communication_style>[0], context);
-    case 'research_company_from_url':
-      return exec_research_company_from_url(input as Parameters<typeof exec_research_company_from_url>[0]);
-    default:
-      return { error: `Unknown prospect tool: ${name}` };
-  }
-}
-
-export const PROSPECT_TOOL_NAMES = new Set([
-  'create_or_import_prospect',
-  'enrich_prospect',
-  'score_prospect_fit',
-  'generate_research_brief',
-  'draft_outreach_message',
-  'approve_outreach_message',
-  'schedule_outreach_step',
-  'send_outreach_message',
-  'classify_outreach_reply',
-  'recommend_prospect_next_step',
-  'convert_prospect_to_deal',
-  'archive_prospect',
-  'analyze_communication_style',
-  'research_company_from_url',
-]);

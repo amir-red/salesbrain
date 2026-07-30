@@ -200,10 +200,10 @@ Gamma Logistics, gamma.com, Sara Kim, , Director of Fleet`}
           <div className="rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
             <h2 className="text-sm font-medium mb-2">3. Next steps</h2>
             <ol className="text-xs space-y-1 list-decimal list-inside" style={{ color: 'var(--text-muted)' }}>
-              <li>Prospects are now at <b>P0_IMPORTED</b>. After research runs they move to <b>P3_RESEARCH_READY</b>.</li>
-              <li>Open any prospect → chat with the AI → ask &quot;draft a first-touch cold email&quot;. The agent will use the research brief + your communication profile.</li>
-              <li>Drafts land in <Link href="/approvals" style={{ color: 'var(--accent)' }}>/approvals</Link> — review, then Approve &amp; Send.</li>
-              <li>Replies are classified and show in <Link href="/inbox" style={{ color: 'var(--accent)' }}>/inbox</Link>. Qualified replies auto-convert to deals.</li>
+              <li>Imported prospects are scored against your active ICP. Review them in <Link href="/prospecting" style={{ color: 'var(--accent)' }}>Prospects</Link>, best fit first.</li>
+              <li>Ask the assistant (Telegram or chat) to <b>qualify</b> a prospect — it researches the company and sharpens the score.</li>
+              <li>Ask it to <b>engage</b> one. That promotes them into the relationship graph with their research attached, then drafts follow the value-first path.</li>
+              <li>Nothing sends without you approving the exact text. Replies arrive in your own inbox, and the assistant triages them for you.</li>
             </ol>
             <p className="text-[10px] mt-3" style={{ color: 'var(--text-muted)' }}>
               Deliverability guardrails active: daily send cap of {process.env.NEXT_PUBLIC_OUTREACH_DAILY_LIMIT || 50}/user, 3-min throttle per recipient domain,

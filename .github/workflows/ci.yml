@@ -18,6 +18,19 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - name: No hardcoded model ids
+        # The shared client in lib/llm.ts rewrites requests to Bedrock's
+        # /model/{id}/invoke, so a direct-API id like claude-sonnet-4-5-20250929
+        # resolves to a model that does not exist there. Three live routes
+        # carried one and failed silently from the Bedrock switch until
+        # 2026-07-30 — the Network page's chat and insights among them. Import
+        # MODEL instead; this keeps it that way.
+        run: |
+          if grep -rnE "model: *['\"](claude-|us\.anthropic)" app lib; then
+            echo "::error::hardcoded model id — import MODEL from @/lib/llm instead"
+            exit 1
+          fi
+          echo "ok: no hardcoded model ids"
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Build
