@@ -36,6 +36,13 @@ jobs:
           # if shell access to the server is ever shared or suspected.
           UNIPILE_DSN: ${{ secrets.UNIPILE_DSN }}
           UNIPILE_API_KEY: ${{ secrets.UNIPILE_API_KEY }}
+          # Bedrock — the credential behind every Claude call in the app.
+          # Previously server-only via the .env.hermes fragment, moved here
+          # 2026-07-31 so it is managed in one place. Rotating it now means
+          # updating this secret in BOTH repos (the gateway reads its own copy)
+          # and re-running both deploys.
+          AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
           # Optional demo-email overrides (empty is fine — code has defaults)
           LEAD_NOTIFY_TO: ${{ secrets.LEAD_NOTIFY_TO }}
           LEAD_NOTIFY_CC: ${{ secrets.LEAD_NOTIFY_CC }}
@@ -45,7 +52,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
-          envs: ANTHROPIC_API_KEY,DATABASE_URL,SESSION_SECRET,RESEND_API_KEY,EMAIL_FROM,TELEGRAM_BOT_TOKEN,TELEGRAM_BOARD_CHAT_ID,TELEGRAM_WEBHOOK_SECRET,TELEGRAM_BOT_USERNAME,CRON_SECRET,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GOOGLE_REDIRECT_URI,PUBLIC_FORM_BASE_URL,ONBOARDING_API_KEY,PUBLIC_FORM_ALLOWED_ORIGIN,CALENDLY_WEBHOOK_SECRET,UNIPILE_DSN,UNIPILE_API_KEY,LEAD_NOTIFY_TO,LEAD_NOTIFY_CC,EMAIL_LOGO_URL
+          envs: ANTHROPIC_API_KEY,DATABASE_URL,SESSION_SECRET,RESEND_API_KEY,EMAIL_FROM,TELEGRAM_BOT_TOKEN,TELEGRAM_BOARD_CHAT_ID,TELEGRAM_WEBHOOK_SECRET,TELEGRAM_BOT_USERNAME,CRON_SECRET,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GOOGLE_REDIRECT_URI,PUBLIC_FORM_BASE_URL,ONBOARDING_API_KEY,PUBLIC_FORM_ALLOWED_ORIGIN,CALENDLY_WEBHOOK_SECRET,UNIPILE_DSN,UNIPILE_API_KEY,AWS_BEARER_TOKEN_BEDROCK,AWS_REGION,LEAD_NOTIFY_TO,LEAD_NOTIFY_CC,EMAIL_LOGO_URL
           script: |
             set -e
             cd /srv/salesbrain
@@ -73,15 +80,29 @@ jobs:
               "CALENDLY_WEBHOOK_SECRET=${CALENDLY_WEBHOOK_SECRET}" \
               "UNIPILE_DSN=${UNIPILE_DSN}" \
               "UNIPILE_API_KEY=${UNIPILE_API_KEY}" \
+              "AWS_BEARER_TOKEN_BEDROCK=${AWS_BEARER_TOKEN_BEDROCK}" \
+              "AWS_REGION=${AWS_REGION}" \
               "LEAD_NOTIFY_TO=${LEAD_NOTIFY_TO}" \
               "LEAD_NOTIFY_CC=${LEAD_NOTIFY_CC}" \
               "EMAIL_LOGO_URL=${EMAIL_LOGO_URL}" \
               > .env.production
 
+            # This file holds every app secret. It was previously left at 644
+            # (world-readable) because the redirect above inherits root's umask —
+            # harmless while root is the only account, but a latent leak the
+            # moment anything runs unprivileged.
+            chmod 600 .env.production
+
             # Relationship OS: append the server-local Hermes fragment
             # (AGENT_RUNTIME, HERMES_API_URL, HERMES_API_KEY) — lives only on
             # the box at /srv/salesbrain/.env.hermes, survives deploys.
-            [ -f .env.hermes ] && cat .env.hermes >> .env.production
+            # NOTE: .env.hermes still carries its own AWS_BEARER_TOKEN_BEDROCK.
+            # A later duplicate key wins in dotenv order, so the fragment would
+            # silently override the GitHub secret — strip the keys we now manage
+            # here before appending, so there is exactly one source of truth.
+            if [ -f .env.hermes ]; then
+              grep -vE '^(AWS_BEARER_TOKEN_BEDROCK|AWS_REGION)=' .env.hermes >> .env.production
+            fi
 
             # Install all deps (including devDependencies for build)
             npm install
