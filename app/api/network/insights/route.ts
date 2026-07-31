@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import Anthropic from '@anthropic-ai/sdk';
-import { anthropic } from '@/lib/llm';
+import { anthropic, MODEL } from '@/lib/llm';
 import { getSession } from '@/lib/auth';
 
 
@@ -71,7 +71,9 @@ Rules:
 
   try {
     const resp = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
+      // Shared constant, never a literal — a direct-API id does not exist on
+      // Bedrock, where the client actually sends. See lib/llm.ts.
+      model: MODEL,
       max_tokens: 2000,
       system: systemPrompt,
       messages: [{ role: 'user', content: JSON.stringify(summary) }],

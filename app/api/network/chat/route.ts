@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import Anthropic from '@anthropic-ai/sdk';
-import { anthropic } from '@/lib/llm';
+import { anthropic, MODEL } from '@/lib/llm';
 import { getSession } from '@/lib/auth';
 
 
@@ -169,7 +169,11 @@ export async function POST(req: NextRequest) {
           iter++;
 
           const response = await anthropic.messages.create({
-            model: 'claude-sonnet-4-5-20250929',
+            // Never hardcode a model id here. The shared client rewrites requests
+            // to Bedrock's /model/{id}/invoke, and a direct-API id such as
+            // claude-sonnet-4-5-20250929 does not exist there — so this route
+            // failed on every call from the Bedrock switch until 2026-07-30.
+            model: MODEL,
             max_tokens: 2000,
             system: SYSTEM_PROMPT,
             tools: TOOLS,

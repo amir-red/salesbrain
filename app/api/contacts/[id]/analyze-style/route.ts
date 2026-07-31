@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import { anthropic } from '@/lib/llm';
+import { anthropic, MODEL } from '@/lib/llm';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 
@@ -63,7 +63,9 @@ Messages:
 ${msgs.map((m, i) => `--- Message ${i + 1} (${m.direction}${m.sent_at ? ', ' + new Date(m.sent_at).toISOString().slice(0, 10) : ''}) ---\n${m.subject ? 'Subject: ' + m.subject + '\n' : ''}${m.body}`).join('\n\n')}`;
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    // Shared constant, never a literal — a direct-API id does not exist on
+    // Bedrock, where the client actually sends. See lib/llm.ts.
+    model: MODEL,
     max_tokens: 1500,
     messages: [{ role: 'user', content: analysisPrompt }],
   });

@@ -112,24 +112,13 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
-  {
-    href: '/approvals',
-    label: 'Approvals',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="20 6 9 17 4 12" />
-      </svg>
-    ),
-  },
-  {
-    href: '/inbox',
-    label: 'Inbox',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
-      </svg>
-    ),
-  },
+  // Approvals and Inbox were removed on 2026-07-30. Both were working pages
+  // wired to producers that no longer exist: Approvals listed draft
+  // outreach_messages (nothing can create one since the agent runtime was
+  // deleted) and Inbox listed prospects at P6_REPLIED (nothing sets that stage).
+  // They could never show a row, and a permanently empty page reads as a broken
+  // feature rather than an absent one. Approvals now happen in the Telegram
+  // flow; LinkedIn replies are triaged by the sync + crm_linkedin_inbox.
   {
     href: '/pricing',
     label: 'Pricing',
