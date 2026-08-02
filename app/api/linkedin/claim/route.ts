@@ -1,7 +1,7 @@
 /**
  * POST /api/linkedin/claim — bind a just-connected Unipile account to me.
  *
- * Called by /settings/linkedin after Unipile redirects the user back. Using the
+ * Called by the LinkedIn tab of /profile after Unipile redirects the user back. Using the
  * session this way avoids exposing a public callback endpoint for Unipile's
  * notify_url: the binding is authenticated as the browser user who just
  * completed the flow, not by a shared secret on an internet-facing route.

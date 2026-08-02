@@ -30,13 +30,13 @@ export async function GET(req: NextRequest) {
   const error = req.nextUrl.searchParams.get('error');
 
   if (error) {
-    return NextResponse.redirect(publicUrl(req, `/integrations?error=${encodeURIComponent(error)}`));
+    return NextResponse.redirect(publicUrl(req, `/profile?tab=imports&error=${encodeURIComponent(error)}`));
   }
   if (!code) {
-    return NextResponse.redirect(publicUrl(req, '/integrations?error=missing_code'));
+    return NextResponse.redirect(publicUrl(req, '/profile?tab=imports&error=missing_code'));
   }
   if (state !== session.userId) {
-    return NextResponse.redirect(publicUrl(req, '/integrations?error=invalid_state'));
+    return NextResponse.redirect(publicUrl(req, '/profile?tab=imports&error=invalid_state'));
   }
 
   try {
@@ -64,11 +64,11 @@ export async function GET(req: NextRequest) {
       ]
     );
 
-    return NextResponse.redirect(publicUrl(req, '/integrations?connected=google'));
+    return NextResponse.redirect(publicUrl(req, '/profile?tab=imports&connected=google'));
   } catch (err) {
     console.error('[Google OAuth callback]', err);
     return NextResponse.redirect(
-      publicUrl(req, `/integrations?error=${encodeURIComponent(err instanceof Error ? err.message : 'exchange_failed')}`)
+      publicUrl(req, `/profile?tab=imports&error=${encodeURIComponent(err instanceof Error ? err.message : 'exchange_failed')}`)
     );
   }
 }

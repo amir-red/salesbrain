@@ -1,5 +1,5 @@
 /**
- * LinkedIn connection flow (Unipile hosted auth). Used by /settings/linkedin.
+ * LinkedIn connection flow (Unipile hosted auth). Used by the LinkedIn tab of /profile.
  *
  *   GET    /api/linkedin/connect  → is a LinkedIn account connected for me?
  *   POST   /api/linkedin/connect  → mint a one-time hosted-auth URL
@@ -49,8 +49,8 @@ export async function POST(req: NextRequest) {
         : `https://${process.env.UNIPILE_DSN}`,
       expiresOn,
       name: session.userId,
-      success_redirect_url: `${origin}/settings/linkedin?connected=1`,
-      failure_redirect_url: `${origin}/settings/linkedin?failed=1`,
+      success_redirect_url: `${origin}/profile?tab=linkedin&connected=1`,
+      failure_redirect_url: `${origin}/profile?tab=linkedin&failed=1`,
     },
   });
   if (res.error) return NextResponse.json({ error: res.error }, { status: 502 });
