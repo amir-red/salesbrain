@@ -3,7 +3,7 @@
 **Audience:** anyone connecting an MCP client (Hermes, Claude Desktop, Cursor, VS Code, custom agents) to SalesBrain.
 **Endpoint:** `https://salescrm.chipchip.social/api/mcp`
 **Transport:** Streamable HTTP (single POST endpoint, JSON-RPC 2.0)
-**Auth:** Bearer token issued at `/settings/mcp`
+**Auth:** Bearer token issued at `/profile?tab=mcp`
 
 ---
 
@@ -20,7 +20,7 @@ SalesBrain's CRM data + workflow tools as an MCP (Model Context Protocol) server
 ## 2. Getting a token
 
 1. Log into SalesBrain as yourself (`https://salescrm.chipchip.social`)
-2. Sidebar → **MCP** (or visit `/settings/mcp`)
+2. Sidebar → **Profile** → **MCP** tab (or visit `/profile?tab=mcp`)
 3. Enter a name (e.g. "Hermes production") → **Generate**
 4. **Copy the token immediately.** It's shown once and never again.
 5. Store it in your MCP client's config (see section 4)
@@ -130,7 +130,7 @@ Configure the MCP server in Hermes's tool integration UI:
 - **Server URL**: `https://salescrm.chipchip.social/api/mcp`
 - **Transport**: Streamable HTTP
 - **Auth**: Bearer token in `Authorization` header
-- **Token value**: your `mcp_...` token from `/settings/mcp`
+- **Token value**: your `mcp_...` token from `/profile?tab=mcp`
 
 Hermes should discover all 19 tools on first connection.
 
@@ -240,7 +240,7 @@ Examples of how a natural-language Hermes prompt turns into MCP tool calls:
 | Symptom | Cause | Fix |
 |---|---|---|
 | `401 Missing bearer token` | Missing / malformed `Authorization` header | Check the header — must be `Bearer <token>` with a space |
-| `401 Invalid or revoked token` | Token doesn't exist, was revoked, or has a typo | Verify at `/settings/mcp`; regenerate if needed |
+| `401 Invalid or revoked token` | Token doesn't exist, was revoked, or has a typo | Verify at `/profile?tab=mcp`; regenerate if needed |
 | `429 Rate limit exceeded` | Too many requests in 60s | Backoff for ~60s; consider batching requests |
 | `Tool not found: X` | Typo in tool name | Call `tools/list` to see the exact names |
 | `Deal not found or not accessible` (on advance_gate / send_telegram / send_email) | You're trying to act on a deal you don't own or lead | The deal must have you as `user_id` (creator) or `lead_id` (assigned lead). Ask its owner to add you as lead. |
@@ -250,7 +250,7 @@ Examples of how a natural-language Hermes prompt turns into MCP tool calls:
 ## 11. Security considerations
 
 - **Tokens are full-power within your scope.** Anyone with the raw token can act as you. Store like a password.
-- **Rotate on suspicion.** Revoke old tokens from `/settings/mcp` and generate new ones. Old ones stop working instantly.
+- **Rotate on suspicion.** Revoke old tokens from `/profile?tab=mcp` and generate new ones. Old ones stop working instantly.
 - **Per-device tokens recommended.** Don't share one token across multiple MCP clients — makes revocation surgical.
 - **Never commit tokens to git.** They start with `mcp_` — easy to spot in leaked repos.
 
