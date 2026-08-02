@@ -24,7 +24,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/mcp/auth';
 import { dispatchTool } from '@/lib/mcp/tool-dispatch';
-import { MCP_TOOLS } from '@/lib/mcp/tool-definitions';
+import { getMcpTools } from '@/lib/mcp/tool-definitions';
 import { recordAudit } from '@/lib/mcp/audit';
 
 // ─── Constants ──────────────────────────────────────────────────────
@@ -134,14 +134,19 @@ export async function POST(req: NextRequest) {
     case 'ping':
       return rpcResult(rpc.id, {});
 
-    case 'tools/list':
+    case 'tools/list': {
+      // Fetched from the ring, so this list is whatever the DEPLOYED kernel
+      // exposes — the app keeps no copy to fall out of date. Degrades to the
+      // app-owned tools if the ring is unreachable; never returns empty.
+      const tools = await getMcpTools();
       return rpcResult(rpc.id, {
-        tools: MCP_TOOLS.map((t) => ({
+        tools: tools.map((t) => ({
           name: t.name,
           description: t.description,
           inputSchema: t.inputSchema,
         })),
       });
+    }
 
     case 'tools/call': {
       const params = (rpc.params ?? {}) as { name?: string; arguments?: Record<string, unknown> };
