@@ -2,24 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { exchangeCodeForToken, getGoogleUserEmail } from '@/lib/google-oauth';
-
-/**
- * Build an absolute URL anchored at the PUBLIC origin, not the internal Node
- * bind (localhost:3002). Caddy forwards X-Forwarded-Host/Proto — use them,
- * otherwise req.url would route redirects back to the internal port.
- */
-function publicUrl(req: NextRequest, path: string): URL {
-  // NEXT_PUBLIC_APP_URL is the most reliable source when configured.
-  const envBase = process.env.NEXT_PUBLIC_APP_URL;
-  if (envBase) {
-    return new URL(path, envBase);
-  }
-  const forwardedHost = req.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
-  const host = forwardedHost || req.headers.get('host') || req.nextUrl.host;
-  const forwardedProto = req.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
-  const proto = forwardedProto || req.nextUrl.protocol.replace(':', '') || 'https';
-  return new URL(path, `${proto}://${host}`);
-}
+import { publicUrl } from '@/lib/public-url';
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
