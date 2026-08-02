@@ -64,11 +64,19 @@ function LinkedInSettings() {
     }
   }, [load]);
 
+  // Depend on the VALUES we read, not the params object itself. The object
+  // identity changes whenever the URL does — and switching tabs rewrites the
+  // URL — so depending on it re-ran this effect on every tab click, firing a
+  // second status check. Each one spawns a Python subprocess and writes an
+  // audit row, so the duplicates were visible in the audit log.
+  const connectedParam = params.get('connected');
+  const failedParam = params.get('failed');
+
   useEffect(() => {
-    if (params.get('connected') === '1') claim();
+    if (connectedParam === '1') claim();
     else load();
-    if (params.get('failed') === '1') setError('LinkedIn connection was cancelled or failed.');
-  }, [params, claim, load]);
+    if (failedParam === '1') setError('LinkedIn connection was cancelled or failed.');
+  }, [connectedParam, failedParam, claim, load]);
 
   async function connect() {
     setBusy(true);

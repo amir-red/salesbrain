@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
 import { unipileFetch } from '@/lib/unipile';
+import { publicUrl } from '@/lib/public-url';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,7 +35,10 @@ export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const origin = req.nextUrl.origin;
+  // NOT req.nextUrl.origin — that is the internal bind (localhost:3002) behind
+  // the proxy, so the provider would send the user to a dead page and the
+  // account would never be claimed.
+  const back = (q: string) => publicUrl(req, `/profile?tab=linkedin&${q}`).toString();
   // Short-lived by design: Unipile expires all links daily anyway, and a stale
   // link is a stale invitation to bind an account to the wrong person.
   const expiresOn = new Date(Date.now() + 15 * 60_000).toISOString();
@@ -49,8 +53,8 @@ export async function POST(req: NextRequest) {
         : `https://${process.env.UNIPILE_DSN}`,
       expiresOn,
       name: session.userId,
-      success_redirect_url: `${origin}/profile?tab=linkedin&connected=1`,
-      failure_redirect_url: `${origin}/profile?tab=linkedin&failed=1`,
+      success_redirect_url: back('connected=1'),
+      failure_redirect_url: back('failed=1'),
     },
   });
   if (res.error) return NextResponse.json({ error: res.error }, { status: 502 });
