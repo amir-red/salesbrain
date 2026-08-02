@@ -1,8 +1,14 @@
 /**
- * MCP tool definitions — the JSON schemas exposed via `tools/list`.
+ * MCP tool definitions — the catalogue exposed via `tools/list`.
  *
- * Kept as a pure data file (no imports) so we can regenerate docs
- * from it, feed it to schema-validation libraries, etc.
+ * The `crm_*` tools are NOT defined here. They are fetched from the ring at
+ * runtime (`getMcpTools`), because a hand-written catalogue is exactly how
+ * this file drifted to 23 tools while the ring registered 70. The ring's tool
+ * declaration is the single source of truth; adding a tool there puts it on
+ * MCP with no change to this file. See `docs/mcp-tool-parity-plan.md`.
+ *
+ * What remains here: the handful of tools the app owns outright (memory), and
+ * the legacy names kept dispatchable for in-flight clients.
  *
  * Naming convention: `get_*` / `list_*` for reads; verb_noun (`update_deal`,
  * `mark_deal_lost`) for writes. Matches the existing `lib/tools.ts`
@@ -14,6 +20,8 @@
  *   - `dispatches_to` (optional): the existing executor name if we
  *     forward straight to `lib/tool-executors.ts`
  */
+
+import { fetchRingCatalog, type RingToolDef } from './kernel-rpc';
 
 export type ToolAccess = 'read' | 'write' | 'admin';
 
@@ -375,8 +383,134 @@ const SIDE_EFFECT_TOOLS: McpToolDef[] = [
   },
 ];
 
-export const MCP_TOOLS: McpToolDef[] = [...READ_TOOLS, ...WRITE_TOOLS, ...SIDE_EFFECT_TOOLS];
+/**
+ * The hand-written tools. Historically this WAS the MCP catalogue, which is
+ * how it drifted to 23 tools while the ring registered 70 — see
+ * `docs/mcp-tool-parity-plan.md`. It is now a legacy layer: the advertised
+ * catalogue comes from the ring (`getMcpTools`), and these survive only to
+ * keep in-flight clients working and to host the few tools the app owns.
+ */
+export const LEGACY_TOOLS: McpToolDef[] = [...READ_TOOLS, ...WRITE_TOOLS, ...SIDE_EFFECT_TOOLS];
 
-export const TOOL_BY_NAME: Map<string, McpToolDef> = new Map(
-  MCP_TOOLS.map((t) => [t.name, t] as const),
+const LEGACY_BY_NAME: Map<string, McpToolDef> = new Map(
+  LEGACY_TOOLS.map((t) => [t.name, t] as const),
 );
+
+/**
+ * Tools the app owns outright — no kernel equivalent exists, so these stay
+ * hand-written and advertised alongside the ring's catalogue.
+ */
+const APP_ONLY = new Set(['get_memories', 'remember', 'forget']);
+
+/**
+ * Legacy names whose behaviour now lives in the kernel. Still dispatchable so
+ * a client mid-session doesn't break, but no longer advertised: `tools/list`
+ * shows one clean `crm_*` namespace instead of two names for one operation.
+ *
+ * Six of these were never proxied — they ran the app's own SQL beside the
+ * kernel's version of the same operation, which meant a second implementation
+ * of deal RBAC and a second write path into `deals`. Deleting them (and their
+ * inline implementations in tool-dispatch) is the follow-up step, once Mateo's
+ * workflow is confirmed on the kernel twins.
+ */
+export const SUPERSEDED_BY: Record<string, string> = {
+  get_deal: 'crm_get_deal',
+  list_deals: 'crm_list_my_deals',
+  get_pipeline_overview: 'crm_pipeline_overview',
+  get_relevant_lessons: 'crm_relevant_lessons',
+  list_sales_leads: 'crm_list_sales_leads',
+  get_sales_lead: 'crm_get_sales_lead',
+  list_pending_board_decisions: 'crm_board_status',
+  update_deal: 'crm_update_deal',
+  add_deal_note: 'crm_add_note',
+  create_deal: 'crm_create_deal',
+  mark_deal_lost: 'crm_mark_deal_lost',
+  assess_deal: 'crm_assess_deal',
+  schedule_followup: 'crm_schedule_followup',
+  send_telegram: 'crm_request_board_review',
+  advance_gate: 'crm_advance_gate',
+  convert_lead_to_deal: 'crm_convert_lead',
+  delete_deal: 'crm_delete_deal',
+  restore_deal: 'crm_restore_deal',
+  nudge_pending_votes: 'crm_remind_board',
+};
+
+/**
+ * `send_email` is withheld rather than superseded. It has no kernel twin, but
+ * it mails an external party, and MCP has no step where a human reads the
+ * words before they go out — the same reason `crm_send_outreach` and
+ * `crm_linkedin_send` are withheld ring-side. It has never been called (zero
+ * rows in `mcp_audit_log`), so withholding it costs nothing today.
+ */
+const WITHHELD = new Set(['send_email']);
+
+// ─── The advertised catalogue ──────────────────────────────────────
+
+/** How long a fetched ring catalogue is trusted. The ring deploys separately
+ *  from the app, so an indefinite cache would hide newly added tools until the
+ *  next app restart. */
+const CATALOG_TTL_MS = 5 * 60 * 1000;
+
+let cached: { tools: McpToolDef[]; at: number } | null = null;
+let lastError: string | null = null;
+
+function fromRing(t: RingToolDef): McpToolDef {
+  return {
+    name: t.name,
+    description: t.description,
+    inputSchema: {
+      type: 'object',
+      properties: t.parameters?.properties ?? {},
+      required: t.parameters?.required,
+    },
+    _meta: { access: t.access },
+  };
+}
+
+/**
+ * The tools `/api/mcp` advertises: everything the ring exposes, plus the few
+ * the app owns. Cached per process, refreshed on a TTL.
+ *
+ * On failure it serves the last good catalogue if there is one, and the
+ * app-only tools if there isn't — never an empty list, because a client that
+ * sees zero tools concludes the server is useless and stops asking.
+ */
+export async function getMcpTools(): Promise<McpToolDef[]> {
+  if (cached && Date.now() - cached.at < CATALOG_TTL_MS) return cached.tools;
+
+  try {
+    const ring = await fetchRingCatalog();
+    const tools = [...ring.map(fromRing), ...LEGACY_TOOLS.filter((t) => APP_ONLY.has(t.name))];
+    cached = { tools, at: Date.now() };
+    lastError = null;
+    return tools;
+  } catch (err) {
+    lastError = err instanceof Error ? err.message : String(err);
+    console.error('[mcp] ring catalogue unavailable:', lastError);
+    // Stale beats absent: a client reconnecting during a ring restart should
+    // still see the full tool set.
+    if (cached) return cached.tools;
+    // No catalogue yet — serve the legacy names, which are all still
+    // dispatchable. This is deliberately the pre-parity behaviour rather than
+    // the 3 app-owned tools, so that a ring that is down, mid-restart, or
+    // simply older than this app leaves clients exactly where they were
+    // instead of stripping them to almost nothing.
+    return LEGACY_TOOLS.filter((t) => !WITHHELD.has(t.name));
+  }
+}
+
+/** Whether the last catalogue fetch failed, for health reporting. */
+export function catalogError(): string | null {
+  return lastError;
+}
+
+/**
+ * Resolve a tool for dispatch. Looks past the advertised catalogue into the
+ * legacy names so a client that still calls `update_deal` keeps working.
+ */
+export async function getToolDef(name: string): Promise<McpToolDef | undefined> {
+  if (WITHHELD.has(name)) return undefined;
+  const advertised = (await getMcpTools()).find((t) => t.name === name);
+  if (advertised) return advertised;
+  return LEGACY_BY_NAME.get(name);
+}
