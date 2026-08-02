@@ -1,5 +1,5 @@
 /**
- * Internal API for MCP token management. Used by /settings/mcp.
+ * Internal API for MCP token management. Used by the MCP tab of /profile.
  *
  *   GET  /api/mcp/tokens        list the signed-in user's active tokens
  *   POST /api/mcp/tokens        create a new token, return the raw value ONCE
