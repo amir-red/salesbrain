@@ -6,14 +6,16 @@ import Sidebar from '@/components/Sidebar';
 import TelegramPanel from '@/components/profile/TelegramPanel';
 import LinkedInPanel from '@/components/profile/LinkedInPanel';
 import ImportsPanel from '@/components/profile/ImportsPanel';
+import McpPanel from '@/components/profile/McpPanel';
 
-type Tab = 'account' | 'telegram' | 'linkedin' | 'imports';
+type Tab = 'account' | 'telegram' | 'linkedin' | 'imports' | 'mcp';
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: 'account', label: 'Account', hint: 'Who you are signed in as' },
   { id: 'telegram', label: 'Telegram', hint: 'Chat with the assistant' },
   { id: 'linkedin', label: 'LinkedIn', hint: 'Inbox triage and follow-ups' },
   { id: 'imports', label: 'Imports', hint: 'Google, contacts, messages' },
+  { id: 'mcp', label: 'MCP', hint: 'Access tokens for Claude and other tools' },
 ];
 
 interface Me { userId: string; email: string; name: string | null; role: string }
@@ -132,6 +134,7 @@ function Profile() {
         {tab === 'telegram' && <TelegramPanel />}
         {tab === 'linkedin' && <LinkedInPanel />}
         {tab === 'imports' && <ImportsPanel />}
+        {tab === 'mcp' && <McpPanel />}
       </div>
     </div>
   );
