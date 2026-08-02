@@ -1,161 +1,198 @@
 # SalesBrain MCP — what changed, and what you need to do
 
-*2026-08-02*
+*2026-08-02. For Hermes agents connecting to SalesBrain over MCP.*
 
 ## The short version
 
 Your SalesBrain MCP connection went from **23 tools to 69**. All of LinkedIn,
-all of prospecting, and the whole relationship graph are now available to
-Claude — they existed in the CRM already, they just were never exposed here.
+all of prospecting, and the whole relationship graph are now available — they
+existed in the CRM already, they were just never exposed here.
 
-**What you need to do: reconnect.** Nothing else.
+**What you need to do: reload MCP.** Your token and URL are unchanged.
 
-Your token and URL are unchanged. Tool names are not stored in your config —
-your client asks the server for the list each time it connects, so it picks up
-the new ones on its own.
+```text
+/reload-mcp
+```
+
+If you run Hermes as a gateway rather than an interactive session, **restart the
+process** instead.
 
 ---
 
-## Reconnecting
+## Why a reload is needed
 
-**Claude Desktop:** quit it fully (Cmd-Q, not just closing the window) and
-reopen. Check the tools icon in the message box — you should see ~69 SalesBrain
-tools where there used to be 23.
+Hermes discovers MCP tools **once per process, in a background thread at
+startup**, and caches them for the life of that process. It will refresh early
+if a server sends `notifications/tools/list_changed` — but SalesBrain declares
+`listChanged: false` and means it. The endpoint is stateless Streamable HTTP
+(one request in, one response out), so it has no open channel to push a
+notification down.
 
-**Anything else:** restart the client, or toggle the SalesBrain server off and
-on in its settings.
+Config-file changes auto-reload via the file watcher. This isn't a config
+change — the *server's* tool list grew — so nothing on your side notices until
+you reload.
 
-If your config needs re-entering for any reason:
+---
 
-```json
-{
-  "mcpServers": {
-    "salesbrain": {
-      "url": "https://salescrm.chipchip.social/api/mcp",
-      "headers": { "Authorization": "Bearer <your token>" }
-    }
-  }
-}
+## Tool names
+
+Hermes prefixes every MCP tool with its server name. If your server block is
+named `salesbrain`, the tools appear as:
+
+```text
+mcp_salesbrain_crm_linkedin_inbox
+mcp_salesbrain_crm_person_dossier
+mcp_salesbrain_crm_whoami
 ```
 
-Your token lives at **salescrm.chipchip.social → Profile → MCP**. If you've lost
-it, mint a new one there and revoke the old — tokens are shown once.
+Throughout this doc I write the bare names (`crm_whoami`); prepend
+`mcp_<your-server-name>_` for what you'll actually see in the tool surface.
+
+---
+
+## Config, if you ever need to re-enter it
+
+```yaml
+mcp_servers:
+  salesbrain:
+    url: "https://salescrm.chipchip.social/api/mcp"
+    headers:
+      Authorization: "Bearer <your token>"
+```
+
+Your token lives at **salescrm.chipchip.social → Profile → MCP**. Tokens are
+shown once — if you've lost it, mint a new one there and revoke the old.
 
 ---
 
 ## Did anything break?
 
-**No.** Every tool you were using still works, including the old names.
+**No.** Everything you were using still works, including the old names.
 
 Some names changed — `update_deal` is now `crm_update_deal`, `list_deals` is
-`crm_list_my_deals`, and so on. The old names still function, they're just no
-longer advertised, so Claude will naturally start using the new ones. You don't
-need to do anything about this. If you have saved prompts that name a tool
-explicitly, add the `crm_` prefix when you next edit them.
+`crm_list_my_deals`. The old names still dispatch, they're just no longer
+advertised, so after a reload your agent will use the new ones. Nothing to do.
 
-One exception: **`send_email` is gone.** It let the MCP client mail an external
-party with no step where you read the message first. It had never been used, so
-nothing is lost. Follow-up emails still go out from the CRM and from Telegram.
+One exception: **`send_email` is gone.** It let the agent mail an external party
+with no step where a human read the message first. It had never been called, so
+nothing is lost.
 
 ---
 
 ## What you can do now that you couldn't before
 
-**Your LinkedIn inbox.** Ask *"what's in my LinkedIn inbox that needs me?"* and
-you get your conversations ranked by value and staleness, with cold pitches
-filtered out. You can read a thread, draft a reply, and see who's accepted a
-connection and is waiting on a first message.
+**Your LinkedIn inbox.** `crm_linkedin_inbox` gives you conversations where the
+other person spoke last, ranked by value and staleness, cold pitches filtered
+out. `crm_linkedin_thread` reads one, `crm_linkedin_draft_reply` drafts,
+`crm_linkedin_pending_followups` shows accepted connections still waiting on a
+first message.
 
-**Prospecting.** Define an ICP, search Sales Navigator against it, see the
-scored queue with the reasons behind each score, and convert a qualified
-prospect into a deal.
+**Prospecting.** `crm_icp_list`, `crm_prospect_search`, `crm_prospect_queue`,
+`crm_prospect_qualify`, `crm_prospect_convert` — define a target, source against
+it, see scored candidates with the reasoning, convert a good one to a deal.
 
-**The relationship graph.** Ask what you know about a person before a call —
-their dossier, the facts on file with where each came from, open commitments in
-both directions, and the value ledger.
+**The relationship graph.** `crm_person_lookup` → `crm_person_dossier` before a
+call: what you know, where each fact came from, open commitments in both
+directions.
 
-**Deal context you had to dig for.** Full timeline for a deal, stalled deals
-past their gate SLA, lessons from similar losses, board vote tallies with who
-has actually voted.
-
-Ask in plain language. Claude picks the tool.
+**Deal context.** `crm_deal_timeline`, `crm_stalled_deals`,
+`crm_relevant_lessons`, `crm_board_status`.
 
 ---
 
 ## What is deliberately NOT available
 
-Claude cannot **send** anything to anyone outside the CRM from here. No LinkedIn
-messages, no outreach emails, no follow-up sends.
+Nothing here sends to anyone outside the CRM. No LinkedIn messages, no outreach
+emails, no follow-up sends. `crm_linkedin_send` and `crm_send_outreach` are
+withheld and come back as `Unknown tool` if something tries.
 
-This isn't a permissions gap — your MCP token carries your identity and the same
-access rules as everywhere else. It's that this surface has no moment where you
-read the exact words before they go. On Telegram you see the draft and say
-"send"; here a client could just call send directly.
+This isn't a permissions gap — your MCP token carries your identity and the
+kernel applies exactly the same rules as everywhere else. It's that this surface
+has no moment where a human reads the exact words before they go out. That
+matters more for an agent than for a chat client, because your agent runs
+multi-turn loops on its own.
 
-So: **drafting happens here, sending happens on Telegram.** Ask Claude to draft
-a LinkedIn reply, read it, then send it from your Telegram DM with the bot.
-
----
-
-## What Claude sees is scoped to you
-
-Everything comes back filtered to your own access — your deals, your LinkedIn
-inbox, your prospects. Same rules as the web app and the Telegram bot.
-
-One difference worth knowing: in the board Telegram group the bot can see the
-whole pipeline, because it's a shared group. Over MCP you get only your own
-deals. That's intentional.
+**Draft here, send from Telegram.**
 
 ---
 
-## Optional: a better system prompt
+## Scope
 
-Paste this into your client's custom-instructions or project-instructions field.
-It's not required — everything works without it — but it helps Claude choose the
-right tool and stops it guessing at things it should look up.
+Everything is filtered to your own access — your deals, your LinkedIn inbox,
+your prospects. Same rules as the web app and the Telegram bot.
 
-```
-I use SalesBrain, a CRM exposed through MCP. Prefer its tools over asking me
-for information I've already recorded there.
+One difference: in the board Telegram group the bot sees the whole pipeline,
+because it's a shared group. Over MCP you get only your own deals. That's
+intentional.
 
-Orientation:
-- crm_whoami tells you who I am and my role.
-- crm_pipeline_overview / crm_list_my_deals / crm_search_deals to find deals.
-- crm_get_deal then crm_deal_timeline for full history before advising.
-- crm_stalled_deals for what's slipping.
+---
 
-Before I talk to anyone, look them up: crm_person_lookup then
-crm_person_dossier. Facts carry provenance — cite where a fact came from
-rather than stating it flat, and say plainly when something is unconfirmed.
-Never invent a detail about a person; if it isn't in the dossier, say so.
+## If 69 tools crowds your context
 
-LinkedIn: crm_linkedin_inbox is the triage view (who spoke last, ranked by
-value). crm_linkedin_thread reads one. crm_linkedin_draft_reply drafts.
-crm_linkedin_pending_followups shows accepted connections still waiting on a
-first message.
+Hermes can filter per server. Use the **original** tool names (unprefixed):
 
-You CANNOT send. No tool here delivers a message to anyone outside the CRM.
-Draft it, show it to me, and tell me to send it from Telegram. Never imply
-something went out.
-
-Prospecting: crm_icp_list, crm_prospect_queue, crm_prospect_get. Scores come
-with reasons — quote them rather than asserting a prospect is good.
-crm_prospect_search burns Sales Navigator quota, so ask me first.
-
-Deal money and dates belong in structured fields via crm_update_deal, not in
-prose notes — the board card and the pipeline views read the columns.
-
-When you change something, say what you changed. When a tool returns an error
-or a denial, tell me what it said rather than working around it.
+```yaml
+mcp_servers:
+  salesbrain:
+    url: "https://salescrm.chipchip.social/api/mcp"
+    headers:
+      Authorization: "Bearer <your token>"
+    tools:
+      exclude: [crm_ping, crm_icp_define, crm_prospect_archive]
+      resources: false
+      prompts: false
 ```
 
+Only worth doing if you notice the tool surface crowding things out — 69 is well
+within what Hermes handles.
+
 ---
 
-## If something looks wrong
+## Suggested system prompt
 
-If you see only ~20 tools after reconnecting, the server couldn't reach the
-kernel and fell back to the old set. Reconnect again in a few minutes; if it
-persists, tell Amir.
+Add this to your agent's system prompt or a skill. Not required, but it stops
+the agent guessing at things it should look up.
 
-If a tool returns `read_only_context`, your account isn't linked — that message
-tells you how to fix it.
+```
+I use SalesBrain, a CRM exposed over MCP. Tool names are prefixed
+mcp_salesbrain_ — adjust if my server block is named differently.
+
+Prefer SalesBrain tools over asking me for anything already recorded there.
+
+Orientation: crm_whoami for who I am. crm_pipeline_overview,
+crm_list_my_deals, crm_search_deals to find work. crm_get_deal then
+crm_deal_timeline before advising on a deal. crm_stalled_deals for slippage.
+
+Before I talk to anyone: crm_person_lookup then crm_person_dossier. Facts
+carry provenance — cite where a fact came from rather than stating it flat,
+and say plainly when something is unconfirmed. Never invent a detail about a
+person. If it isn't in the dossier, say so.
+
+LinkedIn: crm_linkedin_inbox is triage (who spoke last, ranked by value).
+crm_linkedin_thread reads one. crm_linkedin_draft_reply drafts.
+
+You CANNOT send. No tool here delivers a message to anyone outside the CRM,
+and the send tools are withheld server-side. Draft it, show me, and tell me
+to send it from Telegram. Never imply something went out.
+
+Prospecting: scores come with reasons — quote them rather than asserting a
+prospect is good. crm_prospect_search spends Sales Navigator quota against my
+real LinkedIn account, so ask before running it.
+
+Deal money and dates go in structured fields via crm_update_deal, not prose
+notes — the board card and pipeline views read the columns.
+
+Say what you changed when you change something. When a tool returns an error
+or a denial, tell me what it said rather than routing around it.
+```
+
+---
+
+## Checks after reloading
+
+- You should see **~69** SalesBrain tools. If you see ~22, the server couldn't
+  reach the kernel and served the old set — reload again in a few minutes, and
+  tell Amir if it persists.
+- `crm_whoami` should return your name and role. If you get
+  `read_only_context`, your account isn't linked and the message says how to fix
+  it.
