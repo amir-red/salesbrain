@@ -26,10 +26,10 @@ This is what lets the assistant know who you are. Until you do it, the bot will
 refuse to talk to you — deliberately, because acting without knowing who is
 asking would mean showing your deals to a stranger.
 
-1. Open **salescrm.chipchip.social** → sidebar → **Telegram**
+1. Open **salescrm.chipchip.social** → sidebar → **Profile** → **Telegram** tab
 2. Click **Generate linking code**. You'll get something like `LINK-A1B2C3`.
 3. Open Telegram, find **@MateSalesCRMBot**, and send: `/start LINK-A1B2C3`
-4. The bot confirms. Refresh the settings page to see "Linked".
+4. The bot confirms. Refresh the page to see "Linked".
 
 > **If the bot doesn't answer at all**, your Telegram account isn't on the
 > allow-list yet. Message the bot once anyway, then tell Amir — he reads your
@@ -53,9 +53,9 @@ separates real opportunities from pitch noise. Specifically:
   risk is yours to accept. Don't connect an account you can't afford to lose.
 - You can disconnect any time; syncing stops immediately.
 
-To connect: **salescrm.chipchip.social** → sidebar → **LinkedIn** → **Connect
-LinkedIn** → sign in on the provider's page (2FA included) → you land back on the
-settings page showing "Connected".
+To connect: **salescrm.chipchip.social** → sidebar → **Profile** → **LinkedIn**
+tab → **Connect LinkedIn** → sign in on the provider's page (2FA included) → you
+land back on the Profile page showing "Connected".
 
 Your inbox syncs every 30 minutes between 07:00 and 21:00.
 
@@ -216,7 +216,7 @@ assistant tells you honestly what's possible:
 
 ### 4.4 Uploading a list
 
-Import contacts at **Settings → Imports**. They're scored against your active ICP
+Import contacts at **Profile → Imports**. They're scored against your active ICP
 automatically, and the ones that fit become prospects. The rest stay as contacts
 — that's intentional, not a failure. If nothing clears the bar, your ICP and your
 list disagree.
@@ -268,7 +268,7 @@ isn't allow-listed. See §1.1.
 **"It says it can't see my deals"** — check with *"who am I?"*. If it names the
 wrong person, your Telegram is linked to the wrong CRM account.
 
-**"My LinkedIn inbox is empty"** — check **Settings → LinkedIn** shows Connected.
+**"My LinkedIn inbox is empty"** — check **Profile → LinkedIn** shows Connected.
 The sync runs every 30 minutes during working hours; it won't have anything the
 first few minutes after connecting.
 

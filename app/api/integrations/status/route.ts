@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth';
 
 /**
  * Returns which OAuth providers the current user is connected to.
- * Used by /integrations to show the correct connect/connected state
+ * Used by the Imports tab of /profile to show the correct connect/connected state
  * on page load (not just when arriving from the OAuth callback with ?connected=...).
  */
 export async function GET() {
