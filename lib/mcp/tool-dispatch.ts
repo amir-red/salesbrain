@@ -24,7 +24,7 @@ import { loadRelevantLessons } from '../lessons';
 import { appendMemory, removeMemory, loadMemoriesForPrompt } from '../memory';
 import { sendEmail } from '../email';
 import { kernelCall } from './kernel-rpc';
-import { TOOL_BY_NAME } from './tool-definitions';
+import { getToolDef } from './tool-definitions';
 import type { AuthContext } from './auth';
 import { enforceToolLimit } from './auth';
 import { nudgePendingBoardDecisions } from '../telegram-notifications';
@@ -46,7 +46,7 @@ export async function dispatchTool(
   args: Record<string, unknown>,
   ctx: AuthContext,
 ): Promise<DispatchResult> {
-  const def = TOOL_BY_NAME.get(toolName);
+  const def = await getToolDef(toolName);
   if (!def) return { status: 'error', error: `Unknown tool: ${toolName}` };
 
   // Admin gate: 'admin' tools reject non-admin callers.
@@ -114,6 +114,14 @@ async function run(
     case 'nudge_pending_votes':     return nudgePendingVotes(args, ctx);
 
     default:
+      // Everything the ring exposes. No per-tool arm is needed: the catalogue
+      // came from the ring, so the argument names the client saw are already
+      // the kernel's own — nothing to reshape. This is what lets a tool added
+      // to the ring work over MCP with no change here.
+      //
+      // The legacy arms above DO reshape (`new_gate` → `gate`,
+      // `type` → `type_`); they exist only for the old unprefixed names.
+      if (name.startsWith('crm_')) return kernelCall(name, args, ctx.user_id);
       throw new Error(`Handler missing for tool: ${name}`);
   }
 }

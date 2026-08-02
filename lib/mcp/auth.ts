@@ -48,9 +48,31 @@ const WINDOW_MS = 60 * 1000;
 const DEFAULT_LIMIT = 100;
 // Aggressive per-tool limits — some tools shouldn't be spammable at 100/min.
 // Applied on top of the token limit in tool-dispatch.ts.
+// Most tools need no sub-limit — the 100/min token ceiling covers them. These
+// do, because they either post where people will see it or spend a quota that
+// is NOT ours to spend: LinkedIn's per-account limits, Sales Navigator's
+// ~2.5k profiles/day, and a Bedrock call per invocation.
 export const PER_TOOL_LIMITS: Record<string, number> = {
   send_telegram: 10,   // 10/hour = ~0.17/min average; use 10/min ceiling here
   send_email: 20,
+
+  // Posts a card to the board group — the crm_ twin of send_telegram.
+  crm_request_board_review: 10,
+  crm_remind_board: 10,
+
+  // Provider-quota bound. Burning these does not just slow us down; it risks
+  // the LinkedIn account itself, which no rate limit can restore.
+  crm_prospect_search: 5,
+  crm_linkedin_backfill: 5,
+  crm_linkedin_inbox: 20,
+  crm_linkedin_thread: 30,
+  crm_linkedin_find_person: 10,
+
+  // One model call (or more) per invocation.
+  crm_research_company: 10,
+  crm_prospect_qualify: 20,
+  crm_prospect_auto_qualify: 5,
+  crm_linkedin_draft_reply: 20,
 };
 
 // Map<tokenId, number[]> — timestamps of requests within the last WINDOW_MS.
