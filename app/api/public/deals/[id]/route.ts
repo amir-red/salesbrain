@@ -19,7 +19,8 @@ import { SALES_GATES, GRANT_GATES } from '@/lib/gates';
  *   - `company`:  client-side metadata (name, website, size, industry, etc.)
  *   - `contact`:  primary deal contact (name, email, title, phone)
  *   - `insights`: agent-captured `deals.fields` raw, plus a curated subset
- *   - `onboarding`: pointer + state if a client_onboardings row exists
+ *   - `onboarding`: always null (retired 2026-08-03 — see `delivery`)
+ *   - `delivery`:   PM-tool state when the deal is linked to a customer
  *
  * Intentionally NOT returned:
  *   - score, risk, verdict (sales-internal scoring)
@@ -141,34 +142,17 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     );
     const acct = acctRows[0] ?? null;
 
-    // Pull the onboarding row if one exists (sales deals at G9 will have one).
-    // Joined with users for the PM's name/email (the internal user_id stays
-    // server-side; only the human-readable identity is exposed).
-    // `app_credentials` is intentionally OMITTED — sensitive even if it was
-    // cleared after the Stage-3 email send.
-    const { rows: onbRows } = await pool.query<OnboardingRow>(
-      `SELECT o.id, o.stage, o.status, o.deployment_plan, o.primary_contact_email,
-              u.name AS pm_name, u.email AS pm_email,
-              o.company_name, o.website, o.company_size, o.description,
-              o.executive_name, o.executive_email, o.executive_role,
-              o.project_manager_name, o.project_manager_email,
-              o.it_admin_name, o.it_admin_email,
-              o.server_setup_done, o.app_setup_done, o.download_url, o.email_sent_at,
-              o.briefing_meeting_at, o.briefing_notes,
-              o.employee_count, o.employee_setup_notes,
-              o.deployment_started_at,
-              o.audit_started_at, o.audit_notes,
-              o.pnl_ready_at, o.pnl_report_url,
-              o.stage1_completed_at, o.stage2_completed_at, o.stage3_completed_at,
-              o.stage4_completed_at, o.stage5_completed_at, o.stage6_completed_at,
-              o.stage7_completed_at, o.stage8_completed_at,
-              o.created_at, o.updated_at
-       FROM client_onboardings o
-       LEFT JOIN users u ON u.id = o.pm_user_id
-       WHERE o.deal_id = $1 LIMIT 1`,
+    // Delivery state from the PM tool, for deals that have left sales.
+    // Confirmed links only — an unconfirmed proposal must not surface.
+    const { rows: dlRows } = await pool.query(
+      `SELECT dl.pmi_customer_id, dl.pmi_name, dl.status, dl.step_num, dl.step_title,
+              dl.health_level, dl.health_reasons, dl.pm, dl.last_contact_at,
+              dl.expected_pilot_end, dl.open_risks, dl.synced_at
+       FROM delivery_links dl
+       WHERE dl.deal_id = $1 AND dl.confirmed_at IS NOT NULL LIMIT 1`,
       [id]
     );
-    const onb = onbRows[0] ?? null;
+    const dl = dlRows[0] ?? null;
 
     // Captured insights — curate a subset that's safe to surface externally,
     // plus expose the full `fields` raw under `insights.raw` for callers that
@@ -188,7 +172,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       payment_terms:   getStr(fields.payment_terms),
       desktop_heavy_roles: getStr(fields.desktop_heavy_roles),
       pilot_or_full:   getStr(fields.pilot_or_full),
-      deployment_plan: (onb?.deployment_plan ?? getStr(fields.deployment_plan)) as 'on_premise' | 'saas_cloud' | null,
+      // The onboarding row held a client-edited copy of this and won the tie;
+      // with that table retired the sales-captured field is the only source
+      // left. Same value in practice — the client form pre-filled from it.
+      deployment_plan: getStr(fields.deployment_plan) as 'on_premise' | 'saas_cloud' | null,
       // Full agent-captured payload for callers that want the raw set
       raw: fields,
     };
@@ -224,93 +211,26 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         title: getStr(fields.contact_title),
       },
       insights,
-      onboarding: onb ? {
-        // Top-level identity + progress (unchanged from prior schema —
-        // existing callers keep working).
-        id: onb.id,
-        stage: onb.stage,
-        status: onb.status,
-        deployment_plan: onb.deployment_plan,
-        primary_contact_email: onb.primary_contact_email,
-        created_at: onb.created_at,
-        updated_at: onb.updated_at,
+      // Retired 2026-08-03. client_onboardings was dropped when the PM tool
+      // took over onboarding; this key stays so existing callers keep parsing
+      // the same shape instead of hitting an undefined. Use `delivery` below.
+      onboarding: null,
 
-        // Assigned internal project manager — human-readable only.
-        pm: (onb.pm_name || onb.pm_email) ? {
-          name: onb.pm_name,
-          email: onb.pm_email,
-        } : null,
-
-        // The onboarding row's *own* copy of the company profile. Editable
-        // by the client via the public form, so it may diverge from the
-        // sales-side `company` block above.
-        company_profile: {
-          company_name: onb.company_name,
-          website: onb.website,
-          company_size: onb.company_size,
-          description: onb.description,
-          primary_contact_email: onb.primary_contact_email,
-        },
-
-        // Stage 2 — the 3 role contacts the client submitted (or that the
-        // PM filled inline).
-        contacts: {
-          executive: contactBlock(onb.executive_name, onb.executive_email, onb.executive_role),
-          project_manager: contactBlock(onb.project_manager_name, onb.project_manager_email, null),
-          it_admin: contactBlock(onb.it_admin_name, onb.it_admin_email, null),
-        },
-
-        // Stage 3 — access & comms. `app_credentials` is intentionally
-        // not exposed (sensitive). `email_sent_at` tells you when the
-        // IT-admin email went out.
-        access: {
-          server_setup_done: onb.server_setup_done,
-          app_setup_done: onb.app_setup_done,
-          download_url: onb.download_url,
-          email_sent_at: onb.email_sent_at,
-        },
-
-        // Stage 4 — briefing meeting
-        briefing: {
-          meeting_at: onb.briefing_meeting_at,
-          notes: onb.briefing_notes,
-        },
-
-        // Stage 5 — employee setup
-        employees: {
-          count: onb.employee_count,
-          setup_notes: onb.employee_setup_notes,
-        },
-
-        // Stage 6 — deployment
-        deployment: {
-          started_at: onb.deployment_started_at,
-        },
-
-        // Stage 7 — automated audit
-        audit: {
-          started_at: onb.audit_started_at,
-          notes: onb.audit_notes,
-        },
-
-        // Stage 8 — P&L
-        pnl: {
-          ready_at: onb.pnl_ready_at,
-          report_url: onb.pnl_report_url,
-        },
-
-        // Per-stage completion timestamps (unchanged — drives the timeline
-        // checkmarks in the UI).
-        stage_completions: {
-          stage1: onb.stage1_completed_at,
-          stage2: onb.stage2_completed_at,
-          stage3: onb.stage3_completed_at,
-          stage4: onb.stage4_completed_at,
-          stage5: onb.stage5_completed_at,
-          stage6: onb.stage6_completed_at,
-          stage7: onb.stage7_completed_at,
-          stage8: onb.stage8_completed_at,
-        },
+      // Delivery state, as the PM tool reports it. Only CONFIRMED links appear
+      // — an unconfirmed proposal is a guess and must not reach a consumer.
+      delivery: dl ? {
+        pmi_customer_id: dl.pmi_customer_id,
+        name: dl.pmi_name,
+        status: dl.status,
+        step: dl.step_num,
+        step_title: dl.step_title,
+        health: dl.health_level,
+        health_reasons: dl.health_reasons ?? [],
+        pm: dl.pm,
+        last_contact_at: dl.last_contact_at,
+        expected_pilot_end: dl.expected_pilot_end,
+        open_risks: dl.open_risks,
+        synced_at: dl.synced_at,
       } : null,
     });
   } catch (err) {
@@ -327,17 +247,6 @@ function getStr(v: unknown): string | null {
   return String(v);
 }
 
-/** Helper for the 3 contact blocks in the onboarding response. Returns null
- *  when all three values are empty so the caller can easily detect "this
- *  contact wasn't submitted yet". */
-function contactBlock(
-  name: string | null,
-  email: string | null,
-  role: string | null,
-): { name: string | null; email: string | null; role: string | null } | null {
-  if (!name && !email && !role) return null;
-  return { name, email, role };
-}
 
 const PUBLIC_MAIL_DOMAINS = /^(gmail|yahoo|hotmail|outlook|icloud|proton|aol)\./i;
 function buildWebsiteFromEmail(email: string | null): string | null {
