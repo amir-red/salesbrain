@@ -141,13 +141,22 @@ export async function GET(req: NextRequest) {
     );
     const total = Number.parseInt(totalQ.rows[0]?.n ?? '0', 10);
 
-    // Data page. has_onboarding is computed via EXISTS — cheap on the
-    // (deal_id) unique index of client_onboardings.
+    // Data page. `has_onboarding` now means "this deal is linked to a customer
+    // in the PM tool". It used to mean "a client_onboardings row exists", and
+    // that table was retired on 2026-08-03 when the PM tool took over
+    // onboarding. The field NAME is kept deliberately: this is a published
+    // contract and the PM tool itself consumes it, so renaming would break the
+    // one caller we have. Both meanings answer the same question — has this
+    // deal left sales?
+    //
+    // Only CONFIRMED links count, the same rule as everywhere else: an
+    // unconfirmed proposal is a guess and must not change what anyone sees.
     const dataValues = [...values, limit, offset];
     const { rows } = await pool.query<ListRow>(
       `SELECT d.id, d.name, d.company, d.deal_type, d.gate, d.value, d.currency,
               d.gate_entered_at, d.updated_at,
-              EXISTS(SELECT 1 FROM client_onboardings o WHERE o.deal_id = d.id) AS has_onboarding
+              EXISTS(SELECT 1 FROM delivery_links dl
+                      WHERE dl.deal_id = d.id AND dl.confirmed_at IS NOT NULL) AS has_onboarding
        FROM deals d
        ${where}
        ORDER BY d.updated_at DESC
