@@ -139,7 +139,10 @@ function HandoverPanel({ deal, users, onUpdate }: {
   deal: Signable; users: User[]; onUpdate: () => void;
 }) {
   const [signing, setSigning] = useState(false);
-  const [signedAt, setSignedAt] = useState<string>('');
+  // Default to today so the native date picker shows a real date instead
+  // of the empty dd/mm/yyyy placeholder (which reads as a text field on
+  // first glance). Users can still backdate via the picker or keyboard.
+  const [signedAt, setSignedAt] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [newLeadId, setNewLeadId] = useState<string>(deal.lead_id ?? '');
   const [reason, setReason] = useState<string>('');
   const [busy, setBusy] = useState(false);
