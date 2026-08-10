@@ -87,6 +87,10 @@ export async function notifySlaBreachesForAllUsers(): Promise<{ notified: number
       FROM deals d
       WHERE d.status = 'active'
         AND d.lead_id IS NOT NULL
+        -- Signed grants live on a next-report / next-resource clock (crm_grant_signals);
+        -- the gate-SLA breach is meaningless once G9 signs and would spam the lead
+        -- every day about a G10 grant that's operating normally for years.
+        AND d.contract_signed_at IS NULL
     )
     SELECT d.lead_id AS user_id, l.telegram_chat_id::text AS chat_id,
            d.id AS deal_id, d.name AS deal_name, d.company, d.gate, d.days_in_gate

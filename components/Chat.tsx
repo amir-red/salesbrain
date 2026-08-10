@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, KeyboardEvent, useMemo } from 'react';
 import Message, { MessageData, ToolEvent } from './Message';
-import { GATES, getMissingFields } from '@/lib/gates';
+import { getMissingFields, getPipeline } from '@/lib/gates';
 
 interface DealInfo {
   id: string;
@@ -19,6 +19,7 @@ interface DealInfo {
   flags: string[];
   fields: Record<string, unknown>;
   gate_entered_at: string;
+  deal_type?: 'sales' | 'grant';
 }
 
 interface ChatProps {
@@ -30,10 +31,14 @@ interface ChatProps {
 function getSuggestions(deal: DealInfo | null | undefined, messageCount: number): string[] {
   if (!deal) return [];
 
-  const gate = GATES[deal.gate - 1];
+  // Pipeline-aware — sales gates and grant gates differ in count (9 vs 10)
+  // and SLA values. GATES[i] for a grant G10 was undefined and crashed the
+  // ratio calc below.
+  const pipeline = getPipeline(deal.deal_type);
+  const gate = pipeline[deal.gate - 1];
   if (!gate) return [];
 
-  const missing = getMissingFields(deal.gate, deal.fields || {});
+  const missing = getMissingFields(deal.gate, deal.fields || {}, deal.deal_type);
   const daysInGate = Math.floor((Date.now() - new Date(deal.gate_entered_at).getTime()) / 86400000);
   const slaRatio = daysInGate / gate.slaDays;
 

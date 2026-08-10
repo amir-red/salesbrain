@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { GATES } from '@/lib/gates';
+import { getPipeline } from '@/lib/gates';
 import Timeline from './Timeline';
 
 interface Deal {
@@ -27,6 +27,7 @@ interface Deal {
   fields: Record<string, unknown>;
   gate_entered_at: string;
   created_at: string;
+  deal_type?: 'sales' | 'grant';
 }
 
 interface User {
@@ -110,10 +111,11 @@ function VerdictBadge({ verdict }: { verdict: string | null }) {
   );
 }
 
-function GateStrip({ currentGate }: { currentGate: number }) {
+function GateStrip({ currentGate, dealType }: { currentGate: number; dealType?: 'sales' | 'grant' }) {
+  const pipeline = getPipeline(dealType);
   return (
     <div className="flex gap-1">
-      {GATES.map((g) => (
+      {pipeline.map((g) => (
         <div
           key={g.number}
           className="flex-1 h-2 rounded-full"
@@ -261,8 +263,11 @@ export default function DealPanel({ deal, onDealUpdate }: DealPanelProps) {
 
   const fields = deal.fields || {};
   const fieldKeys = Object.keys(fields);
-  const totalRequired = GATES[1]?.requiredFields?.length || 7;
-  const filledRequired = GATES[1]?.requiredFields?.filter((f) => fields[f] !== undefined && fields[f] !== null && fields[f] !== '')?.length || 0;
+  // Pipeline-aware — G2 differs between sales and grant.
+  const pipeline = getPipeline(deal.deal_type);
+  const g2 = pipeline[1];
+  const totalRequired = g2?.requiredFields?.length || 7;
+  const filledRequired = g2?.requiredFields?.filter((f) => fields[f] !== undefined && fields[f] !== null && fields[f] !== '')?.length || 0;
 
   return (
     <div className="h-full overflow-y-auto p-4 space-y-6">
@@ -272,13 +277,13 @@ export default function DealPanel({ deal, onDealUpdate }: DealPanelProps) {
         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{deal.company}</p>
       </div>
 
-      {/* Gate strip */}
+      {/* Gate strip — pipeline-aware (sales vs grant) */}
       <div>
         <div className="flex justify-between text-xs mb-1" style={{ color: 'var(--text-muted)' }}>
-          <span>G{deal.gate}: {GATES[deal.gate - 1]?.name}</span>
-          <span>G9</span>
+          <span>G{deal.gate}: {pipeline[deal.gate - 1]?.name}</span>
+          <span>G{pipeline.length}</span>
         </div>
-        <GateStrip currentGate={deal.gate} />
+        <GateStrip currentGate={deal.gate} dealType={deal.deal_type} />
       </div>
 
       {/* Score + Risk */}

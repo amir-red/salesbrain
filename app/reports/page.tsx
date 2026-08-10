@@ -41,9 +41,15 @@ export default async function ReportsPage() {
     pool.query('SELECT COUNT(*)::int as count FROM deals WHERE gate < 9 AND deleted_at IS NULL'),
     pool.query('SELECT COALESCE(SUM(value), 0)::numeric as total FROM deals WHERE gate < 9 AND deleted_at IS NULL'),
     pool.query(
+      // Signed grants (contract_signed_at IS NOT NULL) don't count as
+      // "overdue" from a gate-SLA perspective — they're in Stage 2 where
+      // the /grants dashboard tracks per-report/per-resource dates. This
+      // avoids reporting all 9 real grants as "overdue" for sitting at
+      // G10 for a year (which they always would under the old SLA logic).
       `SELECT COUNT(*)::int as count FROM deals
        WHERE gate < 9
        AND deleted_at IS NULL
+       AND contract_signed_at IS NULL
        AND EXTRACT(EPOCH FROM (now() - gate_entered_at))/86400 >
          CASE gate
            WHEN 1 THEN 3 WHEN 2 THEN 10 WHEN 3 THEN 5 WHEN 4 THEN 14

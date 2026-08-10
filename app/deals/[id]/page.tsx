@@ -7,7 +7,8 @@ import Sidebar from '@/components/Sidebar';
 import Timeline from '@/components/Timeline';
 import DealPricingPanel from '@/components/DealPricingPanel';
 import MarkAsLostModal from '@/components/MarkAsLostModal';
-import { GATES } from '@/lib/gates';
+import GrantStage2Panels from '@/components/GrantStage2Panels';
+import { getPipeline, SALES_GATES } from '@/lib/gates';
 
 interface Deal {
   id: string;
@@ -34,12 +35,18 @@ interface Deal {
   gate_entered_at: string;
   user_id: string;
   deal_type: 'sales' | 'grant';
-  status?: 'active' | 'lost';
+  status?: 'active' | 'won' | 'lost' | 'cancelled';
+  contract_signed_at?: string | null;
+  won_at?: string | null;
+  cancelled_at?: string | null;
+  cancelled_reason?: string | null;
   deleted_at?: string | null;
   deleted_by_name?: string | null;
   created_at: string;
   updated_at: string;
 }
+
+interface UserRow { id: string; name: string; email: string }
 
 const GRANT_MONEY_FIELDS = [
   'grant_amount_min',
@@ -94,6 +101,7 @@ export default function DealViewPage() {
   const dealId = params.id as string;
   const [deal, setDeal] = useState<Deal | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [markLostOpen, setMarkLostOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -107,9 +115,11 @@ export default function DealViewPage() {
     Promise.all([
       fetchDeal(),
       fetch('/api/auth/me').then((r) => r.ok ? r.json() : null),
-    ]).then(([dealData, userData]) => {
+      fetch('/api/users').then((r) => r.ok ? r.json() : []),
+    ]).then(([dealData, userData, userList]) => {
       setDeal(dealData);
       setCurrentUser(userData);
+      setUsers(Array.isArray(userList) ? userList : []);
       setLoading(false);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -165,7 +175,10 @@ export default function DealViewPage() {
     currentUser?.userId === deal.lead_id;
   const isLost = deal.status === 'lost';
   const isDeleted = !!deal.deleted_at;
-  const gate = GATES[deal.gate - 1];
+  // Pipeline-aware gate lookup — was hardcoded to SALES_GATES via the GATES
+  // alias, silently mislabelling grant deals with sales gate names.
+  const pipeline = getPipeline(deal.deal_type);
+  const gate = pipeline[deal.gate - 1];
   const fields = deal.fields || {};
 
   // Money-fields enforcement for grants — show banner if any are missing.
@@ -177,8 +190,11 @@ export default function DealViewPage() {
       })
     : [];
   const fieldKeys = Object.keys(fields);
-  const totalRequired = GATES[1]?.requiredFields?.length || 7;
-  const filledRequired = GATES[1]?.requiredFields?.filter((f) => fields[f] !== undefined && fields[f] !== null && fields[f] !== '')?.length || 0;
+  // G2 field-completion probe. Sales G2 has 7 required fields; grant G2 has 6
+  // (different set entirely). The old code used SALES_GATES[1] for both.
+  const g2 = pipeline[1];
+  const totalRequired = g2?.requiredFields?.length || 7;
+  const filledRequired = g2?.requiredFields?.filter((f) => fields[f] !== undefined && fields[f] !== null && fields[f] !== '')?.length || 0;
 
   const riskColors: Record<string, string> = { low: 'var(--green)', medium: 'var(--yellow)', high: 'var(--orange)', critical: 'var(--red)' };
   const verdictColors: Record<string, string> = { STRONG: 'var(--green)', PROCEED_WITH_CAUTION: 'var(--yellow)', WEAK: 'var(--orange)', WALK_AWAY: 'var(--red)' };
@@ -388,14 +404,14 @@ export default function DealViewPage() {
             </div>
           </div>
 
-          {/* Gate strip */}
+          {/* Gate strip — uses pipeline for correct sales-vs-grant gate names */}
           <div>
             <div className="flex justify-between text-xs mb-2" style={{ color: 'var(--text-muted)' }}>
               <span>G{deal.gate}: {gate?.name}</span>
-              <span>G9: Project Handover</span>
+              <span>G{pipeline.length}: {pipeline[pipeline.length - 1]?.name}</span>
             </div>
             <div className="flex gap-1.5">
-              {GATES.map((g) => (
+              {pipeline.map((g) => (
                 <div
                   key={g.number}
                   className="flex-1 h-3 rounded-full"
@@ -470,6 +486,15 @@ export default function DealViewPage() {
                   currency: deal.currency,
                 }}
               />
+            </div>
+          )}
+
+          {/* Grant Stage 2 — signature handover, resources, reports, evidence.
+              Panels appear only for grant deals; the resource/report/evidence
+              trio unlocks once contract_signed_at is set. */}
+          {deal.deal_type === 'grant' && (
+            <div className="mb-6">
+              <GrantStage2Panels deal={deal} users={users} onUpdate={reload} />
             </div>
           )}
 

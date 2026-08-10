@@ -64,7 +64,8 @@ interface DealRow {
   gate_entered_at: string;
   deal_type: 'sales' | 'grant';
   days_in_gate_raw: string;
-  status: 'active' | 'lost';
+  status: 'active' | 'won' | 'lost' | 'cancelled';
+  contract_signed_at: string | null;
 }
 
 function buildGateData(deals: DealRow[], gates: typeof SALES_GATES, colors: Record<number, string>) {
@@ -86,7 +87,12 @@ function buildGateData(deals: DealRow[], gates: typeof SALES_GATES, colors: Reco
         gate_entered_at: d.gate_entered_at,
         days_in_gate: Math.floor(Number(d.days_in_gate_raw)),
         sla_days: g.slaDays,
-        is_overdue: Math.floor(Number(d.days_in_gate_raw)) > g.slaDays,
+        // Signed grants live on a next-report / next-resource clock (see the
+        // /grants dashboard) — the gate SLA is meaningless once G9 signs, so
+        // don't flag them as "overdue" for sitting at G10 for years. Real
+        // deadline-based warnings surface via crm_grant_signals + Telegram DM.
+        is_overdue: !d.contract_signed_at
+          && Math.floor(Number(d.days_in_gate_raw)) > g.slaDays,
         is_board: g.isBoard,
         // Forward to FilterBar so it can hide lost from the default view
         // and surface them on a dedicated "Lost" chip.
@@ -202,7 +208,7 @@ export default async function PipelinePage() {
   // client-side. Default view ("All") excludes lost.
   const { rows: deals } = await pool.query<DealRow>(
     `SELECT d.id, d.name, d.company, d.gate, d.score, d.risk, d.value, d.currency,
-     d.owner, d.gate_entered_at, d.lead_id, d.deal_type, d.status,
+     d.owner, d.gate_entered_at, d.lead_id, d.deal_type, d.status, d.contract_signed_at,
      u.name as lead_name,
      EXTRACT(EPOCH FROM (now() - d.gate_entered_at))/86400 as days_in_gate_raw
      FROM deals d
