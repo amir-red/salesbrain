@@ -33,7 +33,13 @@ interface Gate {
   description: string | null;
   required_fields: string[];
   deals: Deal[];
+  /** Optional column-header label override. Pseudo-columns in the grants
+   * stage view set this to a plain name ("Securing") so the header
+   * doesn't render as "G1: Securing" — which reads like a real gate. */
+  label?: string;
 }
+
+type GrantView = 'stages' | 'gates';
 
 const FILTERS = ['All', 'My deals', 'Overdue', 'Board pending', 'Lost'] as const;
 
@@ -101,14 +107,22 @@ type PipelineTab = 'sales' | 'grant';
 interface FilterBarProps {
   salesGates: Gate[];
   grantGates: Gate[];
+  /** Grants collapsed into 2 stage columns (Securing / Disbursement) —
+   * Hannes's default view. `grantGates` (10 columns) stays available
+   * behind the "Gates" toggle for admins who want to see the full gate
+   * breakdown. */
+  grantStages: Gate[];
   currentUserId: string;
 }
 
-export default function FilterBar({ salesGates, grantGates, currentUserId }: FilterBarProps) {
+export default function FilterBar({ salesGates, grantGates, grantStages, currentUserId }: FilterBarProps) {
   const [pipeline, setPipeline] = useState<PipelineTab>('sales');
   const [filter, setFilter] = useState<typeof FILTERS[number]>('All');
+  const [grantView, setGrantView] = useState<GrantView>('stages');
 
-  const activeGates = pipeline === 'sales' ? salesGates : grantGates;
+  const activeGates = pipeline === 'sales'
+    ? salesGates
+    : (grantView === 'stages' ? grantStages : grantGates);
 
   const filteredGates = activeGates.map((g) => ({
     ...g,
@@ -156,6 +170,30 @@ export default function FilterBar({ salesGates, grantGates, currentUserId }: Fil
         >
           Grants ({grantCount})
         </button>
+
+        {/* Grants-only: toggle between the 2-stage default view (Hannes's ask)
+            and the full 10-gate view for admins drilling in. Not shown on
+            sales — sales stays 9-gate always per Hannes's spec. */}
+        {pipeline === 'grant' && (
+          <div className="ml-auto flex rounded-lg overflow-hidden text-xs" style={{ border: '1px solid var(--border)' }}>
+            {(['stages', 'gates'] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setGrantView(v)}
+                className="px-3 py-1.5 font-medium transition-colors capitalize"
+                style={{
+                  background: grantView === v ? 'var(--bg-input)' : 'transparent',
+                  color: grantView === v ? 'var(--text)' : 'var(--text-muted)',
+                }}
+                title={v === 'stages'
+                  ? 'Show 2 stages: Securing / Disbursement, Delivery & Reporting'
+                  : 'Show all 10 underlying gates (G1..G10)'}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Filter chips */}
@@ -176,17 +214,24 @@ export default function FilterBar({ salesGates, grantGates, currentUserId }: Fil
         ))}
       </div>
 
-      {/* Kanban columns */}
+      {/* Kanban columns. Column width grows in stage view (2 columns to fill
+          the space, no benefit to keeping them narrow like the 9/10-gate view). */}
       <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: 'calc(100vh - 200px)' }}>
-        {filteredGates.map((g) => (
-          <div key={g.number} className="flex-shrink-0 w-56 flex flex-col">
+        {filteredGates.map((g) => {
+          const isStageColumn = !!g.label;   // pseudo-columns from buildGrantStageData
+          const headerText = g.label || `G${g.number}: ${g.name}`;
+          return (
+          <div
+            key={g.number}
+            className={`flex-shrink-0 flex flex-col ${isStageColumn ? 'w-[26rem]' : 'w-56'}`}
+          >
             {/* Column header */}
             <div
               className="rounded-t-lg px-3 py-2 flex items-center justify-between gap-1"
               style={{ background: g.color }}
             >
-              <span className="text-xs font-medium text-white truncate flex-1" title={`G${g.number}: ${g.name}`}>
-                G{g.number}: {g.name}
+              <span className="text-xs font-medium text-white truncate flex-1" title={headerText}>
+                {headerText}
               </span>
               <GateInfoTooltip gate={g} />
               <span className="text-[10px] bg-white/20 text-white px-1.5 py-0.5 rounded-full flex-shrink-0">
@@ -206,7 +251,8 @@ export default function FilterBar({ salesGates, grantGates, currentUserId }: Fil
               ))}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

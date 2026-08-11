@@ -113,6 +113,76 @@ function buildGateData(deals: DealRow[], gates: typeof SALES_GATES, colors: Reco
   });
 }
 
+/** Grants only — collapse 10 gates into 2 visible stages per Hannes's spec.
+ *
+ * Splitter: `contract_signed_at`. Null → Securing (still trying to win it);
+ * set → Disbursement, Delivery & Reporting (now delivering on it). The
+ * underlying gate machinery is untouched — board reviews still fire at
+ * G3/G7/G9, money-first still blocks at G1, gate_events still records
+ * every transition. Individual gate stays visible on each card badge
+ * (`sla_days`/`days_in_gate` come from the real gate); this only rearranges
+ * how the kanban groups the cards for at-a-glance oversight.
+ *
+ * Emits the same Gate shape as buildGateData so FilterBar renders the two
+ * as regular columns. `label` overrides the "G{n}: {name}" header so the
+ * user sees "Securing" instead of "G1: Securing".
+ */
+function buildGrantStageData(deals: DealRow[]) {
+  const securing = deals.filter((d) => !d.contract_signed_at);
+  const delivering = deals.filter((d) => !!d.contract_signed_at);
+
+  function toCard(d: DealRow) {
+    const g = GRANT_GATES.find((x) => x.number === d.gate);
+    const days = Math.floor(Number(d.days_in_gate_raw));
+    return {
+      id: d.id,
+      name: d.name,
+      company: d.company,
+      gate: d.gate,
+      score: d.score,
+      risk: d.risk,
+      value: d.value,
+      currency: d.currency || 'USD',
+      owner: d.owner,
+      lead_id: d.lead_id,
+      lead_name: d.lead_name,
+      gate_entered_at: d.gate_entered_at,
+      days_in_gate: days,
+      sla_days: g?.slaDays ?? 0,
+      // Signed grants are on a next-report/next-resource clock (see /grants
+      // dashboard); they should never be flagged SLA-overdue by the gate clock.
+      is_overdue: !d.contract_signed_at && days > (g?.slaDays ?? 0),
+      is_board: g?.isBoard ?? false,
+      is_lost: d.status === 'lost',
+    };
+  }
+
+  return [
+    {
+      number: 1,
+      label: 'Securing',
+      name: 'Securing',
+      color: '#1D4ED8',
+      sla_days: 0,
+      is_board: false,
+      description: 'Actively pursuing the grant — opportunity through pre-signature G9. The board reviews at G3/G7/G9 still fire from inside this stage.',
+      required_fields: [],
+      deals: securing.map(toCard),
+    },
+    {
+      number: 2,
+      label: 'Disbursement, Delivery & Reporting',
+      name: 'Disbursement, Delivery & Reporting',
+      color: '#166534',
+      sla_days: 0,
+      is_board: false,
+      description: 'Signed and now delivering — cash tranches, credit utilization, reports. Real deadlines surface on the /grants dashboard and via daily Telegram DMs.',
+      required_fields: [],
+      deals: delivering.map(toCard),
+    },
+  ];
+}
+
 // ─── Aggregates ─────────────────────────────────────────────────
 
 interface PipelineSummary {
@@ -225,6 +295,7 @@ export default async function PipelinePage() {
 
   const salesGateData = buildGateData(salesDeals, SALES_GATES, SALES_GATE_COLORS);
   const grantGateData = buildGateData(grantDeals, GRANT_GATES, GRANT_GATE_COLORS);
+  const grantStageData = buildGrantStageData(grantDeals);
 
   return (
     <div className="flex h-screen">
@@ -255,6 +326,7 @@ export default async function PipelinePage() {
           <FilterBar
             salesGates={salesGateData}
             grantGates={grantGateData}
+            grantStages={grantStageData}
             currentUserId={userId}
           />
         </div>
