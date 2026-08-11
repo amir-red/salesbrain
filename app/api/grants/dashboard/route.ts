@@ -15,8 +15,8 @@ export async function GET(req: NextRequest) {
   const days = Number(req.nextUrl.searchParams.get('days') || '30');
   try {
     const [risk, due] = await Promise.all([
-      kernelCall('grants_resources_at_risk', {}, session.userId),
-      kernelCall('grants_reports_due', { days }, session.userId),
+      kernelCall('crm_grants_at_risk', {}, session.userId),
+      kernelCall('crm_grants_reports_due', { days }, session.userId),
     ]);
     return Response.json({ resources_at_risk: risk, reports_due: due });
   } catch (err) {

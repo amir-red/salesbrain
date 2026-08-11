@@ -23,5 +23,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id: deal_id } = await params;
   let body: Record<string, unknown> = {};
   try { body = await req.json(); } catch { /* empty body is fine — signed_at defaults to now */ }
-  return callGrantTool(session, 'sign_grant_agreement', { deal_id, ...body });
+  return callGrantTool(session, 'crm_sign_grant_agreement', { deal_id, ...body });
 }

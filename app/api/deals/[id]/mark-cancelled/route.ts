@@ -18,5 +18,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   let body: { reason?: string } = {};
   try { body = await req.json(); } catch { return Response.json({ error: 'Invalid JSON' }, { status: 400 }); }
   if (!body.reason?.trim()) return Response.json({ error: 'reason is required' }, { status: 400 });
-  return callGrantTool(session, 'mark_deal_cancelled', { deal_id, reason: body.reason.trim() });
+  return callGrantTool(session, 'crm_mark_deal_cancelled', { deal_id, reason: body.reason.trim() });
 }

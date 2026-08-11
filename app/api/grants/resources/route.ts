@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 });
   const deal_id = req.nextUrl.searchParams.get('deal_id');
   if (!deal_id) return Response.json({ error: 'deal_id required' }, { status: 400 });
-  return callGrantTool(session, 'grant_resource_list', { deal_id });
+  return callGrantTool(session, 'crm_grant_resource_list', { deal_id });
 }
 
 export async function POST(req: NextRequest) {
@@ -24,5 +24,5 @@ export async function POST(req: NextRequest) {
   try { body = await req.json(); } catch { return Response.json({ error: 'Invalid JSON' }, { status: 400 }); }
   if (!body.deal_id) return Response.json({ error: 'deal_id required' }, { status: 400 });
   if (!body.resource_type) return Response.json({ error: 'resource_type required' }, { status: 400 });
-  return callGrantTool(session, 'grant_resource_add', body);
+  return callGrantTool(session, 'crm_grant_resource_add', body);
 }
