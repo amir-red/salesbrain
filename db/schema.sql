@@ -12,7 +12,7 @@ CREATE TABLE deals (
   contact_phone TEXT,
   gate          INTEGER NOT NULL DEFAULT 1 CHECK (gate BETWEEN 1 AND 10),
   gate_entered_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  deal_type     TEXT NOT NULL DEFAULT 'sales' CHECK (deal_type IN ('sales', 'grant')),
+  deal_type     TEXT NOT NULL DEFAULT 'sales' CHECK (deal_type IN ('sales', 'grant', 'ai_credit')),
   score         INTEGER CHECK (score BETWEEN 0 AND 100),
   risk          TEXT CHECK (risk IN ('low', 'medium', 'high', 'critical')),
   verdict       TEXT CHECK (verdict IN ('STRONG', 'PROCEED_WITH_CAUTION', 'WEAK', 'WALK_AWAY', 'STRONG_FIT', 'WEAK_FIT', 'DO_NOT_PURSUE')),
@@ -305,7 +305,7 @@ CREATE TABLE IF NOT EXISTS lessons_learned (
   -- lesson stays meaningful even if the deal record is later edited or
   -- deleted. Agent reasoning later filters by deal_type + gate_lost_at +
   -- value, so these fields need to live ON the lesson row.
-  deal_type TEXT NOT NULL CHECK (deal_type IN ('sales', 'grant')),
+  deal_type TEXT NOT NULL CHECK (deal_type IN ('sales', 'grant', 'ai_credit')),
   gate_lost_at SMALLINT NOT NULL,
   value NUMERIC,
   currency TEXT,
@@ -743,3 +743,15 @@ CREATE TRIGGER trg_grant_reports_updated
     BEFORE UPDATE ON grant_reports
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+-- Migration 031: AI credits — a third deal_type alongside sales + grant.
+-- Full rationale: db/migrations/031_ai_credits.sql. Existing deals CHECK
+-- above already includes 'ai_credit' from the widened form; below adds
+-- the two new columns (applicant_entity + grant_resources.provider).
+
+ALTER TABLE deals ADD COLUMN IF NOT EXISTS applicant_entity TEXT
+    CHECK (applicant_entity IS NULL
+           OR applicant_entity IN ('chipchip','zeami','both'));
+
+ALTER TABLE grant_resources ADD COLUMN IF NOT EXISTS provider TEXT;
+CREATE INDEX IF NOT EXISTS idx_grant_resources_provider
+    ON grant_resources(provider) WHERE provider IS NOT NULL;

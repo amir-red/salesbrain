@@ -184,7 +184,7 @@ const WRITE_TOOLS: McpToolDef[] = [
       properties: {
         name: { type: 'string' },
         company: { type: 'string' },
-        deal_type: { type: 'string', enum: ['sales', 'grant'] },
+        deal_type: { type: 'string', enum: ['sales', 'grant', 'ai_credit'] },
         contact_name: { type: 'string' },
         contact_email: { type: 'string' },
         value: { type: 'number' },

@@ -12,7 +12,7 @@ import { SALES_GATES, GRANT_GATES } from '@/lib/gates';
  * Auth: shared `ONBOARDING_API_KEY` (see lib/public-api.ts).
  *
  * Query params:
- *   - `deal_type`     'sales' | 'grant'                          filter by pipeline
+ *   - `deal_type`     'sales' | 'grant' | 'ai_credit'                          filter by pipeline
  *   - `gate`          integer                                    filter by exact gate
  *   - `status`        'won' | 'active' | 'all' (default: 'all')  shorthand: 'won' = at final gate,
  *                                                                'active' = below final gate
@@ -44,7 +44,7 @@ interface ListRow {
   id: string;
   name: string;
   company: string;
-  deal_type: 'sales' | 'grant';
+  deal_type: 'sales' | 'grant' | 'ai_credit';
   gate: number;
   value: string | null;
   currency: string | null;
@@ -199,7 +199,7 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
 }
 
-function gateName(type: 'sales' | 'grant', gate: number): string | null {
+function gateName(type: 'sales' | 'grant' | 'ai_credit', gate: number): string | null {
   const pipeline = type === 'grant' ? GRANT_GATES : SALES_GATES;
   return pipeline.find((g) => g.number === gate)?.name ?? null;
 }

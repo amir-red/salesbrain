@@ -8,6 +8,7 @@ import Timeline from '@/components/Timeline';
 import DealPricingPanel from '@/components/DealPricingPanel';
 import MarkAsLostModal from '@/components/MarkAsLostModal';
 import GrantStage2Panels from '@/components/GrantStage2Panels';
+import AiCreditPanel from '@/components/AiCreditPanel';
 import { getPipeline, SALES_GATES } from '@/lib/gates';
 
 interface Deal {
@@ -34,7 +35,7 @@ interface Deal {
   fields: Record<string, unknown>;
   gate_entered_at: string;
   user_id: string;
-  deal_type: 'sales' | 'grant';
+  deal_type: 'sales' | 'grant' | 'ai_credit';
   status?: 'active' | 'won' | 'lost' | 'cancelled';
   contract_signed_at?: string | null;
   won_at?: string | null;
@@ -495,6 +496,14 @@ export default function DealViewPage() {
           {deal.deal_type === 'grant' && (
             <div className="mb-6">
               <GrantStage2Panels deal={deal} users={users} onUpdate={reload} />
+            </div>
+          )}
+
+          {/* AI-credit panel — provider info, applicant, credit balance
+              and expiration. Simpler than grants: no reports, no handover. */}
+          {deal.deal_type === 'ai_credit' && (
+            <div className="mb-6">
+              <AiCreditPanel deal={deal} />
             </div>
           )}
 

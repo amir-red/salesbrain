@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   const rootCause = url.searchParams.get('root_cause') || 'all';
   const limit = Math.max(1, Math.min(200, Number(url.searchParams.get('limit') || '100')));
 
-  const validDealTypes = new Set(['sales', 'grant', 'all']);
+  const validDealTypes = new Set(['sales', 'grant', 'ai_credit', 'all']);
   if (!validDealTypes.has(dealType)) {
     return NextResponse.json({ error: `Invalid deal_type: ${dealType}` }, { status: 400 });
   }

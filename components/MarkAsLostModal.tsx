@@ -28,7 +28,7 @@ type RootCause = typeof ROOT_CAUSES[number]['value'];
 export interface MarkAsLostModalProps {
   dealId: string;
   dealName: string;
-  dealType: 'sales' | 'grant';
+  dealType: 'sales' | 'grant' | 'ai_credit';
   isOpen: boolean;
   onClose: () => void;
   /** Called after a successful mark-lost. Caller decides how to refresh. */

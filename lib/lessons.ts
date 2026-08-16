@@ -41,7 +41,7 @@ export interface MarkLostInput {
 export interface LessonRow {
   id: string;
   deal_id: string;
-  deal_type: 'sales' | 'grant';
+  deal_type: 'sales' | 'grant' | 'ai_credit';
   gate_lost_at: number;
   value: string | null;          // pg NUMERIC returns as string
   currency: string | null;
@@ -175,7 +175,7 @@ export async function markDealLost(args: {
  */
 export async function loadRelevantLessons(deal: {
   id: string;
-  deal_type: 'sales' | 'grant';
+  deal_type: 'sales' | 'grant' | 'ai_credit';
   gate: number;
   value: string | number | null;
 }): Promise<LessonRow[]> {

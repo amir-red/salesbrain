@@ -10,7 +10,7 @@ export interface Gate {
   description?: string;
 }
 
-export type DealType = 'sales' | 'grant';
+export type DealType = 'sales' | 'grant' | 'ai_credit';
 
 // ─── Sales Pipeline (Zeami deals) ────────────────────────────────
 
@@ -275,6 +275,59 @@ export const GRANT_GATES: Gate[] = [
   },
 ];
 
+// ─── AI credits (migration 031) ──────────────────────────────────
+// Mirror of salesbrain-core.domain.gates.AI_CREDIT_GATES. 5 stages,
+// no board reviews — small-ticket + fast-turn credit chase (Google,
+// AWS, Anthropic, ElevenLabs, DigitalOcean). Post-award utilization
+// tracked via grant_resources rows (resource_type='credits').
+export const AI_CREDIT_GATES: Gate[] = [
+  {
+    number: 1,
+    name: 'Discovered',
+    slaDays: 14,
+    isBoard: false,
+    objective: 'Capture the opportunity and rough value.',
+    description: 'Opportunity found. Log provider, program name, and rough potential value so we can prioritize against other credit applications in flight.',
+    requiredFields: ['provider', 'credit_program_name', 'potential_value', 'potential_currency'],
+  },
+  {
+    number: 2,
+    name: 'Qualified',
+    slaDays: 7,
+    isBoard: false,
+    objective: 'Confirm eligibility and pick applicant entity (ChipChip / Zeami / both).',
+    description: 'Eligibility screening + applicant-entity choice per the KB decision tree.',
+    requiredFields: ['eligibility_confirmed', 'applicant_entity', 'estimated_credit_value'],
+  },
+  {
+    number: 3,
+    name: 'Applied',
+    slaDays: 30,
+    isBoard: false,
+    objective: 'Track submission so follow-ups fire on the right cadence.',
+    description: 'Application submitted. Record URL + date so follow-up reminders are anchored.',
+    requiredFields: ['application_url', 'application_date'],
+  },
+  {
+    number: 4,
+    name: 'Awarded',
+    slaDays: 21,
+    isBoard: false,
+    objective: 'Convert the promise into a credit balance the CRM can monitor.',
+    description: 'Approved — attach a grant_resources row (resource_type=credits) so balance, utilization, and expiry surface on /credits and daily reminders.',
+    requiredFields: ['award_amount', 'credits_activated_at', 'expires_at'],
+  },
+  {
+    number: 5,
+    name: 'Active',
+    slaDays: 365,
+    isBoard: false,
+    objective: 'Utilize credits fully before they expire.',
+    description: 'Live credits — being used. Utilization tracked on the linked grant_resources row. Deal moves to won when fully utilized, or expired if the clock runs out first.',
+    requiredFields: [],
+  },
+];
+
 // ─── Legacy export for backwards compatibility ──────────────────
 // Existing code imports `GATES` and uses it as the sales pipeline.
 export const GATES = SALES_GATES;
@@ -296,7 +349,9 @@ export const GRANT_MONEY_FIELDS = [
 // ─── Pipeline selector ──────────────────────────────────────────
 
 export function getPipeline(type: DealType | string | null | undefined): Gate[] {
-  return type === 'grant' ? GRANT_GATES : SALES_GATES;
+  if (type === 'grant') return GRANT_GATES;
+  if (type === 'ai_credit') return AI_CREDIT_GATES;
+  return SALES_GATES;
 }
 
 export function getGate(number: number, type: DealType | string = 'sales'): Gate | undefined {

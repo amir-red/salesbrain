@@ -102,7 +102,7 @@ function DealCard({ deal }: { deal: Deal }) {
   );
 }
 
-type PipelineTab = 'sales' | 'grant';
+type PipelineTab = 'sales' | 'grant' | 'ai_credit';
 
 interface FilterBarProps {
   salesGates: Gate[];
@@ -112,17 +112,25 @@ interface FilterBarProps {
    * behind the "Gates" toggle for admins who want to see the full gate
    * breakdown. */
   grantStages: Gate[];
+  /** AI credits — 5-gate pipeline. No stage collapse yet; the /credits
+   * dashboard is the main surface for Awarded and Active. */
+  creditGates: Gate[];
   currentUserId: string;
 }
 
-export default function FilterBar({ salesGates, grantGates, grantStages, currentUserId }: FilterBarProps) {
+export default function FilterBar({ salesGates, grantGates, grantStages, creditGates, currentUserId }: FilterBarProps) {
   const [pipeline, setPipeline] = useState<PipelineTab>('sales');
   const [filter, setFilter] = useState<typeof FILTERS[number]>('All');
   const [grantView, setGrantView] = useState<GrantView>('stages');
 
-  const activeGates = pipeline === 'sales'
-    ? salesGates
-    : (grantView === 'stages' ? grantStages : grantGates);
+  let activeGates: Gate[];
+  if (pipeline === 'sales') {
+    activeGates = salesGates;
+  } else if (pipeline === 'grant') {
+    activeGates = grantView === 'stages' ? grantStages : grantGates;
+  } else {
+    activeGates = creditGates;
+  }
 
   const filteredGates = activeGates.map((g) => ({
     ...g,
@@ -143,6 +151,7 @@ export default function FilterBar({ salesGates, grantGates, grantStages, current
   // the *board* size, not the all-time count.
   const salesCount = salesGates.reduce((sum, g) => sum + g.deals.filter((d) => !d.is_lost).length, 0);
   const grantCount = grantGates.reduce((sum, g) => sum + g.deals.filter((d) => !d.is_lost).length, 0);
+  const creditCount = creditGates.reduce((sum, g) => sum + g.deals.filter((d) => !d.is_lost).length, 0);
 
   return (
     <div>
@@ -169,6 +178,17 @@ export default function FilterBar({ salesGates, grantGates, grantStages, current
           }}
         >
           Grants ({grantCount})
+        </button>
+        <button
+          onClick={() => setPipeline('ai_credit')}
+          className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          style={{
+            background: pipeline === 'ai_credit' ? '#D97706' : 'var(--bg-card)',
+            color: pipeline === 'ai_credit' ? '#fff' : 'var(--text-muted)',
+            border: `1px solid ${pipeline === 'ai_credit' ? '#D97706' : 'var(--border)'}`,
+          }}
+        >
+          Credits ({creditCount})
         </button>
 
         {/* Grants-only: toggle between the 2-stage default view (Hannes's ask)

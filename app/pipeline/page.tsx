@@ -1,5 +1,5 @@
 import pool from '@/lib/db';
-import { SALES_GATES, GRANT_GATES } from '@/lib/gates';
+import { SALES_GATES, GRANT_GATES, AI_CREDIT_GATES } from '@/lib/gates';
 import Sidebar from '@/components/Sidebar';
 import FilterBar from './FilterBar';
 import { cookies } from 'next/headers';
@@ -49,6 +49,16 @@ const GRANT_GATE_COLORS: Record<number, string> = {
   10: '#166534',
 };
 
+// AI credit gate colors (5 gates, no board reviews) — application-in-flight
+// stages blue, Awarded amber (money in hand), Active green (being used).
+const AI_CREDIT_GATE_COLORS: Record<number, string> = {
+  1: '#1D4ED8',   // Discovered
+  2: '#1D4ED8',   // Qualified
+  3: '#1D4ED8',   // Applied
+  4: '#D97706',   // Awarded
+  5: '#166534',   // Active
+};
+
 interface DealRow {
   id: string;
   name: string;
@@ -62,7 +72,7 @@ interface DealRow {
   lead_id: string | null;
   lead_name: string | null;
   gate_entered_at: string;
-  deal_type: 'sales' | 'grant';
+  deal_type: 'sales' | 'grant' | 'ai_credit';
   days_in_gate_raw: string;
   status: 'active' | 'won' | 'lost' | 'cancelled';
   contract_signed_at: string | null;
@@ -287,15 +297,22 @@ export default async function PipelinePage() {
      ORDER BY d.gate, d.score DESC NULLS LAST`
   );
 
-  const salesDeals = deals.filter((d) => d.deal_type !== 'grant');
+  // 3-way partition (migration 031 added ai_credit). Anything not explicitly
+  // matched to grant or ai_credit falls into sales so legacy rows and any
+  // future deal_type mis-set land in the most-general bucket, not silently
+  // in a credit list they don't belong in.
+  const salesDeals = deals.filter((d) => d.deal_type !== 'grant' && d.deal_type !== 'ai_credit');
   const grantDeals = deals.filter((d) => d.deal_type === 'grant');
+  const creditDeals = deals.filter((d) => d.deal_type === 'ai_credit');
 
   const salesSummary = summarize(salesDeals, SALES_GATES);
   const grantSummary = summarize(grantDeals, GRANT_GATES);
+  const creditsSummary = summarize(creditDeals, AI_CREDIT_GATES);
 
   const salesGateData = buildGateData(salesDeals, SALES_GATES, SALES_GATE_COLORS);
   const grantGateData = buildGateData(grantDeals, GRANT_GATES, GRANT_GATE_COLORS);
   const grantStageData = buildGrantStageData(grantDeals);
+  const creditsGateData = buildGateData(creditDeals, AI_CREDIT_GATES, AI_CREDIT_GATE_COLORS);
 
   return (
     <div className="flex h-screen">
@@ -304,12 +321,12 @@ export default async function PipelinePage() {
         <div className="p-4 border-b" style={{ borderColor: 'var(--border)' }}>
           <h1 className="text-lg font-bold">Pipeline Board</h1>
           <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-            {salesDeals.length} sales · {grantDeals.length} grants
+            {salesDeals.length} sales · {grantDeals.length} grants · {creditDeals.length} credits
           </p>
         </div>
 
-        {/* Pipeline value overview */}
-        <div className="p-4 grid grid-cols-2 gap-4 border-b" style={{ borderColor: 'var(--border)' }}>
+        {/* Pipeline value overview — 3 cards, one per deal type */}
+        <div className="p-4 grid grid-cols-3 gap-4 border-b" style={{ borderColor: 'var(--border)' }}>
           <SummaryCard
             label="Sales Pipeline"
             accent="var(--accent)"
@@ -320,6 +337,11 @@ export default async function PipelinePage() {
             accent="var(--green)"
             summary={grantSummary}
           />
+          <SummaryCard
+            label="Credits Pipeline"
+            accent="#D97706"
+            summary={creditsSummary}
+          />
         </div>
 
         <div className="p-4 overflow-x-auto flex-1">
@@ -327,6 +349,7 @@ export default async function PipelinePage() {
             salesGates={salesGateData}
             grantGates={grantGateData}
             grantStages={grantStageData}
+            creditGates={creditsGateData}
             currentUserId={userId}
           />
         </div>

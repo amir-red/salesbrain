@@ -26,7 +26,7 @@ interface Deal {
   company: string;
   lead_id: string | null;
   lead_name: string | null;
-  deal_type: 'sales' | 'grant';
+  deal_type: 'sales' | 'grant' | 'ai_credit';
   fields: Record<string, unknown>;
   status?: string;
   gate: number;

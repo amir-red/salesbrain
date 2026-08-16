@@ -19,7 +19,7 @@ interface DealInfo {
   flags: string[];
   fields: Record<string, unknown>;
   gate_entered_at: string;
-  deal_type?: 'sales' | 'grant';
+  deal_type?: 'sales' | 'grant' | 'ai_credit';
 }
 
 interface ChatProps {

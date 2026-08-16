@@ -10,7 +10,7 @@ const CreateDealSchema = z.object({
   contact_name: z.string().optional(),
   contact_email: z.string().email().optional(),
   value: z.number().optional(),
-  deal_type: z.enum(['sales', 'grant']).default('sales'),
+  deal_type: z.enum(['sales', 'grant', 'ai_credit']).default('sales'),
 });
 
 export async function GET() {

@@ -7,7 +7,7 @@ import Sidebar from '@/components/Sidebar';
 interface Lesson {
   id: string;
   deal_id: string;
-  deal_type: 'sales' | 'grant';
+  deal_type: 'sales' | 'grant' | 'ai_credit';
   gate_lost_at: number;
   value: string | null;
   currency: string | null;
@@ -27,7 +27,7 @@ type RootCause =
   | 'price' | 'timeline' | 'fit' | 'decision_maker' | 'capability'
   | 'competition' | 'budget' | 'eligibility' | 'other';
 
-type DealTypeFilter = 'all' | 'sales' | 'grant';
+type DealTypeFilter = 'all' | 'sales' | 'grant' | 'ai_credit';
 
 const ROOT_CAUSE_LABEL: Record<RootCause, string> = {
   price: 'Price',

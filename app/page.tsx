@@ -28,7 +28,7 @@ interface Deal {
   fields: Record<string, unknown>;
   gate_entered_at: string;
   created_at: string;
-  deal_type: 'sales' | 'grant';
+  deal_type: 'sales' | 'grant' | 'ai_credit';
 }
 
 type MobileTab = 'deals' | 'chat' | 'details';
@@ -38,7 +38,7 @@ export default function Home() {
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [showNewDeal, setShowNewDeal] = useState(false);
-  const [newDealType, setNewDealType] = useState<'sales' | 'grant'>('sales');
+  const [newDealType, setNewDealType] = useState<'sales' | 'grant' | 'ai_credit'>('sales');
   const [newDealName, setNewDealName] = useState('');
   const [newDealCompany, setNewDealCompany] = useState('');
   const [loading, setLoading] = useState(true);

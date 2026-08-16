@@ -27,7 +27,7 @@ interface Deal {
   fields: Record<string, unknown>;
   gate_entered_at: string;
   created_at: string;
-  deal_type?: 'sales' | 'grant';
+  deal_type?: 'sales' | 'grant' | 'ai_credit';
 }
 
 interface User {
@@ -111,7 +111,7 @@ function VerdictBadge({ verdict }: { verdict: string | null }) {
   );
 }
 
-function GateStrip({ currentGate, dealType }: { currentGate: number; dealType?: 'sales' | 'grant' }) {
+function GateStrip({ currentGate, dealType }: { currentGate: number; dealType?: 'sales' | 'grant' | 'ai_credit' }) {
   const pipeline = getPipeline(dealType);
   return (
     <div className="flex gap-1">

@@ -41,7 +41,7 @@ interface DealRow {
   contact_phone: string | null;
   gate: number;
   gate_entered_at: string;
-  deal_type: 'sales' | 'grant';
+  deal_type: 'sales' | 'grant' | 'ai_credit';
   value: string | null;
   currency: string | null;
   fields: Record<string, unknown> | null;

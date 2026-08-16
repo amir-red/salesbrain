@@ -6,7 +6,7 @@ import { getSession } from '@/lib/auth';
 const CreateCampaignSchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().optional(),
-  deal_type: z.enum(['sales', 'grant']).default('sales'),
+  deal_type: z.enum(['sales', 'grant', 'ai_credit']).default('sales'),
   persona_target: z.string().optional(),
   segment_definition: z.string().optional(),
   positioning_angle: z.string().optional(),
