@@ -277,6 +277,17 @@ All product-name references renamed. Old conversations in DB may still say "Mate
 
 ---
 
+### 5.x ICP builder (`/icp`, 2026-08-28) — Gojiberry-inspired
+
+Web UI for the `icp_profiles` row that `crm_prospect_search` sources against and every prospect is scored by. Before this, ICPs could only be defined through the agent (`crm_icp_define`).
+
+- **Page** `app/icp/page.tsx` — list cards (prospect count, summary, "Source from LinkedIn" → `crm_prospect_search`, Archive) + `components/icp/IcpBuilder.tsx` (5 numbered sections: product/website → roles + seniority → industries/locations/sizes → exclusions → weights) with a sticky right rail showing the derived Sales Navigator ask and a **Preview matches** dry run.
+- **Vocabulary + bridge** `lib/icp.ts` — role groups (with LinkedIn `function` mapping), industries, location groups, size buckets, exclusion presets; `buildSalesNavFilters(criteria)` derives `filters` + `search_keywords` from the same chips, so sourcing and scoring can't drift. `components/icp/ChipSelect.tsx` is the reusable chip picker.
+- **API** `app/api/icp` (GET list / POST upsert, direct SQL like `/api/prospects`, audits to `agent_audit_log` as `icp_define`), `[id]` (GET/PUT/DELETE=soft archive), `preview` (→ kernel `crm_icp_preview`, scoring stays in Python), `[id]/search` (→ `crm_prospect_search`), `suggest` (website → draft ICP via `lib/llm.ts`; nothing persisted). Shared zod schema in `lib/icp-server.ts` (route files may only export handlers).
+- **Scorer additions** (core 0.20.0, `policy/icp.py`): `company_sizes[]` scored under a new `size` weight (default 0 → legacy profiles unchanged; builder sets 10 when sizes are chosen), `exclude_companies[]` = hard disqualification on word boundary, `size_bucket()` snaps "201-500 employees" / "1,000+" to LinkedIn's ladder. `company_size` now flows into `qualify` and `auto_qualify_contacts`.
+- **Ring** (hermes 0.20.0): `crm_icp_preview` (read, no writes/quota) and `crm_icp_archive`; roster tests updated (`crm_prospect_*`/`crm_icp_*` = 12).
+- Not done: company *type* (private/public/non-profit) — no data column and no Unipile filter for it; intent signals (job change, funding, competitor followers) remain the known gap vs Gojiberry.
+
 ## 6. Env vars
 
 All must be in `.env.local` (dev) and as GitHub repo secrets (prod — workflow writes them to `.env.production`).

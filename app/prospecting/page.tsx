@@ -108,13 +108,16 @@ export default function ProspectingPage() {
             <h1 className="text-lg font-bold">Prospecting</h1>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{prospects.length} prospects</p>
           </div>
-          <button
-            onClick={() => setShowNew(!showNew)}
-            className="px-3 py-1.5 rounded-lg text-sm font-medium"
-            style={{ background: 'var(--accent)', color: '#fff' }}
-          >
-            + New Prospect
-          </button>
+          <div className="flex items-center gap-3">
+            <Link href="/icp" className="text-xs underline" style={{ color: 'var(--text-muted)' }}>ICP profiles →</Link>
+            <button
+              onClick={() => setShowNew(!showNew)}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium"
+              style={{ background: 'var(--accent)', color: '#fff' }}
+            >
+              + New Prospect
+            </button>
+          </div>
         </div>
 
         {/* New prospect form */}
