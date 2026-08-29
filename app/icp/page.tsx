@@ -4,16 +4,12 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import IcpBuilder from '@/components/icp/IcpBuilder';
+import IcpLeads, { RunPill } from '@/components/icp/IcpLeads';
 import { PRODUCTS, summarizeCriteria } from '@/lib/icp';
 import type { IcpProfile } from '@/lib/icp';
 import { relativeTime } from '@/lib/time';
 
-type Mode = { kind: 'list' } | { kind: 'new' } | { kind: 'edit'; profile: IcpProfile };
-
-interface SearchOutcome {
-  icp?: string; matched_total?: number | null; fetched?: number; new_prospects?: number;
-  already_known?: number; filter_notes?: string[]; error?: string;
-}
+type Mode = { kind: 'list' } | { kind: 'new' } | { kind: 'edit'; profile: IcpProfile } | { kind: 'leads'; profile: IcpProfile };
 
 /**
  * /icp — the list of ideal-customer profiles and the builder. An ICP is what
@@ -25,7 +21,6 @@ export default function IcpPage() {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<Mode>({ kind: 'list' });
   const [busy, setBusy] = useState<string | null>(null);
-  const [outcome, setOutcome] = useState<{ id: string; res: SearchOutcome } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -45,19 +40,13 @@ export default function IcpPage() {
     } finally { setBusy(null); }
   };
 
-  const source = async (p: IcpProfile) => {
-    if (!confirm(`Search Sales Navigator for "${p.name}" now?\n\nThis spends LinkedIn search quota (account-level, ~20 searches/day) and lands up to 25 scored prospects.`)) return;
-    setBusy(p.id); setOutcome(null);
-    try {
-      const res = await fetch(`/api/icp/${p.id}/search`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ limit: 25 }),
-      });
-      const data = await res.json();
-      setOutcome({ id: p.id, res: res.ok ? data : { error: data.error || 'Search failed' } });
-      if (res.ok) load();
-    } catch (e) {
-      setOutcome({ id: p.id, res: { error: e instanceof Error ? e.message : 'Search failed' } });
-    } finally { setBusy(null); }
+  const runAgent = (p: IcpProfile) => async (mode: 'now' | 'queue') => {
+    const res = await fetch(`/api/icp/${p.id}/run`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }),
+    });
+    const out = await res.json();
+    load();
+    return out;
   };
 
   const productLabel = (k: string | null) => PRODUCTS.find((p) => p.key === k)?.label ?? k ?? '—';
@@ -72,12 +61,14 @@ export default function IcpPage() {
               {mode.kind !== 'list' && (
                 <button onClick={() => setMode({ kind: 'list' })} className="text-sm" style={{ color: 'var(--text-muted)' }} title="Back">←</button>
               )}
-              {mode.kind === 'list' ? 'Ideal Customer Profiles' : mode.kind === 'new' ? 'New ICP' : `Edit · ${mode.profile.name}`}
+              {mode.kind === 'list' ? 'Ideal Customer Profiles' : mode.kind === 'new' ? 'New ICP' : mode.kind === 'leads' ? mode.profile.name : `Edit · ${mode.profile.name}`}
             </h1>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
               {mode.kind === 'list'
                 ? `${profiles.length} active · who to look for on LinkedIn, and what makes them a fit`
-                : 'Every prospect sourced or imported is scored against this profile, with reasons.'}
+                : mode.kind === 'leads'
+                  ? 'The list the Leads Finder fills for this ICP, and what it did on each tick.'
+                  : 'Every prospect sourced or imported is scored against this profile, with reasons.'}
             </p>
           </div>
           {mode.kind === 'list' && (
@@ -90,7 +81,14 @@ export default function IcpPage() {
           )}
         </div>
 
-        {mode.kind !== 'list' && (
+        {mode.kind === 'leads' && <IcpLeads profile={mode.profile} onRun={runAgent(mode.profile)} />}
+        {mode.kind === 'leads' && (
+          <div className="px-4 pb-4">
+            <button onClick={() => setMode({ kind: 'edit', profile: mode.profile })} className="text-xs underline" style={{ color: 'var(--text-muted)' }}>Edit this ICP</button>
+          </div>
+        )}
+
+        {(mode.kind === 'new' || mode.kind === 'edit') && (
           <IcpBuilder
             initial={mode.kind === 'edit' ? mode.profile : null}
             onSaved={() => { setMode({ kind: 'list' }); load(); }}
@@ -121,7 +119,7 @@ export default function IcpPage() {
                       </div>
                     </div>
                     <span className="shrink-0 text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>
-                      {p.prospects ?? 0} prospects
+                      {p.prospects ?? 0} on list · {p.matched_prospects ?? 0} matched
                     </span>
                   </div>
                   {p.description && <p className="text-xs line-clamp-2" style={{ color: 'var(--text-muted)' }}>{p.description}</p>}
@@ -136,22 +134,12 @@ export default function IcpPage() {
                     </div>
                   )}
 
-                  {outcome?.id === p.id && (
-                    <div className="text-[11px] rounded-lg p-2 space-y-1" style={{ background: 'var(--bg-input)', color: outcome.res.error ? 'var(--red)' : 'var(--text)' }}>
-                      {outcome.res.error ? outcome.res.error : (
-                        <>
-                          <div>LinkedIn matched {outcome.res.matched_total ?? '?'} · fetched {outcome.res.fetched} · <b>{outcome.res.new_prospects} new</b> · {outcome.res.already_known} already known</div>
-                          {outcome.res.filter_notes?.map((n, i) => <div key={i} style={{ color: 'var(--text-muted)' }}>· {n}</div>)}
-                          <Link href="/prospecting" className="underline" style={{ color: 'var(--accent)' }}>See prospects →</Link>
-                        </>
-                      )}
-                    </div>
-                  )}
+                  <div><RunPill run={p.last_run ?? null} queued={p.queued_runs ?? 0} state={p.agent_state ?? null} /></div>
 
                   <div className="mt-auto flex gap-2 pt-1">
                     <button onClick={() => setMode({ kind: 'edit', profile: p })} className="px-3 py-1.5 rounded-lg text-xs" style={{ border: '1px solid var(--border)', color: 'var(--text)' }}>Edit</button>
-                    <button onClick={() => source(p)} disabled={busy === p.id} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--accent)', color: '#fff' }} title="Run crm_prospect_search for this ICP (uses LinkedIn quota)">
-                      {busy === p.id ? 'Working…' : 'Source from LinkedIn'}
+                    <button onClick={() => setMode({ kind: 'leads', profile: p })} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'var(--accent)', color: '#fff' }} title="The list the Leads Finder fills, and its activity">
+                      Leads →
                     </button>
                     <button onClick={() => archive(p)} disabled={busy === p.id} className="ml-auto px-3 py-1.5 rounded-lg text-xs disabled:opacity-40" style={{ color: 'var(--text-muted)' }}>Archive</button>
                   </div>

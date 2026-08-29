@@ -39,7 +39,51 @@ export interface IcpProfile {
   created_at: string;
   updated_at: string;
   prospects?: number;
+  matched_prospects?: number;
+  queued_runs?: number;
+  last_run?: AgentRun | null;
+  agent_state?: IcpAgentState | null;
 }
+
+/** One agent tick, as stored in agent_runs (the Activity feed row). */
+export interface AgentRun {
+  id?: string;
+  agent?: string;
+  trigger: 'timer' | 'manual' | 'chat' | 'requested';
+  source: string | null;
+  status: 'requested' | 'running' | 'success' | 'partial' | 'error' | 'skipped';
+  started_at: string;
+  finished_at: string | null;
+  analyzed: number;
+  matched: number;
+  created: number;
+  researched: number;
+  error: string | null;
+  detail?: {
+    reason?: string;
+    top?: { name?: string; headline?: string; company?: string | null; icp_score?: number; fit_label?: string; prospect_id?: string }[];
+    keywords?: string;
+    variant?: string;
+    filter_notes?: string[];
+    exhausted?: boolean;
+  } | null;
+  icp_name?: string | null;
+  icp_profile_id?: string | null;
+  owner_name?: string | null;
+}
+
+export interface IcpAgentState {
+  variant_index: number;
+  consecutive_empty_runs: number;
+  last_run_at: string | null;
+  next_eligible_at: string | null;
+  exhausted_at: string | null;
+}
+
+export const RUN_STATUS_COLOR: Record<AgentRun['status'], string> = {
+  success: 'var(--green)', partial: 'var(--yellow)', running: 'var(--accent)',
+  requested: 'var(--accent)', skipped: 'var(--text-muted)', error: 'var(--red)',
+};
 
 // Mirrors policy/icp.py DEFAULT_WEIGHTS. `size` defaults to 0 so profiles that
 // predate the builder keep their exact scores; the builder raises it when the

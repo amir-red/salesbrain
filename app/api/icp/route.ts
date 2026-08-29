@@ -19,8 +19,21 @@ export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const all = req.nextUrl.searchParams.get('all') === '1';
+  // Each card carries its list size, the agent's last tick and queued requests,
+  // so /icp can show "agent ran 2h ago · 48 analyzed · 9 matched" without N+1 calls.
   const { rows } = await pool.query(
-    `SELECT i.*, (SELECT count(*)::int FROM prospects p WHERE p.icp_profile_id = i.id) AS prospects
+    `SELECT i.*,
+            (SELECT count(*)::int FROM prospects p WHERE p.icp_profile_id = i.id) AS prospects,
+            (SELECT count(*)::int FROM prospects p WHERE p.icp_profile_id = i.id
+               AND p.fit_label IN ('strong_fit','proceed_with_caution')) AS matched_prospects,
+            (SELECT row_to_json(r) FROM (
+               SELECT status, trigger, source, started_at, finished_at, analyzed, matched, created, researched, error, detail
+               FROM agent_runs WHERE icp_profile_id = i.id AND status <> 'requested'
+               ORDER BY started_at DESC LIMIT 1) r) AS last_run,
+            (SELECT count(*)::int FROM agent_runs WHERE icp_profile_id = i.id AND status = 'requested') AS queued_runs,
+            (SELECT row_to_json(s) FROM (
+               SELECT variant_index, consecutive_empty_runs, last_run_at, next_eligible_at, exhausted_at
+               FROM icp_agent_state WHERE icp_profile_id = i.id) s) AS agent_state
      FROM icp_profiles i
      WHERE i.owner_user_id = $1 ${all ? '' : 'AND i.is_active'}
      ORDER BY i.updated_at DESC`,
