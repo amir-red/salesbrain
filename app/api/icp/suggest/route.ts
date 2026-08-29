@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { anthropic, MODEL } from '@/lib/llm';
 import { COMPANY_SIZES, INDUSTRIES, LOCATION_GROUPS, ROLE_GROUPS, SENIORITY_BANDS, EXCLUDE_TITLE_PRESETS } from '@/lib/icp';
 import type { IcpSuggestion, SeniorityBand } from '@/lib/icp';
+import { fetchSite } from '@/lib/icp-site';
 
 /**
  * Website → draft ICP. The "paste your URL, we'll prefill everything" step.
@@ -13,36 +14,6 @@ import type { IcpSuggestion, SeniorityBand } from '@/lib/icp';
  * selections rather than free text. The user reviews every chip before saving —
  * nothing here is persisted.
  */
-
-const UA = 'SalesBrain/1.0 (+https://salescrm.chipchip.social)';
-
-function stripHtml(html: string): string {
-  return html
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-    .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;|&amp;|&quot;|&#39;/g, (m) => ({ '&nbsp;': ' ', '&amp;': '&', '&quot;': '"', '&#39;': "'" }[m] || ' '))
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-async function fetchSite(website: string): Promise<{ url: string; pages: { url: string; text: string }[] }> {
-  const base = (website.startsWith('http') ? website : `https://${website}`).replace(/\/$/, '');
-  const pages: { url: string; text: string }[] = [];
-  for (const url of [base, `${base}/about`, `${base}/about-us`]) {
-    try {
-      const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(12000), redirect: 'follow' });
-      if (!res.ok) continue;
-      const ct = res.headers.get('content-type') || '';
-      if (!ct.includes('html') && !ct.includes('text')) continue;
-      const text = stripHtml(await res.text()).slice(0, 7000);
-      if (text.length > 200) pages.push({ url, text });
-    } catch { /* skip page */ }
-    if (pages.length >= 2) break;
-  }
-  return { url: base, pages };
-}
 
 function extractJson(text: string): Record<string, unknown> | null {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -60,7 +31,7 @@ export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  let body: { website?: string; product?: string | null };
+  let body: { website?: string; product?: string | null; description?: string | null };
   try { body = await req.json(); } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
@@ -70,8 +41,15 @@ export async function POST(req: NextRequest) {
   }
 
   const site = await fetchSite(website);
+  const description = (body.description || '').trim();
+  // Last resort: the user already wrote what the product is — draft from that.
+  if (site.pages.length === 0 && description.length >= 40) {
+    site.pages.push({ url: 'your description', text: description, via: 'html' });
+  }
   if (site.pages.length === 0) {
-    return NextResponse.json({ error: `Couldn't read ${site.url} (blocked, JS-only, or down). Fill the profile by hand.` }, { status: 422 });
+    return NextResponse.json({
+      error: `Couldn't read ${site.url} — it returned no text (JS-rendered, blocked, or down). Write 2–3 sentences in the description above and click Analyze again to draft from that instead.`,
+    }, { status: 422 });
   }
 
   const allTitles = ROLE_GROUPS.flatMap((g) => g.titles);
@@ -136,5 +114,6 @@ Return ONLY JSON:
     keywords: list(raw.keywords, 10),
     rationale: raw.rationale ? String(raw.rationale) : null,
   };
-  return NextResponse.json({ suggestion, source_url: site.url, pages_read: site.pages.length });
+  const source = site.pages[0].url === 'your description' ? 'description' : site.pages[0].via;
+  return NextResponse.json({ suggestion, source_url: site.url, pages_read: site.pages.length, source });
 }

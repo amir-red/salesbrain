@@ -96,7 +96,7 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
     try {
       const res = await fetch('/api/icp/suggest', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ website, product }),
+        body: JSON.stringify({ website, product, description }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Analysis failed'); return; }
@@ -119,7 +119,9 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
         };
       });
       setAiTouched(true);
-      setSuggestNote([s.rationale, s.keywords.length ? `Topics buyers talk about: ${s.keywords.join(', ')}` : null].filter(Boolean).join(' — '));
+      const via = data.source === 'bundle' ? 'Read from the site\u2019s app bundle (JS-only page). '
+        : data.source === 'description' ? 'The site returned no text \u2014 drafted from your description instead. ' : '';
+      setSuggestNote(via + [s.rationale, s.keywords.length ? `Topics buyers talk about: ${s.keywords.join(', ')}` : null].filter(Boolean).join(' \u2014 '));
       setPreview(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Analysis failed');
