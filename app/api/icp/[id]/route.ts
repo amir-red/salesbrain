@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { kernelCall } from '@/lib/mcp/kernel-rpc';
 import { buildSalesNavFilters, normalizeCriteria, normalizeWeights, weightsTotal } from '@/lib/icp';
 import { IcpBodySchema, auditBestEffort } from '@/lib/icp-server';
 
@@ -59,7 +60,12 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
      JSON.stringify(filters), JSON.stringify(criteria)],
   );
   await auditBestEffort(session.userId, 'icp_define', { name, icp_id: params.id, via: 'builder' });
-  return NextResponse.json({ ...rows[0], criteria: normalizeCriteria(rows[0].criteria) });
+  // Editing criteria must reach the people already on the list, not only the
+  // next page the finder fetches. Best-effort: the kernel may be unreachable
+  // locally, and a save must not fail because a rescore did.
+  let rescore: Record<string, unknown> | null = null;
+  try { rescore = await kernelCall('crm_icp_rescore', { icp_id: params.id }, session.userId); } catch { rescore = null; }
+  return NextResponse.json({ ...rows[0], criteria: normalizeCriteria(rows[0].criteria), rescore });
 }
 
 /** Soft delete — mirrors the kernel's icp_archive. Prospects keep their provenance link. */
