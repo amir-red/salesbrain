@@ -27,7 +27,7 @@ const fitColor = (s: number | null) =>
   s === null ? 'var(--text-muted)' : s >= 75 ? 'var(--green)' : s >= 60 ? 'var(--yellow)' : s >= 40 ? 'var(--orange)' : 'var(--red)';
 
 /** Gojiberry's Leads + Activity tabs for one ICP: the list the agent fills, and what it did. */
-export default function IcpLeads({ profile, onRun }: { profile: IcpProfile; onRun: (mode: 'now' | 'queue') => Promise<unknown> }) {
+export default function IcpLeads({ profile, onRun }: { profile: IcpProfile; onRun: (mode: 'now' | 'queue' | 'enrich') => Promise<unknown> }) {
   const [data, setData] = useState<Payload | null>(null);
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [tab, setTab] = useState<'leads' | 'activity'>('leads');
@@ -46,11 +46,12 @@ export default function IcpLeads({ profile, onRun }: { profile: IcpProfile; onRu
   }, [profile.id, minScore]);
   useEffect(() => { load(); }, [load]);
 
-  const run = async (mode: 'now' | 'queue') => {
+  const run = async (mode: 'now' | 'queue' | 'enrich') => {
     setBusy(mode); setNote(null);
     try {
       const out = (await onRun(mode)) as Record<string, unknown>;
       if (out?.error) setNote(String(out.error));
+      else if (mode === 'enrich') setNote(String(out?.note || 'Queued for the Enricher\u2019s next tick (09:40 / 16:40).'));
       else if (mode === 'queue') setNote(String(out?.note || 'Queued for the next tick.'));
       else setNote(`Analyzed ${out?.analyzed ?? 0} · matched ${out?.matched ?? 0} · new ${out?.new ?? 0} · researched ${out?.researched ?? 0}${out?.more_pages ? ' · more pages remain' : ''}`);
       await load();
@@ -72,6 +73,9 @@ export default function IcpLeads({ profile, onRun }: { profile: IcpProfile; onRu
           <span><b style={{ color: 'var(--text)' }}>{c?.engaged ?? '—'}</b> engaged</span>
         </div>
         <div className="ml-auto flex gap-2">
+          <button onClick={() => run('enrich')} disabled={!!busy} className="px-3 py-1.5 rounded-lg text-xs disabled:opacity-40" style={{ border: '1px solid var(--border)', color: 'var(--text)' }} title="Queue the Enricher: employer, research, website, email for this list">
+            {busy === 'enrich' ? 'Queuing…' : 'Enrich now'}
+          </button>
           <button onClick={() => run('queue')} disabled={!!busy} className="px-3 py-1.5 rounded-lg text-xs disabled:opacity-40" style={{ border: '1px solid var(--border)', color: 'var(--text)' }} title="Queue a pass for the agent's next tick (no budget spent now)">
             {busy === 'queue' ? 'Queuing…' : 'Queue a pass'}
           </button>

@@ -4,9 +4,10 @@ import { getSession } from '@/lib/auth';
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
 
 /**
- * Hand this ICP to the Leads Finder.
- *   { mode: 'now' }   → crm_leads_finder_run: one step synchronously (spends budget now)
- *   { mode: 'queue' } → crm_agent_request_run: picked up on the agent's next tick
+ * Hand this ICP to an agent.
+ *   { mode: 'now' }    → crm_leads_finder_run: one step synchronously (spends budget now)
+ *   { mode: 'queue' }  → crm_agent_request_run: Leads Finder's next tick
+ *   { mode: 'enrich' } → crm_agent_request_run(enricher): fill employer/research/email
  */
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
@@ -14,13 +15,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const own = await pool.query(`SELECT id FROM icp_profiles WHERE id = $1 AND owner_user_id = $2 AND is_active`, [params.id, session.userId]);
   if (!own.rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  let body: { mode?: 'now' | 'queue'; limit?: number } = {};
+  let body: { mode?: 'now' | 'queue' | 'enrich'; limit?: number } = {};
   try { body = await req.json(); } catch { /* defaults */ }
-  const mode = body.mode === 'queue' ? 'queue' : 'now';
+  const mode = body.mode === 'queue' || body.mode === 'enrich' ? body.mode : 'now';
   try {
-    const out = mode === 'queue'
-      ? await kernelCall('crm_agent_request_run', { agent: 'leads_finder', icp_id: params.id }, session.userId)
-      : await kernelCall('crm_leads_finder_run', { icp_id: params.id, ...(body.limit ? { limit: body.limit } : {}) }, session.userId);
+    const out = mode === 'now'
+      ? await kernelCall('crm_leads_finder_run', { icp_id: params.id, ...(body.limit ? { limit: body.limit } : {}) }, session.userId)
+      : await kernelCall('crm_agent_request_run',
+          { agent: mode === 'enrich' ? 'enricher' : 'leads_finder', icp_id: params.id }, session.userId);
     return NextResponse.json({ mode, ...out });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

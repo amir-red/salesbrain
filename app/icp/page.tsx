@@ -40,7 +40,7 @@ export default function IcpPage() {
     } finally { setBusy(null); }
   };
 
-  const runAgent = (p: IcpProfile) => async (mode: 'now' | 'queue') => {
+  const runAgent = (p: IcpProfile) => async (mode: 'now' | 'queue' | 'enrich') => {
     const res = await fetch(`/api/icp/${p.id}/run`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }),
     });
