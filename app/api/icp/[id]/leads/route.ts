@@ -15,15 +15,18 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const stage = req.nextUrl.searchParams.get('stage');
   const minScore = Number(req.nextUrl.searchParams.get('min_score') || 0);
+  const warm = req.nextUrl.searchParams.get('warm') === '1';
   const values: unknown[] = [params.id, session.userId];
   const filters: string[] = [`p.icp_profile_id = $1`, `(p.owner_user_id = $2 OR p.owner_user_id IS NULL)`];
   if (stage) { values.push(stage); filters.push(`p.stage = $${values.length}`); }
   if (minScore > 0) { values.push(minScore); filters.push(`p.icp_score >= $${values.length}`); }
+  if (warm) filters.push(`(p.network_degree IN ('1','2') OR jsonb_array_length(COALESCE(p.warm_paths, '[]'::jsonb)) > 0)`);
 
   const [leads, state, last, counts] = await Promise.all([
     pool.query(
       `SELECT p.id, p.stage, p.icp_score, p.fit_label, p.qualification_reason, p.research_summary,
               p.source_type, p.source_detail, p.linkedin_public_id, p.candidate_location,
+              p.network_degree, p.warm_paths,
               p.created_at, p.scored_at, p.engaged_at, p.converted_deal_id,
               c.full_name, c.title, c.email, c.linkedin_url,
               a.name AS company_name, a.industry, a.company_size

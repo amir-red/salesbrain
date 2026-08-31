@@ -24,6 +24,7 @@ interface Approval {
   id: string; status: string; channel: string; subject: string | null; message: string; rationale: string | null;
   created_at: string; expires_at: string; person_name: string | null; title: string | null; company: string | null;
   icp_score: number | null; icp_name: string | null; owner_name: string | null;
+  kind?: string; intro_lead_name?: string | null;
 }
 
 /**
@@ -186,6 +187,7 @@ export default function AgentsPage() {
               <div key={ap.id} className="rounded-xl p-4 space-y-2" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
                 <div className="flex items-start justify-between gap-3">
                   <div>
+                    {ap.kind === 'intro_request' && <div className="text-[10px] mb-0.5 inline-block px-1.5 py-0.5 rounded" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>\ud83e\udd1d Intro request \u2192 {ap.intro_lead_name || 'a lead'}</div>}
                     <div className="font-semibold">{ap.person_name || '—'} <span className="font-normal text-xs" style={{ color: 'var(--text-muted)' }}>{[ap.title, ap.company].filter(Boolean).join(' · ')}</span></div>
                     <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>via {ap.channel}{ap.icp_score !== null ? ` · fit ${ap.icp_score}` : ''}{ap.icp_name ? ` · ${ap.icp_name}` : ''}{ap.owner_name ? ` · for ${ap.owner_name}` : ''} · expires {relativeTime(ap.expires_at)}</div>
                     {ap.rationale && <div className="text-[11px] mt-1 italic" style={{ color: 'var(--text-muted)' }}>{ap.rationale}</div>}

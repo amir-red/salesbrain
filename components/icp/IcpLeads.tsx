@@ -13,6 +13,8 @@ interface Lead {
   engaged_at: string | null; converted_deal_id: string | null;
   full_name: string | null; title: string | null; email: string | null; linkedin_url: string | null;
   company_name: string | null; industry: string | null; company_size: string | null;
+  network_degree: string | null;
+  warm_paths: { type: string; value?: string; note: string }[] | null;
 }
 interface Payload {
   icp: { id: string; name: string };
@@ -32,18 +34,22 @@ export default function IcpLeads({ profile, onRun }: { profile: IcpProfile; onRu
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [tab, setTab] = useState<'leads' | 'activity'>('leads');
   const [minScore, setMinScore] = useState(0);
+  const [warmOnly, setWarmOnly] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const [a, b] = await Promise.all([
-      fetch(`/api/icp/${profile.id}/leads${minScore ? `?min_score=${minScore}` : ''}`),
+      fetch(`/api/icp/${profile.id}/leads?` + new URLSearchParams({
+        ...(minScore ? { min_score: String(minScore) } : {}),
+        ...(warmOnly ? { warm: '1' } : {}),
+      }).toString()),
       fetch(`/api/icp/${profile.id}/activity`),
     ]);
     if (a.ok) setData(await a.json());
     if (b.ok) setRuns(await b.json());
-  }, [profile.id, minScore]);
+  }, [profile.id, minScore, warmOnly]);
   useEffect(() => { load(); }, [load]);
 
   const run = async (mode: 'now' | 'queue' | 'enrich') => {
@@ -94,12 +100,17 @@ export default function IcpLeads({ profile, onRun }: { profile: IcpProfile; onRu
           </button>
         ))}
         {tab === 'leads' && (
-          <label className="ml-auto text-[11px] flex items-center gap-2" style={{ color: 'var(--text-muted)' }}>
+          <>
+          <label className="ml-auto text-[11px] flex items-center gap-1" style={{ color: 'var(--text-muted)' }}>
+            <input type="checkbox" checked={warmOnly} onChange={(e) => setWarmOnly(e.target.checked)} /> warm only
+          </label>
+          <label className="text-[11px] flex items-center gap-2" style={{ color: 'var(--text-muted)' }}>
             min score
             <select value={minScore} onChange={(e) => setMinScore(Number(e.target.value))} className="px-2 py-1 rounded text-xs" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }}>
               <option value={0}>any</option><option value={40}>40 weak+</option><option value={60}>60 proceed+</option><option value={75}>75 strong</option>
             </select>
           </label>
+          </>
         )}
       </div>
 
@@ -131,6 +142,7 @@ export default function IcpLeads({ profile, onRun }: { profile: IcpProfile; onRu
                         <Link href={`/prospects/${l.id}`} className="font-medium hover:underline">{l.full_name || '—'}</Link>
                         <div className="text-xs truncate max-w-[320px]" style={{ color: 'var(--text-muted)' }}>{l.title || '—'}</div>
                         {l.linkedin_url && <a href={l.linkedin_url.startsWith('http') ? l.linkedin_url : `https://linkedin.com/in/${l.linkedin_url}`} target="_blank" rel="noreferrer" className="text-[10px] underline" style={{ color: 'var(--accent)' }}>LinkedIn ↗</a>}
+                        <DegreeWarm degree={l.network_degree} paths={l.warm_paths} />
                       </td>
                       <td className="p-2 text-xs">
                         <div>{l.company_name || '—'}</div>
@@ -217,5 +229,20 @@ export function ActivityList({ runs, showIcp = false }: { runs: AgentRun[]; show
         );
       })}
     </div>
+  );
+}
+
+function DegreeWarm({ degree, paths }: { degree: string | null; paths: { type: string; value?: string; note: string }[] | null }) {
+  const warm = paths || [];
+  const colleague = warm.find((w) => w.type === 'colleague');
+  const label = degree === '1' ? '1st' : degree === '2' ? '2nd' : degree === '3' ? '3rd' : null;
+  const color = degree === '1' ? 'var(--green)' : degree === '2' ? 'var(--yellow)' : 'var(--text-muted)';
+  if (!label && warm.length === 0) return null;
+  const tip = warm.map((w) => w.note).join(' \u00b7 ') || (label ? `${label} degree connection` : '');
+  return (
+    <span className="ml-1 inline-flex items-center gap-1 align-middle" title={tip}>
+      {label && <span className="text-[9px] px-1 rounded" style={{ background: `${color}22`, color }}>{label}</span>}
+      {warm.length > 0 && <span className="text-[9px]" style={{ color: colleague ? 'var(--accent)' : 'var(--green)' }}>{colleague ? '\ud83e\udd1d intro' : `\ud83d\udd25 ${warm.length}`}</span>}
+    </span>
   );
 }
