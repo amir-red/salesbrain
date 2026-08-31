@@ -304,6 +304,16 @@ The first agent that runs UNATTENDED. Gojiberry-style: for every active ICP, fou
 - **Enricher agent (2026-08-30, 0.22.0, ships DISABLED)** — third agent: employer (LinkedIn profile fetch, budgeted), company research + website/domain, email. Email sources are pluggable (`email_sources.py`: hunter/apollo/fullenrich ready, keys manual in `/root/.hermes/.env`); live source at launch = free in-DB google_contacts match only (`agents.enricher.email_provider: "none"`). Every attempt logs to `prospect_enrichment` (retry_days, credit counters, GDPR source disclosure); low-confidence addresses are logged but written NOWHERE; suppression_list honored and adopted in migration 033. `crm_enrich_prospect` runs one prospect from chat; "Enrich now" on the ICP Leads view queues it. Scorer's `reachable` weight (default 0) lets an ICP credit "email on file".
 - **Pattern for the next agent**: registry row + policy row + script (+ routine prompt + skill for LLM work) + timer or `hermes cron create`; act as the owner via `_actor_by`; write `agent_runs`; notify via `deliver.notify_user`. Hermes has `delegate_task` and a kanban queue but NO agent-to-agent messaging — Postgres is the mailbox.
 
+### 5.z Outreach-as-a-Service — dedicated service MCP for a sibling app (2026-08-31, app-only, migration 032)
+
+Exposes the FULL outreach pipeline (ICP → Leads Finder → Enricher → draft → approve → send) to **another internal app we own**, so its own employees run outreach for their own clients. **App-only, no core/hermes change, no version bump** — the kernel is already multi-tenant on `owner_user_id` and `kernelCall(tool, args, ownerId)` already reaches the `mcp=None` outreach tools (ring `rpc.py` dispatches by name; the `mcp` flag only hides from `tools/list`).
+
+- **Surface** `POST /api/service-mcp` — a SECOND MCP endpoint (JSON-RPC 2.0), separate from `/api/mcp`. Whitelisted in `middleware.ts` (`api/service-mcp$`, bearer-authed). Own curated catalog in `lib/service-mcp/dispatch.ts` (`SERVICE_TOOLS`) that deliberately includes the send/spend tools the public MCP hides.
+- **Two-layer identity**: (1) `Authorization: Bearer svc_…` = which APP (one token per app, table `service_tokens`, hashed like `mcp_tokens`); (2) `X-On-Behalf-Of: <employee_id>` = which of its users. The other app **registers each employee up front** (`register_user`), which provisions an un-loginable SalesBrain `users` row (migration-022 sentinel hash) and stores the map in `external_employees(app_key, employee_id → salesbrain_user_id)`. Every later call resolves the employee → owner; **unregistered employee = rejected** (register-then-use). One SalesBrain user per employee is the grain (no org/tenant layer exists).
+- **Tools** (`lib/service-mcp/`): `register_user`, `crm_icp_define`/`crm_icp_preview`/`crm_icp_list`, `crm_leads_finder_run`/`crm_agent_request_run`, `crm_enrich_prospect`, `list_leads` (direct SQL, owner-scoped), `crm_outreach_propose`, `crm_outreach_pending`, `crm_outreach_decide`, and LinkedIn onboarding (`linkedin_connect_start`/`linkedin_unbound_accounts`/`linkedin_link_account`/`crm_linkedin_status`). Kernel tools pass straight through `kernelCall`; audit → `mcp_audit_log` with `{app_key, employee_id}` in `input`.
+- **Decisions**: approvals render in the OTHER app's UI (`crm_outreach_pending` → `crm_outreach_decide`, not Telegram); each employee connects their OWN LinkedIn + email; **shared data pool** — external rows live in the same `prospects`/`accounts` tables, owned by the mapped user (recoverable as external-origin via `external_employees`). Reachability caveat: fresh LinkedIn leads with no existing thread are email-only (no cold invites).
+- **Admin**: `POST /api/admin/service-tokens {app_key,name}` mints a token (shown once); `lib/service-mcp/tokens.ts`. Rate limits: 120/min per app token + per-tool sub-limits (`lib/service-mcp/auth.ts`). Full contract for the other app's dev: `docs/service-mcp.md`.
+
 ## 6. Env vars
 
 All must be in `.env.local` (dev) and as GitHub repo secrets (prod — workflow writes them to `.env.production`).
@@ -444,6 +454,13 @@ ssh root@104.248.139.55 'grep RESEND_API_KEY /srv/salesbrain/.env.production'
 
 Several Claude Code sessions can work on different features at the same time. The unit of parallelism is a
 **feature**, not a repo — one feature usually touches `salesbrain` + `salesbrain-core` + `salesbrain-hermes`.
+
+**Zero-touch for Amir**: he just opens a new chat and describes the feature. The SESSION creates and manages its
+own workspace — the full startup protocol lives in `Sales CRM/CLAUDE.md` ("Startup protocol"). In short: check
+`./ws.sh list` + every `ws-*/BRIEF.md` `## Scope` first; feature work → `./ws.sh new <slug> <port>` and work only
+inside `ws-<slug>/`, declaring your scope in its BRIEF.md; trivial fixes/merges/deploys → root repos as the
+integration session. A chat doesn't need its own VS Code window — working inside the `ws-<slug>/` subfolder from
+the parent window isolates it just as well.
 
 **Layout.** `Sales CRM/ws.sh` (parent folder) creates `Sales CRM/ws-<feature>/` containing git worktrees of all
 three repos on branch `feat/<feature>`, plus `.env.local`, `node_modules`, and the two `uv` venvs (hermes installs
