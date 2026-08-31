@@ -440,6 +440,45 @@ pm2 restart salesbrain
 ssh root@104.248.139.55 'grep RESEND_API_KEY /srv/salesbrain/.env.production'
 ```
 
+## 13. Parallel sessions (feature workspaces)
+
+Several Claude Code sessions can work on different features at the same time. The unit of parallelism is a
+**feature**, not a repo — one feature usually touches `salesbrain` + `salesbrain-core` + `salesbrain-hermes`.
+
+**Layout.** `Sales CRM/ws.sh` (parent folder) creates `Sales CRM/ws-<feature>/` containing git worktrees of all
+three repos on branch `feat/<feature>`, plus `.env.local`, `node_modules`, and the two `uv` venvs (hermes installs
+core editable from `../salesbrain-core` inside the workspace, so imports resolve to the feature branch). It also
+writes `ws-<feature>/BRIEF.md` — paste that as the first message of the new session.
+
+```bash
+cd "/Users/amir/Documents/Programming /Sales CRM"
+./ws.sh new <feature> [port]   # e.g. ./ws.sh new warm-intros-v2 3001  (~20 s)
+./ws.sh list
+./ws.sh sync <feature>         # merge main -> feat/<feature> in all 3 repos after main moves
+./ws.sh rm <feature>           # after merge; refuses on unmerged/uncommitted work unless --force
+```
+Open `ws-<feature>/` itself as the VS Code / Claude Code folder — same three-folder layout as `Sales CRM/`. The
+workspace gets a copy of `Sales CRM/CLAUDE.md` (which imports this file) and shares the main window's Claude memory dir.
+
+**Which session am I?** If the folder path contains `/ws-<something>/`, this is a **feature session**. If it is the
+plain `Sales CRM/` (the parent folder holding all three repos — the normal way to open this project), this is the
+**integration session** on `main`.
+
+**Feature session rules**
+- Commit only on `feat/<feature>`. Never push `Production`, run `deploy-server.sh`, or SSH to the server.
+- Never bump versions — the 0.x.y lockstep bump happens in the integration session at merge time.
+- Postgres is one shared Supabase DB for every session. Writing a migration file is fine; **applying** it is not,
+  unless the owner has said this feature owns the schema this round. List every migration in the final summary.
+- `PORT=<port> npm run dev` (from `BRIEF.md`); 3000 belongs to the integration session.
+- Stay inside the files the feature needs; other sessions are editing other areas concurrently.
+
+**Integration session (`Sales CRM/`) owns**: merging `feat/*` into `main` in all three repos, the lockstep version bump,
+`npx tsc --noEmit && npx next build` + `pytest` on `main`, applying migrations, deploying, and the live Telegram bot.
+After merging, run `./ws.sh sync <other-feature>` for every workspace still open and tell that session `main` moved.
+
+**Limits**: 2–3 concurrent features is the practical ceiling — everything funnels through one kernel and one DB.
+Two features that must edit the same kernel module or the same table should run sequentially, not in parallel.
+
 ---
 
 If anything in this doc is out of date, update it as you work — it's the canonical handoff between sessions.
