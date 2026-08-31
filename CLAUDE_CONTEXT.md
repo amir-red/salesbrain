@@ -16,7 +16,7 @@ Long-term plan history lives in `~/.claude/plans/lazy-orbiting-sky.md` — every
 
 **Users:** internal sales/grants/PM team. There's no customer-facing product surface inside this CRM (clients hit a public form at zeami.io only).
 
-**Production URL:** `https://salescrm.chipchip.social` (Caddy → PM2 → Next.js on port 3002, server `root@104.248.139.55`, project at `/srv/salesbrain`).
+**Production URL:** `https://salescrm.chipchip.social` (Caddy → PM2 → Next.js on port 3002, server `root@13.63.148.158`, project at `/srv/salesbrain`). Hosted on AWS EC2 (eu-north-1, Elastic IP) since the 2026-08-23 cutover. The old DO droplet `104.248.139.55` was rebuilt 2026-08-24 and now hosts the unrelated personal-assistant project — never deploy or SSH there from this project.
 
 **Local dev:** `npm run dev` on port 3000. `.env.local` has the same env vars listed below.
 
@@ -356,7 +356,7 @@ Server-only deploy SSH secrets (in `.github/workflows/deploy.yml`): `SERVER_HOST
 
 1. Push to `Production` branch on GitHub.
 2. `.github/workflows/deploy.yml`:
-   - SSH to `root@104.248.139.55`
+   - SSH to `root@13.63.148.158`
    - `cd /srv/salesbrain && git pull origin Production`
    - Writes `.env.production` from secrets via `printf` (no leading spaces — `.env` is picky)
    - `npm install` (includes dev deps for build)
@@ -441,13 +441,13 @@ npx tsc --noEmit && npx next build
 DATABASE_URL='...' node -e "..."  # see §7
 
 # SSH to production server
-ssh root@104.248.139.55
+ssh root@13.63.148.158
 cd /srv/salesbrain
 pm2 logs salesbrain --lines 100
 pm2 restart salesbrain
 
 # Verify a production env var
-ssh root@104.248.139.55 'grep RESEND_API_KEY /srv/salesbrain/.env.production'
+ssh root@13.63.148.158 'grep RESEND_API_KEY /srv/salesbrain/.env.production'
 ```
 
 ## 13. Parallel sessions (feature workspaces)

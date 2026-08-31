@@ -1,5 +1,7 @@
 # SalesBrain — Project Context for Claude
 
+> **⚠️ STALE May-2026 snapshot — do not use.** The canonical, maintained doc is [`../CLAUDE_CONTEXT.md`](../CLAUDE_CONTEXT.md) at the repo root. This copy is kept only because old plans/memories link to it.
+
 This file is a self-contained briefing for a fresh Claude session (e.g. moving from one machine/IDE to another). Read it first; it'll bring you up to speed on the project, the architecture, what's shipped, what's broken, and the conventions we follow.
 
 Long-term plan history lives in `~/.claude/plans/lazy-orbiting-sky.md` — every major feature has a plan entry there. Skim it if you want the design rationale for a specific feature.
@@ -16,7 +18,7 @@ Long-term plan history lives in `~/.claude/plans/lazy-orbiting-sky.md` — every
 
 **Users:** internal sales/grants/PM team. There's no customer-facing product surface inside this CRM (clients hit a public form at zeami.io only).
 
-**Production URL:** `https://salescrm.chipchip.social` (Caddy → PM2 → Next.js on port 3002, server `root@104.248.139.55`, project at `/srv/salesbrain`).
+**Production URL:** `https://salescrm.chipchip.social` (Caddy → PM2 → Next.js on port 3002, server `root@13.63.148.158`, project at `/srv/salesbrain`).
 
 **Local dev:** `npm run dev` on port 3000. `.env.local` has the same env vars listed below.
 
@@ -319,7 +321,7 @@ Server-only deploy SSH secrets (in `.github/workflows/deploy.yml`): `SERVER_HOST
 
 1. Push to `Production` branch on GitHub.
 2. `.github/workflows/deploy.yml`:
-   - SSH to `root@104.248.139.55`
+   - SSH to `root@13.63.148.158`
    - `cd /srv/salesbrain && git pull origin Production`
    - Writes `.env.production` from secrets via `printf` (no leading spaces — `.env` is picky)
    - `npm install` (includes dev deps for build)
@@ -404,13 +406,13 @@ npx tsc --noEmit && npx next build
 DATABASE_URL='...' node -e "..."  # see §7
 
 # SSH to production server
-ssh root@104.248.139.55
+ssh root@13.63.148.158
 cd /srv/salesbrain
 pm2 logs salesbrain --lines 100
 pm2 restart salesbrain
 
 # Verify a production env var
-ssh root@104.248.139.55 'grep RESEND_API_KEY /srv/salesbrain/.env.production'
+ssh root@13.63.148.158 'grep RESEND_API_KEY /srv/salesbrain/.env.production'
 ```
 
 ---
