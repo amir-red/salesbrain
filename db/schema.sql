@@ -755,3 +755,35 @@ ALTER TABLE deals ADD COLUMN IF NOT EXISTS applicant_entity TEXT
 ALTER TABLE grant_resources ADD COLUMN IF NOT EXISTS provider TEXT;
 CREATE INDEX IF NOT EXISTS idx_grant_resources_provider
     ON grant_resources(provider) WHERE provider IS NOT NULL;
+
+-- ─── Service MCP: outreach-as-a-service for a sibling app (migration 032) ───
+-- One bearer token per consuming app + a map from that app's employee ids to
+-- provisioned SalesBrain users. See db/migrations/032_service_mcp.sql.
+
+CREATE TABLE IF NOT EXISTS service_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  app_key TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  token_prefix TEXT NOT NULL,
+  name TEXT NOT NULL,
+  last_used_at TIMESTAMPTZ,
+  revoked_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_service_tokens_hash_active
+  ON service_tokens(token_hash) WHERE revoked_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_service_tokens_app
+  ON service_tokens(app_key) WHERE revoked_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS external_employees (
+  app_key TEXT NOT NULL,
+  employee_id TEXT NOT NULL,
+  salesbrain_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  display_name TEXT,
+  email TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at TIMESTAMPTZ,
+  PRIMARY KEY (app_key, employee_id)
+);
+CREATE INDEX IF NOT EXISTS idx_external_employees_user
+  ON external_employees(salesbrain_user_id);

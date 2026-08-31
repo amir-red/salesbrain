@@ -52,6 +52,6 @@ export const config = {
     // handled by getSession() inside the tokens route. The legacy Telegram
     // webhook and /api/cron/* endpoints were retired (Phase 5); the surviving
     // /api/telegram/link* routes are cookie-authed and go through middleware.
-    '/((?!login|signup|forgot-password|reset-password|forms|api/auth|api/health|api/public|api/mcp$|_next/static|_next/image|favicon\\.ico).*)',
+    '/((?!login|signup|forgot-password|reset-password|forms|api/auth|api/health|api/public|api/mcp$|api/service-mcp$|_next/static|_next/image|favicon\\.ico).*)',
   ],
 };
