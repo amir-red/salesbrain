@@ -7,8 +7,9 @@ import TelegramPanel from '@/components/profile/TelegramPanel';
 import LinkedInPanel from '@/components/profile/LinkedInPanel';
 import ImportsPanel from '@/components/profile/ImportsPanel';
 import McpPanel from '@/components/profile/McpPanel';
+import ServiceTokenPanel from '@/components/profile/ServiceTokenPanel';
 
-type Tab = 'account' | 'telegram' | 'linkedin' | 'imports' | 'mcp';
+type Tab = 'account' | 'telegram' | 'linkedin' | 'imports' | 'mcp' | 'service';
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: 'account', label: 'Account', hint: 'Who you are signed in as' },
@@ -16,6 +17,7 @@ const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: 'linkedin', label: 'LinkedIn', hint: 'Inbox triage and follow-ups' },
   { id: 'imports', label: 'Imports', hint: 'Google, contacts, messages' },
   { id: 'mcp', label: 'MCP', hint: 'Access tokens for Claude and other tools' },
+  { id: 'service', label: 'Service API', hint: 'Admin: tokens for a sibling app to run outreach' },
 ];
 
 interface Me { userId: string; email: string; name: string | null; role: string }
@@ -64,7 +66,7 @@ function Profile() {
         </div>
 
         <div className="px-4 pt-3 border-b flex gap-1 overflow-x-auto" style={{ borderColor: 'var(--border)' }}>
-          {TABS.map((t) => (
+          {TABS.filter((t) => t.id !== 'service' || me?.role === 'admin').map((t) => (
             <button
               key={t.id}
               onClick={() => select(t.id)}
@@ -135,6 +137,7 @@ function Profile() {
         {tab === 'linkedin' && <LinkedInPanel />}
         {tab === 'imports' && <ImportsPanel />}
         {tab === 'mcp' && <McpPanel />}
+        {tab === 'service' && me?.role === 'admin' && <ServiceTokenPanel />}
       </div>
     </div>
   );
