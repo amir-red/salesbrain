@@ -18,6 +18,16 @@ interface Lead {
   full_name: string | null; title: string | null; email: string | null; linkedin_url: string | null;
   company_name: string | null; industry: string | null;
 }
+interface Icp {
+  id: string; name: string; product: string | null; description: string | null;
+  search_keywords: string | null; is_active: boolean; prospects: number;
+  filters: Record<string, unknown> | null;
+  criteria: {
+    titles?: string[]; seniority?: string[]; locations?: string[]; industries?: string[];
+    company_sizes?: string[]; exclude_titles?: string[]; exclude_companies?: string[];
+    weights?: Record<string, number>;
+  } | null;
+}
 interface Approval {
   id: string; status: string; channel: string; subject: string | null; message: string; rationale: string | null;
   created_at: string; sent_at: string | null; decided_at: string | null;
@@ -31,7 +41,7 @@ export default function ServiceAdminPage() {
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [drill, setDrill] = useState<{ emp: EmployeeRow; leads: Lead[]; approvals: Approval[] } | null>(null);
+  const [drill, setDrill] = useState<{ emp: EmployeeRow; icps: Icp[]; leads: Lead[]; approvals: Approval[] } | null>(null);
   const [drillBusy, setDrillBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -54,7 +64,7 @@ export default function ServiceAdminPage() {
       const res = await fetch(`/api/admin/service-activity?user_id=${encodeURIComponent(emp.salesbrain_user_id)}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed');
-      setDrill({ emp, leads: data.leads || [], approvals: data.approvals || [] });
+      setDrill({ emp, icps: data.icps || [], leads: data.leads || [], approvals: data.approvals || [] });
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed');
     } finally { setDrillBusy(false); }
@@ -177,6 +187,15 @@ export default function ServiceAdminPage() {
             </div>
 
             <div className="p-4">
+              <h3 className="text-sm font-semibold mb-2">ICPs <span style={{ color: 'var(--text-muted)' }}>({drill.icps.length})</span></h3>
+              {drill.icps.length === 0 ? (
+                <p className="text-xs mb-6" style={{ color: 'var(--text-muted)' }}>No ICP defined yet.</p>
+              ) : (
+                <div className="space-y-2 mb-6">
+                  {drill.icps.map((icp) => <IcpCard key={icp.id} icp={icp} />)}
+                </div>
+              )}
+
               <h3 className="text-sm font-semibold mb-2">Pending & recent drafts <span style={{ color: 'var(--text-muted)' }}>({drill.approvals.length})</span></h3>
               {drill.approvals.length === 0 ? (
                 <p className="text-xs mb-5" style={{ color: 'var(--text-muted)' }}>No outreach drafts yet.</p>
@@ -219,6 +238,72 @@ export default function ServiceAdminPage() {
               )}
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Chips({ label, items, tone }: { label: string; items?: string[]; tone?: 'exclude' }) {
+  if (!items || items.length === 0) return null;
+  const bg = tone === 'exclude' ? 'rgba(239,68,68,0.10)' : 'var(--bg-input)';
+  const fg = tone === 'exclude' ? '#ef4444' : 'var(--text)';
+  return (
+    <div className="flex flex-wrap items-baseline gap-1.5 mb-1.5">
+      <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)', minWidth: 74 }}>{label}</span>
+      {items.map((it, i) => (
+        <span key={i} className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: bg, color: fg, border: '1px solid var(--border)' }}>{it}</span>
+      ))}
+    </div>
+  );
+}
+
+function IcpCard({ icp }: { icp: Icp }) {
+  const c = icp.criteria || {};
+  const w = c.weights || {};
+  const f = (icp.filters || {}) as Record<string, unknown>;
+  const filterList = (k: string): string[] => {
+    const v = f[k];
+    return Array.isArray(v) ? v.map(String) : [];
+  };
+  return (
+    <div className="rounded p-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-sm font-medium">
+          {icp.name}
+          {!icp.is_active && <span className="ml-2 text-[10px]" style={{ color: 'var(--text-muted)' }}>(archived)</span>}
+        </div>
+        <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{icp.prospects} leads</span>
+      </div>
+      {icp.search_keywords && (
+        <p className="text-[11px] mb-2 font-mono" style={{ color: 'var(--text-muted)' }}>&ldquo;{icp.search_keywords}&rdquo;</p>
+      )}
+
+      <div className="text-[10px] uppercase tracking-wider mt-2 mb-1" style={{ color: 'var(--accent)' }}>Scoring criteria</div>
+      <Chips label="Titles" items={c.titles} />
+      <Chips label="Seniority" items={c.seniority} />
+      <Chips label="Industries" items={c.industries} />
+      <Chips label="Locations" items={c.locations} />
+      <Chips label="Sizes" items={c.company_sizes} />
+      <Chips label="Exclude" items={c.exclude_titles} tone="exclude" />
+      <Chips label="Exclude co." items={c.exclude_companies} tone="exclude" />
+
+      {(filterList('location').length || filterList('industry').length || filterList('function').length || filterList('company').length) > 0 && (
+        <>
+          <div className="text-[10px] uppercase tracking-wider mt-3 mb-1" style={{ color: 'var(--accent)' }}>LinkedIn search filters</div>
+          <Chips label="Location" items={filterList('location')} />
+          <Chips label="Industry" items={filterList('industry')} />
+          <Chips label="Function" items={filterList('function')} />
+          <Chips label="Company" items={filterList('company')} />
+        </>
+      )}
+
+      {Object.keys(w).length > 0 && (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3 pt-2 text-[10px]" style={{ borderTop: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+          <span className="uppercase tracking-wider">Weights</span>
+          {Object.entries(w).map(([k, v]) => (
+            <span key={k} className="font-mono">{k} {v}</span>
+          ))}
         </div>
       )}
     </div>

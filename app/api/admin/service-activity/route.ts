@@ -30,7 +30,16 @@ export async function GET(req: NextRequest) {
     );
     if (!owned.rows.length) return NextResponse.json({ error: 'Not a service employee' }, { status: 404 });
 
-    const [leads, approvals] = await Promise.all([
+    const [icps, leads, approvals] = await Promise.all([
+      pool.query(
+        `SELECT i.id, i.name, i.product, i.description, i.search_keywords,
+                i.filters, i.criteria, i.is_active, i.created_at,
+                (SELECT count(*)::int FROM prospects p WHERE p.icp_profile_id = i.id) AS prospects
+         FROM icp_profiles i
+         WHERE i.owner_user_id = $1
+         ORDER BY i.is_active DESC, i.updated_at DESC`,
+        [drillUser],
+      ),
       pool.query(
         `SELECT p.id, p.stage, p.icp_score, p.fit_label, p.research_summary,
                 p.network_degree, p.created_at, i.name AS icp_name,
@@ -58,7 +67,7 @@ export async function GET(req: NextRequest) {
         [drillUser],
       ),
     ]);
-    return NextResponse.json({ employee: owned.rows[0], leads: leads.rows, approvals: approvals.rows });
+    return NextResponse.json({ employee: owned.rows[0], icps: icps.rows, leads: leads.rows, approvals: approvals.rows });
   }
 
   // ── Overview: one row per provisioned employee, with counts. ──
