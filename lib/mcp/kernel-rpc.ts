@@ -59,24 +59,46 @@ export async function fetchRingCatalog(): Promise<RingToolDef[]> {
   return tools as RingToolDef[];
 }
 
+// Tools that reach LinkedIn/Unipile and/or an LLM per invocation and can run
+// well past the default ceiling — a Leads Finder step searches a page THEN
+// researches the top N (profile fetches + a model call each). The background
+// timer isn't subprocess-bounded; these app/MCP-driven calls are, so give them
+// real headroom or they get SIGKILLed mid-research (run left stuck 'running').
+const LONG_RUNNING_TOOLS = new Set<string>([
+  'crm_leads_finder_run',
+  'crm_enrich_prospect',
+  'crm_prospect_search',
+  'crm_research_company',
+  'crm_prospect_auto_qualify',
+  'crm_icp_rescore',
+]);
+
 async function rpc(
   request: Record<string, unknown>,
   label: string,
 ): Promise<Record<string, unknown>> {
   const encoded = Buffer.from(JSON.stringify(request)).toString('base64');
+  const tool = typeof request.tool === 'string' ? request.tool : '';
+  const timeoutMs = LONG_RUNNING_TOOLS.has(tool) ? 180_000 : 30_000;
 
   let stdout: string;
   try {
     const res = await execFileAsync(RPC_PYTHON, ['-m', 'salesbrain_hermes.rpc'], {
       // Pass the request via env (not argv) so it never shows up in `ps`.
       env: { ...process.env, SALESBRAIN_RPC_REQUEST: encoded },
-      timeout: 30_000,
+      timeout: timeoutMs,
       maxBuffer: 8 * 1024 * 1024,
     });
     stdout = res.stdout;
   } catch (err) {
+    // Surface WHAT actually happened — a plain "Command failed" hides timeouts
+    // (SIGKILL at the ceiling) and Python tracebacks written to stderr.
+    const e = err as { message?: string; killed?: boolean; signal?: string; stderr?: string };
+    const killed = e?.killed || e?.signal === 'SIGTERM' || e?.signal === 'SIGKILL';
+    const reason = killed ? ` (killed after ${Math.round(timeoutMs / 1000)}s — likely timeout)` : '';
+    const stderr = e?.stderr ? ` — ${String(e.stderr).slice(0, 400)}` : '';
     throw new Error(
-      `kernel RPC failed for ${label}: ${err instanceof Error ? err.message : String(err)}`,
+      `kernel RPC failed for ${label}: ${e?.message || String(err)}${reason}${stderr}`,
     );
   }
 
