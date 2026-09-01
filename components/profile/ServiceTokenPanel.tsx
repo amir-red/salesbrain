@@ -88,6 +88,9 @@ export default function ServiceTokenPanel() {
           on behalf of its own employees, via <span className="font-mono">/api/service-mcp</span>. One token per app.
           Admin only. Revoke any time.
         </p>
+        <a href="/admin/service" className="inline-block mt-2 text-xs" style={{ color: 'var(--accent)' }}>
+          View service activity (per app &amp; employee) →
+        </a>
       </div>
 
       <div className="p-4 max-w-3xl">
