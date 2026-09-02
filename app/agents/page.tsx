@@ -101,6 +101,12 @@ export default function AgentsPage() {
                 </Link>
               )}
               {data.is_admin && (
+                <Link href="/admin/linkedin" className="text-xs px-3 py-1.5 rounded-lg"
+                      style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                  LinkedIn health →
+                </Link>
+              )}
+              {data.is_admin && (
                 <button onClick={() => { if (data.kill_switch ? confirm('Stop every background agent on its next tick?') : true) patch({ kill_switch: !data.kill_switch }, 'ks'); }}
                         disabled={busy === 'ks'} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40"
                         style={{ background: data.kill_switch ? 'var(--red)' : 'var(--green)', color: '#fff' }}>
