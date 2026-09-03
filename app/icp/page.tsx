@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import IcpBuilder from '@/components/icp/IcpBuilder';
 import IcpLeads, { RunPill } from '@/components/icp/IcpLeads';
-import { PRODUCTS, summarizeCriteria } from '@/lib/icp';
+import { PRODUCTS, OBJECTIVES, summarizeCriteria } from '@/lib/icp';
 import type { IcpProfile } from '@/lib/icp';
 import { relativeTime } from '@/lib/time';
 
@@ -114,8 +114,13 @@ export default function IcpPage() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="font-semibold truncate">{p.name}</div>
-                      <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                      <div className="text-[11px] flex items-center gap-1.5 flex-wrap" style={{ color: 'var(--text-muted)' }}>
                         {productLabel(p.product)} · updated {relativeTime(p.updated_at)}
+                        {p.objective && (
+                          <span className="px-1.5 py-0.5 rounded" style={{ background: 'var(--bg-input)', color: 'var(--text)' }}>
+                            ⌾ {OBJECTIVES.find((o) => o.key === p.objective)?.label ?? p.objective}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <span className="shrink-0 text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>

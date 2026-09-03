@@ -5,9 +5,9 @@ import ChipSelect from './ChipSelect';
 import {
   COMPANY_SIZES, DEFAULT_WEIGHTS, EXCLUDE_TITLE_PRESETS, INDUSTRIES, LOCATION_GROUPS, PRODUCTS,
   ROLE_GROUPS, SENIORITY_BANDS, WEIGHT_LABELS, buildSalesNavFilters, emptyCriteria,
-  normalizeWeights, weightsTotal,
+  normalizeWeights, weightsTotal, OBJECTIVES,
 } from '@/lib/icp';
-import type { IcpCriteria, IcpProfile, IcpSuggestion, SeniorityBand, WeightKey } from '@/lib/icp';
+import type { IcpCandidate, IcpCriteria, IcpProfile, ObjectiveKey, SeniorityBand, WeightKey } from '@/lib/icp';
 
 interface PreviewMatch {
   contact_id: string; full_name: string; title: string | null; company: string | null;
@@ -67,6 +67,9 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
   const [suggesting, setSuggesting] = useState(false);
   const [suggestNote, setSuggestNote] = useState<string | null>(null);
   const [aiTouched, setAiTouched] = useState(false);
+  const [objective, setObjective] = useState<ObjectiveKey | ''>((initial?.objective as ObjectiveKey) ?? '');
+  const [candidates, setCandidates] = useState<IcpCandidate[]>([]);
+  const [recommendedIdx, setRecommendedIdx] = useState(0);
 
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [previewing, setPreviewing] = useState(false);
@@ -91,41 +94,48 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
   const salesNav = useMemo(() => buildSalesNavFilters(criteria), [criteria]);
   const canSave = name.trim().length > 0 && (criteria.titles.length > 0 || criteria.seniority.length > 0 || criteria.industries.length > 0);
 
-  const analyze = async () => {
+  // Suggest scored ICP candidates from whatever the user has (website /
+  // description / current chips) tuned to the chosen objective. Nothing saves.
+  const suggest = async () => {
     setSuggesting(true); setError(null); setSuggestNote(null);
     try {
-      const res = await fetch('/api/icp/suggest', {
+      const partial = {
+        titles: criteria.titles, seniority: criteria.seniority, industries: criteria.industries,
+        locations: criteria.locations, company_sizes: criteria.company_sizes,
+      };
+      const res = await fetch('/api/icp/optimize', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ website, product, description }),
+        body: JSON.stringify({ website, product, description, objective: objective || undefined, criteria: partial }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error || 'Analysis failed'); return; }
-      const s: IcpSuggestion = data.suggestion;
-      if (!name.trim() && s.company_name) setName(`${s.company_name} buyers`);
-      if (!description.trim() && s.description) setDescription(s.description);
-      setCriteria((c) => {
-        const sizes = s.company_sizes.length ? s.company_sizes : c.company_sizes;
-        const w = { ...c.weights };
-        if (sizes.length && w.size === 0) w.size = 10;
-        return {
-          titles: s.titles.length ? s.titles : c.titles,
-          seniority: s.seniority.length ? s.seniority : c.seniority,
-          industries: s.industries.length ? s.industries : c.industries,
-          locations: s.locations.length ? s.locations : c.locations,
-          company_sizes: sizes,
-          exclude_titles: s.exclude_titles.length ? s.exclude_titles : c.exclude_titles,
-          exclude_companies: s.exclude_companies.length ? s.exclude_companies : c.exclude_companies,
-          weights: normalizeWeights(w),
-        };
-      });
-      setAiTouched(true);
-      const via = data.source === 'bundle' ? 'Read from the site\u2019s app bundle (JS-only page). '
-        : data.source === 'description' ? 'The site returned no text \u2014 drafted from your description instead. ' : '';
-      setSuggestNote(via + [s.rationale, s.keywords.length ? `Topics buyers talk about: ${s.keywords.join(', ')}` : null].filter(Boolean).join(' \u2014 '));
+      if (!res.ok) { setError(data.error || 'Suggestion failed'); return; }
+      setCandidates(data.candidates || []);
+      setRecommendedIdx(typeof data.recommended_index === 'number' ? data.recommended_index : 0);
       setPreview(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Analysis failed');
+      setError(e instanceof Error ? e.message : 'Suggestion failed');
     } finally { setSuggesting(false); }
+  };
+
+  // Apply a chosen candidate into the form (like the old website merge, but a
+  // full replace since the candidate is a complete profile).
+  const useCandidate = (cand: IcpCandidate) => {
+    const s2 = cand.suggestion;
+    if (!name.trim() && s2.name) setName(s2.name);
+    if (s2.product) setProduct(s2.product);
+    setCriteria({
+      titles: s2.criteria.titles ?? [],
+      seniority: (s2.criteria.seniority ?? []) as SeniorityBand[],
+      industries: s2.criteria.industries ?? [],
+      locations: s2.criteria.locations ?? [],
+      company_sizes: s2.criteria.company_sizes ?? [],
+      exclude_titles: s2.criteria.exclude_titles ?? [],
+      exclude_companies: s2.criteria.exclude_companies ?? [],
+      weights: normalizeWeights({ ...DEFAULT_WEIGHTS, ...(s2.criteria.weights ?? {}) }),
+    });
+    setAiTouched(true);
+    setCandidates([]);
+    setSuggestNote(cand.rationale || null);
   };
 
   const runPreview = async () => {
@@ -146,7 +156,7 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
   const save = async () => {
     setSaving(true); setError(null);
     try {
-      const body = { name: name.trim(), product: product || null, description: description.trim() || null, criteria };
+      const body = { name: name.trim(), product: product || null, description: description.trim() || null, objective: objective || null, criteria };
       const res = await fetch(initial ? `/api/icp/${initial.id}` : '/api/icp', {
         method: initial ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -189,21 +199,75 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2}
                     placeholder="What we sell and to whom (used by the agent when drafting outreach)"
                     className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y" style={inputStyle} />
-          <div className="rounded-lg p-3 space-y-2" style={{ background: 'var(--bg-input)', border: '1px dashed var(--border)' }}>
-            <div className="text-xs font-medium">Draft from a website</div>
+          <div className="rounded-lg p-3 space-y-3" style={{ background: 'var(--bg-input)', border: '1px dashed var(--border)' }}>
+            <div>
+              <div className="text-xs font-medium mb-1">Optimize for <span style={{ color: 'var(--text-muted)' }}>(optional)</span></div>
+              <div className="flex flex-wrap gap-1.5">
+                {OBJECTIVES.map((o) => (
+                  <button key={o.key} type="button" title={o.hint}
+                          onClick={() => setObjective(objective === o.key ? '' : o.key)}
+                          className="text-[11px] px-2 py-1 rounded-full border"
+                          style={objective === o.key
+                            ? { background: 'var(--accent)', color: '#fff', borderColor: 'transparent' }
+                            : { background: 'var(--bg)', color: 'var(--text-muted)', borderColor: 'var(--border)' }}>
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="flex gap-2">
-              <input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://zeami.io"
-                     onKeyDown={(e) => { if (e.key === 'Enter' && website.trim() && !suggesting) analyze(); }}
+              <input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="Website (optional), e.g. zeami.io"
+                     onKeyDown={(e) => { if (e.key === 'Enter' && !suggesting) suggest(); }}
                      className="flex-1 px-3 py-1.5 rounded-lg text-sm outline-none" style={{ ...inputStyle, background: 'var(--bg)' }} />
-              <button type="button" onClick={analyze} disabled={!website.trim() || suggesting}
-                      className="px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-40" style={{ background: 'var(--accent)', color: '#fff' }}>
-                {suggesting ? 'Analyzing…' : 'Analyze'}
+              <button type="button" onClick={suggest} disabled={suggesting}
+                      className="px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-40 whitespace-nowrap" style={{ background: 'var(--accent)', color: '#fff' }}>
+                {suggesting ? 'Thinking…' : 'Suggest ICPs'}
               </button>
             </div>
             <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-              Reads the homepage and /about, then proposes roles, industries, markets, sizes and exclusions. Nothing is saved until you click Save.
+              Uses the website, your description and any chips you’ve set to propose a few candidate ICPs — each scored on speed, volume, margin, logo and test-cases. Nothing is saved until you pick one and click Save.
             </p>
             {suggestNote && <p className="text-[11px]" style={{ color: 'var(--text)' }}>{suggestNote}</p>}
+
+            {candidates.length > 0 && (
+              <div className="space-y-2 pt-1">
+                {candidates.map((cand, i) => (
+                  <div key={i} className="rounded-lg p-3"
+                       style={{ background: 'var(--bg)', border: i === recommendedIdx ? '1px solid var(--accent)' : '1px solid var(--border)' }}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-xs font-semibold flex items-center gap-2 flex-wrap">
+                        {cand.suggestion.name}
+                        {i === recommendedIdx && <span className="text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wider" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>Recommended</span>}
+                        <span className="text-[9px]" style={{ color: 'var(--text-muted)' }}>{cand.confidence} confidence</span>
+                      </div>
+                      <button type="button" onClick={() => useCandidate(cand)}
+                              className="text-[11px] px-2 py-1 rounded whitespace-nowrap" style={{ background: 'var(--accent)', color: '#fff' }}>Use this</button>
+                    </div>
+                    <div className="grid gap-1 mt-2" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+                      {OBJECTIVES.map((o) => {
+                        const v = cand.objective_scores[o.key] ?? 0;
+                        return (
+                          <div key={o.key} title={`${o.label}: ${v}/5`} className="text-center">
+                            <div className="flex items-end justify-center gap-0.5 h-6">
+                              {[1, 2, 3, 4, 5].map((n) => (
+                                <span key={n} className="w-1 rounded-sm" style={{ height: `${n * 18}%`, background: n <= v ? 'var(--accent)' : 'var(--border)' }} />
+                              ))}
+                            </div>
+                            <div className="text-[8px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{o.label.split(' ')[0]}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {cand.rationale && <p className="text-[10px] mt-2" style={{ color: 'var(--text-muted)' }}>{cand.rationale}</p>}
+                    {cand.assumptions.length > 0 && (
+                      <ul className="text-[10px] mt-1 list-disc pl-4 space-y-0.5" style={{ color: 'var(--text-muted)' }}>
+                        {cand.assumptions.slice(0, 3).map((a, j) => <li key={j}>{a}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </Section>
 

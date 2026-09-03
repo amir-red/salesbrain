@@ -33,6 +33,7 @@ export interface IcpProfile {
   product: string | null;
   description: string | null;
   search_keywords: string | null;
+  objective: string | null;
   filters: Record<string, unknown>;
   criteria: IcpCriteria;
   is_active: boolean;
@@ -171,6 +172,51 @@ export const PRODUCTS: { key: string; label: string }[] = [
   { key: 'zeami', label: 'Zeami' },
   { key: 'chipchip', label: 'ChipChip' },
 ];
+
+/**
+ * Strategic objectives an ICP can be optimized FOR. These are orthogonal to
+ * the scoring weights (which rate a person against a fixed segment): an
+ * objective is about WHICH segment to chase. The optimizer scores every
+ * candidate ICP 1–5 on all five so the tradeoff is visible, and tunes toward a
+ * chosen primary. Only the chosen `objective` is persisted (on icp_profiles);
+ * the per-candidate scores are decision aids and are never stored.
+ */
+export type ObjectiveKey = 'speed_to_market' | 'volume' | 'margin' | 'logo' | 'test_cases';
+
+export const OBJECTIVES: { key: ObjectiveKey; label: string; hint: string }[] = [
+  { key: 'speed_to_market', label: 'Speed to market', hint: 'Fastest to close — short cycle, easy to reach and qualify' },
+  { key: 'volume', label: 'Volume', hint: 'Largest addressable pool of prospects' },
+  { key: 'margin', label: 'Margin', hint: 'Highest deal size / profitability' },
+  { key: 'logo', label: 'Logo', hint: 'Marquee / reference prestige of winning these accounts' },
+  { key: 'test_cases', label: 'Test cases', hint: 'Best early adopters to validate the product and produce case studies' },
+];
+
+export const OBJECTIVE_KEYS: ObjectiveKey[] = OBJECTIVES.map((o) => o.key);
+
+export type ObjectiveScores = Record<ObjectiveKey, number>;
+
+/** One optimizer candidate: a full ICP + how it scores on each objective. */
+export interface IcpCandidate {
+  suggestion: {
+    name: string;
+    product: string | null;
+    search_keywords: string;
+    filters: { location: string[]; industry: string[]; function: string[]; company: string[] };
+    criteria: IcpCriteria;
+  };
+  objective_scores: ObjectiveScores;
+  rationale: string | null;
+  assumptions: string[];
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export interface IcpOptimizeResult {
+  objective: ObjectiveKey | null;
+  recommended_index: number;
+  candidates: IcpCandidate[];
+  source: string;
+  note: string;
+}
 
 export function emptyCriteria(): IcpCriteria {
   return {

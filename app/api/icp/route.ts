@@ -54,20 +54,20 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'Invalid body', issues: parsed.error.issues }, { status: 400 });
   }
-  const { name, product, description } = parsed.data;
+  const { name, product, description, objective } = parsed.data;
   const criteria = normalizeCriteria(parsed.data.criteria);
   if (weightsTotal(criteria.weights) !== 100) criteria.weights = normalizeWeights(criteria.weights);
   const { filters, search_keywords } = buildSalesNavFilters(criteria);
 
   const { rows } = await pool.query(
-    `INSERT INTO icp_profiles (owner_user_id, name, product, description, search_keywords, filters, criteria)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO icp_profiles (owner_user_id, name, product, description, objective, search_keywords, filters, criteria)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (owner_user_id, lower(name)) DO UPDATE SET
-       product = EXCLUDED.product, description = EXCLUDED.description,
+       product = EXCLUDED.product, description = EXCLUDED.description, objective = EXCLUDED.objective,
        search_keywords = EXCLUDED.search_keywords, filters = EXCLUDED.filters,
        criteria = EXCLUDED.criteria, is_active = true, updated_at = now()
      RETURNING *`,
-    [session.userId, name, product ?? null, description ?? null, search_keywords || null,
+    [session.userId, name, product ?? null, description ?? null, objective ?? null, search_keywords || null,
      JSON.stringify(filters), JSON.stringify(criteria)],
   );
   await auditBestEffort(session.userId, 'icp_define', { name, icp_id: rows[0].id, via: 'builder' });

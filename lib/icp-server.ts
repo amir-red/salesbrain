@@ -22,6 +22,7 @@ export const IcpBodySchema = z.object({
   name: z.string().trim().min(1).max(120),
   product: z.string().trim().max(40).nullable().optional(),
   description: z.string().trim().max(2000).nullable().optional(),
+  objective: z.enum(['speed_to_market', 'volume', 'margin', 'logo', 'test_cases']).nullable().optional(),
   criteria: CriteriaSchema,
 });
 

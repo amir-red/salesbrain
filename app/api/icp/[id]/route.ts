@@ -38,7 +38,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   if (!parsed.success) {
     return NextResponse.json({ error: 'Invalid body', issues: parsed.error.issues }, { status: 400 });
   }
-  const { name, product, description } = parsed.data;
+  const { name, product, description, objective } = parsed.data;
   const criteria = normalizeCriteria(parsed.data.criteria);
   if (weightsTotal(criteria.weights) !== 100) criteria.weights = normalizeWeights(criteria.weights);
   const { filters, search_keywords } = buildSalesNavFilters(criteria);
@@ -53,11 +53,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 
   const { rows } = await pool.query(
-    `UPDATE icp_profiles SET name = $3, product = $4, description = $5, search_keywords = $6,
+    `UPDATE icp_profiles SET name = $3, product = $4, description = $5, objective = $9, search_keywords = $6,
        filters = $7, criteria = $8, is_active = true, updated_at = now()
      WHERE id = $1 AND owner_user_id = $2 RETURNING *`,
     [params.id, session.userId, name, product ?? null, description ?? null, search_keywords || null,
-     JSON.stringify(filters), JSON.stringify(criteria)],
+     JSON.stringify(filters), JSON.stringify(criteria), objective ?? null],
   );
   await auditBestEffort(session.userId, 'icp_define', { name, icp_id: params.id, via: 'builder' });
   // Editing criteria must reach the people already on the list, not only the

@@ -63,10 +63,11 @@ export const SERVICE_TOOLS: ToolDef[] = [
   {
     name: 'suggest_icp',
     description:
-      "Optimize partial targeting into a complete, confirmable ICP. Give any of website / product / " +
-      "description / a partial criteria or filters; Claude returns a full ICP (filters + scoring criteria + " +
-      "weights) plus an 'assumptions' list of everything it INFERRED for a human to confirm. Saves nothing — " +
-      "show it, let the user edit, then call crm_icp_define with the confirmed profile. Run this BEFORE sourcing.",
+      "Optimize partial targeting into confirmable ICP CANDIDATES. Give any of website / product / description / " +
+      "a partial criteria or filters (optionally a primary `objective`); returns 2-4 candidate ICPs, each a full " +
+      "profile (filters + criteria + weights) SCORED 1-5 on all five objectives (speed_to_market, volume, margin, " +
+      "logo, test_cases) with `objective_scores`, plus `assumptions` and `confidence`; `recommended_index` flags the " +
+      "best fit. Saves nothing — show the candidates, let the user pick/edit, then call crm_icp_define. Run BEFORE sourcing.",
     inputSchema: obj({
       name: { type: 'string' },
       product: { type: 'string', description: 'zeami | chipchip' },
@@ -74,6 +75,9 @@ export const SERVICE_TOOLS: ToolDef[] = [
       description: { type: 'string' },
       criteria: { type: 'object', description: 'Any partial criteria you already have' },
       filters: { type: 'object', description: 'Any partial filters you already have' },
+      objective: { type: 'string', enum: ['speed_to_market', 'volume', 'margin', 'logo', 'test_cases'],
+                   description: 'Primary objective to optimize for; the recommended candidate is tuned to it' },
+      n_candidates: { type: 'integer', description: 'How many candidate ICPs to return (2-4, default 3)' },
     }),
     needsOwner: false,
   },
@@ -301,6 +305,8 @@ export async function dispatchServiceTool(
         description: typeof args.description === 'string' ? args.description : undefined,
         criteria: (args.criteria && typeof args.criteria === 'object') ? args.criteria as Record<string, unknown> : undefined,
         filters: (args.filters && typeof args.filters === 'object') ? args.filters as Record<string, unknown> : undefined,
+        objective: typeof args.objective === 'string' ? args.objective : undefined,
+        n_candidates: typeof args.n_candidates === 'number' ? args.n_candidates : undefined,
       });
       if ((out as { error?: string }).error) return { status: 'error', error: (out as { error: string }).error };
       return { status: 'success', data: out };

@@ -130,16 +130,17 @@ Provisions their private owner and maps your id to it. Idempotent — safe to ca
 ```
 
 ### 3. Optimize the ICP (recommended)
-Often you won't have a full ICP — just a product, a sentence, or a website. `suggest_icp` turns whatever you
-have into a complete, LinkedIn-mapped ICP (filters + scoring criteria + weights) and returns an `assumptions`
-list of everything it INFERRED. **Show it to your user, let them confirm/edit, then pass the confirmed profile to
-`crm_icp_define` in the next step.** Saves nothing on its own.
+Often you won't have a full ICP — just a product, a sentence, or a website. `suggest_icp` turns whatever you have
+into **2–4 candidate ICPs**, each a complete LinkedIn-mapped profile (filters + criteria + weights) **scored 1–5 on
+five strategic objectives** — speed_to_market, volume, margin, logo, test_cases — plus an `assumptions` list of what
+it inferred. Pass an optional primary `objective` and the recommended candidate is tuned to it. **Show the
+candidates, let your user pick/edit one, then pass it to `crm_icp_define`.** Saves nothing on its own.
 
 ```json
 "name": "suggest_icp",
-"arguments": { "product": "AI ops automation", "description": "we help mid-market ops teams cut manual work" }
+"arguments": { "product": "AI ops automation", "description": "we help mid-market ops teams cut manual work", "objective": "margin" }
 ```
-→ `{ suggestion: { name, filters, criteria, weights, search_keywords }, rationale, assumptions: ["we assumed US/EU — confirm?"], confidence }`
+→ `{ recommended_index: 0, candidates: [ { suggestion:{name,filters,criteria,weights,search_keywords}, objective_scores:{speed_to_market,volume,margin,logo,test_cases}, rationale, assumptions:[…], confidence } ] }`
 
 ### 4. Define the ICP
 Who this employee is selling to — search filters plus scoring criteria (the confirmed output of step 3, or built
@@ -219,12 +220,13 @@ spends quota · **send** can deliver a message. Required params marked `*`.
 
 ### Targeting
 
-**`suggest_icp`** · read (LLM) — Turn partial input (website / product / description / a partial criteria or
-filters) into a complete, confirmable ICP + an `assumptions` list of what it inferred + a `confidence`. Saves
+**`suggest_icp`** · read (LLM) — Turn partial input into **2–4 candidate ICPs**, each scored 1–5 on the five
+objectives (`objective_scores`) with `assumptions` + `confidence`; `recommended_index` flags the best fit. Saves
 nothing. Run before `crm_icp_define`.
 - `website` / `product` / `description` — any subset; more is better
 - `criteria` / `filters` — a partial draft to optimize
-- `name` — optional name for the suggested ICP
+- `objective` — primary goal to tune the recommendation to: `speed_to_market` | `volume` | `margin` | `logo` | `test_cases`
+- `n_candidates` — how many candidates (2–4, default 3); `name` — optional
 
 **`crm_icp_define`** · write — Create or update a named ICP: filters (who to find) + criteria (what
 scores as a fit).
