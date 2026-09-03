@@ -13,10 +13,10 @@
 ## 1. What it does, end to end
 
 ```
- 01 ICP  →  02 Find  →  03 Enrich  →  04 Draft  →  05 Approve  →  06 Send
- target     source &     employer,     first        your user       through the
- spec       score fit    research,     message      says yes,       policy gate
-                         email                       in your UI
+ 01 ICP  →  02 Optimize  →  03 Find  →  04 Enrich  →  05 Draft  →  06 Approve  →  07 Send
+ target     LLM completes    source &     employer,     first        your user       through the
+ spec       + you confirm    score fit    research,     message      says yes,       policy gate
+                                          email                       in your UI
 ```
 
 Every stage is a tool call. Run the whole sequence, or only the parts you need — bring your own
@@ -129,9 +129,21 @@ Provisions their private owner and maps your id to it. Idempotent — safe to ca
 "arguments": { "employee_id": "emp-4821", "name": "Dana Okoro", "email": "dana@you.com" }
 ```
 
-### 3. Define an ICP
-Who this employee is selling to — search filters plus scoring criteria. Re-run with the same `name` to
-refine; criteria are data, no redeploy.
+### 3. Optimize the ICP (recommended)
+Often you won't have a full ICP — just a product, a sentence, or a website. `suggest_icp` turns whatever you
+have into a complete, LinkedIn-mapped ICP (filters + scoring criteria + weights) and returns an `assumptions`
+list of everything it INFERRED. **Show it to your user, let them confirm/edit, then pass the confirmed profile to
+`crm_icp_define` in the next step.** Saves nothing on its own.
+
+```json
+"name": "suggest_icp",
+"arguments": { "product": "AI ops automation", "description": "we help mid-market ops teams cut manual work" }
+```
+→ `{ suggestion: { name, filters, criteria, weights, search_keywords }, rationale, assumptions: ["we assumed US/EU — confirm?"], confidence }`
+
+### 4. Define the ICP
+Who this employee is selling to — search filters plus scoring criteria (the confirmed output of step 3, or built
+by hand). Re-run with the same `name` to refine; criteria are data, no redeploy.
 
 ```json
 "name": "crm_icp_define",
@@ -143,19 +155,19 @@ refine; criteria are data, no redeploy.
 }
 ```
 
-### 4. Source leads
+### 5. Source leads
 `crm_leads_finder_run` pulls one page now (spends the LinkedIn daily search budget). Prefer
 `crm_agent_request_run` to queue a background pass when it needn't happen this second.
 
-### 5. Enrich the best ones
+### 6. Enrich the best ones
 `crm_enrich_prospect` fills employer, company research + website, and an email address. It contacts no
 one. This is what makes a lead reachable and a draft specific.
 
-### 6. Read the list & draft
+### 7. Read the list & draft
 `list_leads` returns the employee's prospects, best fit first, with reachability. For a chosen person,
 `crm_outreach_propose` files a draft — it sends nothing.
 
-### 7. Approve in your UI → send
+### 8. Approve in your UI → send
 Show `crm_outreach_pending` in your product. When the employee clicks approve, call
 `crm_outreach_decide` — that sends immediately through SalesBrain's policy gate and reports the
 outcome.
@@ -206,6 +218,13 @@ spends quota · **send** can deliver a message. Required params marked `*`.
 - `email` — their email, if you have it
 
 ### Targeting
+
+**`suggest_icp`** · read (LLM) — Turn partial input (website / product / description / a partial criteria or
+filters) into a complete, confirmable ICP + an `assumptions` list of what it inferred + a `confidence`. Saves
+nothing. Run before `crm_icp_define`.
+- `website` / `product` / `description` — any subset; more is better
+- `criteria` / `filters` — a partial draft to optimize
+- `name` — optional name for the suggested ICP
 
 **`crm_icp_define`** · write — Create or update a named ICP: filters (who to find) + criteria (what
 scores as a fit).

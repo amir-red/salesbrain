@@ -21,6 +21,7 @@ import pool from '../db';
 import { kernelCall } from '../mcp/kernel-rpc';
 import { registerEmployee } from './identity';
 import { linkedinConnectStart, linkedinUnboundAccounts, linkedinLinkAccount } from './linkedin';
+import { suggestIcp } from './icp-suggest';
 
 export interface ServiceDispatchResult {
   status: 'success' | 'error';
@@ -57,6 +58,23 @@ export const SERVICE_TOOLS: ToolDef[] = [
       },
       ['employee_id'],
     ),
+    needsOwner: false,
+  },
+  {
+    name: 'suggest_icp',
+    description:
+      "Optimize partial targeting into a complete, confirmable ICP. Give any of website / product / " +
+      "description / a partial criteria or filters; Claude returns a full ICP (filters + scoring criteria + " +
+      "weights) plus an 'assumptions' list of everything it INFERRED for a human to confirm. Saves nothing — " +
+      "show it, let the user edit, then call crm_icp_define with the confirmed profile. Run this BEFORE sourcing.",
+    inputSchema: obj({
+      name: { type: 'string' },
+      product: { type: 'string', description: 'zeami | chipchip' },
+      website: { type: 'string' },
+      description: { type: 'string' },
+      criteria: { type: 'object', description: 'Any partial criteria you already have' },
+      filters: { type: 'object', description: 'Any partial filters you already have' },
+    }),
     needsOwner: false,
   },
   {
@@ -272,6 +290,19 @@ export async function dispatchServiceTool(
         name: typeof args.name === 'string' ? args.name : undefined,
         email: typeof args.email === 'string' ? args.email : undefined,
       });
+      return { status: 'success', data: out };
+    }
+
+    if (toolName === 'suggest_icp') {
+      const out = await suggestIcp({
+        name: typeof args.name === 'string' ? args.name : undefined,
+        product: typeof args.product === 'string' ? args.product : undefined,
+        website: typeof args.website === 'string' ? args.website : undefined,
+        description: typeof args.description === 'string' ? args.description : undefined,
+        criteria: (args.criteria && typeof args.criteria === 'object') ? args.criteria as Record<string, unknown> : undefined,
+        filters: (args.filters && typeof args.filters === 'object') ? args.filters as Record<string, unknown> : undefined,
+      });
+      if ((out as { error?: string }).error) return { status: 'error', error: (out as { error: string }).error };
       return { status: 'success', data: out };
     }
 
