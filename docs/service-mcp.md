@@ -23,6 +23,22 @@ Every stage is a tool call. Run the whole sequence, or only the parts you need �
 just drafting + sending, or use the finder and stop at drafts. **Nothing is ever sent without an explicit
 approval.**
 
+### The stages, and what your system does at each
+
+| # | Stage | What it means | Your system calls | Your system's UI / job |
+|---|---|---|---|---|
+| — | *(setup)* | Map your user to a private SalesBrain owner (once) | `register_user` | On first login of an employee |
+| **01** | **ICP** | Define who to target | *(the raw idea — a product, a sentence, a rough list)* | Collect whatever the user knows |
+| **02** | **Optimize** | LLM completes it, you confirm | `suggest_icp` → `crm_icp_define` | Show the scored candidates, let the user pick/edit one, then save it |
+| **03** | **Find** | Source from LinkedIn, score fit | `crm_leads_finder_run` (or `crm_agent_request_run` to queue) | Trigger a run; poll `list_leads` for results |
+| **04** | **Enrich** | Employer, research, email | `crm_enrich_prospect` | Enrich the best leads so they're reachable + specific |
+| **05** | **Draft** | Personalized first message | `crm_outreach_propose` | File a draft per chosen person (sends nothing) |
+| **06** | **Approve** | Your user says yes, in your UI | `crm_outreach_pending` → `crm_outreach_decide` | Render pending drafts; on the user's approve, decide |
+| **07** | **Send** | Through the policy gate | *(the `approve` decision above sends it)* | Show the outcome returned by `crm_outreach_decide` |
+
+Everything acts for a specific employee via the `X-On-Behalf-Of` header (see §3), except the setup/optimize calls,
+which need no header. §5 walks each step with real payloads.
+
 ---
 
 ## 2. Core concepts
