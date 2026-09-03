@@ -91,7 +91,7 @@ Four JSON-RPC methods:
 | Method | Purpose |
 |---|---|
 | `initialize` | Handshake — returns server info + protocol version. |
-| `tools/list` | The catalog (16 tools) with JSON-Schema for each. |
+| `tools/list` | The catalog (17 tools) with JSON-Schema for each. |
 | `tools/call` | Invoke one tool. This is where the work happens. |
 | `ping` | Health check. |
 
@@ -201,6 +201,34 @@ is reachable at all:
 At approval time the gate also enforces quiet hours, per-person frequency caps, per-account daily caps, and the
 global kill switch. A denial at that moment is **final** and returned to you — it is not queued for retry.
 
+### LinkedIn safe-rate — quota & block protection
+
+The two LinkedIn-spending tools — `crm_leads_finder_run` and `crm_enrich_prospect` — are guarded so an employee's
+LinkedIn account is never pushed into a block. **You don't have to track limits yourself; the response tells you.**
+
+- **Quota used for the period** → the call is *deferred, not failed*. You get a normal success result with:
+  ```json
+  { "deferred": true, "status": "rate_limited",
+    "message": "LinkedIn search quota for this period is used (12/12 today). We'll resume automatically after 2026-09-04T09:20:00Z.",
+    "resume_at": "2026-09-04T09:20:00Z",
+    "linkedin": { "search": {"used":12,"cap":12,"remaining":0,"resume_at":"…"}, "profile": {…}, "tier":"free", "paused":false } }
+  ```
+  Show `message` to your user and retry after `resume_at` — no LinkedIn call was spent. (`status` is `paused` if
+  the account was auto-paused after LinkedIn pushed back, or `not_connected` if there's no linked account.)
+- **Approaching the limit** → a successful call still carries the remaining budget and a heads-up so you can warn
+  your user *before* the next call gets risky:
+  ```json
+  { "…tool result…",
+    "linkedin": { "search": {"used":10,"cap":12,"remaining":2,"resume_at":"…"}, … },
+    "warnings": ["Only 2 LinkedIn searches left today for this account (10/12) — approaching the safe limit. It resumes after 2026-09-04T09:20:00Z."] }
+  ```
+- **`crm_linkedin_quota`** (read) returns the same budget snapshot on demand (search + profile daily budgets, used
+  / cap / remaining / `resume_at`, tier, pause state, recent blocks) — call it to render a "LinkedIn budget" meter
+  in your UI at any time.
+
+Under the hood every LinkedIn call is also paced (a minimum gap between calls) and the account is paused
+immediately if LinkedIn ever returns a rate-limit/challenge — so even a burst of calls can't get it blocked.
+
 ---
 
 ## 7. LinkedIn onboarding (per employee)
@@ -217,7 +245,7 @@ Optional, and only needed for LinkedIn sending. Each employee connects their own
 
 ## 8. Tool reference
 
-Sixteen tools. Access tags: **setup** establishes identity · **read** only reads · **write** creates or spends
+Seventeen tools. Access tags: **setup** establishes identity · **read** only reads · **write** creates or spends
 quota · **send** can deliver a message. Required params marked `*`.
 
 ### Setup
@@ -299,6 +327,10 @@ link.
 - `unipile_account_id*` — from `linkedin_unbound_accounts`
 
 **`crm_linkedin_status`** · read — Whether this employee has a connected LinkedIn account, and which.
+
+**`crm_linkedin_quota`** · read — This employee's LinkedIn spend budget for the day: searches + profile fetches
+used vs the safe cap, `remaining`, `resume_at`, tier, pause state, and recent block count. The same snapshot the
+spending tools attach as `linkedin`.
 
 ---
 

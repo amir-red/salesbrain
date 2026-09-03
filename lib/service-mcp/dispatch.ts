@@ -269,6 +269,77 @@ async function listLeads(ownerUserId: string, args: Record<string, unknown>): Pr
   return { leads: rows };
 }
 
+// ─── LinkedIn safe-rate guard for the two spending tools ───────────
+// Consult the account's daily LinkedIn budget before crm_leads_finder_run /
+// crm_enrich_prospect. If it's spent (or the account is paused), DON'T spend a
+// call — return a clear deferral the calling app can show its user, with when
+// we'll resume. If it runs, attach the remaining budget and a warning when the
+// account is near its safe limit, so the client is informed before it risks a block.
+
+interface Budget { used: number; cap: number; remaining: number; resume_at: string | null }
+interface Quota {
+  connected: boolean; message?: string;
+  unipile_account_id?: string; tier?: string; paused?: boolean; pause_reason?: string | null;
+  search?: Budget; profile?: Budget; blocks_24h?: number; errors_24h?: number;
+}
+
+async function guardedLinkedinSpend(
+  toolName: string, owner: string, rest: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const isSearch = toolName === 'crm_leads_finder_run';
+  const label = isSearch ? 'search' : 'profile-fetch';
+
+  let quota: Quota;
+  try {
+    quota = (await kernelCall('crm_linkedin_quota', {}, owner)) as unknown as Quota;
+  } catch {
+    // If the budget read fails, fall through to the tool — the kernel + the
+    // ring-level guard still enforce every limit; we just can't pre-annotate.
+    return kernelCall(toolName, rest, owner);
+  }
+
+  if (!quota.connected) {
+    return { deferred: true, status: 'not_connected', message: quota.message, linkedin: quota };
+  }
+  if (quota.paused) {
+    return {
+      deferred: true, status: 'paused',
+      message: 'This employee\'s LinkedIn account is paused to protect it — '
+        + (quota.pause_reason || 'it hit a LinkedIn limit') + '. Resume it before more LinkedIn work.',
+      linkedin: quota,
+    };
+  }
+
+  const budget = (isSearch ? quota.search : quota.profile) as Budget | undefined;
+  if (budget && budget.remaining <= 0) {
+    const when = budget.resume_at
+      ? `We'll resume automatically after ${budget.resume_at}.`
+      : 'It resumes as the 24-hour window rolls forward.';
+    return {
+      deferred: true, status: 'rate_limited',
+      message: `LinkedIn ${label} quota for this period is used (${budget.used}/${budget.cap} today). ${when}`,
+      resume_at: budget.resume_at, linkedin: quota,
+    };
+  }
+
+  // Under budget — run it, then report the fresh budget + a near-limit warning.
+  const data = (await kernelCall(toolName, rest, owner)) as Record<string, unknown>;
+  const fresh = (await kernelCall('crm_linkedin_quota', {}, owner).catch(() => quota)) as unknown as Quota;
+  const b = (isSearch ? fresh.search : fresh.profile) as Budget | undefined;
+  const warnings: string[] = [];
+  if (b) {
+    const near = Math.max(2, Math.ceil(b.cap * 0.2));
+    if (b.remaining <= near) {
+      warnings.push(`Only ${b.remaining} LinkedIn ${label}${b.remaining === 1 ? '' : 's'} left today for this account `
+        + `(${b.used}/${b.cap}) — approaching the safe limit. It resumes after ${b.resume_at ?? 'the window rolls'}.`);
+    }
+  }
+  if ((fresh.blocks_24h ?? 0) > 0) {
+    warnings.push('This account was recently rate-limited by LinkedIn in the last 24h — proceeding cautiously.');
+  }
+  return { ...data, linkedin: fresh, ...(warnings.length ? { warnings } : {}) };
+}
+
 // Kernel tools exposed verbatim (name in → same crm_* name out).
 const PASSTHROUGH = new Set([
   'crm_icp_define', 'crm_icp_preview', 'crm_icp_list', 'crm_leads_finder_run',
@@ -316,6 +387,14 @@ export async function dispatchServiceTool(
       return { status: 'error', error: 'X-On-Behalf-Of (employee_id) is required for this tool' };
     }
     const owner = ctx.ownerUserId;
+
+    // LinkedIn-spending tools: check the safe-rate budget first, and either
+    // defer with a clear "quota used — resumes at X" message, or run and attach
+    // the remaining-budget + a near-limit warning so the caller can inform its user.
+    if (toolName === 'crm_leads_finder_run' || toolName === 'crm_enrich_prospect') {
+      const { employee_id: _drop, ...rest } = args;
+      return { status: 'success', data: await guardedLinkedinSpend(toolName, owner, rest) };
+    }
 
     if (PASSTHROUGH.has(toolName)) {
       const { employee_id: _drop, ...rest } = args;
