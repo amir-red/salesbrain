@@ -22,6 +22,7 @@ import { kernelCall } from '../mcp/kernel-rpc';
 import { registerEmployee } from './identity';
 import { linkedinConnectStart, linkedinUnboundAccounts, linkedinLinkAccount } from './linkedin';
 import { suggestIcp } from './icp-suggest';
+import { nextWindowFor } from './schedule';
 
 export interface ServiceDispatchResult {
   status: 'success' | 'error';
@@ -164,6 +165,48 @@ export const SERVICE_TOOLS: ToolDef[] = [
     needsOwner: true,
   },
   {
+    name: 'get_run_status',
+    description:
+      "Track a queued or finished run. Give the run_id you got from crm_agent_request_run (or an icp_id " +
+      "for its latest run) and get: status (requested / running / success / partial / error / skipped), " +
+      "the counts, the skip `reason` verbatim, how many runs are queued ahead, the next timer window, " +
+      "this employee's readiness, and the current lead count. This is the poll loop.",
+    inputSchema: obj({
+      run_id: { type: 'string', description: 'From crm_agent_request_run' },
+      icp_id: { type: 'string', description: 'Alternative: the latest run for this ICP' },
+    }),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_agent_activity',
+    description:
+      "Recent runs for this employee — per run: status, trigger, source/query, analyzed / matched / new / " +
+      "researched, why a tick was skipped, and any error. The Activity feed.",
+    inputSchema: obj({
+      agent: { type: 'string', enum: ['leads_finder', 'outreach', 'enricher'] },
+      icp_id: { type: 'string' },
+      limit: { type: 'integer', description: 'default 30' },
+    }),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_agent_status',
+    description:
+      "Are the background agents live for this employee: kill switch, each agent's enabled flag, caps and " +
+      "schedule, its last run and 24h totals, plus any LinkedIn account paused for agent work.",
+    inputSchema: obj({}),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_linkedin_quota',
+    description:
+      "This employee's LinkedIn budget for the day: searches and profile fetches used vs the safe cap, " +
+      "remaining, when it resumes, account tier, and pause state. Call it before sourcing to know whether " +
+      "a run can happen at all.",
+    inputSchema: obj({}),
+    needsOwner: true,
+  },
+  {
     name: 'crm_outreach_propose',
     description:
       "File a first-message DRAFT for this employee to approve. Sends nothing. Email needs an email " +
@@ -269,6 +312,76 @@ async function listLeads(ownerUserId: string, args: Record<string, unknown>): Pr
   return { leads: rows };
 }
 
+/** Readiness: can this employee's agents do LinkedIn work at all right now? */
+async function readinessFor(owner: string): Promise<Record<string, unknown>> {
+  try {
+    return (await kernelCall('crm_linkedin_quota', {}, owner)) as Record<string, unknown>;
+  } catch {
+    return { connected: null, note: 'readiness unavailable' };
+  }
+}
+
+/**
+ * The poll loop for a queued run. `crm_agent_request_run` hands back a run_id
+ * and the timer mutates THAT SAME row (requested → running → success | partial |
+ * error | skipped), so the id is a valid handle from queue to completion.
+ * Owner-scoped SQL, like listLeads.
+ */
+async function getRunStatus(owner: string, args: Record<string, unknown>): Promise<unknown> {
+  const runId = typeof args.run_id === 'string' ? args.run_id : null;
+  const icpId = typeof args.icp_id === 'string' ? args.icp_id : null;
+
+  const where: string[] = ['r.owner_user_id = $1'];
+  const values: unknown[] = [owner];
+  if (runId) { values.push(runId); where.push(`r.id = $${values.length}`); }
+  else if (icpId) { values.push(icpId); where.push(`r.icp_profile_id = $${values.length}`); }
+
+  const { rows } = await pool.query(
+    `SELECT r.id, r.agent, r.status, r.trigger, r.source, r.started_at, r.finished_at,
+            r.analyzed, r.matched, r.created, r.researched, r.detail, r.error,
+            r.icp_profile_id, i.name AS icp_name
+     FROM agent_runs r
+     LEFT JOIN icp_profiles i ON i.id = r.icp_profile_id
+     WHERE ${where.join(' AND ')}
+     ORDER BY r.started_at DESC LIMIT 1`,
+    values,
+  );
+  if (!rows.length) {
+    return { found: false, message: runId ? `No run ${runId} for this employee.` : 'No runs yet for this employee.' };
+  }
+  const r = rows[0];
+  const detail = (r.detail || {}) as Record<string, unknown>;
+  const terminal = ['success', 'partial', 'error', 'skipped'].includes(r.status);
+
+  const queued = await pool.query(
+    `SELECT count(*)::int AS n FROM agent_runs WHERE agent = $1 AND status = 'requested'`, [r.agent]);
+  const leads = await pool.query(
+    r.icp_profile_id
+      ? `SELECT count(*)::int AS n FROM prospects WHERE owner_user_id = $1 AND icp_profile_id = $2`
+      : `SELECT count(*)::int AS n FROM prospects WHERE owner_user_id = $1`,
+    r.icp_profile_id ? [owner, r.icp_profile_id] : [owner],
+  );
+
+  return {
+    found: true,
+    run_id: r.id, agent: r.agent, status: r.status, trigger: r.trigger, source: r.source,
+    done: terminal,
+    started_at: r.started_at, finished_at: r.finished_at,
+    analyzed: r.analyzed, matched: r.matched, created: r.created, researched: r.researched,
+    reason: (detail.reason as string) ?? null,   // why a tick was skipped, verbatim
+    error: r.error ?? null,
+    icp_id: r.icp_profile_id, icp_name: r.icp_name,
+    detail,
+    lead_count: leads.rows[0]?.n ?? 0,
+    ...(terminal ? {} : {
+      queued_runs: queued.rows[0]?.n ?? 0,
+      queued_note: 'All runs queued for this agent drain on the same tick, budget permitting — this is a count, not a position.',
+      next_tick_window: nextWindowFor(r.agent),
+    }),
+    readiness: await readinessFor(owner),
+  };
+}
+
 // ─── LinkedIn safe-rate guard for the two spending tools ───────────
 // Consult the account's daily LinkedIn budget before crm_leads_finder_run /
 // crm_enrich_prospect. If it's spent (or the account is paused), DON'T spend a
@@ -345,6 +458,7 @@ const PASSTHROUGH = new Set([
   'crm_icp_define', 'crm_icp_preview', 'crm_icp_list', 'crm_leads_finder_run',
   'crm_agent_request_run', 'crm_enrich_prospect', 'crm_outreach_propose',
   'crm_outreach_pending', 'crm_outreach_decide', 'crm_linkedin_status',
+  'crm_agent_activity', 'crm_agent_status', 'crm_linkedin_quota',
 ]);
 
 /**
@@ -387,6 +501,44 @@ export async function dispatchServiceTool(
       return { status: 'error', error: 'X-On-Behalf-Of (employee_id) is required for this tool' };
     }
     const owner = ctx.ownerUserId;
+
+    if (toolName === 'get_run_status') {
+      return { status: 'success', data: await getRunStatus(owner, args) };
+    }
+
+    // Queueing a sourcing run for an employee with no connected LinkedIn would
+    // sit in the queue and then silently skip forever. Refuse up front with the
+    // fix, and never create the run.
+    if (toolName === 'crm_agent_request_run') {
+      const { employee_id: _drop2, ...rest } = args;
+      const readiness = await readinessFor(owner) as { connected?: boolean | null; paused?: boolean; pause_reason?: string | null };
+      if (readiness.connected === false) {
+        return {
+          status: 'success',
+          data: {
+            refused: true, status: 'not_connected',
+            message: "No LinkedIn account is connected for this employee — sourcing can't run, so nothing was queued. "
+              + 'Send them a connect link with linkedin_connect_start, then queue the run again.',
+            readiness,
+          },
+        };
+      }
+      const out = (await kernelCall(toolName, rest, owner)) as Record<string, unknown>;
+      const agent = typeof rest.agent === 'string' ? rest.agent : 'leads_finder';
+      return {
+        status: 'success',
+        data: {
+          ...out,
+          status: 'requested',
+          poll_with: 'get_run_status',
+          next_tick_window: nextWindowFor(agent),
+          readiness,
+          ...(readiness.paused
+            ? { warnings: [`This employee's LinkedIn account is paused (${readiness.pause_reason || 'paused for agents'}) — the queued run will skip until it is resumed.`] }
+            : {}),
+        },
+      };
+    }
 
     // LinkedIn-spending tools: check the safe-rate budget first, and either
     // defer with a clear "quota used — resumes at X" message, or run and attach

@@ -91,7 +91,7 @@ Four JSON-RPC methods:
 | Method | Purpose |
 |---|---|
 | `initialize` | Handshake — returns server info + protocol version. |
-| `tools/list` | The catalog (17 tools) with JSON-Schema for each. |
+| `tools/list` | The catalog (20 tools) with JSON-Schema for each. |
 | `tools/call` | Invoke one tool. This is where the work happens. |
 | `ping` | Health check. |
 
@@ -231,6 +231,53 @@ immediately if LinkedIn ever returns a rate-limit/challenge — so even a burst 
 
 ---
 
+## 6b. Tracking a run
+
+Two ways to source, and they differ in how you observe them:
+
+**Synchronous — no polling needed.** `crm_leads_finder_run` does the search inline and returns the counts
+(`analyzed / matched / new / already_known / researched`, `top`, `budget`). Use this when a user is waiting.
+
+**Queued — poll it.** `crm_agent_request_run` hands back a **`run_id`**, and the background timer mutates *that
+same row* (`requested → running → success | partial | error | skipped`). The ack is self-describing:
+
+```json
+{ "requested": true, "run_id": "…", "icp": "…", "status": "requested",
+  "poll_with": "get_run_status",
+  "next_tick_window": { "earliest": "…", "latest": "…", "note": "…jitter / not replayed / needs budget…" },
+  "readiness": { "connected": true, "paused": false, "search": {"used":4,"cap":12,"remaining":8,"resume_at":"…"} } }
+```
+
+Then poll **`get_run_status { run_id }`** until `done: true`:
+
+```json
+{ "found": true, "run_id": "…", "agent": "leads_finder",
+  "status": "skipped", "done": true, "trigger": "requested",
+  "analyzed": 0, "matched": 0, "created": 0, "researched": 0,
+  "reason": "daily search budget spent (12/12)",     // why a tick did nothing, verbatim
+  "error": null, "icp_name": "…", "lead_count": 43,
+  "readiness": { … } }
+```
+While still pending it also carries `queued_runs` + `next_tick_window`. **`reason` is the field to surface to your
+user** — it explains every no-op (budget spent, account paused, kill switch, backoff, exhausted).
+
+**Timing, honestly.** The agent runs on a timer (four times a day) with up to 30 minutes of jitter, so we return a
+**window, not an ETA**. A tick missed while the box was down is *not* replayed, and the run still needs an
+unpaused account and remaining budget. If you need certainty, use the synchronous tool.
+
+**Refused before it's queued.** If the employee has no LinkedIn connected, `crm_agent_request_run` does **not**
+create a run that would silently skip — it returns immediately:
+
+```json
+{ "refused": true, "status": "not_connected",
+  "message": "No LinkedIn account is connected for this employee — sourcing can't run, so nothing was queued. Send them a connect link with linkedin_connect_start, then queue the run again." }
+```
+
+For a broader view, `crm_agent_activity` lists recent runs and `crm_agent_status` shows whether the agents are
+enabled at all.
+
+---
+
 ## 7. LinkedIn onboarding (per employee)
 
 Optional, and only needed for LinkedIn sending. Each employee connects their own account:
@@ -245,7 +292,7 @@ Optional, and only needed for LinkedIn sending. Each employee connects their own
 
 ## 8. Tool reference
 
-Seventeen tools. Access tags: **setup** establishes identity · **read** only reads · **write** creates or spends
+Twenty tools. Access tags: **setup** establishes identity · **read** only reads · **write** creates or spends
 quota · **send** can deliver a message. Required params marked `*`.
 
 ### Setup
@@ -297,6 +344,23 @@ Contacts no one.
 **`list_leads`** · read — The employee's prospects for an ICP (or all), best fit first — contact, company, score,
 stage, research summary, reachability.
 - `icp_id` — filter to one ICP · `stage` / `min_score` / `limit` — filter + cap (≤300)
+
+### Run visibility
+
+**`get_run_status`** · read — Track a queued or finished run: `status`, `done`, counts, the skip `reason`
+verbatim, `error`, `lead_count`, plus (while pending) `queued_runs` and `next_tick_window`, and always
+`readiness`. **This is the poll loop.**
+- `run_id` — from `crm_agent_request_run` · `icp_id` — alternative: that ICP's latest run
+
+**`crm_agent_activity`** · read — Recent runs for this employee: status, trigger, source/query, counts, skip
+reason, error.
+- `agent` — `leads_finder` | `outreach` | `enricher` · `icp_id` · `limit` (default 30)
+
+**`crm_agent_status`** · read — Kill switch, each agent's `enabled` flag, caps + schedule, its last run and 24h
+totals, and any LinkedIn account paused for agent work.
+
+**`crm_linkedin_quota`** · read — Today's LinkedIn budget: searches and profile fetches used vs the safe cap,
+`remaining`, `resume_at`, tier, pause state.
 
 ### Outreach
 
