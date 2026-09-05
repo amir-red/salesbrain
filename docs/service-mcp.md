@@ -295,7 +295,7 @@ Optional, and only needed for LinkedIn sending. Each employee connects their own
 
 ## 8. Tool reference
 
-Twenty-one tools. Access tags: **setup** establishes identity · **read** only reads · **write** creates or spends
+Twenty-three tools. Access tags: **setup** establishes identity · **read** only reads · **write** creates or spends
 quota · **send** can deliver a message. Required params marked `*`.
 
 ### Setup
@@ -330,6 +330,26 @@ distribution. Writes nothing, spends no quota.
 
 **`crm_icp_list`** · read — This employee's ICP profiles (with `objective`) and how many prospects each has found.
 - `include_inactive` — include archived ICPs
+
+**`crm_icp_archive`** · write — Retire an ICP (soft): agents stop sourcing for it, prospects keep their link.
+Use it to put a profile on standby; re-defining the same `name` with `crm_icp_define` revives it.
+- `icp_id*` — from `crm_icp_list`
+
+**`crm_icp_rescore`** · write — Re-score every open prospect on an ICP with its current criteria. Call it after
+editing an ICP via `crm_icp_define` so existing leads reflect the new rules. Creates and contacts nothing.
+- `icp_id*` — from `crm_icp_list` · `limit` — prospects to re-score (default 2000)
+
+**Verify your writes.** A successful `crm_icp_define` returns the saved profile including its `id` — that id
+appearing in the response IS the confirmation. If your call errored, or you never made it, there is nothing to
+report as "applied": confirm with `crm_icp_list` before telling your user a configuration is live. Every call you
+make is audit-logged on our side, so a claimed write with no matching call is visible.
+
+**Multi-profile configs.** A targeting document with several profiles or market tiers maps to SEVERAL ICPs — one
+`crm_icp_define` per profile × market (e.g. "Avocado Buyers — Kenya (T1)", "Avocado Buyers — Gulf (T2)", "Pulses
+Buyers — Kenya (T1)"), since an ICP carries one location set and one criteria set. Standby profiles: define them,
+then `crm_icp_archive` (revive later by re-defining the same name). Edits: re-define the same name, then
+`crm_icp_rescore`. Sourcing: `crm_agent_request_run` per ACTIVE ICP, then poll `get_run_status`. Rules an ICP
+cannot express (custom point values, research gates, per-tier budget ordering) stay in your agent's own logic.
 
 ### Sourcing & enrichment
 

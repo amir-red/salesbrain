@@ -118,6 +118,27 @@ export const SERVICE_TOOLS: ToolDef[] = [
     needsOwner: true,
   },
   {
+    name: 'crm_icp_archive',
+    description:
+      "Retire one of this employee's ICPs (soft): agents stop sourcing for it, existing prospects " +
+      "keep their link to it. Use it to put a profile on standby; re-defining the same name with " +
+      "crm_icp_define revives it.",
+    inputSchema: obj({ icp_id: { type: 'string', description: 'UUID from crm_icp_list' } }, ['icp_id']),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_icp_rescore',
+    description:
+      "Re-score every open prospect on an ICP's list with the ICP's current criteria — call it after " +
+      "editing an ICP via crm_icp_define so existing leads reflect the new rules. Creates and " +
+      "contacts nothing; returns the new fit distribution.",
+    inputSchema: obj(
+      { icp_id: { type: 'string', description: 'UUID from crm_icp_list' }, limit: { type: 'integer', description: 'default 2000' } },
+      ['icp_id'],
+    ),
+    needsOwner: true,
+  },
+  {
     name: 'crm_leads_finder_run',
     description:
       "Run ONE Leads Finder step for an ICP now: search the next page, score + store new people, " +
@@ -464,7 +485,8 @@ async function guardedLinkedinSpend(
 
 // Kernel tools exposed verbatim (name in → same crm_* name out).
 const PASSTHROUGH = new Set([
-  'crm_icp_define', 'crm_icp_preview', 'crm_icp_list', 'crm_leads_finder_run',
+  'crm_icp_define', 'crm_icp_preview', 'crm_icp_list', 'crm_icp_archive',
+  'crm_icp_rescore', 'crm_leads_finder_run',
   'crm_agent_request_run', 'crm_enrich_prospect', 'crm_outreach_propose',
   'crm_outreach_pending', 'crm_outreach_decide', 'crm_linkedin_status',
   'crm_linkedin_revoke', 'crm_agent_activity', 'crm_agent_status', 'crm_linkedin_quota',
