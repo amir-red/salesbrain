@@ -287,12 +287,15 @@ Optional, and only needed for LinkedIn sending. Each employee connects their own
    `success_redirect_url` / `failure_redirect_url` to bring them back.
 2. **Bind the account.** On return, call `linkedin_unbound_accounts` to get the new `unipile_account_id`, then
    `linkedin_link_account` to bind it to that employee. `crm_linkedin_status` confirms the connection.
+3. **Disconnect (when needed).** `crm_linkedin_revoke` unbinds the account AND ends the session at the provider
+   (the Unipile account is deleted). Mirrored conversation history is kept. The employee can reconnect later by
+   starting the flow again from step 1 — a reconnect creates a fresh account, it does not resurrect the old one.
 
 ---
 
 ## 8. Tool reference
 
-Twenty tools. Access tags: **setup** establishes identity · **read** only reads · **write** creates or spends
+Twenty-one tools. Access tags: **setup** establishes identity · **read** only reads · **write** creates or spends
 quota · **send** can deliver a message. Required params marked `*`.
 
 ### Setup
@@ -391,6 +394,11 @@ link.
 - `unipile_account_id*` — from `linkedin_unbound_accounts`
 
 **`crm_linkedin_status`** · read — Whether this employee has a connected LinkedIn account, and which.
+
+**`crm_linkedin_revoke`** · write — Disconnect this employee's LinkedIn account. Stops syncing/sending and ends
+the session at the provider (deletes the Unipile account, so it stops being billed). Mirrored threads are kept as
+history. If the result carries a `delivery_note`, the CRM side is revoked but the provider deletion failed — the
+account must then be removed from the Unipile dashboard by the operator.
 
 **`crm_linkedin_quota`** · read — This employee's LinkedIn spend budget for the day: searches + profile fetches
 used vs the safe cap, `remaining`, `resume_at`, tier, pause state, and recent block count. The same snapshot the

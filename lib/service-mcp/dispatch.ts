@@ -272,6 +272,15 @@ export const SERVICE_TOOLS: ToolDef[] = [
     inputSchema: obj({}),
     needsOwner: true,
   },
+  {
+    name: 'crm_linkedin_revoke',
+    description:
+      "Disconnect this employee's LinkedIn account: stops syncing and sending, and ends the session " +
+      "at the provider (the Unipile account is deleted, so it stops being billed). Mirrored threads " +
+      "are kept as history. Reconnect any time with linkedin_connect_start.",
+    inputSchema: obj({}),
+    needsOwner: true,
+  },
 ];
 
 const CATALOG = new Map(SERVICE_TOOLS.map((t) => [t.name, t]));
@@ -458,7 +467,7 @@ const PASSTHROUGH = new Set([
   'crm_icp_define', 'crm_icp_preview', 'crm_icp_list', 'crm_leads_finder_run',
   'crm_agent_request_run', 'crm_enrich_prospect', 'crm_outreach_propose',
   'crm_outreach_pending', 'crm_outreach_decide', 'crm_linkedin_status',
-  'crm_agent_activity', 'crm_agent_status', 'crm_linkedin_quota',
+  'crm_linkedin_revoke', 'crm_agent_activity', 'crm_agent_status', 'crm_linkedin_quota',
 ]);
 
 /**
