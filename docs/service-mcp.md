@@ -109,7 +109,7 @@ Four JSON-RPC methods:
 | Method | Purpose |
 |---|---|
 | `initialize` | Handshake — returns server info + protocol version. |
-| `tools/list` | The catalog (20 tools) with JSON-Schema for each. |
+| `tools/list` | The catalog (24 tools) with JSON-Schema for each. |
 | `tools/call` | Invoke one tool. This is where the work happens. |
 | `ping` | Health check. |
 
@@ -313,8 +313,38 @@ Optional, and only needed for LinkedIn sending. Each employee connects their own
 
 ## 8. Tool reference
 
-Twenty-three tools. Access tags: **setup** establishes identity · **read** only reads · **write** creates or spends
+Twenty-four tools. Access tags: **setup** establishes identity · **read** only reads · **write** creates or spends
 quota · **send** can deliver a message. Required params marked `*`.
+
+Every tool except `register_user` and `suggest_icp` requires the `X-On-Behalf-Of` header and acts only on that
+employee's data.
+
+| | Tool | Access | What it is for |
+|---|---|---|---|
+| **Setup** | `register_user` | setup | Map one of your users to a SalesBrain owner. Do this once, before anything else |
+| | `linkedin_connect_start` | write | Mint a hosted-auth link for the employee to connect LinkedIn |
+| | `linkedin_unbound_accounts` | read | Connected accounts not yet bound to an owner |
+| | `linkedin_link_account` | write | Bind one of those to this employee |
+| | `crm_linkedin_status` | read | Is LinkedIn connected for this employee |
+| | `crm_linkedin_revoke` | write | Disconnect it and end the session at the provider |
+| **Targeting** | `suggest_icp` | read | Website or notes in, scored candidate ICPs out. Saves nothing |
+| | `crm_icp_define` | write | Create or update a profile. **A new `name` creates; a used `name` overwrites** |
+| | `crm_icp_preview` | read | Dry-run criteria against contacts on file |
+| | `crm_icp_list` | read | Their profiles, with `state` and lead counts |
+| | `crm_icp_set_state` | write | **running / paused / stopped**, per profile |
+| | `crm_icp_archive` | write | Retire one (same as `state: "stopped"`) |
+| | `crm_icp_rescore` | write | Re-score existing leads after editing criteria |
+| **Sourcing** | `crm_leads_finder_run` | write | Source one page now. Spends LinkedIn search quota |
+| | `crm_agent_request_run` | write | Queue a background run instead of waiting |
+| | `crm_enrich_prospect` | write | Fill employer, company, email for one lead |
+| | `list_leads` | read | The lead list, filterable by ICP, stage and fit |
+| **Visibility** | `get_run_status` | read | Poll a queued or finished run. The poll loop |
+| | `crm_agent_activity` | read | Recent runs and why a tick was skipped |
+| | `crm_agent_status` | read | Agent switches, caps, `sourcing_paused`, paused accounts |
+| | `crm_linkedin_quota` | read | Today's LinkedIn budget and when it resets |
+| **Outreach** | `crm_outreach_propose` | write | File a draft for approval |
+| | `crm_outreach_pending` | read | Drafts awaiting a decision — render these in your UI |
+| | `crm_outreach_decide` | **send** | Approve or skip. **Approve sends immediately** |
 
 ### Setup
 
@@ -369,6 +399,23 @@ distribution. Writes nothing, spends no quota.
 
 **`crm_icp_list`** · read — This employee's ICP profiles (with `objective`) and how many prospects each has found.
 - `include_inactive` — include archived ICPs
+
+**`crm_icp_set_state`** · write — Start, hold or retire ONE ICP. This is the per-profile switch: it affects
+that profile only, not the employee's other ICPs and not anyone else.
+- `icp_id*` · `state*` — `running` | `paused` | `stopped` · `reason` — shown wherever the hold is reported
+
+| State | What runs | Notes |
+|---|---|---|
+| `running` | sourcing, enrichment, drafting, sending | the default |
+| `paused` | **nothing** | leads and history untouched; one call puts it back. Use this for a temporary hold |
+| `stopped` | nothing | retired; hidden from `crm_icp_list` unless `include_inactive` |
+
+`paused` stops the **send** path too: no new drafts are queued for that ICP's leads, so there is nothing to
+approve. A pause set by a SalesBrain administrator can only be lifted by one, and `crm_icp_define` does **not**
+clear a pause — editing a profile cannot quietly resume work an operator stopped.
+
+`crm_icp_list` returns `state` (`running` | `paused` | `stopped`) plus `paused_at`, `paused_reason` and
+`paused_by_admin` on every profile.
 
 **`crm_icp_archive`** · write — Retire an ICP (soft): agents stop sourcing for it, prospects keep their link.
 Use it to put a profile on standby; re-defining the same `name` with `crm_icp_define` revives it.
@@ -566,3 +613,38 @@ const icp = await call("crm_icp_define", { ...chosen, objective: "margin" }, "em
 // source:
 await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 ```
+
+---
+
+## 12. Changelog
+
+### 2026-09-06 — per-ICP control, and two corrections
+
+**New: `crm_icp_set_state`** (§8 Targeting). Start, hold or retire one profile — `running` | `paused` |
+`stopped` — affecting that profile only, not the employee's others and not anyone else. `paused` stops
+sourcing, enrichment, drafting **and sending** for it, keeps the leads and history intact, and reverses in one
+call. `crm_icp_list` now returns `state`, `paused_at`, `paused_reason` and `paused_by_admin` per profile.
+
+Two behaviours to code against: `crm_icp_define` does **not** clear a pause, and a pause set by a SalesBrain
+administrator can only be lifted by one. `crm_agent_request_run` against a paused ICP now **refuses** with
+`status: "icp_paused"` rather than queueing a run that would skip on every tick.
+
+**Clarified: an employee may hold many ICPs at once, and `name` is the identity.** There is no per-employee
+limit and no operator step. A new `name` creates a profile alongside the existing ones; a name already in use
+updates that one **in place**. Keep names stable and distinct — re-sending a name overwrites rather than adds,
+and paraphrasing one creates a near-duplicate. This was always the behaviour; only the documentation changed.
+
+**Clarified: `kill_switch: true` means agents are ALLOWED to run.** It is the master enable, not a brake, so
+`true` is the healthy value. `crm_agent_status` now also returns **`sourcing_paused`**, the same fact stated the
+safe way round.
+
+**Documented: the vocabularies are closed and fail silently** (§2). `seniority` must be lowercase
+(`c_level` · `founder` · `vp` · `head` · `director` · `manager` · `senior`); industries and locations must be
+LinkedIn names. An unrecognised value is not an error — the ICP saves and simply scores nothing on that
+dimension, which is the usual reason a profile looks right and returns no strong fits.
+
+### Earlier
+
+`crm_linkedin_revoke` (disconnect + end the provider session) · `crm_icp_archive` and `crm_icp_rescore` ·
+run visibility (`get_run_status`, readiness pre-flight, refuse-early) · LinkedIn safe-rate guard on the
+spending tools (`crm_linkedin_quota`, deferral envelopes) · `suggest_icp` objective-scored candidates.

@@ -12,10 +12,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const own = await pool.query(
-    `SELECT id FROM icp_profiles WHERE id = $1 AND owner_user_id = $2 AND is_active`,
+    `SELECT id, name, paused_at FROM icp_profiles WHERE id = $1 AND owner_user_id = $2 AND is_active`,
     [params.id, session.userId],
   );
   if (!own.rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  if (own.rows[0].paused_at) {
+    return NextResponse.json({ error: `"${own.rows[0].name}" is paused. Resume it to source again.` }, { status: 409 });
+  }
 
   let body: { limit?: number; sales_navigator?: boolean } = {};
   try { body = await req.json(); } catch { /* defaults */ }

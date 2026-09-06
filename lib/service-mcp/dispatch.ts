@@ -144,6 +144,25 @@ export const SERVICE_TOOLS: ToolDef[] = [
     needsOwner: true,
   },
   {
+    name: 'crm_icp_set_state',
+    description:
+      'Start, hold or retire ONE ICP — the per-profile on/off switch, affecting only this profile and ' +
+      'no other employee. `running`: agents source, enrich, draft and send for it. `paused`: all of ' +
+      'that stops immediately while the profile, its leads and its history stay exactly as they are, ' +
+      'and one call puts it back — use this for a temporary hold. `stopped`: retired and hidden from ' +
+      'the default list. A pause set by a SalesBrain administrator can only be lifted by one; ' +
+      'crm_icp_define does not clear a pause.',
+    inputSchema: obj(
+      {
+        icp_id: { type: 'string', description: 'UUID from crm_icp_list' },
+        state: { type: 'string', enum: ['running', 'paused', 'stopped'] },
+        reason: { type: 'string', description: 'Shown wherever the hold is reported' },
+      },
+      ['icp_id', 'state'],
+    ),
+    needsOwner: true,
+  },
+  {
     name: 'crm_icp_archive',
     description:
       "Retire one of this employee's ICPs (soft): agents stop sourcing for it, existing prospects " +
@@ -562,7 +581,7 @@ async function guardedLinkedinSpend(
 
 // Kernel tools exposed verbatim (name in → same crm_* name out).
 const PASSTHROUGH = new Set([
-  'crm_icp_define', 'crm_icp_preview', 'crm_icp_list', 'crm_icp_archive',
+  'crm_icp_define', 'crm_icp_preview', 'crm_icp_list', 'crm_icp_archive', 'crm_icp_set_state',
   'crm_icp_rescore', 'crm_leads_finder_run',
   'crm_agent_request_run', 'crm_enrich_prospect', 'crm_outreach_propose',
   'crm_outreach_pending', 'crm_outreach_decide', 'crm_linkedin_status',

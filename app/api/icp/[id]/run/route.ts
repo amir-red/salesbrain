@@ -12,8 +12,20 @@ import { kernelCall } from '@/lib/mcp/kernel-rpc';
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const own = await pool.query(`SELECT id FROM icp_profiles WHERE id = $1 AND owner_user_id = $2 AND is_active`, [params.id, session.userId]);
+  // A paused ICP refuses here rather than queueing a run that would skip on
+  // every tick — a silent no-op reads as a broken button.
+  const own = await pool.query(
+    `SELECT id, name, paused_at, paused_reason FROM icp_profiles
+      WHERE id = $1 AND owner_user_id = $2 AND is_active`,
+    [params.id, session.userId],
+  );
   if (!own.rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  if (own.rows[0].paused_at) {
+    return NextResponse.json(
+      { error: `"${own.rows[0].name}" is paused${own.rows[0].paused_reason ? ` (${own.rows[0].paused_reason})` : ''}. Resume it to run again.` },
+      { status: 409 },
+    );
+  }
 
   let body: { mode?: 'now' | 'queue' | 'enrich'; limit?: number } = {};
   try { body = await req.json(); } catch { /* defaults */ }

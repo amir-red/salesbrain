@@ -31,6 +31,29 @@ export default function IcpPage() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  /** running | paused | stopped — the per-ICP switch. Pause is the reversible
+   *  one: it holds sourcing, enrichment, drafting AND sending for this profile
+   *  alone, without touching any other ICP or anyone else's agents. */
+  const setState = async (p: IcpProfile, state: 'running' | 'paused' | 'stopped') => {
+    let reason: string | undefined;
+    if (state === 'paused') {
+      const answer = prompt(`Pause "${p.name}"?\n\nSourcing, enrichment, drafting and sending stop for this ICP only. Its leads and history are untouched, and Resume puts it straight back.\n\nReason (optional):`);
+      if (answer === null) return;
+      reason = answer.trim() || undefined;
+    }
+    setBusy(p.id);
+    try {
+      const res = await fetch(`/api/icp/${p.id}/state`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state, reason }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.error) alert(json.error || 'Could not change the state');
+      await load();
+    } finally { setBusy(null); }
+  };
+
   const archive = async (p: IcpProfile) => {
     if (!confirm(`Archive "${p.name}"? Its prospects keep their link; re-creating the same name revives it.`)) return;
     setBusy(p.id);
@@ -139,6 +162,14 @@ export default function IcpPage() {
                     </div>
                   )}
 
+                  {p.paused_at && (
+                    <div className="rounded-lg px-2 py-1 text-xs" style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>
+                      ⏸ Paused {relativeTime(p.paused_at)}
+                      {p.paused_reason ? ` — ${p.paused_reason}` : ''}
+                      {p.paused_by_admin ? ' · by an administrator' : ''}
+                    </div>
+                  )}
+
                   <div><RunPill run={p.last_run ?? null} queued={p.queued_runs ?? 0} state={p.agent_state ?? null} /></div>
 
                   <div className="mt-auto flex gap-2 pt-1">
@@ -146,6 +177,15 @@ export default function IcpPage() {
                     <button onClick={() => setMode({ kind: 'leads', profile: p })} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'var(--accent)', color: '#fff' }} title="The list the Leads Finder fills, and its activity">
                       Leads →
                     </button>
+                    {p.paused_at ? (
+                      <button onClick={() => setState(p, 'running')} disabled={busy === p.id} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ border: '1px solid var(--accent)', color: 'var(--accent)' }} title="Resume sourcing, enrichment, drafting and sending for this ICP">
+                        Resume
+                      </button>
+                    ) : (
+                      <button onClick={() => setState(p, 'paused')} disabled={busy === p.id} className="px-3 py-1.5 rounded-lg text-xs disabled:opacity-40" style={{ border: '1px solid var(--border)', color: 'var(--text-muted)' }} title="Hold this ICP only — reversible, nothing is lost">
+                        Pause
+                      </button>
+                    )}
                     <button onClick={() => archive(p)} disabled={busy === p.id} className="ml-auto px-3 py-1.5 rounded-lg text-xs disabled:opacity-40" style={{ color: 'var(--text-muted)' }}>Archive</button>
                   </div>
                 </div>
