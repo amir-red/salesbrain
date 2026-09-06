@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(Math.max(Number(url.searchParams.get('edges') ?? 50) || 50, 1), 500);
   const source = url.searchParams.get('source');
 
-  const [bySource, totals, contacts, state, edges] = await Promise.all([
+  const [bySource, totals, contacts, state, edges, reach, colleagues, teammates] = await Promise.all([
     pool.query(
       `SELECT source, count(*)::int AS edges,
               count(DISTINCT dst_person_id)::int AS people,
@@ -58,6 +58,39 @@ export async function GET(req: NextRequest) {
         LIMIT $3`,
       [session.userId, source, limit],
     ),
+    // The second hop: everyone a connected teammate knows that I do not.
+    // Aggregate only — a teammate's contact list is never returned here.
+    pool.query(
+      `SELECT count(DISTINCT e.dst_person_id)::int AS via
+         FROM person_edges e
+         JOIN users u ON u.id = e.owner_user_id AND u.person_id IS NOT NULL
+        WHERE e.owner_user_id <> $1 AND e.src_person_id IS NULL
+          AND NOT EXISTS (SELECT 1 FROM person_edges mine
+                           WHERE mine.owner_user_id = $1 AND mine.src_person_id IS NULL
+                             AND mine.dst_person_id = e.dst_person_id)`,
+      [session.userId],
+    ),
+    pool.query(
+      `SELECT u.name,
+              count(DISTINCT e.dst_person_id)::int AS ring,
+              count(DISTINCT e.dst_person_id) FILTER (
+                WHERE NOT EXISTS (SELECT 1 FROM person_edges mine
+                                   WHERE mine.owner_user_id = $1 AND mine.src_person_id IS NULL
+                                     AND mine.dst_person_id = e.dst_person_id))::int AS adds
+         FROM users u
+         JOIN person_edges e ON e.owner_user_id = u.id AND e.src_person_id IS NULL
+        WHERE u.id <> $1 AND u.person_id IS NOT NULL
+        GROUP BY u.id, u.name
+        ORDER BY 3 DESC`,
+      [session.userId],
+    ),
+    pool.query(
+      `SELECT count(*)::int AS n FROM users u
+        WHERE u.id <> $1
+          AND NOT EXISTS (SELECT 1 FROM linkedin_accounts la
+                           WHERE la.owner_user_id = u.id AND la.revoked_at IS NULL)`,
+      [session.userId],
+    ),
   ]);
 
   return NextResponse.json({
@@ -66,5 +99,11 @@ export async function GET(req: NextRequest) {
     contacts: contacts.rows[0] ?? { contacts: 0, bridged: 0, dated: 0 },
     sync: state.rows[0] ?? null,
     edges: edges.rows,
+    reach: {
+      direct: totals.rows[0]?.people ?? 0,
+      via_colleagues: reach.rows[0]?.via ?? 0,
+      colleagues: colleagues.rows,
+      teammates_without_linkedin: teammates.rows[0]?.n ?? 0,
+    },
   });
 }
