@@ -332,8 +332,10 @@ run by design — so an established account's existing connections were never st
 - **`graph_sync_state`** — per owner. `relations_page_cursor` is Unipile's opaque pagination cursor and is a
   DIFFERENT thing from `linkedin_accounts.relations_cursor`, which is a timestamp high-water mark.
 - **The contacts→people bridge** — `contacts.person_id / linkedin_slug / connected_on`. These were two
-  disconnected identity spaces with no FK between them; ~13k CSV contacts are the cheapest 1st-degree ring
-  there is. `identity.ensure_people_bulk` promotes them set-based and writes NO `relationships` row (13k
+  disconnected identity spaces with no FK between them; imported CSV contacts are the cheapest 1st-degree
+  ring there is. NOTE: the "12,932 contacts" figure repeated across this repo is STALE — as of 2026-09-06 the
+  live table holds 850 rows, only 230 of them from the LinkedIn CSV import, so the free sources yield a much
+  thinner graph than the design assumed. `identity.ensure_people_bulk` promotes them set-based and writes NO `relationships` row (13k
   `stage='stranger'` rows would flood `network_insights` and the attention allocator).
 - **`policy/graph.py`** (pure) — `strength = base[source] x 0.5 ^ (days/half_life)`. An undated signal scores
   `undated_recency` (0.5), NOT 1.0: pre-existing CSV contacts have no date, and scoring them as fresh would
