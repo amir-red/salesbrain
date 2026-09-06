@@ -85,16 +85,42 @@ export const SERVICE_TOOLS: ToolDef[] = [
   {
     name: 'crm_icp_define',
     description:
-      "Create or update a named ideal-customer profile for this employee: who to look for " +
-      "(filters) and what makes them a fit (criteria + weights). Re-run with the same name to refine.",
+      'Create or update an ideal-customer profile for this employee: who to look for (filters) and ' +
+      'what makes them a fit (criteria + weights). ' +
+      'AN EMPLOYEE MAY HOLD MANY ICPs AT ONCE, AND `name` IS THE IDENTITY: a new name creates a new ' +
+      'profile alongside the existing ones, an existing name updates that one in place. Pick a stable, ' +
+      'distinct name per profile and do not paraphrase it between calls — re-sending a name you have ' +
+      'used before overwrites that profile instead of adding one, and paraphrasing it creates a ' +
+      'near-duplicate. There is no per-employee profile limit and no operator step. ' +
+      'Call crm_icp_list first to see what already exists, and crm_icp_archive to retire one.',
     inputSchema: obj(
       {
-        name: { type: 'string' },
+        name: {
+          type: 'string',
+          description:
+            'The profile identity. New name = new profile; existing name = update that profile in place.',
+        },
         product: { type: 'string', description: 'zeami | chipchip' },
         description: { type: 'string' },
         search_keywords: { type: 'string' },
-        filters: { type: 'object', description: 'location[], industry[], function[], company[], tenure[]' },
-        criteria: { type: 'object', description: 'titles[], seniority[], locations[], industries[], company_sizes[], exclude_titles[], exclude_companies[], weights{}' },
+        filters: {
+          type: 'object',
+          description:
+            'location[], industry[], function[], company[], tenure[]. industry/location must use the ' +
+            'closed vocabulary (see criteria below) — free prose resolves to no LinkedIn filter and is dropped.',
+        },
+        criteria: {
+          type: 'object',
+          description:
+            'titles[], seniority[], locations[], industries[], company_sizes[], exclude_titles[], ' +
+            'exclude_companies[], weights{}. CLOSED VOCABULARIES, matched exactly and dropped in silence ' +
+            'when unrecognised: seniority must be lowercase keys from ' +
+            'c_level | founder | vp | head | director | manager | senior ' +
+            '("C-Level", "C-Suite", "Owner" and the like score NOTHING); industries and locations must be ' +
+            'LinkedIn names such as "Financial Services", "Software Development", "United Kingdom". ' +
+            'titles[] and exclude_titles[] are free text and are matched as keywords. ' +
+            'Run suggest_icp first if unsure — it returns values already in the vocabulary.',
+        },
       },
       ['name'],
     ),
@@ -218,8 +244,13 @@ export const SERVICE_TOOLS: ToolDef[] = [
   {
     name: 'crm_agent_status',
     description:
-      "Are the background agents live for this employee: kill switch, each agent's enabled flag, caps and " +
-      "schedule, its last run and 24h totals, plus any LinkedIn account paused for agent work.",
+      "Are the background agents live for this employee: each agent's enabled flag, caps and schedule, its " +
+      "last run and 24h totals, plus any LinkedIn account paused for agent work. " +
+      "READ THE SWITCH CAREFULLY: `kill_switch: true` means agents are ALLOWED to run — it is the master " +
+      "enable, not a brake — so `true` is the healthy value and `false` means everything is halted. The " +
+      "response also carries `sourcing_paused`, the same fact stated the safe way round: " +
+      "`sourcing_paused: false` means sourcing is running normally. Whether a particular agent runs is its " +
+      "own `enabled` flag, not this one.",
     inputSchema: obj({}),
     needsOwner: true,
   },
@@ -629,6 +660,21 @@ export async function dispatchServiceTool(
     if (toolName === 'crm_leads_finder_run' || toolName === 'crm_enrich_prospect') {
       const { employee_id: _drop, ...rest } = args;
       return { status: 'success', data: await guardedLinkedinSpend(toolName, owner, rest) };
+    }
+
+    // `kill_switch: true` means agents are ALLOWED to run — the field is the
+    // master enable, not a brake. A partner agent read it the other way round
+    // and reported to its user that sourcing was paused at the provider, which
+    // was the opposite of the truth. Ship the same fact under a name that
+    // cannot be misread, alongside the original (renaming it would break
+    // /agents and the ring, which both read `kill_switch`).
+    if (toolName === 'crm_agent_status') {
+      const { employee_id: _drop, ...rest } = args;
+      const out = (await kernelCall(toolName, rest, owner)) as Record<string, unknown>;
+      return {
+        status: 'success',
+        data: { ...out, sourcing_paused: out.kill_switch === false },
+      };
     }
 
     if (PASSTHROUGH.has(toolName)) {
