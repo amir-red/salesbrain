@@ -67,6 +67,19 @@ export function nextEnricherWindow(now = new Date()): TickWindow {
   return nextWindow(ENRICHER_HOURS, ENRICHER_MINUTE, ENRICHER_JITTER_MINUTES, now);
 }
 
+/** Graph Sync: OnCalendar=*-*-* 02,14:10, RandomizedDelaySec=900. */
+const GRAPH_SYNC_HOURS = [2, 14];
+const GRAPH_SYNC_MINUTE = 10;
+const GRAPH_SYNC_JITTER_MINUTES = 15;
+
+export function nextGraphSyncWindow(now = new Date()): TickWindow {
+  return nextWindow(GRAPH_SYNC_HOURS, GRAPH_SYNC_MINUTE, GRAPH_SYNC_JITTER_MINUTES, now);
+}
+
 export function nextWindowFor(agent: string, now = new Date()): TickWindow {
-  return agent === 'enricher' ? nextEnricherWindow(now) : nextLeadsFinderWindow(now);
+  if (agent === 'enricher') return nextEnricherWindow(now);
+  if (agent === 'graph_sync') return nextGraphSyncWindow(now);
+  // Unknown agents still get the leads-finder window — wrong, but bounded, and
+  // better than no estimate. Add a case here when a new timer ships.
+  return nextLeadsFinderWindow(now);
 }

@@ -6,6 +6,7 @@ import Sidebar from '@/components/Sidebar';
 import NetworkFilters, { EMPTY_FILTERS, type NetworkFilterState } from '@/components/NetworkFilters';
 import NetworkDetailPanel from '@/components/NetworkDetailPanel';
 import NetworkInsights from '@/components/NetworkInsights';
+import GraphPanel from '@/components/network/GraphPanel';
 import type { GraphNode, GraphEdge } from '@/lib/network-graph';
 
 // Cytoscape is a heavy library — load it only on this page
@@ -186,6 +187,11 @@ export default function NetworkPage() {
             AI Insights
           </button>
         </header>
+
+        {/* The relationship graph behind warm intros. The cytoscape view below
+            still draws from `contacts`; this strip reports person_edges, which
+            is a different (and smaller) thing until every source has synced. */}
+        <GraphPanel />
 
         {/* Graph area */}
         <div className="flex-1 relative overflow-hidden">

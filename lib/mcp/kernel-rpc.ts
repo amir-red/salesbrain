@@ -71,6 +71,8 @@ const LONG_RUNNING_TOOLS = new Set<string>([
   'crm_research_company',
   'crm_prospect_auto_qualify',
   'crm_icp_rescore',
+  // Paces LinkedIn pages 6s apart and can promote thousands of contacts.
+  'crm_graph_sync',
 ]);
 
 async function rpc(

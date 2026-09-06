@@ -109,6 +109,32 @@ export interface LinkedInContact {
   connected_on: string | null;
 }
 
+const MONTHS: Record<string, string> = {
+  jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+  jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
+};
+
+/**
+ * LinkedIn's Connections.csv writes "21 Jun 2019". Returns ISO yyyy-mm-dd, or null.
+ *
+ * Parsed by hand rather than with `new Date(raw)`: V8 happens to accept that
+ * spelling but the behaviour is implementation-defined, and a wrong date here
+ * feeds straight into edge strength — a mis-parsed year would rank a decade-old
+ * acquaintance as this week's conversation.
+ */
+export function parseLinkedInConnectedOn(raw: string | null): string | null {
+  const v = (raw || '').trim();
+  if (!v) return null;
+  const dmy = v.match(/^(\d{1,2})\s+([A-Za-z]{3,})\s+(\d{4})$/);
+  if (dmy) {
+    const mon = MONTHS[dmy[2].slice(0, 3).toLowerCase()];
+    if (mon) return `${dmy[3]}-${mon}-${dmy[1].padStart(2, '0')}`;
+  }
+  const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return v;
+  return null;
+}
+
 export function parseLinkedInContactsCsv(text: string): LinkedInContact[] {
   // LinkedIn export has a preamble of "Notes:" lines above the header — skip to the actual header row
   const lines = text.replace(/\r\n/g, '\n').split('\n');

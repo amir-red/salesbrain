@@ -151,10 +151,15 @@ export const SERVICE_TOOLS: ToolDef[] = [
   },
   {
     name: 'crm_agent_request_run',
-    description: "Queue an agent run for an ICP; the background agent picks it up on its next tick.",
+    description:
+      'Queue an agent run; the background agent picks it up on its next tick. leads_finder and '
+      + 'enricher work per ICP and need icp_id. graph_sync works per employee and takes no icp_id.',
     inputSchema: obj(
-      { agent: { type: 'string', enum: ['leads_finder', 'enricher'] }, icp_id: { type: 'string' } },
-      ['agent', 'icp_id'],
+      {
+        agent: { type: 'string', enum: ['leads_finder', 'enricher', 'graph_sync'] },
+        icp_id: { type: 'string', description: 'Required for leads_finder and enricher' },
+      },
+      ['agent'],
     ),
     needsOwner: true,
   },
@@ -204,7 +209,7 @@ export const SERVICE_TOOLS: ToolDef[] = [
       "Recent runs for this employee — per run: status, trigger, source/query, analyzed / matched / new / " +
       "researched, why a tick was skipped, and any error. The Activity feed.",
     inputSchema: obj({
-      agent: { type: 'string', enum: ['leads_finder', 'outreach', 'enricher'] },
+      agent: { type: 'string', enum: ['leads_finder', 'outreach', 'enricher', 'graph_sync'] },
       icp_id: { type: 'string' },
       limit: { type: 'integer', description: 'default 30' },
     }),
@@ -300,6 +305,47 @@ export const SERVICE_TOOLS: ToolDef[] = [
       "at the provider (the Unipile account is deleted, so it stops being billed). Mirrored threads " +
       "are kept as history. Reconnect any time with linkedin_connect_start.",
     inputSchema: obj({}),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_graph_status',
+    description:
+      "This employee's relationship graph: how many people and edges it holds by source, how strong "
+      + 'they are, whether the LinkedIn 1st-degree mirror is complete or still paging, and how many of '
+      + 'their imported contacts have been bridged into it. Reads only.',
+    inputSchema: obj({}),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_graph_edges',
+    description:
+      'The strongest people in this employee\'s graph — who they know best right now, with the evidence '
+      + 'behind each score (messages exchanged, when the last signal was, which source it came from).',
+    inputSchema: obj({
+      limit: { type: 'integer', description: 'How many to return (default 50, max 500)' },
+      source: {
+        type: 'string',
+        enum: ['linkedin_csv', 'linkedin_relation', 'linkedin_thread', 'email_thread', 'intro_confirmed', 'manual'],
+        description: 'Only edges from this source',
+      },
+    }),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_graph_sync',
+    description:
+      "Build this employee's relationship graph now. The free sources — imported LinkedIn contacts, "
+      + 'mirrored LinkedIn threads, synced email — always run, so an employee with no LinkedIn connected '
+      + 'still gets a graph. The LinkedIn 1st-degree mirror pages only while today\'s relations budget '
+      + 'allows and resumes on the next call. Contacts no one; spends no search or profile quota.',
+    inputSchema: obj({
+      sources: {
+        type: 'array',
+        items: { type: 'string', enum: ['contacts', 'threads', 'email', 'relations', 'linkedin'] },
+        description: 'Default: all of them',
+      },
+      max_pages: { type: 'integer', description: 'LinkedIn relations pages this call (default 2, max 5)' },
+    }),
     needsOwner: true,
   },
 ];
@@ -490,6 +536,7 @@ const PASSTHROUGH = new Set([
   'crm_agent_request_run', 'crm_enrich_prospect', 'crm_outreach_propose',
   'crm_outreach_pending', 'crm_outreach_decide', 'crm_linkedin_status',
   'crm_linkedin_revoke', 'crm_agent_activity', 'crm_agent_status', 'crm_linkedin_quota',
+  'crm_graph_status', 'crm_graph_edges', 'crm_graph_sync',
 ]);
 
 /**
@@ -542,8 +589,14 @@ export async function dispatchServiceTool(
     // fix, and never create the run.
     if (toolName === 'crm_agent_request_run') {
       const { employee_id: _drop2, ...rest } = args;
+      const agent = typeof rest.agent === 'string' ? rest.agent : 'leads_finder';
+      // Only the sourcing agents are useless without LinkedIn. graph_sync
+      // builds most of its edges from imported contacts and synced email, so
+      // refusing it for an unconnected employee would withhold the one agent
+      // that still works for them.
+      const NEEDS_LINKEDIN = new Set(['leads_finder', 'enricher']);
       const readiness = await readinessFor(owner) as { connected?: boolean | null; paused?: boolean; pause_reason?: string | null };
-      if (readiness.connected === false) {
+      if (NEEDS_LINKEDIN.has(agent) && readiness.connected === false) {
         return {
           status: 'success',
           data: {
@@ -555,7 +608,6 @@ export async function dispatchServiceTool(
         };
       }
       const out = (await kernelCall(toolName, rest, owner)) as Record<string, unknown>;
-      const agent = typeof rest.agent === 'string' ? rest.agent : 'leads_finder';
       return {
         status: 'success',
         data: {

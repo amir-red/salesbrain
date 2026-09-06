@@ -314,6 +314,52 @@ Exposes the FULL outreach pipeline (ICP → Leads Finder → Enricher → draft 
 - **Decisions**: approvals render in the OTHER app's UI (`crm_outreach_pending` → `crm_outreach_decide`, not Telegram); each employee connects their OWN LinkedIn + email; **shared data pool** — external rows live in the same `prospects`/`accounts` tables, owned by the mapped user (recoverable as external-origin via `external_employees`). Reachability caveat: fresh LinkedIn leads with no existing thread are email-only (no cold invites).
 - **Admin**: mint tokens in the UI at `/profile → Service API` tab (admin-only, `components/profile/ServiceTokenPanel.tsx`) or `POST /api/admin/service-tokens {app_key,name}` (shown once); `lib/service-mcp/tokens.ts`. Rate limits: 120/min per app token + per-tool sub-limits (`lib/service-mcp/auth.ts`). Full contract for the other app's dev: `docs/service-mcp.md`.
 
+### 5.aa Relationship graph — warm-intro Phase 1 (2026-09-06, core/hermes 0.28.0, migration 038)
+
+The ingestion foundation for warm introductions. Design of record:
+`docs/research/03-warm-intro-spec.md` (§1-2 = this; §3-9 = later phases). **No pathfinding, no intro
+campaigns, no reply detection yet.**
+
+The problem it fixes: nothing in the schema recorded "A knows B". `relationships.person_id` is UNIQUE so it
+models person↔us, not a pair, and `linkedin_relations` is a change detector that skips every row on its first
+run by design — so an established account's existing connections were never stored anywhere.
+
+- **`person_edges`** (migration 038) — owner-scoped, `src_person_id NULL` = the owner (the red node),
+  `source` + `direction` + `strength` 0-1 + `evidence` jsonb. Unique on
+  `(owner, COALESCE(src, sentinel), dst, source)` — a plain unique index would not dedupe the owner's own
+  edges, since NULLs are distinct (the hole 037 closed for `agent_runs`). Structural overlaps (same employer,
+  same school) are deliberately NOT stored — they get derived at query time in Phase 2.
+- **`graph_sync_state`** — per owner. `relations_page_cursor` is Unipile's opaque pagination cursor and is a
+  DIFFERENT thing from `linkedin_accounts.relations_cursor`, which is a timestamp high-water mark.
+- **The contacts→people bridge** — `contacts.person_id / linkedin_slug / connected_on`. These were two
+  disconnected identity spaces with no FK between them; ~13k CSV contacts are the cheapest 1st-degree ring
+  there is. `identity.ensure_people_bulk` promotes them set-based and writes NO `relationships` row (13k
+  `stage='stranger'` rows would flood `network_insights` and the attention allocator).
+- **`policy/graph.py`** (pure) — `strength = base[source] x 0.5 ^ (days/half_life)`. An undated signal scores
+  `undated_recency` (0.5), NOT 1.0: pre-existing CSV contacts have no date, and scoring them as fresh would
+  rank a 2014 acquaintance above last month's conversation. All constants in `policy_rules['agents.graph_sync']`.
+- **`commands/graph.py`** — four zero-cost sources (contacts / threads / email / relations) plus
+  `record_relations_page`, which advances the cursor only AFTER a page commits, so a rate-limit refusal or a
+  crash re-fetches at worst one page. Owner-scoped with no admin bypass; `graph_plan` is SERVICE-gated like
+  `list_connected_accounts`.
+- **`graph_sync` timer agent** (ships DISABLED) — `assets/scripts/graph_sync.py` + `graph-sync.timer`
+  (02:10/14:10 Addis, away from every other sweep — two sweeps on one account collide on the guard's 6s
+  min-gap). `--probe` prints a real `users/relations` response shape: **Unipile's max page size and cursor key
+  are unverified**, so probe before enabling. `relations_reserve` holds back budget for the hourly
+  `linkedin_sync` poll, which spends ~24/day of the free 60 on the same action class.
+- **Ring tools** `crm_graph_sync` / `crm_graph_status` / `crm_graph_edges`; all three on the service MCP
+  surface. `crm_agent_request_run` now takes `graph_sync` with no `icp_id` (owner-scoped dedupe index in 038),
+  and the service surface no longer refuses to queue it for an employee without LinkedIn.
+- **App** — `/network` gets a status strip + browsable strongest-edges list (`components/network/GraphPanel.tsx`,
+  `/api/graph`, `/api/graph/sync`). The contacts CSV import now persists `connected_on`, batches its inserts
+  (was ~35k queries for a 13k-row file), and queues a graph sync.
+- **Fixed on the way:** `normalize_handle('linkedin', ...)` now strips `?query` strings (a mis-normalized handle
+  mints a duplicate person nothing merges); `resolve_or_promote` matches an indexed slug column instead of
+  `LIKE '%slug%'`, which was a 13k-row seq scan AND a correctness bug (`%amir%` matches `amir-hassan`);
+  `deploy-server.sh` had `VERSION=0.22.0` against pyproject 0.27.0 and never scp'd `leads_finder.py`,
+  `enricher.py`, `outreach_queue.py` or `grant_signals.py` — their systemd units pointed at absent files.
+- Disconnecting LinkedIn purges that owner's LinkedIn-derived edges.
+
 ## 6. Env vars
 
 All must be in `.env.local` (dev) and as GitHub repo secrets (prod — workflow writes them to `.env.production`).

@@ -424,6 +424,35 @@ account must then be removed from the Unipile dashboard by the operator.
 used vs the safe cap, `remaining`, `resume_at`, tier, pause state, and recent block count. The same snapshot the
 spending tools attach as `linkedin`.
 
+### Relationship graph
+
+Each employee has a private graph of the people they actually know, scored by how warm the connection is
+right now. It is built from data already on file — imported LinkedIn contacts, mirrored LinkedIn threads,
+synced email — plus a paginated mirror of their LinkedIn 1st-degree ring. It contacts no one and spends no
+search or profile budget, and an employee with no LinkedIn connected still gets a graph from the rest.
+
+This is the foundation for warm-introduction pathfinding. Path search and intro campaigns are not built yet;
+today the graph is readable and can be rebuilt on demand.
+
+**`crm_graph_sync`** · write — Build this employee's graph now. Free sources always run; the LinkedIn mirror
+pages only while today's `relations` budget allows and resumes on the next call.
+- `sources` — any of `contacts`, `threads`, `email`, `relations`, `linkedin` (default: all)
+- `max_pages` — LinkedIn relations pages this call (default 2, max 5). For a full first mirror, queue the
+  agent instead: `crm_agent_request_run {agent: "graph_sync"}` — no `icp_id`.
+
+**`crm_graph_status`** · read — Size by source, average strength, mirror progress, and how many of the
+employee's imported contacts have been bridged into the graph.
+
+**`crm_graph_edges`** · read — The strongest people in the graph, with the evidence behind each score.
+- `limit` — default 50, max 500
+- `source` — one of `linkedin_csv`, `linkedin_relation`, `linkedin_thread`, `email_thread`,
+  `intro_confirmed`, `manual`
+
+> **Strength is a decayed score, not a flag.** `base[source] x 0.5 ^ (days_since_last_signal / 180)`. A reply
+> outranks a connection; a 2014 connection outranks almost nothing. Contacts imported before this shipped
+> carry no connection date and are scored at a flat mid-value until the employee re-uploads their
+> Connections.csv.
+
 ---
 
 ## 9. Admin: issuing a token
