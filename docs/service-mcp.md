@@ -55,6 +55,24 @@ pipeline. Company records are shared org-wide; the person-level data is private 
 **Approvals live in your UI.** Drafts are never auto-sent. You list an employee's pending drafts, render them in
 your product, and post their decision back. **Approve means send now.**
 
+**Many ICPs per employee; `name` is the identity.** There is no per-employee limit and no operator step. A new
+`name` on `crm_icp_define` creates a new profile alongside the existing ones; a name you have used before
+updates *that* profile in place. So keep the name stable and distinct per profile — re-sending a name
+overwrites rather than adds, and paraphrasing it ("Tech Founders" → "Technical Founders") quietly creates a
+near-duplicate. `crm_icp_list` shows what exists; `crm_icp_archive` retires one.
+
+**Vocabulary is closed, and unknown values are dropped in silence.** `seniority`, `industries`, `locations` and
+`company_sizes` are enumerated sets matched exactly. An unrecognised value is not an error — the ICP saves
+happily and simply scores nothing on that dimension, which is the usual reason a profile looks correct and
+returns zero strong fits. Seniority in particular is **lowercase keys**:
+
+`c_level` · `founder` · `vp` · `head` · `director` · `manager` · `senior`
+
+`"C-Level"`, `"C-Suite"`, `"Owner"`, `"Executive"` all score nothing. Industries and locations must be LinkedIn
+names (`"Financial Services"`, `"Software Development"`, `"United Kingdom"`). `titles[]` and `exclude_titles[]`
+are the exception: free text, matched as keywords. When in doubt call `suggest_icp` first and use the values it
+returns — they are already in the vocabulary.
+
 ---
 
 ## 3. Authentication & headers
@@ -314,14 +332,35 @@ fit. Saves nothing. Needs no `X-On-Behalf-Of`. Run before `crm_icp_define`.
 - `objective` — primary goal to tune the recommendation to: `speed_to_market` | `volume` | `margin` | `logo` | `test_cases`
 - `n_candidates` — how many candidates (2–4, default 3) · `name` — optional name
 
-**`crm_icp_define`** · write — Create or update a named ICP: filters (who to find) + criteria (what scores as a
-fit). Re-use the `name` to refine.
-- `name*` — ICP name
+**`crm_icp_define`** · write — Create or update an ICP: filters (who to find) + criteria (what scores as a fit).
+**`name` is the identity** — a new name creates a profile alongside the existing ones, a name already in use
+updates that one in place. An employee may hold many at once.
+- `name*` — the profile identity. Keep it stable and distinct; see "Many ICPs per employee" in §2
 - `objective` — the strategic goal it optimizes for (from `suggest_icp`): one of the five above
 - `search_keywords` — free-text LinkedIn query
 - `filters` — `location[]`, `industry[]`, `function[]`, `company[]`, `tenure[]`
 - `criteria` — `titles[]`, `seniority[]`, `locations[]`, `industries[]`, `company_sizes[]`, `exclude_titles[]`, `exclude_companies[]`, `weights{}`
 - `product` — `zeami` | `chipchip`
+
+Closed vocabularies apply (§2): `seniority` is lowercase `c_level | founder | vp | head | director | manager |
+senior`; industries and locations must be LinkedIn names. Unknown values save without error and score nothing.
+
+Two calls, two live profiles — this is how you add a profile rather than replace one:
+
+```json
+{ "name": "crm_icp_define", "arguments": {
+    "name": "Hands-On Technical Founder/CTO",
+    "criteria": { "titles": ["CTO", "Head of Engineering"], "seniority": ["c_level", "founder"] } } }
+
+{ "name": "crm_icp_define", "arguments": {
+    "name": "PE Portfolio Operators",
+    "criteria": { "titles": ["COO", "CFO", "Operations Director"],
+                  "seniority": ["c_level", "director"],
+                  "industries": ["Venture Capital and Private Equity", "Manufacturing"] } } }
+```
+
+`crm_icp_list` now returns **two** profiles. Sending the second payload under the *first* name would instead
+have overwritten it, leaving one.
 
 **`crm_icp_preview`** · read — Dry-run criteria against contacts on file — who it would pick and the fit
 distribution. Writes nothing, spends no quota.
@@ -379,8 +418,13 @@ verbatim, `error`, `lead_count`, plus (while pending) `queued_runs` and `next_ti
 reason, error.
 - `agent` — `leads_finder` | `outreach` | `enricher` · `icp_id` · `limit` (default 30)
 
-**`crm_agent_status`** · read — Kill switch, each agent's `enabled` flag, caps + schedule, its last run and 24h
-totals, and any LinkedIn account paused for agent work.
+**`crm_agent_status`** · read — Each agent's `enabled` flag, caps + schedule, its last run and 24h totals, and
+any LinkedIn account paused for agent work.
+
+> **`kill_switch: true` means agents are ALLOWED to run.** It is the master enable, not a brake — `true` is the
+> healthy value and `false` means every agent is halted globally. Because that name reads backwards, the
+> response also carries **`sourcing_paused`**, the same fact stated safely: `sourcing_paused: false` = sourcing
+> is running normally. Whether a *particular* agent runs is its own `enabled` flag, not this one.
 
 **`crm_linkedin_quota`** · read — Today's LinkedIn budget: searches and profile fetches used vs the safe cap,
 `remaining`, `resume_at`, tier, pause state.
