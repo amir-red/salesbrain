@@ -370,6 +370,23 @@ distribution. Writes nothing, spends no quota.
 **`crm_icp_list`** · read — This employee's ICP profiles (with `objective`) and how many prospects each has found.
 - `include_inactive` — include archived ICPs
 
+**`crm_icp_set_state`** · write — Start, hold or retire ONE ICP. This is the per-profile switch: it affects
+that profile only, not the employee's other ICPs and not anyone else.
+- `icp_id*` · `state*` — `running` | `paused` | `stopped` · `reason` — shown wherever the hold is reported
+
+| State | What runs | Notes |
+|---|---|---|
+| `running` | sourcing, enrichment, drafting, sending | the default |
+| `paused` | **nothing** | leads and history untouched; one call puts it back. Use this for a temporary hold |
+| `stopped` | nothing | retired; hidden from `crm_icp_list` unless `include_inactive` |
+
+`paused` stops the **send** path too: no new drafts are queued for that ICP's leads, so there is nothing to
+approve. A pause set by a SalesBrain administrator can only be lifted by one, and `crm_icp_define` does **not**
+clear a pause — editing a profile cannot quietly resume work an operator stopped.
+
+`crm_icp_list` returns `state` (`running` | `paused` | `stopped`) plus `paused_at`, `paused_reason` and
+`paused_by_admin` on every profile.
+
 **`crm_icp_archive`** · write — Retire an ICP (soft): agents stop sourcing for it, prospects keep their link.
 Use it to put a profile on standby; re-defining the same `name` with `crm_icp_define` revives it.
 - `icp_id*` — from `crm_icp_list`

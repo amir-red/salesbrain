@@ -37,6 +37,10 @@ export interface IcpProfile {
   filters: Record<string, unknown>;
   criteria: IcpCriteria;
   is_active: boolean;
+  /** Derived run state: running (agents work it) | paused (held, reversible) | stopped (retired). */
+  paused_at?: string | null;
+  paused_reason?: string | null;
+  paused_by_admin?: boolean;
   created_at: string;
   updated_at: string;
   prospects?: number;
