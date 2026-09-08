@@ -382,10 +382,17 @@ colleague a person node. NO ranking, NO target expansion, NO intro campaigns yet
   index), so `edges_from_threads`, the strongest source, produced zero edges. Member ids now live in a new
   `channel_handles.channel = 'linkedin_id'`; threads fall back to them and the relations mirror registers both
   handles so the same human converges on one row. Live: identifiable thread attendees 0 → 48.
-- **Not yet lit on the box (needs SSH, integration session)**: `deploy-server.sh` for 0.31.0, then
-  `graph_sync.py --probe --owner <uuid>` on one account (Unipile page size / cursor key still unverified),
-  `--dry-run`, `systemctl --user enable --now graph-sync.timer`, and flip `agents.graph_sync.enabled`. Until
-  then `person_edges` holds only CSV (230) + email (4) edges and `graph_sync_state` is empty.
+- **LIVE since 2026-09-08 20:18 Addis (0.31.2)**: `graph-sync.timer` enabled (02:10/14:10 + jitter),
+  `agents.graph_sync.enabled=true` (flipped from `/agents`). Probe verified Unipile's shape: cursor at
+  top-level `cursor`, items carry `public_identifier` / `member_id` / `created_at` / `headline`. Both
+  connected accounts mirrored to completion in one page (99 + 96 relations — small networks). Live edges:
+  230 csv, 195 relation, 42 thread, 4 email. All five users now have a `person_id`.
+  Two bugs the first run exposed, both fixed: (1) `upsert_edges` batches held the same (src,dst,source)
+  twice — two threads with one person — and Postgres refuses `ON CONFLICT DO UPDATE` touching a row twice;
+  `policy/graph.py::merge_duplicate_edges` collapses a batch first (0.31.1). (2) `runs_per_day` counted
+  `agent_runs` ROWS, one per owner, so one sweep over five owners spent 2.5 days of budget; it now counts
+  the max per-owner runs = sweeps (0.31.2). The `/agents` toggle covers only `enabled`; the other 13
+  policy keys are still SQL-only — a `/admin/policies` editor was proposed, not built.
 - **Still open from spec Phase A**: `person_facets`, automatic reply detection (`P6_REPLIED` is a stage nothing
   writes from inbound threads). Then Phase 3 = `crm_target_expand`, `crm_path_find`, `intro_campaigns`.
 
