@@ -448,6 +448,22 @@ Plan: `~/.claude/plans/but-let-s-step-back-buzzing-dongarra.md`.
   Decision for Amir; not built.
 - 0.32.1 fixed a pre-existing `set_warm_paths` bug (owner-scope alias `p.` on an un-aliased UPDATE — admins
   never hit it, the first regular-user route lookup did).
+- **Routes run as the LEAD'S OWNER (0.32.2, 2026-09-08).** The first lookup on a colleague's lead
+  (Alemayehu, Yasin's) found nothing because the route ran as the CLICKING user (amir@test.com: no LinkedIn,
+  empty graph) and the panel hid the skip reason. Now `lib/act-as.ts::resolveActingUser` makes an admin's
+  Find route / Look up LinkedIn / Enrich / intro ask run as the lead's owner by default (toggle "run as
+  <owner> | me"), audited as `act_as` next to the kernel's rows; the owner is derived from the prospect row,
+  never a client uuid; non-admins always act as themselves. RoutePanel shows `expand.notes[]` and
+  `profile.error`, and warns with a Connect-LinkedIn link when the acting user cannot source. Prospect GET
+  returns `owner_can_source`, `viewer_can_source`, `acting_user_id`, `viewer`.
+- **ONE AMIR (2026-09-08).** `store/merge_users.py` (dry-run default, `--apply` = one transaction, FK-catalogue
+  driven, preflight-guarded, reusable) folded `amir@test.com` (admin login) and the Zeami service employee
+  "Amir Redwan" (held the live `amir-redwan` LinkedIn, 340 prospects, 2 ICPs, 126 edges) into
+  **`amir@chipchip.social`** — now admin, name "Amir Redwan", test.com's password, person `ae407bcb` with all
+  three handles, Telegram 7666216888 kept (379316691 revoked), Zeami `external_employees` row re-pointed.
+  Backup CSVs: `~/.cache/salesbrain/backups/pre-merge-20260908_230827/`. Amir logs in as
+  amir@chipchip.social now. Yasin is ALSO a real user + a Zeami employee — merge later with the same script
+  (needs a `--keep-linkedin` flag: both hold active accounts).
 - **Still to verify live**: the member-id key on Sales Navigator people items (`_member_id` tries
   provider_id/id/member_id) — the profile fetch now backfills `linkedin_member_id` regardless.
   Not built: 3rd-degree yellows, posts engagement, reply detection, follow-up cadence.
