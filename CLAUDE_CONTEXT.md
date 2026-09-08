@@ -362,6 +362,33 @@ run by design — so an established account's existing connections were never st
   `enricher.py`, `outreach_queue.py` or `grant_signals.py` — their systemd units pointed at absent files.
 - Disconnecting LinkedIn purges that owner's LinkedIn-derived edges.
 
+### 5.ab Warm-intro Phase 2 — colleague identity + the second hop (2026-09-08, core/hermes 0.31.0, migration 040)
+
+Spec §3-4 first half: the Phase 1 star (owner → 1st-degree) becomes a traversable 2-hop graph by making each
+colleague a person node. NO ranking, NO target expansion, NO intro campaigns yet (Phase 3).
+
+- **`users.person_id`** (migration 040, partial unique) — `commands/graph.py::ensure_owner_person` mints the node
+  from the user's LinkedIn identity (email fallback; service-account addresses excluded). `graph_sync.py` calls it
+  per owner before syncing. No new edge rows: a colleague's own owner-scoped `person_edges(src IS NULL, dst=X)`
+  read as their outbound edges in someone else's search — the second hop is a join, always current.
+- **`graph_reach`** (direct ring, 2-hop union, what each teammate adds) and **`who_can_reach`** (the traversal
+  primitive Phase 3 ranks on). Ring tools `crm_graph_reach` / `crm_who_can_reach` (read-only), both on the
+  service MCP surface (29 tools). `/network` strip: "+N within 2 hops via teammates" + invite nudge for
+  teammates without LinkedIn.
+- **Privacy, load-bearing**: crossing an owner boundary happens only inside the kernel and returns
+  reachability + evidence for one tie. A colleague's contact list is never returned. Aggregate counts only.
+- **Phase 1 silent failure fixed**: every mirrored thread had `attendee_public_identifier = NULL` (LinkedIn
+  builds profile URLs on the opaque member id; `thread_payload` nulls the slug rather than corrupt the slug
+  index), so `edges_from_threads`, the strongest source, produced zero edges. Member ids now live in a new
+  `channel_handles.channel = 'linkedin_id'`; threads fall back to them and the relations mirror registers both
+  handles so the same human converges on one row. Live: identifiable thread attendees 0 → 48.
+- **Not yet lit on the box (needs SSH, integration session)**: `deploy-server.sh` for 0.31.0, then
+  `graph_sync.py --probe --owner <uuid>` on one account (Unipile page size / cursor key still unverified),
+  `--dry-run`, `systemctl --user enable --now graph-sync.timer`, and flip `agents.graph_sync.enabled`. Until
+  then `person_edges` holds only CSV (230) + email (4) edges and `graph_sync_state` is empty.
+- **Still open from spec Phase A**: `person_facets`, automatic reply detection (`P6_REPLIED` is a stage nothing
+  writes from inbound threads). Then Phase 3 = `crm_target_expand`, `crm_path_find`, `intro_campaigns`.
+
 ## 6. Env vars
 
 All must be in `.env.local` (dev) and as GitHub repo secrets (prod — workflow writes them to `.env.production`).
