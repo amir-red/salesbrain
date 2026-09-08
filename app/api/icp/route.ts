@@ -19,6 +19,12 @@ export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const all = req.nextUrl.searchParams.get('all') === '1';
+  // scope=all is the ADMIN estate view: every employee's profile, not just
+  // mine. Deals have followed "regular users see their own, admins see all"
+  // since the May cleanup; ICPs never got it, so there was no way to see — let
+  // alone hold — the ~118 profiles a partner app files on behalf of people who
+  // never log in. Silently ignored for non-admins rather than erroring.
+  const estate = req.nextUrl.searchParams.get('scope') === 'all' && session.role === 'admin';
   // Each card carries its list size, the agent's last tick and queued requests,
   // so /icp can show "agent ran 2h ago · 48 analyzed · 9 matched" without N+1 calls.
   const { rows } = await pool.query(
@@ -34,12 +40,28 @@ export async function GET(req: NextRequest) {
             (SELECT row_to_json(s) FROM (
                SELECT variant_index, consecutive_empty_runs, last_run_at, next_eligible_at, exhausted_at
                FROM icp_agent_state WHERE icp_profile_id = i.id) s) AS agent_state
+            ${estate ? `, u.name AS owner_name, u.email AS owner_email,
+               (u.email LIKE '%.service.salesbrain') AS owner_is_external,
+               EXISTS(SELECT 1 FROM linkedin_accounts la
+                       WHERE la.owner_user_id = i.owner_user_id AND la.revoked_at IS NULL)
+                 AS owner_can_source` : ''}
      FROM icp_profiles i
-     WHERE i.owner_user_id = $1 ${all ? '' : 'AND i.is_active'}
-     ORDER BY i.updated_at DESC`,
-    [session.userId],
+     ${estate ? 'JOIN users u ON u.id = i.owner_user_id' : ''}
+     WHERE ${estate ? 'TRUE' : 'i.owner_user_id = $1'} ${all ? '' : 'AND i.is_active'}
+     -- In estate view the useful ones are the ones producing leads, not the
+     -- most recently edited: ~118 of these have never sourced anything.
+     ORDER BY ${estate ? '(SELECT count(*) FROM prospects p WHERE p.icp_profile_id = i.id) DESC,' : ''}
+              i.updated_at DESC`,
+    estate ? [] : [session.userId],
   );
-  return NextResponse.json(rows.map((r) => ({ ...r, criteria: normalizeCriteria(r.criteria) })));
+  // { icps, is_admin } rather than a bare array: the page needs to know whether
+  // to offer the estate toggle, and /agents already sets this precedent instead
+  // of shipping a separate /api/me.
+  return NextResponse.json({
+    icps: rows.map((r) => ({ ...r, criteria: normalizeCriteria(r.criteria) })),
+    is_admin: session.role === 'admin',
+    scope: estate ? 'all' : 'mine',
+  });
 }
 
 export async function POST(req: NextRequest) {

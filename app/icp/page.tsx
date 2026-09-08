@@ -21,14 +21,22 @@ export default function IcpPage() {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<Mode>({ kind: 'list' });
   const [busy, setBusy] = useState<string | null>(null);
+  const [estate, setEstate] = useState(false);       // admin: every employee's ICPs
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/icp');
-      if (res.ok) setProfiles(await res.json());
+      const res = await fetch(`/api/icp${estate ? '?scope=all' : ''}`);
+      if (res.ok) {
+        const json = await res.json();
+        setProfiles(json.icps ?? []);
+        // The toggle only SHOWS for admins; the API ignores scope=all for
+        // everyone else, so this is presentation, not the security boundary.
+        setIsAdmin(Boolean(json.is_admin));
+      }
     } catch { /* ignore */ } finally { setLoading(false); }
-  }, []);
+  }, [estate]);
   useEffect(() => { load(); }, [load]);
 
   /** running | paused | stopped — the per-ICP switch. Pause is the reversible
@@ -97,6 +105,20 @@ export default function IcpPage() {
           {mode.kind === 'list' && (
             <div className="flex items-center gap-3">
               <Link href="/prospecting" className="text-xs underline" style={{ color: 'var(--text-muted)' }}>Prospects →</Link>
+              {isAdmin && mode.kind === 'list' && (
+                <button
+                  onClick={() => setEstate((v) => !v)}
+                  className="px-3 py-1.5 rounded-lg text-xs"
+                  style={{
+                    border: '1px solid var(--border)',
+                    background: estate ? 'var(--accent)' : 'transparent',
+                    color: estate ? '#fff' : 'var(--text-muted)',
+                  }}
+                  title="Admin: every employee's ICPs, including those filed by the partner app"
+                >
+                  {estate ? 'All employees' : 'Mine only'}
+                </button>
+              )}
               <button onClick={() => setMode({ kind: 'new' })} className="px-3 py-1.5 rounded-lg text-sm font-medium" style={{ background: 'var(--accent)', color: '#fff' }}>
                 + New ICP
               </button>
@@ -170,13 +192,33 @@ export default function IcpPage() {
                     </div>
                   )}
 
+                  {p.owner_name && (
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                      <span style={{ color: 'var(--text)' }}>{p.owner_name}</span>
+                      {p.owner_is_external && <span title="Registered by the partner app">· partner</span>}
+                      {p.owner_can_source
+                        ? <span title="LinkedIn connected — this profile can source">· can source</span>
+                        : <span title="No LinkedIn connected — this profile never runs">· inert</span>}
+                    </div>
+                  )}
+
                   <div><RunPill run={p.last_run ?? null} queued={p.queued_runs ?? 0} state={p.agent_state ?? null} /></div>
 
                   <div className="mt-auto flex gap-2 pt-1">
-                    <button onClick={() => setMode({ kind: 'edit', profile: p })} className="px-3 py-1.5 rounded-lg text-xs" style={{ border: '1px solid var(--border)', color: 'var(--text)' }}>Edit</button>
-                    <button onClick={() => setMode({ kind: 'leads', profile: p })} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'var(--accent)', color: '#fff' }} title="The list the Leads Finder fills, and its activity">
-                      Leads →
-                    </button>
+                    {/* Editing stays with the owner. An admin gets a HOLD on
+                        someone else's profile, not authorship of it. */}
+                    {!p.owner_name && (
+                      <button onClick={() => setMode({ kind: 'edit', profile: p })} className="px-3 py-1.5 rounded-lg text-xs" style={{ border: '1px solid var(--border)', color: 'var(--text)' }}>Edit</button>
+                    )}
+                    {/* The leads endpoint is owner-scoped, so this would open
+                        an empty list on someone else's profile. The card already
+                        carries the counts and the run pill — enough to decide
+                        whether to hold it. */}
+                    {!p.owner_name && (
+                      <button onClick={() => setMode({ kind: 'leads', profile: p })} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'var(--accent)', color: '#fff' }} title="The list the Leads Finder fills, and its activity">
+                        Leads →
+                      </button>
+                    )}
                     {p.paused_at ? (
                       <button onClick={() => setState(p, 'running')} disabled={busy === p.id} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ border: '1px solid var(--accent)', color: 'var(--accent)' }} title="Resume sourcing, enrichment, drafting and sending for this ICP">
                         Resume
@@ -186,7 +228,9 @@ export default function IcpPage() {
                         Pause
                       </button>
                     )}
-                    <button onClick={() => archive(p)} disabled={busy === p.id} className="ml-auto px-3 py-1.5 rounded-lg text-xs disabled:opacity-40" style={{ color: 'var(--text-muted)' }}>Archive</button>
+                    {!p.owner_name && (
+                      <button onClick={() => archive(p)} disabled={busy === p.id} className="ml-auto px-3 py-1.5 rounded-lg text-xs disabled:opacity-40" style={{ color: 'var(--text-muted)' }}>Archive</button>
+                    )}
                   </div>
                 </div>
               ))}

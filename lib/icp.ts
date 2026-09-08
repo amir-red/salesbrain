@@ -38,6 +38,11 @@ export interface IcpProfile {
   criteria: IcpCriteria;
   is_active: boolean;
   /** Derived run state: running (agents work it) | paused (held, reversible) | stopped (retired). */
+  /** Present only in the admin estate view (GET /api/icp?scope=all). */
+  owner_name?: string;
+  owner_email?: string;
+  owner_is_external?: boolean;
+  owner_can_source?: boolean;
   paused_at?: string | null;
   paused_reason?: string | null;
   paused_by_admin?: boolean;
