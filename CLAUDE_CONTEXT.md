@@ -434,8 +434,22 @@ Plan: `~/.claude/plans/but-let-s-step-back-buzzing-dongarra.md`.
   IcpLeads "route · N hops / bridge / cold" badge. Service MCP (`docs/service-mcp.md` §8 "Route to a
   lead"): `crm_path_find`, `crm_route_expand` (guarded), `crm_propose_intro`; `list_leads` +
   `best_path_hops`/`path_available`.
+- **Merged + deployed 2026-09-08 (0.32.1, migration 043 applied).** Live walk on Lesya Hendrix (2nd degree,
+  fit 85, owner = the Zeami service user holding `amir-redwan`): `path_find` → no route (graph had nothing);
+  `route_expand` → profile fetched (degree 2, `shared_connections_count` 1, 10 employers), the STRUCTURED
+  `connections_of` filter worked first time (`mode: filters`, no URL fallback), 1 mutual found and stored as
+  `linkedin_mutual` (+ the owner→B `linkedin_relation`), teammate probe 1 account / 0 hits. Result: **Yan
+  Kwizera** named as the bridge — YELLOW, not blue, because we hold no thread/email with him.
+- **Known gap surfaced by that walk — "1st degree but no thread" is yellow.** The blue predicate requires an
+  existing LinkedIn thread or an email; a plain 1st-degree connection cannot be messaged by the ring because
+  `send_message` only replies into an existing chat (Unipile has a start-chat endpoint we deliberately never
+  used). Messaging a 1st-degree connection is normal human behaviour and NOT an invitation — allowing
+  "start a chat with a 1st-degree connection" as a blue channel would have turned that route actionable.
+  Decision for Amir; not built.
+- 0.32.1 fixed a pre-existing `set_warm_paths` bug (owner-scope alias `p.` on an un-aliased UPDATE — admins
+  never hit it, the first regular-user route lookup did).
 - **Still to verify live**: the member-id key on Sales Navigator people items (`_member_id` tries
-  provider_id/id/member_id); classic `connections_of` accepting a raw provider id (URL fallback exists).
+  provider_id/id/member_id) — the profile fetch now backfills `linkedin_member_id` regardless.
   Not built: 3rd-degree yellows, posts engagement, reply detection, follow-up cadence.
 
 ## 6. Env vars
