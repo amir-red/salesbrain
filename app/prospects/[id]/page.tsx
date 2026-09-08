@@ -10,7 +10,7 @@ import ApprovalsPanel from '@/components/prospect/ApprovalsPanel';
 import type { LeadApproval } from '@/components/prospect/ApprovalsPanel';
 import { PROSPECT_STAGES } from '@/lib/prospecting';
 import { journeyState, routeEntry, warmAngles } from '@/lib/prospects';
-import type { IntroRequestLite, JourneyKey, Prospect } from '@/lib/prospects';
+import type { ActAs, IntroRequestLite, JourneyKey, Prospect } from '@/lib/prospects';
 import { relativeTime, formatDate } from '@/lib/time';
 
 interface Brief {
@@ -24,6 +24,8 @@ interface IntroRequest extends IntroRequestLite { channel: string | null; path_i
 interface Payload {
   prospect: Prospect; briefs: Brief[]; scores: Score[]; messages: Message[]; events: Event[];
   approvals: LeadApproval[]; intro_requests: IntroRequest[]; teammates_with_linkedin: number;
+  acting_user_id: string; owner_can_source: boolean; viewer_can_source: boolean;
+  viewer: { user_id: string; role: string; name: string };
 }
 
 /**
@@ -38,16 +40,19 @@ export default function ProspectDetailPage() {
   const [converting, setConverting] = useState(false);
   const [enriching, setEnriching] = useState(false);
   const [enrichNote, setEnrichNote] = useState<string | null>(null);
+  // Whose graph/LinkedIn the route + enrich + intro actions run with (admins
+  // on someone else's lead default to the owner).
+  const [as, setAs] = useState<ActAs>('owner');
   const refs = useRef<Partial<Record<JourneyKey, HTMLDivElement | null>>>({});
 
   const fetchData = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
     try {
-      const res = await fetch(`/api/prospects/${prospectId}`);
+      const res = await fetch(`/api/prospects/${prospectId}?as=${as}`);
       if (res.ok) setData(await res.json());
     } catch { /* ignore */ }
     finally { setLoading(false); }
-  }, [prospectId]);
+  }, [prospectId, as]);
   useEffect(() => { fetchData(); }, [fetchData]);
   const refresh = () => fetchData(true);
 
@@ -62,7 +67,7 @@ export default function ProspectDetailPage() {
   const enrichNow = async () => {
     setEnriching(true); setEnrichNote(null);
     try {
-      const res = await fetch(`/api/prospects/${prospectId}/enrich`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+      const res = await fetch(`/api/prospects/${prospectId}/enrich`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ as }) });
       const out = await res.json();
       if (out.error) setEnrichNote(String(out.error));
       else {
@@ -185,7 +190,12 @@ export default function ProspectDetailPage() {
           {/* Middle — the route and the drafts */}
           <div className="space-y-4">
             <Section k="route" n={4} title="Route — how to reach them">
-              <RoutePanel prospectId={prospectId} route={route} intros={intro_requests} degree={prospect.network_degree} teammatesWithLinkedin={data.teammates_with_linkedin} onChanged={refresh} />
+              <RoutePanel
+                prospectId={prospectId} route={route} intros={intro_requests} degree={prospect.network_degree}
+                teammatesWithLinkedin={data.teammates_with_linkedin} onChanged={refresh}
+                acting={{ as, setAs, viewer: data.viewer, owner: { user_id: prospect.owner_user_id ?? null, name: prospect.owner_name ?? null },
+                          ownerCanSource: data.owner_can_source, viewerCanSource: data.viewer_can_source }}
+              />
             </Section>
 
             <Section k="drafted" n={5} title="Drafts & approvals">

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { canSource, parseActAs, resolveActingUser } from '@/lib/act-as';
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const isAdmin = session.role === 'admin';
@@ -24,7 +25,11 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   );
   if (rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const [briefs, scores, messages, events, approvals, intros, teammates] = await Promise.all([
+  // Who the route/enrich/intro actions would run as (no audit on a read).
+  const acting = await resolveActingUser(session, params.id, parseActAs(req.nextUrl.searchParams.get('as')), undefined, false);
+  const actingUserId = 'error' in acting ? session.userId : acting.actingUserId;
+
+  const [briefs, scores, messages, events, approvals, intros, teammates, ownerCan, viewerCan] = await Promise.all([
     pool.query(`SELECT * FROM research_briefs WHERE prospect_id = $1 ORDER BY created_at DESC`, [params.id]),
     pool.query(`SELECT * FROM qualification_scores WHERE prospect_id = $1 ORDER BY created_at DESC`, [params.id]),
     pool.query(`SELECT * FROM outreach_messages WHERE prospect_id = $1 ORDER BY created_at ASC`, [params.id]),
@@ -51,7 +56,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
         ORDER BY ir.created_at DESC`, ownerValues),
     pool.query(
       `SELECT count(*)::int AS n FROM linkedin_accounts la
-        WHERE la.revoked_at IS NULL AND la.owner_user_id <> $1`, [session.userId]),
+        WHERE la.revoked_at IS NULL AND la.owner_user_id <> $1`, [actingUserId]),
+    canSource(rows[0].owner_user_id),
+    canSource(session.userId),
   ]);
 
   return NextResponse.json({
@@ -63,6 +70,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     approvals: approvals.rows,
     intro_requests: intros.rows,
     teammates_with_linkedin: teammates.rows[0]?.n ?? 0,
+    acting_user_id: actingUserId,
+    owner_can_source: ownerCan,
+    viewer_can_source: viewerCan,
+    viewer: { user_id: session.userId, role: session.role, name: session.name },
   });
 }
 

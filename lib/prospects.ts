@@ -44,6 +44,7 @@ export interface Prospect {
   phone?: string | null;
   linkedin_url: string | null;
   owner_name?: string | null;
+  owner_user_id?: string | null;
 }
 
 /** One entry of prospects.warm_paths. Angles (employer/school/colleague) are
@@ -94,6 +95,16 @@ export interface RouteEntry extends WarmPath {
   note?: string;
   expand?: Record<string, unknown>;
 }
+
+/** What crm_route_expand spent and found — shown verbatim so a skipped step is never silent. */
+export interface RouteExpand {
+  profile?: { fetched: boolean; error?: string; cached?: boolean; degree?: string | null; shared_connections_count?: number | null; employers?: number };
+  mutual?: { searched: boolean; skipped?: string; found?: number; pages?: number; mode?: string; edges?: number; error?: string | null; budget?: { used_today: number; cap: number } };
+  probe?: { accounts_checked: number; hits: number };
+  notes?: string[];
+}
+export type ActAs = 'owner' | 'me';
+export interface ActedAs { user_id: string; name: string; on_behalf: boolean }
 
 export const ROUTE_COLORS: Record<RouteColor, string> = {
   red: '#ef4444', blue: '#3b82f6', yellow: '#eab308', green: '#22c55e', grey: '#64748b',

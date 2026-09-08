@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { ROUTE_COLORS, ROUTE_LEGEND } from '@/lib/prospects';
-import type { IntroRequestLite, RouteEntry, RouteHop, RoutePath } from '@/lib/prospects';
+import type { ActAs, IntroRequestLite, RouteEntry, RouteExpand, RouteHop, RoutePath } from '@/lib/prospects';
 import { relativeTime } from '@/lib/time';
 
 const RouteGraph = dynamic(() => import('@/components/prospect/RouteGraph'), { ssr: false });
@@ -13,10 +14,26 @@ const RouteGraph = dynamic(() => import('@/components/prospect/RouteGraph'), { s
  * three actions: find (free), probe LinkedIn (spends), ask a connector for an
  * intro (files an approval). Cold send stays where it always was.
  */
-export default function RoutePanel({ prospectId, route, intros, degree, teammatesWithLinkedin, onChanged }: {
+export interface ActingContext {
+  as: ActAs;
+  setAs: (v: ActAs) => void;
+  viewer: { user_id: string; role: string; name: string };
+  owner: { user_id: string | null; name: string | null };
+  ownerCanSource: boolean;
+  viewerCanSource: boolean;
+}
+
+export default function RoutePanel({ prospectId, route, intros, degree, teammatesWithLinkedin, acting, onChanged }: {
   prospectId: string; route: RouteEntry | null; intros: IntroRequestLite[]; degree: string | null;
-  teammatesWithLinkedin: number; onChanged: () => void;
+  teammatesWithLinkedin: number; acting: ActingContext; onChanged: () => void;
 }) {
+  // Whose graph and LinkedIn the lookup runs with. An admin viewing someone
+  // else's lead runs as that owner by default — it is the owner's network an
+  // intro would come through — and can switch to themselves.
+  const canToggle = acting.viewer.role === 'admin' && !!acting.owner.user_id && acting.owner.user_id !== acting.viewer.user_id;
+  const runningAsOwner = canToggle && acting.as === 'owner';
+  const actingName = runningAsOwner ? (acting.owner.name || 'the owner') : acting.viewer.name;
+  const actingCanSource = runningAsOwner ? acting.ownerCanSource : acting.viewerCanSource;
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [lit, setLit] = useState<string | null>(route?.paths?.[0]?.path_id ?? null);
@@ -25,14 +42,19 @@ export default function RoutePanel({ prospectId, route, intros, degree, teammate
   const run = async (mode: 'find' | 'expand') => {
     setBusy(mode); setNote(null);
     try {
-      const res = await fetch(`/api/prospects/${prospectId}/route-find`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) });
+      const res = await fetch(`/api/prospects/${prospectId}/route-find`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode, as: acting.as }) });
       const out = await res.json();
       if (out.error) setNote(String(out.error));
       else if (out.deferred) setNote(String(out.message || 'Deferred — LinkedIn budget.'));
       else {
-        const ex = out.expand as Record<string, Record<string, unknown>> | undefined;
-        const bits = [out.note];
-        if (ex?.mutual?.searched) bits.push(`Connections-of search: ${ex.mutual.found} found, ${ex.mutual.edges} edges`);
+        const ex = out.expand as RouteExpand | undefined;
+        const who = out.acted_as?.on_behalf ? `as ${out.acted_as.name}` : null;
+        const bits: (string | null | undefined)[] = [who, out.note];
+        // Every reason a step was skipped is shown. "No route" with no reason
+        // was how a missing LinkedIn account went unnoticed.
+        for (const n of ex?.notes ?? []) bits.push(n);
+        if (ex?.profile?.error) bits.push(`profile: ${ex.profile.error}`);
+        if (ex?.mutual?.searched) bits.push(`Connections-of search: ${ex.mutual.found} found, ${ex.mutual.edges} edges${ex.mutual.error ? ` (${ex.mutual.error})` : ''}`);
         else if (ex?.mutual?.skipped) bits.push(`mutual search skipped: ${ex.mutual.skipped}`);
         if (ex?.probe && Number(ex.probe.accounts_checked) > 0) bits.push(`teammates checked: ${ex.probe.accounts_checked}, 1st-degree hits: ${ex.probe.hits}`);
         setNote(bits.filter(Boolean).join(' · '));
@@ -51,12 +73,26 @@ export default function RoutePanel({ prospectId, route, intros, degree, teammate
       <div className="flex flex-wrap items-center gap-2">
         {degreeLabel && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--bg-input)', color: degree === '1' ? 'var(--green)' : degree === '2' ? 'var(--yellow)' : 'var(--text-muted)' }}>LinkedIn: {degreeLabel}{shared !== undefined && shared !== null ? ` · ${shared} shared` : ''}</span>}
         {route && <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>computed {relativeTime(route.computed_at)}</span>}
+        {canToggle && (
+          <span className="inline-flex items-center gap-1 text-[10px]" style={{ color: 'var(--text-muted)' }} title="Whose graph and LinkedIn the lookup uses">
+            run as
+            <button onClick={() => acting.setAs('owner')} className="px-1.5 py-0.5 rounded" style={{ background: acting.as === 'owner' ? 'var(--accent-glow)' : 'var(--bg-input)', color: acting.as === 'owner' ? 'var(--accent)' : 'var(--text-muted)' }}>{acting.owner.name || 'owner'}</button>
+            <button onClick={() => acting.setAs('me')} className="px-1.5 py-0.5 rounded" style={{ background: acting.as === 'me' ? 'var(--accent-glow)' : 'var(--bg-input)', color: acting.as === 'me' ? 'var(--accent)' : 'var(--text-muted)' }}>me</button>
+          </span>
+        )}
         <div className="ml-auto flex gap-2">
           <button onClick={() => run('find')} disabled={!!busy} className="px-3 py-1 rounded-lg text-xs disabled:opacity-40" style={{ border: '1px solid var(--border)', color: 'var(--text)' }} title="Free — uses what the graph already knows">{busy === 'find' ? 'Finding…' : route ? 'Recompute' : 'Find route'}</button>
           <button onClick={() => run('expand')} disabled={!!busy} className="px-3 py-1 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--accent)', color: '#fff' }} title={`Spends LinkedIn budget: the lead's profile, then a Connections-of search for a 2nd-degree lead, then ${teammatesWithLinkedin} teammate account${teammatesWithLinkedin === 1 ? '' : 's'}`}>{busy === 'expand' ? 'Looking up…' : 'Look up LinkedIn'}</button>
         </div>
       </div>
       {note && <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{note}</div>}
+      {!actingCanSource && (
+        <div className="text-[11px] rounded-lg px-3 py-2" style={{ background: 'rgba(234,179,8,0.10)', color: 'var(--yellow)' }}>
+          {runningAsOwner
+            ? <>{actingName} has no LinkedIn account connected — Look up LinkedIn will only check teammates. Switch to <b>me</b> to use yours{acting.viewerCanSource ? '' : ' (not connected either)'}.</>
+            : <>No LinkedIn account connected for you — Look up LinkedIn will only check teammates. <Link href="/profile?tab=linkedin" className="underline">Connect LinkedIn</Link>.</>}
+        </div>
+      )}
 
       {!route && (
         <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
@@ -117,13 +153,13 @@ export default function RoutePanel({ prospectId, route, intros, degree, teammate
         </>
       )}
 
-      {ask && <IntroAskModal prospectId={prospectId} path={ask.path} hop={ask.hop} onClose={() => setAsk(null)} onFiled={() => { setAsk(null); onChanged(); }} />}
+      {ask && <IntroAskModal prospectId={prospectId} path={ask.path} hop={ask.hop} as={acting.as} actingName={actingName} onClose={() => setAsk(null)} onFiled={() => { setAsk(null); onChanged(); }} />}
     </div>
   );
 }
 
-function IntroAskModal({ prospectId, path, hop, onClose, onFiled }: {
-  prospectId: string; path: RoutePath; hop: RouteHop; onClose: () => void; onFiled: () => void;
+function IntroAskModal({ prospectId, path, hop, as, actingName, onClose, onFiled }: {
+  prospectId: string; path: RoutePath; hop: RouteHop; as: ActAs; actingName: string; onClose: () => void; onFiled: () => void;
 }) {
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
@@ -135,7 +171,7 @@ function IntroAskModal({ prospectId, path, hop, onClose, onFiled }: {
   const draft = async () => {
     setBusy('draft'); setErr(null);
     try {
-      const res = await fetch(`/api/prospects/${prospectId}/intro`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'draft', connector_person_id: connector.person_id, connector }) });
+      const res = await fetch(`/api/prospects/${prospectId}/intro`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'draft', as, connector_person_id: connector.person_id, connector }) });
       const out = await res.json();
       if (out.error) setErr(String(out.error));
       else { setSubject(out.subject || ''); setMessage(out.message || ''); setBlurb(out.forwardable_blurb || ''); }
@@ -144,7 +180,7 @@ function IntroAskModal({ prospectId, path, hop, onClose, onFiled }: {
   const propose = async () => {
     setBusy('propose'); setErr(null);
     try {
-      const res = await fetch(`/api/prospects/${prospectId}/intro`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'propose', connector_person_id: connector.person_id, path_id: path.path_id, message, subject: hop.channel === 'email' ? subject : undefined, forwardable_blurb: blurb, rationale: `Route via ${hop.to.name}: ${hop.evidence}` }) });
+      const res = await fetch(`/api/prospects/${prospectId}/intro`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'propose', as, connector_person_id: connector.person_id, path_id: path.path_id, message, subject: hop.channel === 'email' ? subject : undefined, forwardable_blurb: blurb, rationale: `Route via ${hop.to.name}: ${hop.evidence}` }) });
       const out = await res.json();
       if (out.error) setErr(String(out.error));
       else onFiled();
@@ -171,7 +207,7 @@ function IntroAskModal({ prospectId, path, hop, onClose, onFiled }: {
           <textarea value={blurb} onChange={(e) => setBlurb(e.target.value)} rows={3} className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }} />
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Files an approval — nothing is sent until you tap Send.</span>
+          <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Files an approval in {actingName}&apos;s name — nothing is sent until it is approved.</span>
           <div className="flex gap-2">
             <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs" style={{ border: '1px solid var(--border)', color: 'var(--text)' }}>Cancel</button>
             <button onClick={propose} disabled={!!busy || !message.trim()} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--accent)', color: '#fff' }}>{busy === 'propose' ? 'Filing…' : 'Propose for approval'}</button>
