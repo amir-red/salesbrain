@@ -23,7 +23,15 @@ interface GraphEdge {
   primary_email: string | null;
 }
 
+interface Reach {
+  direct: number;
+  via_colleagues: number;
+  colleagues: { name: string; ring: number; adds: number }[];
+  teammates_without_linkedin: number;
+}
+
 interface GraphPayload {
+  reach?: Reach;
   totals: { edges: number; people: number };
   by_source: { source: string; edges: number; people: number; avg_strength: number; newest: string | null }[];
   contacts: { contacts: number; bridged: number; dated: number };
@@ -99,7 +107,7 @@ export default function GraphPanel() {
 
   if (!data) return null;
 
-  const { totals, by_source, contacts, sync: state } = data;
+  const { totals, by_source, contacts, sync: state, reach } = data;
   const mirror = state?.phase === 'mirror_complete'
     ? 'LinkedIn mirror complete'
     : state?.relations_seen
@@ -121,6 +129,11 @@ export default function GraphPanel() {
           {by_source.length > 0 && ` · ${by_source.length} sources`}
         </span>
         <span style={{ color: 'var(--text-muted)' }}>{mirror}</span>
+        {reach && reach.via_colleagues > 0 && (
+          <span style={{ color: 'var(--accent)' }}>
+            +{reach.via_colleagues.toLocaleString()} within 2 hops via teammates
+          </span>
+        )}
         {contacts.contacts > 0 && (
           <span style={{ color: 'var(--text-muted)' }}>
             {contacts.bridged.toLocaleString()}/{contacts.contacts.toLocaleString()} contacts bridged
@@ -142,6 +155,33 @@ export default function GraphPanel() {
 
       {open && (
         <div className="px-4 pb-3">
+          {reach && (
+            <div className="mb-3 rounded p-2 text-xs" style={{ background: 'var(--bg-card)' }}>
+              <span style={{ color: 'var(--text)' }}>
+                {reach.direct.toLocaleString()} people you know
+                {reach.via_colleagues > 0 && (
+                  <> · <b>{reach.via_colleagues.toLocaleString()}</b> more one introduction away</>
+                )}
+              </span>
+              {reach.colleagues.length > 0 && (
+                <div className="mt-1" style={{ color: 'var(--text-muted)' }}>
+                  {reach.colleagues.map((c) => (
+                    <div key={c.name}>
+                      {c.name} knows {c.ring.toLocaleString()} people — {c.adds.toLocaleString()} you
+                      {"'"}d have no other way to reach
+                    </div>
+                  ))}
+                </div>
+              )}
+              {reach.teammates_without_linkedin > 0 && (
+                <div className="mt-1" style={{ color: 'var(--text-muted)' }}>
+                  {reach.teammates_without_linkedin} teammate
+                  {reach.teammates_without_linkedin === 1 ? ' has' : 's have'} not connected LinkedIn.
+                  Each one who does adds their whole network as a second hop.
+                </div>
+              )}
+            </div>
+          )}
           <div className="mb-2 flex flex-wrap gap-1">
             <button
               onClick={() => setSource(null)}

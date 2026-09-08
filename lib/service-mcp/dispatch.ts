@@ -382,6 +382,27 @@ export const SERVICE_TOOLS: ToolDef[] = [
     needsOwner: true,
   },
   {
+    name: 'crm_graph_reach',
+    description:
+      'How far this employee can reach through the team: how many people they know directly, how many '
+      + 'more a teammate could introduce them to, what each connected teammate adds, and how many '
+      + "teammates have not connected LinkedIn. Counts only — a teammate's contacts are never listed.",
+    inputSchema: obj({}),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_who_can_reach',
+    description:
+      'Who on the team could introduce this employee to a given person. Answers in hops: 1 if they '
+      + 'already know them, 2 if a teammate does — naming that teammate and the evidence for the tie. '
+      + "Returns only the route to THIS person, never the rest of a teammate's network.",
+    inputSchema: obj(
+      { person_id: { type: 'string', description: 'UUID from crm_graph_edges' } },
+      ['person_id'],
+    ),
+    needsOwner: true,
+  },
+  {
     name: 'crm_graph_sync',
     description:
       "Build this employee's relationship graph now. The free sources — imported LinkedIn contacts, "
@@ -587,6 +608,7 @@ const PASSTHROUGH = new Set([
   'crm_outreach_pending', 'crm_outreach_decide', 'crm_linkedin_status',
   'crm_linkedin_revoke', 'crm_agent_activity', 'crm_agent_status', 'crm_linkedin_quota',
   'crm_graph_status', 'crm_graph_edges', 'crm_graph_sync',
+  'crm_graph_reach', 'crm_who_can_reach',
 ]);
 
 /**
