@@ -396,6 +396,48 @@ colleague a person node. NO ranking, NO target expansion, NO intro campaigns yet
 - **Still open from spec Phase A**: `person_facets`, automatic reply detection (`P6_REPLIED` is a stage nothing
   writes from inbound threads). Then Phase 3 = `crm_target_expand`, `crm_path_find`, `intro_campaigns`.
 
+### 5.ac Route to a lead — warm-intro Phase 3a (2026-09-08, feat/warm-intro-route, migration 043)
+
+Amir's reframe: the graph is a STEP in the lead's journey, not a map. Pipeline of record (mature outbound
+standard, Amir's 1–6 verbatim): 1 ICP → 2 improve ICP → 3 find leads → 4 enrich → **5 route** → **6 draft**
+(intro ask when a route exists, cold otherwise) → 7 approve/send → 8 follow-up → 9 reply detection → 10 deal.
+This feature = steps 5–6 + the lead page as the journey. Steps 8–9 are NEXT (nothing writes P6_REPLIED yet).
+Plan: `~/.claude/plans/but-let-s-step-back-buzzing-dongarra.md`.
+
+- **The picture**: red = owner/teammate, blue = a person the owner can message NOW (email handle or an
+  existing LinkedIn thread — `commands/warm_paths.blue_map`, which finally matches threads by member id),
+  yellow = knows the lead but not reachable yet, green = the lead. **Hop one must be blue.**
+- **Intermediary = ANY person in the graph**, not just a teammate. "B knows T" evidence, cheapest first:
+  `linkedin_mutual` (**LinkedIn's own Connections-of search** — Unipile `connections_of` + `network_distance`
+  filters, verified 2026-09-08; the 01-current-state note "not found" was WRONG), `email_cothread` (both on
+  one Gmail thread; the Gmail sync now stores `participants`), same org, shared employer/school (from
+  `people.facets`), a teammate's ring, a teammate's LinkedIn degree. First two are STORED non-star edges
+  (`src_person_id IS NOT NULL`); structural overlaps are derived at query time, never stored.
+- **Kernel**: `policy/warm_paths.py` (pure: beam search, `score = Π strength × hop_penalty^(hops−1)`,
+  Yen-style diversity, bridge ranking, evidence text, `to_drawable` with a `hop` column per node),
+  `commands/warm_paths.py` (`load_subgraph` — owner ring + teammates' edges INTO the target only + stored
+  B→T + target-org people + derived overlaps; `path_find`; `edges_from_email_cothreads`; `intro_requests`
+  helpers). Policy row `agents.warm_intro` (hop_penalty 0.5, base per source, `mutual_searches_per_day` 5 =
+  a sub-budget of the search cap so route lookups never starve the Leads Finder, `intro_ttl_hours` 168).
+- **Identity**: `prospects.linkedin_member_id` captured at upsert; `ensure_prospect_person` resolves member
+  id → slug → email and attaches every handle WITHOUT engaging (`engage()` keys "already" on `engaged_at`).
+- **Intro state**: table `intro_requests` (single-hop flattening of spec §6; `replied_at`/`next_followup_at`
+  reserved for steps 8–9). `mark_approval_result` is kind-aware: a sent `intro_request` → `awaiting_reply`,
+  never `P5_SENT` on the lead. `crm_propose_intro` fixed: recipient = connector, channel from `blue_map`,
+  `prospect_id=None` + `intro_for_prospect_id=lead`, `forwardable_blurb` appended (double opt-in).
+- **Ring**: `crm_path_find` (read), `crm_route_expand` (write: profile → facets, Connections-of search when
+  2nd degree + shared count > 0, teammate probe, then path_find; `route_core.py`), `unipile.search(url=)`
+  fallback for the raw LinkedIn URL form. `probe_cross_account_degree` shared by enricher + route.
+- **App**: `/prospects/[id]` rebuilt as the journey (`JourneyStepper`, `RoutePanel` + `RouteGraph`
+  (cytoscape preset layout, x = hop), `ApprovalsPanel`, intro-ask modal with AI draft via
+  `lib/intro-draft.ts`), shared `lib/prospects.ts`, API `/api/prospects/[id]/{route-find,enrich,intro}`,
+  IcpLeads "route · N hops / bridge / cold" badge. Service MCP (`docs/service-mcp.md` §8 "Route to a
+  lead"): `crm_path_find`, `crm_route_expand` (guarded), `crm_propose_intro`; `list_leads` +
+  `best_path_hops`/`path_available`.
+- **Still to verify live**: the member-id key on Sales Navigator people items (`_member_id` tries
+  provider_id/id/member_id); classic `connections_of` accepting a raw provider id (URL fallback exists).
+  Not built: 3rd-degree yellows, posts engagement, reply detection, follow-up cadence.
+
 ## 6. Env vars
 
 All must be in `.env.local` (dev) and as GitHub repo secrets (prod — workflow writes them to `.env.production`).

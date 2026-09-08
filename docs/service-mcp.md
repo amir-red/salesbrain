@@ -32,9 +32,10 @@ approval.**
 | **02** | **Optimize** | LLM completes it, you confirm | `suggest_icp` → `crm_icp_define` | Show the scored candidates, let the user pick/edit one, then save it |
 | **03** | **Find** | Source from LinkedIn, score fit | `crm_leads_finder_run` (or `crm_agent_request_run` to queue) | Trigger a run; poll `list_leads` for results |
 | **04** | **Enrich** | Employer, research, email | `crm_enrich_prospect` | Enrich the best leads so they're reachable + specific |
-| **05** | **Draft** | Personalized first message | `crm_outreach_propose` | File a draft per chosen person (sends nothing) |
-| **06** | **Approve** | Your user says yes, in your UI | `crm_outreach_pending` → `crm_outreach_decide` | Render pending drafts; on the user's approve, decide |
-| **07** | **Send** | Through the policy gate | *(the `approve` decision above sends it)* | Show the outcome returned by `crm_outreach_decide` |
+| **05** | **Route** | How to reach this lead — a warm route through someone the employee can message now, drawn red → blue → green | `crm_path_find` (free) → `crm_route_expand` (looks LinkedIn up) | Draw the returned `graph`; list the routes; offer "ask X for an intro" or "send cold" |
+| **06** | **Draft** | Personalized first message — or an intro ask to the connector when a route exists | `crm_outreach_propose` (cold) · `crm_propose_intro` (warm) | File a draft per chosen person (sends nothing) |
+| **07** | **Approve** | Your user says yes, in your UI | `crm_outreach_pending` → `crm_outreach_decide` | Render pending drafts (cold and `intro_request`); on the user's approve, decide |
+| **08** | **Send** | Through the policy gate | *(the `approve` decision above sends it)* | Show the outcome returned by `crm_outreach_decide` |
 
 Everything acts for a specific employee via the `X-On-Behalf-Of` header (see §3), except the setup/optimize calls,
 which need no header. §5 walks each step with real payloads.
@@ -522,8 +523,8 @@ right now. It is built from data already on file — imported LinkedIn contacts,
 synced email — plus a paginated mirror of their LinkedIn 1st-degree ring. It contacts no one and spends no
 search or profile budget, and an employee with no LinkedIn connected still gets a graph from the rest.
 
-This is the foundation for warm-introduction pathfinding. Path search and intro campaigns are not built yet;
-today the graph is readable and can be rebuilt on demand.
+This is the foundation for warm-introduction pathfinding — see **Route to a lead** below for the search
+itself. Intro campaigns (multi-hop, follow-ups, reply-driven completion) are not built yet.
 
 **`crm_graph_sync`** · write — Build this employee's graph now. Free sources always run; the LinkedIn mirror
 pages only while today's `relations` budget allows and resumes on the next call.
@@ -537,12 +538,55 @@ employee's imported contacts have been bridged into the graph.
 **`crm_graph_edges`** · read — The strongest people in the graph, with the evidence behind each score.
 - `limit` — default 50, max 500
 - `source` — one of `linkedin_csv`, `linkedin_relation`, `linkedin_thread`, `email_thread`,
-  `intro_confirmed`, `manual`
+  `intro_confirmed`, `manual`, `linkedin_mutual`, `email_cothread`
 
 > **Strength is a decayed score, not a flag.** `base[source] x 0.5 ^ (days_since_last_signal / 180)`. A reply
 > outranks a connection; a 2014 connection outranks almost nothing. Contacts imported before this shipped
 > carry no connection date and are scored at a flat mid-value until the employee re-uploads their
 > Connections.csv.
+
+### Route to a lead
+
+The graph is a **step in the lead's journey**, not a map. After a lead is enriched and before the first
+message, these tools answer one question — *how do I reach this person* — as a route your UI draws:
+
+| Colour | Meaning |
+|---|---|
+| **red** | the employee, or a teammate (someone they can simply ask) |
+| **blue** | a person the employee can message **now** — an email on file, or an existing LinkedIn conversation on their account |
+| **yellow** | a person who is known to know the lead but whom the employee cannot message yet — the bridge to build |
+| **green** | the lead |
+
+The rule every route obeys: **hop one must be blue.** A chain whose first link cannot be messaged is not a
+route; it comes back as a `bridge_candidate` instead. No invitations are ever sent.
+
+**`crm_path_find`** · read — Ranked routes to one lead from what the graph already holds. Free.
+- `prospect_id` (preferred — the result is stored on the lead) or `person_id`; `max_hops` 1–3 (default 2); `k` (default 3)
+- Returns `best_path_hops`, `path_available`, `paths[]` (each hop: `from`, `to`, `channel`, `confidence`,
+  `evidence` in words, `why_this_person`, `actionable_now`), `bridge_candidates[]`, and a drawable
+  **`graph`**: `nodes[{id, label, color, role, hop}]` + `edges[{from, to, strength, channel, path_ids}]`.
+  `hop` is the column to draw the node in (0 = the employee); `path_ids` lets you highlight one route.
+- `list_leads` now returns `best_path_hops`, `path_available` and `route_computed_at` per lead.
+
+**`crm_route_expand`** · write, LinkedIn-spending, budget-guarded — When the free search finds nothing.
+Cheapest first: (1) the lead's profile — employers, schools, degree and **shared-connection count** (1 profile
+fetch, cached 90 days); (2) for a 2nd-degree lead with shared connections, **LinkedIn's own "Connections of"
+search** naming the employee's mutual connections (1–2 searches from a small daily sub-budget, never the
+Leads Finder's); (3) each teammate's LinkedIn account for a 1st-degree tie (1 profile fetch each); then the
+route again. Returns the `crm_path_find` shape plus `expand` (what was spent and found). Same deferral
+envelope as the other spending tools when the account is paused or out of quota.
+
+**`crm_propose_intro`** · write — Ask a connector for the introduction. `connector_person_id` is
+`hops[0].to.person_id` of a route; `lead_prospect_id` the lead; `message` the ask; `forwardable_blurb` 2–3
+sentences the connector can paste to the lead (the double-opt-in convention); optional `subject`, `path_id`,
+`rationale`. The channel is chosen from how the employee reaches the connector (thread, else email). It
+appears in `crm_outreach_pending` with `kind: "intro_request"`; `crm_outreach_decide {approve}` sends it to
+the connector. **A sent intro ask never changes the lead's stage** — the lead was not messaged.
+
+> Evidence that "B knows the lead", cheapest first: LinkedIn's Connections-of search (`linkedin_mutual`),
+> both on one Gmail thread (`email_cothread`), same organisation now, shared past employer or school (from
+> the lead's cached profile), a teammate's own ring, a teammate's LinkedIn degree. Structural overlaps are
+> derived at query time and never stored; a teammate's contact list is never returned.
 
 ---
 
@@ -617,6 +661,16 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 ---
 
 ## 12. Changelog
+
+### 2026-09-08 — route to a lead (journey step 5) and the intro ask
+
+**New: `crm_path_find`, `crm_route_expand`, `crm_propose_intro`** (§8 Relationship graph → *Route to a lead*).
+The graph now answers *how do I reach this lead* with ranked routes and a drawable `graph` (red → blue →
+green, yellow bridges). `crm_route_expand` uses LinkedIn's own Connections-of search to **name** the mutual
+connections for a 2nd-degree lead; `crm_propose_intro` files the ask to the connector. `list_leads` gains
+`best_path_hops` / `path_available` / `route_computed_at`. `crm_graph_sync` gains the `email_cothreads`
+source; `crm_graph_edges` gains sources `linkedin_mutual`, `email_cothread`. Stage table (§1) renumbered:
+Route is 05, Draft 06, Approve 07, Send 08.
 
 ### 2026-09-06 — per-ICP control, and two corrections
 

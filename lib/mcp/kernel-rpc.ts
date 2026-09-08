@@ -67,6 +67,7 @@ export async function fetchRingCatalog(): Promise<RingToolDef[]> {
 const LONG_RUNNING_TOOLS = new Set<string>([
   'crm_leads_finder_run',
   'crm_enrich_prospect',
+  'crm_route_expand',
   'crm_prospect_search',
   'crm_research_company',
   'crm_prospect_auto_qualify',

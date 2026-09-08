@@ -375,7 +375,8 @@ export const SERVICE_TOOLS: ToolDef[] = [
       limit: { type: 'integer', description: 'How many to return (default 50, max 500)' },
       source: {
         type: 'string',
-        enum: ['linkedin_csv', 'linkedin_relation', 'linkedin_thread', 'email_thread', 'intro_confirmed', 'manual'],
+        enum: ['linkedin_csv', 'linkedin_relation', 'linkedin_thread', 'email_thread', 'intro_confirmed', 'manual',
+               'linkedin_mutual', 'email_cothread'],
         description: 'Only edges from this source',
       },
     }),
@@ -412,11 +413,62 @@ export const SERVICE_TOOLS: ToolDef[] = [
     inputSchema: obj({
       sources: {
         type: 'array',
-        items: { type: 'string', enum: ['contacts', 'threads', 'email', 'relations', 'linkedin'] },
+        items: { type: 'string', enum: ['contacts', 'threads', 'email', 'email_cothreads', 'relations', 'linkedin'] },
         description: 'Default: all of them',
       },
       max_pages: { type: 'integer', description: 'LinkedIn relations pages this call (default 2, max 5)' },
     }),
+    needsOwner: true,
+  },
+  // ─── Route to a lead (journey step 5) ───────────────────────────
+  {
+    name: 'crm_path_find',
+    description:
+      'How to reach ONE lead: ranked routes from the employee to the lead through people they can message now. '
+      + 'Colours: red = the employee or a teammate, blue = reachable now (email on file or an existing LinkedIn '
+      + 'conversation), yellow = knows the lead but not reachable yet, green = the lead. Each hop carries the '
+      + 'channel, the evidence in words, why that person, and whether it is actionable now. Returns a drawable '
+      + '`graph` {nodes[{id,label,color,role,hop}], edges[{from,to,strength,channel}]} and `bridge_candidates` '
+      + 'when no route exists. Read-only — spends nothing. The result is stored on the lead (`warm_paths`) and '
+      + 'summarised on list_leads as best_path_hops / path_available.',
+    inputSchema: obj({
+      prospect_id: { type: 'string', description: 'The lead (preferred)' },
+      person_id: { type: 'string', description: 'Any person instead of a lead' },
+      max_hops: { type: 'integer', description: '1-3 (default 2)' },
+      k: { type: 'integer', description: 'How many routes (default 3)' },
+    }),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_route_expand',
+    description:
+      'Look LinkedIn up to find a route to a lead, cheapest first: the lead\'s profile (employers, schools, '
+      + 'degree, shared-connection count — 1 profile fetch), then for a 2nd-degree lead with shared connections '
+      + "LinkedIn's own Connections-of search naming the employee's mutual connections (1-2 searches from a "
+      + 'small daily sub-budget), then each teammate\'s account for a 1st-degree tie. Recomputes the route and '
+      + 'returns the same shape as crm_path_find plus `expand` (what was spent and found). Sends nothing. '
+      + 'Budget-guarded: a deferral envelope comes back when the account is paused or out of quota.',
+    inputSchema: obj({ prospect_id: { type: 'string', description: 'The lead' } }, ['prospect_id']),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_propose_intro',
+    description:
+      'File an INTRO-REQUEST draft: ask a connector (the first hop of a crm_path_find route — someone the '
+      + 'employee can message now) to introduce them to the lead. The channel is picked from how the employee '
+      + 'reaches the connector (existing LinkedIn thread, else email; never an invitation). Sends nothing: it '
+      + 'appears in crm_outreach_pending with kind=intro_request; approving it via crm_outreach_decide sends '
+      + "the ask to the connector. A sent ask never changes the lead's stage. Include a forwardable_blurb "
+      + '(2-3 sentences the connector can paste to the lead) — the double-opt-in convention.',
+    inputSchema: obj({
+      connector_person_id: { type: 'string', description: "hops[0].to.person_id of a crm_path_find route" },
+      lead_prospect_id: { type: 'string', description: 'The lead' },
+      message: { type: 'string', description: "The ask, in the employee's voice" },
+      forwardable_blurb: { type: 'string', description: 'What the connector can forward verbatim' },
+      subject: { type: 'string', description: 'Email only' },
+      path_id: { type: 'string', description: 'From crm_path_find, ties the ask to its route' },
+      rationale: { type: 'string' },
+    }, ['connector_person_id', 'lead_prospect_id', 'message']),
     needsOwner: true,
   },
 ];
@@ -447,8 +499,15 @@ async function listLeads(ownerUserId: string, args: Record<string, unknown>): Pr
     `SELECT p.id, p.stage, p.icp_score, p.fit_label, p.qualification_reason, p.research_summary,
             p.source_type, p.source_detail, p.linkedin_public_id, p.candidate_location,
             p.network_degree, p.warm_paths, p.created_at, p.scored_at, p.engaged_at, p.converted_deal_id,
-            p.icp_profile_id, c.full_name, c.title, c.email, c.linkedin_url,
-            a.name AS company_name, a.industry, a.company_size
+            p.icp_profile_id, p.person_id, c.full_name, c.title, c.email, c.linkedin_url,
+            a.name AS company_name, a.industry, a.company_size,
+            -- step 5 summary, from the stored route entry (crm_path_find)
+            (SELECT (e->>'best_path_hops')::int FROM jsonb_array_elements(COALESCE(p.warm_paths, '[]'::jsonb)) e
+              WHERE e->>'type' = 'route' LIMIT 1) AS best_path_hops,
+            COALESCE((SELECT (e->>'path_available')::boolean FROM jsonb_array_elements(COALESCE(p.warm_paths, '[]'::jsonb)) e
+              WHERE e->>'type' = 'route' LIMIT 1), false) AS path_available,
+            (SELECT e->>'computed_at' FROM jsonb_array_elements(COALESCE(p.warm_paths, '[]'::jsonb)) e
+              WHERE e->>'type' = 'route' LIMIT 1) AS route_computed_at
      FROM prospects p
      LEFT JOIN contacts c ON c.id = p.contact_id
      LEFT JOIN accounts a ON a.id = p.account_id
@@ -547,6 +606,9 @@ async function guardedLinkedinSpend(
   toolName: string, owner: string, rest: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   const isSearch = toolName === 'crm_leads_finder_run';
+  // crm_route_expand spends a profile fetch first and, only for a 2nd-degree
+  // lead with shared connections, a search — the profile budget is the one it
+  // always touches, so that is the one checked up front.
   const label = isSearch ? 'search' : 'profile-fetch';
 
   let quota: Quota;
@@ -609,6 +671,7 @@ const PASSTHROUGH = new Set([
   'crm_linkedin_revoke', 'crm_agent_activity', 'crm_agent_status', 'crm_linkedin_quota',
   'crm_graph_status', 'crm_graph_edges', 'crm_graph_sync',
   'crm_graph_reach', 'crm_who_can_reach',
+  'crm_path_find', 'crm_propose_intro',
 ]);
 
 /**
@@ -698,7 +761,7 @@ export async function dispatchServiceTool(
     // LinkedIn-spending tools: check the safe-rate budget first, and either
     // defer with a clear "quota used — resumes at X" message, or run and attach
     // the remaining-budget + a near-limit warning so the caller can inform its user.
-    if (toolName === 'crm_leads_finder_run' || toolName === 'crm_enrich_prospect') {
+    if (toolName === 'crm_leads_finder_run' || toolName === 'crm_enrich_prospect' || toolName === 'crm_route_expand') {
       const { employee_id: _drop, ...rest } = args;
       return { status: 'success', data: await guardedLinkedinSpend(toolName, owner, rest) };
     }

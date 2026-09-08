@@ -233,16 +233,24 @@ export function ActivityList({ runs, showIcp = false }: { runs: AgentRun[]; show
 }
 
 function DegreeWarm({ degree, paths }: { degree: string | null; paths: { type: string; value?: string; note: string }[] | null }) {
-  const warm = paths || [];
+  // The single `route` entry is step 5's stored result, not an angle — it gets
+  // its own badge below and must not inflate the angle count.
+  const warm = (paths || []).filter((w) => w.type !== 'route');
+  const route = (paths || []).find((w) => w.type === 'route') as { best_path_hops?: number | null; path_available?: boolean; bridge_candidates?: unknown[] } | undefined;
   const colleague = warm.find((w) => w.type === 'colleague');
   const label = degree === '1' ? '1st' : degree === '2' ? '2nd' : degree === '3' ? '3rd' : null;
   const color = degree === '1' ? 'var(--green)' : degree === '2' ? 'var(--yellow)' : 'var(--text-muted)';
-  if (!label && warm.length === 0) return null;
+  if (!label && warm.length === 0 && !route) return null;
   const tip = warm.map((w) => w.note).join(' \u00b7 ') || (label ? `${label} degree connection` : '');
   return (
     <span className="ml-1 inline-flex items-center gap-1 align-middle" title={tip}>
       {label && <span className="text-[9px] px-1 rounded" style={{ background: `${color}22`, color }}>{label}</span>}
       {warm.length > 0 && <span className="text-[9px]" style={{ color: colleague ? 'var(--accent)' : 'var(--green)' }}>{colleague ? '\ud83e\udd1d intro' : `\ud83d\udd25 ${warm.length}`}</span>}
+      {route && (
+        route.path_available
+          ? <span className="text-[9px] px-1 rounded" style={{ background: 'rgba(34,197,94,0.15)', color: 'var(--green)' }} title="a warm route exists">route \u00b7 {route.best_path_hops} hop{route.best_path_hops === 1 ? '' : 's'}</span>
+          : <span className="text-[9px] px-1 rounded" style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }} title={(route.bridge_candidates?.length || 0) > 0 ? 'no route yet — bridge candidates exist' : 'no route yet'}>{(route.bridge_candidates?.length || 0) > 0 ? 'bridge' : 'cold'}</span>
+      )}
     </span>
   );
 }

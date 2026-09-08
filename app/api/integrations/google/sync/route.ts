@@ -160,8 +160,8 @@ export async function POST(req: NextRequest) {
               if (existing.length > 0) continue;
 
               await pool.query(
-                `INSERT INTO imported_messages (contact_id, user_id, source, direction, sent_at, from_email, to_email, subject, body, raw_metadata)
-                 VALUES ($1, $2, 'gmail', $3, $4, $5, $6, $7, $8, $9)`,
+                `INSERT INTO imported_messages (contact_id, user_id, source, direction, sent_at, from_email, to_email, subject, body, raw_metadata, participants)
+                 VALUES ($1, $2, 'gmail', $3, $4, $5, $6, $7, $8, $9, $10)`,
                 [
                   contact.id,
                   session.userId,
@@ -172,6 +172,7 @@ export async function POST(req: NextRequest) {
                   parsed.subject,
                   parsed.body,
                   JSON.stringify({ id: m.id, threadId: m.threadId }),
+                  JSON.stringify(parsed.participants),
                 ]
               );
               stats.messages_imported++;

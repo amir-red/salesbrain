@@ -188,19 +188,34 @@ export function parseGmailMessage(msg: GmailMessage): {
   to: string | null;
   subject: string | null;
   body: string;
+  participants: string[];
 } {
   const headers = msg.payload?.headers || [];
   const getHeader = (name: string) =>
     headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || null;
   const sentAt = msg.internalDate ? new Date(Number(msg.internalDate)) : null;
   const body = extractBodyFromPayload(msg.payload) || msg.snippet || '';
+  // Everyone on the message (From + To + Cc), emails only, lower-cased and
+  // de-duplicated. from/to keep one address each; this is what the
+  // relationship graph's co-thread edges ("B and T were on the same thread")
+  // are built from.
+  const participants = Array.from(new Set(
+    ['From', 'To', 'Cc'].flatMap((h) => extractAllEmails(getHeader(h))),
+  ));
   return {
     sent_at: sentAt,
     from: getHeader('From'),
     to: getHeader('To'),
     subject: getHeader('Subject'),
     body: body.slice(0, 20000), // cap per message
+    participants,
   };
+}
+
+export function extractAllEmails(headerValue: string | null): string[] {
+  if (!headerValue) return [];
+  const found = headerValue.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
+  return found.map((e) => e.toLowerCase());
 }
 
 // ─── People API (Contacts) ──────────────────────────────────────

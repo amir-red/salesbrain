@@ -24,11 +24,34 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   );
   if (rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const [briefs, scores, messages, events] = await Promise.all([
+  const [briefs, scores, messages, events, approvals, intros, teammates] = await Promise.all([
     pool.query(`SELECT * FROM research_briefs WHERE prospect_id = $1 ORDER BY created_at DESC`, [params.id]),
     pool.query(`SELECT * FROM qualification_scores WHERE prospect_id = $1 ORDER BY created_at DESC`, [params.id]),
     pool.query(`SELECT * FROM outreach_messages WHERE prospect_id = $1 ORDER BY created_at ASC`, [params.id]),
     pool.query(`SELECT * FROM prospect_events WHERE prospect_id = $1 ORDER BY created_at DESC LIMIT 50`, [params.id]),
+    // Kernel-side drafts for this lead: cold drafts (prospect_id) and intro
+    // asks to a connector on the lead's behalf (intro_for_prospect_id).
+    pool.query(
+      `SELECT oa.id, oa.status, oa.kind, oa.channel, oa.subject, oa.message, oa.rationale, oa.created_at,
+              oa.decided_at, oa.sent_at, oa.expires_at, oa.person_id, oa.owner_user_id,
+              pe.full_name AS person_name, lc.full_name AS intro_lead_name, u.name AS owner_name
+         FROM outreach_approvals oa
+         LEFT JOIN people pe ON pe.id = oa.person_id
+         LEFT JOIN prospects ip ON ip.id = oa.intro_for_prospect_id
+         LEFT JOIN contacts lc ON lc.id = ip.contact_id
+         LEFT JOIN users u ON u.id = oa.owner_user_id
+        WHERE (oa.prospect_id = $1 OR oa.intro_for_prospect_id = $1)
+          ${isAdmin ? '' : 'AND oa.owner_user_id = $2'}
+        ORDER BY oa.created_at DESC LIMIT 30`, ownerValues),
+    pool.query(
+      `SELECT ir.id, ir.state, ir.channel, ir.path_id, ir.forwardable_blurb, ir.created_at, ir.sent_at,
+              ir.replied_at, ir.approval_id, ir.connector_person_id, pe.full_name AS connector_name
+         FROM intro_requests ir JOIN people pe ON pe.id = ir.connector_person_id
+        WHERE ir.prospect_id = $1 ${isAdmin ? '' : 'AND ir.owner_user_id = $2'}
+        ORDER BY ir.created_at DESC`, ownerValues),
+    pool.query(
+      `SELECT count(*)::int AS n FROM linkedin_accounts la
+        WHERE la.revoked_at IS NULL AND la.owner_user_id <> $1`, [session.userId]),
   ]);
 
   return NextResponse.json({
@@ -37,6 +60,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     scores: scores.rows,
     messages: messages.rows,
     events: events.rows,
+    approvals: approvals.rows,
+    intro_requests: intros.rows,
+    teammates_with_linkedin: teammates.rows[0]?.n ?? 0,
   });
 }
 
