@@ -545,48 +545,135 @@ employee's imported contacts have been bridged into the graph.
 > carry no connection date and are scored at a flat mid-value until the employee re-uploads their
 > Connections.csv.
 
-### Route to a lead
+### Route to a lead — the warm-intro strategy
 
-The graph is a **step in the lead's journey**, not a map. After a lead is enriched and before the first
-message, these tools answer one question — *how do I reach this person* — as a route your UI draws:
+The graph is **a step in the lead's journey, not a map**. After a lead is enriched and before the first
+message, these tools answer one question — *how does this employee reach this person?* — as a route your
+UI draws with four colours:
 
 | Colour | Meaning |
 |---|---|
-| **red** | the employee, or a teammate (someone they can simply ask) |
-| **blue** | a person the employee can message **now** — an email on file, or an existing LinkedIn conversation on their account |
-| **yellow** | a person who is known to know the lead but whom the employee cannot message yet — the bridge to build |
+| **red** | the employee, or a teammate they can simply ask |
+| **blue** | someone the employee can message **now** — an email on file, or an existing LinkedIn conversation on their account |
+| **yellow** | known to know the lead, but not messageable yet — the bridge to build |
 | **green** | the lead |
 
-The rule every route obeys: **hop one must be blue.** A chain whose first link cannot be messaged is not a
-route; it comes back as a `bridge_candidate` instead. No invitations are ever sent.
+**The rule every route obeys: hop one must be blue.** A chain whose first link cannot be messaged is not a
+route; it comes back as a `bridge_candidate`. No LinkedIn invitation is ever sent.
 
-**`crm_path_find`** · read — Ranked routes to one lead from what the graph already holds. Free.
+Every call runs as the employee named in `X-On-Behalf-Of`, so the route always uses **that employee's**
+graph and LinkedIn account. A route is only meaningful for the person who would make the ask — never
+compute it as an admin or a shared account and show it to someone else.
+
+#### The sequence your app should run
+
+1. **`crm_path_find`** first, every time. Free; uses what the graph already holds.
+2. **`crm_route_expand`** only when step 1 finds nothing and the lead is worth it. Spends LinkedIn budget.
+3. A route exists → **`crm_propose_intro`** to the first hop. No route but bridges → build the bridge (below)
+   or `crm_outreach_propose` cold. Tell the user which case it is; show `expand.notes[]` verbatim.
+4. Render pending drafts of both kinds (`kind: "outreach"` and `"intro_request"`) → `crm_outreach_decide`.
+
+**`crm_path_find`** · read, free — Ranked routes to one lead.
 - `prospect_id` (preferred — the result is stored on the lead) or `person_id`; `max_hops` 1–3 (default 2); `k` (default 3)
-- Returns `best_path_hops`, `path_available`, `paths[]` (each hop: `from`, `to`, `channel`, `confidence`,
-  `evidence` in words, `why_this_person`, `actionable_now`), `bridge_candidates[]`, and a drawable
-  **`graph`**: `nodes[{id, label, color, role, hop}]` + `edges[{from, to, strength, channel, path_ids}]`.
-  `hop` is the column to draw the node in (0 = the employee); `path_ids` lets you highlight one route.
-- `list_leads` now returns `best_path_hops`, `path_available` and `route_computed_at` per lead.
+- Returns `best_path_hops`, `path_available`, `paths[]` — each hop: `from`, `to`, `channel`
+  (`email` | `linkedin` | `null`; only knowable for the employee's own hop), `confidence`, `evidence` in
+  words, `why_this_person`, `actionable_now` — plus `bridge_candidates[]` and a drawable **`graph`**:
+
+```json
+{"best_path_hops": 2, "path_available": true,
+ "paths": [{"path_id": "a1b2c3d4e5f6", "score": 0.41, "hops": [
+   {"from": {"name": "Amir", "role": "owner"}, "to": {"name": "Yasin", "role": "colleague", "person_id": "…"},
+    "channel": "email", "confidence": 0.9, "actionable_now": true,
+    "evidence": "teammate — ask directly", "why_this_person": "teammate; knows the lead: connected on LinkedIn since Mar 2025"},
+   {"from": {"name": "Yasin"}, "to": {"name": "Lead", "role": "target"}, "channel": null, "confidence": 0.55,
+    "actionable_now": false, "evidence": "connected on LinkedIn since Mar 2025"}]}],
+ "bridge_candidates": [{"person_id": "…", "name": "Yan Kwizera", "headline": "…", "connector_score": 0.8,
+    "is_blue": false, "evidence": "a shared LinkedIn connection (Connections-of search)"}],
+ "graph": {"nodes": [{"id": "…", "label": "Amir", "color": "red", "role": "owner", "hop": 0}],
+           "edges": [{"from": "…", "to": "…", "strength": 0.55, "channel": "linkedin", "path_ids": ["a1b2c3d4e5f6"]}]}}
+```
+- `list_leads` carries `best_path_hops`, `path_available` and `route_computed_at` per lead, so a list can
+  show a route badge without recomputing.
 
 **`crm_route_expand`** · write, LinkedIn-spending, budget-guarded — When the free search finds nothing.
-Cheapest first: (1) the lead's profile — employers, schools, degree and **shared-connection count** (1 profile
-fetch, cached 90 days); (2) for a 2nd-degree lead with shared connections, **LinkedIn's own "Connections of"
-search** naming the employee's mutual connections (1–2 searches from a small daily sub-budget, never the
-Leads Finder's); (3) each teammate's LinkedIn account for a 1st-degree tie (1 profile fetch each); then the
-route again. Returns the `crm_path_find` shape plus `expand` (what was spent and found). Same deferral
-envelope as the other spending tools when the account is paused or out of quota.
+Cheapest first, then the route again:
+1. the lead's profile — employers, schools, degree and the **shared-connection count** (1 profile fetch,
+   cached 90 days);
+2. for a 2nd-degree lead with shared connections, **LinkedIn's own "Connections of" search**, which NAMES the
+   employee's mutual connections and stores them as edges (1–2 searches from a daily sub-budget of **5 per
+   employee**, so it can never starve the Leads Finder's sourcing budget);
+3. each teammate's LinkedIn account, asked whether the lead is 1st degree there (1 profile fetch each).
 
-**`crm_propose_intro`** · write — Ask a connector for the introduction. `connector_person_id` is
-`hops[0].to.person_id` of a route; `lead_prospect_id` the lead; `message` the ask; `forwardable_blurb` 2–3
-sentences the connector can paste to the lead (the double-opt-in convention); optional `subject`, `path_id`,
-`rationale`. The channel is chosen from how the employee reaches the connector (thread, else email). It
-appears in `crm_outreach_pending` with `kind: "intro_request"`; `crm_outreach_decide {approve}` sends it to
-the connector. **A sent intro ask never changes the lead's stage** — the lead was not messaged.
+Returns the `crm_path_find` shape plus `expand`. **Show `expand.notes[]` to the user verbatim** — a skipped
+step ("no LinkedIn account connected — profile fetch and mutual search skipped") is the difference between
+"no route" and "nothing was checked".
+```json
+"expand": {"profile": {"fetched": true, "degree": "2", "shared_connections_count": 38, "employers": 4},
+           "mutual":  {"searched": true, "found": 20, "pages": 2, "edges": 39, "budget": {"used_today": 1, "cap": 5}},
+           "probe":   {"accounts_checked": 1, "hits": 0}, "notes": []}
+```
+Same deferral envelope as the other spending tools (`deferred`, `status`, `resume_at`) when the account is
+paused or out of quota; nothing is spent then.
 
-> Evidence that "B knows the lead", cheapest first: LinkedIn's Connections-of search (`linkedin_mutual`),
-> both on one Gmail thread (`email_cothread`), same organisation now, shared past employer or school (from
-> the lead's cached profile), a teammate's own ring, a teammate's LinkedIn degree. Structural overlaps are
-> derived at query time and never stored; a teammate's contact list is never returned.
+**`crm_propose_intro`** · write, sends nothing — Ask the connector for the introduction.
+`connector_person_id` = `hops[0].to.person_id` of a route; `lead_prospect_id` the lead; `message` the ask;
+`forwardable_blurb` 2–3 sentences the connector can paste to the lead **as-is** (the double-opt-in
+convention: the connector forwards it, the lead says yes, only then does a conversation start); optional
+`subject`, `path_id`, `rationale`. The channel is chosen from how the employee reaches the connector (an
+existing LinkedIn thread wins, else email — never an invitation). It appears in `crm_outreach_pending` with
+`kind: "intro_request"`; `crm_outreach_decide {approve}` sends it to the connector. **A sent intro ask never
+changes the lead's stage** — the connector was messaged, not the lead.
+
+#### What counts as evidence that someone knows the lead
+
+| Source | Meaning | Cost |
+|---|---|---|
+| `linkedin_mutual` | LinkedIn's Connections-of search listed them as a shared connection | 1 search |
+| `email_cothread` | both were on the same email thread | free |
+| same organisation | works where the lead works now | free |
+| shared employer / school | overlap between the lead's profile and what we know of the connector | 1 profile fetch |
+| a teammate's own ring | a colleague with LinkedIn connected has the lead as a connection | free |
+| teammate degree probe | the lead is 1st degree on a colleague's LinkedIn | 1 fetch per teammate |
+
+Structural overlaps are derived at query time and never stored. A teammate's contact list is never returned
+to anyone — only the fact that they can reach this one person, with the evidence.
+
+#### What we saw on real leads (2026-09-08)
+
+| Lead | Degree | Shared | Fetched | Route |
+|---|---|---|---|---|
+| Lesya Hendrix | 2nd | 1 | 1 mutual | none · 1 yellow bridge |
+| Alemayehu Aklilu | 2nd | 38 | 20 mutuals, 2 pages | none · 8 yellow bridges |
+
+Both lookups named the mutual connections correctly. Both came back **yellow** for the same reason, and it is
+the one thing to set expectations around:
+
+> **A 1st-degree connection the employee has never messaged is yellow, not blue.** The service only replies
+> into existing conversations; it does not start a new LinkedIn chat, even with a connection. So most
+> 2nd-degree leads will show their mutuals as bridges until the employee has spoken to at least one of them.
+
+Two ways to turn a yellow bridge into a route today: **email** — if the bridge person has an email on file
+they are blue (enrichment can find it); or **build the bridge** — treat the bridge person as their own lead
+(value-first cold message), and once they reply the conversation exists and the route opens; run
+`crm_path_find` again. Starting a LinkedIn chat with a 1st-degree connection is a normal human action, not
+an invitation; allowing it is under discussion and will be noted here if it lands.
+
+#### Rendering the graph
+
+- Place nodes in columns by `hop`: 0 is the employee, the highest value is the lead; bridges sit in the last
+  intermediary column.
+- Fill each node with its `color`; keep exactly these four meanings.
+- Edge width from `strength` (0–1). Edges with an empty `path_ids` are bridge edges — draw them dashed.
+- Highlight one route by matching `path_id` against each edge's `path_ids`.
+- Show `evidence` and `why_this_person` as text on every hop; they are written to be read, not decoded.
+
+#### Limits worth telling your users
+
+- Routes are at most three hops, in practice two: the employee, one connector, the lead.
+- 3rd-degree leads have no named connector yet; the lookup only checks teammates for them.
+- Reply detection and follow-up cadence for intro asks are not built: the ask shows as sent; whether the
+  connector answered is not tracked automatically yet.
+- The mutual-connections search spends from a budget of 5 per employee per day; the response says when it is used.
 
 ---
 
@@ -661,6 +748,14 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 ---
 
 ## 12. Changelog
+
+### 2026-09-09 — the warm-intro strategy, written down
+
+§8 *Route to a lead* now explains the strategy end to end for your product team: the four-colour route model
+and the hop-one-must-be-blue rule, the call sequence (`crm_path_find` → `crm_route_expand` →
+`crm_propose_intro`), what counts as evidence, results from real leads, rendering guidance, and the one
+expectation to set — **a 1st-degree connection the employee has never messaged is yellow**, so most
+2nd-degree leads surface their mutuals as bridges until a conversation exists. No tool contract changed.
 
 ### 2026-09-08 — route to a lead (journey step 5) and the intro ask
 
