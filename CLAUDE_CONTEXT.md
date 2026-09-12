@@ -401,6 +401,17 @@ colleague a person node. NO ranking, NO target expansion, NO intro campaigns yet
   `RETURNING (xmax = 0)`), `graph_sync.should_digest` gates on new edges only, and the digest is sent with
   `notify_user(..., fallback=False)` — the owner's own DM or nothing. Keep `fallback=True` (the default) for
   escalations; use `fallback=False` for any routine per-owner progress note.
+  **Two Telegram destinations, by rule** (fixed on the box the same day): board content (reviews, votes,
+  nudges) goes to the group via `TELEGRAM_BOARD_CHAT_ID`; supervision digests (`notify_owner` / `crm_notify`)
+  and every unlinked-owner fallback go to Amir's admin DM via `SALESBRAIN_DIGEST_CHAT_ID=7666216888`.
+  The box had it set to the group id; `deploy-server.sh` now resets it if it ever equals the board id again.
+  Why 7666216888 and not 379316691 (`TELEGRAM_HOME_CHANNEL`, the account that votes): the supervisor path
+  sends from @MateSalesCRMBot (`SALESBRAIN_BOARD_BOT_TOKEN`), and the 379316691 account has BLOCKED that bot
+  (403 "bot was blocked by the user", verified 2026-09-12 — which is also why its `telegram_user_links` row
+  was revoked 2026-09-08). 7666216888 is Amir's active link and receives. To move the supervisor chat back
+  to 379316691: unblock @MateSalesCRMBot from that account, then change the env + `AMIR_DM` in the deploy
+  script. The Hermes gateway bot (@SalesBrainZeamiBot, `TELEGRAM_BOT_TOKEN`) is the reverse: it reaches
+  379316691 and not 7666216888.
 - **Still open from spec Phase A**: `person_facets`, automatic reply detection (`P6_REPLIED` is a stage nothing
   writes from inbound threads). Then Phase 3 = `crm_target_expand`, `crm_path_find`, `intro_campaigns`.
 
