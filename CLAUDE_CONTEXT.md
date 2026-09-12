@@ -393,6 +393,14 @@ colleague a person node. NO ranking, NO target expansion, NO intro campaigns yet
   `agent_runs` ROWS, one per owner, so one sweep over five owners spent 2.5 days of budget; it now counts
   the max per-owner runs = sweeps (0.31.2). The `/agents` toggle covers only `enabled`; the other 13
   policy keys are still SQL-only — a `/admin/policies` editor was proposed, not built.
+  (3) **The digest flood (fixed 0.32.3, 2026-09-12)**: once the sibling app had registered ~6 employees
+  with LinkedIn, every 14:10 sweep posted one "⚠️ routed to you — Relationship graph — <owner>" digest per
+  owner into the board group. Two causes: the gate compared `digest_min_edges` against `upserted`, which is
+  the size of the ring (a sweep refreshes every edge), not its growth; and `deliver.notify_user` forwards an
+  unlinked owner's message to the supervisor chat. Now `upsert_edges` also returns `inserted` (via
+  `RETURNING (xmax = 0)`), `graph_sync.should_digest` gates on new edges only, and the digest is sent with
+  `notify_user(..., fallback=False)` — the owner's own DM or nothing. Keep `fallback=True` (the default) for
+  escalations; use `fallback=False` for any routine per-owner progress note.
 - **Still open from spec Phase A**: `person_facets`, automatic reply detection (`P6_REPLIED` is a stage nothing
   writes from inbound threads). Then Phase 3 = `crm_target_expand`, `crm_path_find`, `intro_campaigns`.
 
