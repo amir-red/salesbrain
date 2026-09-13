@@ -42,6 +42,14 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     const rule = Object.fromEntries(rules.rows.map((r) => [r.key, (r.value ?? {}) as Record<string, unknown>]));
     const minScore = Number(rule['agents.enricher']?.min_score ?? 60) || 60;
     const quotaBy = await ownerQuotas([owner], client);
+    // The owner's per-person Leads Finder hold (migration 044), for the blocker list.
+    const holdRow = await q(
+      `SELECT state, reason, by_admin FROM user_agent_state
+        WHERE owner_user_id = $1 AND agent = 'leads_finder' AND state <> 'running'`, [owner]);
+    const h = holdRow.rows[0];
+    const userHold: string | null = h
+      ? `${h.state} by ${h.by_admin ? 'an administrator' : 'the owner'}${h.reason ? `: ${h.reason}` : ''}`
+      : null;
 
     // Fit, coverage and degrees are all FILTERed counts over the same rows; the
     // stage funnel rides along as a jsonb object.
@@ -185,7 +193,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       viewer: { user_id: session.userId, role: session.role },
       icp: { ...(icp as unknown as PanelPayload['icp']), criteria: normalizeCriteria(icp.criteria as never) },
       is_owner: owner === session.userId,
-      blockers: blockersFor(icp, quota, { kill_switch: killSwitch, leads_finder_enabled: enabled.leads_finder }, finderState),
+      blockers: blockersFor(icp, quota, { kill_switch: killSwitch, leads_finder_enabled: enabled.leads_finder, user_hold: userHold }, finderState),
       quota,
       policy: { kill_switch: killSwitch, enabled, leads_finder: rule['agents.leads_finder'] ?? {}, enricher: rule['agents.enricher'] ?? {} },
       fit: { strong: a.strong, proceed: a.proceed, weak: a.weak, do_not_pursue: a.do_not_pursue, unscored: a.unscored },

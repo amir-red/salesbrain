@@ -18,9 +18,11 @@ export type RunMode = 'now' | 'queue' | 'enrich';
  * the old cards. Actions that run with the owner's LinkedIn stay with the
  * owner — an admin gets a hold on a colleague's ICP, not its budget.
  */
-export default function IcpRow({ icp, quota, viewerUserId, isAdmin, fleet, busy, onRun, onState, onArchive }: {
+export default function IcpRow({ icp, quota, viewerUserId, isAdmin, fleet, hold, busy, onRun, onState, onArchive }: {
   icp: OverviewIcp; quota: OwnerQuota | null; viewerUserId: string; isAdmin: boolean;
   fleet: { kill_switch: boolean; leads_finder_enabled: boolean };
+  /** The owner's per-person Leads Finder hold, as a label (migration 044); null = running. */
+  hold?: string | null;
   busy: boolean;
   onRun: (mode: RunMode) => Promise<Record<string, unknown>>;
   onState: (state: 'running' | 'paused') => Promise<void>;
@@ -29,7 +31,7 @@ export default function IcpRow({ icp, quota, viewerUserId, isAdmin, fleet, busy,
   const [note, setNote] = useState<string | null>(null);
   const [running, setRunning] = useState<RunMode | null>(null);
   const isOwner = icp.owner_user_id === viewerUserId;
-  const blockers = blockersFor(icp, quota, fleet, (icp.agent_state as IcpAgentState | null) ?? null);
+  const blockers = blockersFor(icp, quota, { ...fleet, user_hold: hold ?? null }, (icp.agent_state as IcpAgentState | null) ?? null);
   const cov = icp.coverage;
   const run = async (mode: RunMode) => {
     setRunning(mode); setNote(null);

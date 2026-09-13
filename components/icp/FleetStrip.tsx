@@ -57,6 +57,7 @@ export default function FleetStrip({ fleet, quota, onChanged }: {
         )}
         <div className="ml-auto flex items-center gap-3 text-[11px]">
           <Link href="/agents" className="underline" style={{ color: 'var(--text-muted)' }}>Agents →</Link>
+          {fleet.is_admin && <Link href="/admin/users" className="underline" style={{ color: 'var(--text-muted)' }}>Users →</Link>}
           {fleet.is_admin && <Link href="/admin/linkedin" className="underline" style={{ color: 'var(--text-muted)' }}>LinkedIn health →</Link>}
         </div>
       </div>

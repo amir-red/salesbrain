@@ -12,6 +12,8 @@ export async function GET(req: NextRequest) {
   const where: string[] = [`r.status <> 'requested'`];
   if (session.role !== 'admin') { values.push(session.userId); where.push(`(r.owner_user_id = $${values.length} OR r.owner_user_id IS NULL)`); }
   if (agent) { values.push(agent); where.push(`r.agent = $${values.length}`); }
+  const owner = req.nextUrl.searchParams.get('owner');
+  if (owner && session.role === 'admin') { values.push(owner); where.push(`r.owner_user_id = $${values.length}`); }
   const { rows } = await pool.query(
     `SELECT r.id, r.agent, r.trigger, r.source, r.status, r.started_at, r.finished_at,
             r.analyzed, r.matched, r.created, r.researched, r.detail, r.error,

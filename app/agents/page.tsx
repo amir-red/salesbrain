@@ -95,6 +95,12 @@ export default function AgentsPage() {
                 ● {data.kill_switch ? 'agents live' : 'KILL SWITCH — all agents stopped'}
               </span>
               {data.is_admin && (
+                <Link href="/admin/users" className="text-xs px-3 py-1.5 rounded-lg"
+                      style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                  Users →
+                </Link>
+              )}
+              {data.is_admin && (
                 <Link href="/admin/service" className="text-xs px-3 py-1.5 rounded-lg"
                       style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
                   Service integrations →

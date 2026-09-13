@@ -54,6 +54,8 @@ export interface OverviewPayload {
   viewer_user_id: string;
   icps: OverviewIcp[];
   quota_by_owner: Record<string, OwnerQuota>;
+  /** Per-person agent holds (migration 044), owner → agent → human label. Absent = running. */
+  holds_by_owner?: Record<string, Record<string, string>>;
 }
 
 export interface AgentDef {
@@ -156,19 +158,21 @@ export function stageTotal(stages: StageCounts): number {
 /**
  * Why the Leads Finder will NOT run for this ICP right now, in the order the
  * scheduler checks (policy/leads_finder.should_run): kill switch → agent
- * enabled → ICP held → LinkedIn present → account paused → search budget →
- * exhausted → backoff. Empty means "eligible on the next tick".
+ * enabled → held for this person → ICP held → LinkedIn present → account
+ * paused → search budget → exhausted → backoff. Empty means "eligible on the
+ * next tick".
  */
 export function blockersFor(
   icp: { paused_at?: string | null; paused_reason?: string | null; paused_by_admin?: boolean },
   quota: OwnerQuota | null,
-  policy: { kill_switch: boolean; leads_finder_enabled: boolean },
+  policy: { kill_switch: boolean; leads_finder_enabled: boolean; user_hold?: string | null },
   state: IcpAgentState | null,
   now: Date = new Date(),
 ): string[] {
   const out: string[] = [];
   if (!policy.kill_switch) out.push('Kill switch is on — every agent is stopped');
   if (!policy.leads_finder_enabled) out.push('Leads Finder is disabled on /agents');
+  if (policy.user_hold) out.push(`Leads Finder is held for this user — ${policy.user_hold}`);
   if (icp.paused_at) out.push(`ICP is paused${icp.paused_reason ? ` — ${icp.paused_reason}` : ''}${icp.paused_by_admin ? ' (by an administrator)' : ''}`);
   if (quota && !quota.connected) out.push('Owner has no LinkedIn connected — nothing can source');
   if (quota?.paused_at) out.push(`LinkedIn account paused — ${quota.pause_reason || 'provider errors'}`);

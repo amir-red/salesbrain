@@ -133,7 +133,7 @@ export default function IcpPage() {
             <div className="space-y-3">
               {icps.map((p) => (
                 <IcpRow key={p.id} icp={p} quota={overview?.quota_by_owner[p.owner_user_id] ?? null} viewerUserId={viewer} isAdmin={isAdmin}
-                        fleet={fleetFlags} busy={busy === p.id}
+                        fleet={fleetFlags} hold={overview?.holds_by_owner?.[p.owner_user_id]?.leads_finder ?? null} busy={busy === p.id}
                         onRun={runAgent(p)} onState={(s) => setState(p, s)} onArchive={() => archive(p)} />
               ))}
             </div>

@@ -337,6 +337,7 @@ employee's data.
 | | `crm_icp_rescore` | write | Re-score existing leads after editing criteria |
 | **Sourcing** | `crm_leads_finder_run` | write | Source one page now. Spends LinkedIn search quota |
 | | `crm_agent_request_run` | write | Queue a background run instead of waiting |
+| | `crm_agent_set_user_state` | write | **running / paused / stopped** — one agent, for this employee |
 | | `crm_enrich_prospect` | write | Fill employer, company, email for one lead |
 | | `list_leads` | read | The lead list, filterable by ICP, stage and fit |
 | **Visibility** | `get_run_status` | read | Poll a queued or finished run. The poll loop |
@@ -447,6 +448,10 @@ people, research the best. Spends the daily LinkedIn search budget.
 **`crm_agent_request_run`** · write — Queue a background run; the agent picks it up on its next tick.
 - `agent*` — `leads_finder` | `enricher` · `icp_id*` — target ICP
 
+Refuses rather than queues when the run could never drain: `{ refused: true, status: "icp_paused" }` for a
+paused ICP, and `status: "user_paused" | "user_stopped"` when that agent is held for this employee (see
+`crm_agent_set_user_state`). The response is returned as-is — no `run_id`, nothing to poll.
+
 **`crm_enrich_prospect`** · write — Enrich one prospect now: employer, company research + website, and an email.
 Contacts no one.
 - `prospect_id*` — from `list_leads` · `kinds` — subset of `employer`, `research`, `email`
@@ -473,6 +478,23 @@ any LinkedIn account paused for agent work.
 > healthy value and `false` means every agent is halted globally. Because that name reads backwards, the
 > response also carries **`sourcing_paused`**, the same fact stated safely: `sourcing_paused: false` = sourcing
 > is running normally. Whether a *particular* agent runs is its own `enabled` flag, not this one.
+
+**`crm_agent_set_user_state`** · write — Pause, stop or continue ONE agent for THIS employee. This is the
+per-person switch: it affects one agent for one person, never their colleagues and never the whole agent.
+- `agent*` — `leads_finder` | `enricher` | `graph_sync` | `outreach` · `state*` — `running` | `paused` | `stopped` · `reason` — shown wherever the hold is reported
+
+| State | What runs | Notes |
+|---|---|---|
+| `running` | the agent plans this person on its next tick; their queued runs drain | the default (no hold) |
+| `paused` | **nothing** for this person, on this agent | a temporary hold; one call puts it back |
+| `stopped` | nothing | a hard off; same mechanics, different intent |
+
+Nothing in flight is cancelled — the next tick simply does not plan the person. While held, `crm_leads_finder_run`,
+`crm_enrich_prospect`, `crm_route_expand` and `crm_graph_sync` **refuse** for that agent with
+`{ refused: true, status: "user_paused" | "user_stopped", agent, reason, by_admin }` (a refusal, not a deferral:
+there is no `resume_at`), and `crm_agent_request_run` refuses the same way instead of queueing. A hold set by a
+SalesBrain administrator can only be lifted by one. `crm_agent_status` lists the employee's holds under
+`user_states`.
 
 **`crm_linkedin_quota`** · read — Today's LinkedIn budget: searches and profile fetches used vs the safe cap,
 `remaining`, `resume_at`, tier, pause state.
@@ -748,6 +770,14 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 ---
 
 ## 12. Changelog
+
+### 2026-09-13 — per-person agent holds
+
+**New: `crm_agent_set_user_state`** (§8 Sourcing). Pause, stop or continue one agent for one employee. A held
+agent never plans that person until continued (nothing in flight is cancelled); the spending tools and
+`crm_agent_request_run` return a refusal with `status: "user_paused" | "user_stopped"`; `crm_agent_status` carries
+the holds under `user_states`. **Fixed:** `crm_agent_request_run` used to decorate a kernel refusal (a paused ICP)
+as `status: "requested"`; refusals are now returned unmodified.
 
 ### 2026-09-09 — the warm-intro strategy, written down
 

@@ -209,6 +209,23 @@ export const SERVICE_TOOLS: ToolDef[] = [
     needsOwner: true,
   },
   {
+    name: 'crm_agent_set_user_state',
+    description:
+      'Pause, stop or continue ONE background agent for THIS employee. `paused` and `stopped` both mean ' +
+      'the agent never plans them again until continued — nothing in flight is cancelled, and their ' +
+      'queued runs wait. A hold set by a SalesBrain administrator can only be lifted by one. Read the ' +
+      'current holds from crm_agent_status → user_states.',
+    inputSchema: obj(
+      {
+        agent: { type: 'string', enum: ['leads_finder', 'enricher', 'graph_sync', 'outreach'] },
+        state: { type: 'string', enum: ['running', 'paused', 'stopped'] },
+        reason: { type: 'string', description: 'Shown wherever the hold is reported' },
+      },
+      ['agent', 'state'],
+    ),
+    needsOwner: true,
+  },
+  {
     name: 'crm_enrich_prospect',
     description:
       "Run the Enricher on ONE prospect now: employer, company research + website, and an email " +
@@ -666,7 +683,7 @@ async function guardedLinkedinSpend(
 const PASSTHROUGH = new Set([
   'crm_icp_define', 'crm_icp_preview', 'crm_icp_list', 'crm_icp_archive', 'crm_icp_set_state',
   'crm_icp_rescore', 'crm_leads_finder_run',
-  'crm_agent_request_run', 'crm_enrich_prospect', 'crm_outreach_propose',
+  'crm_agent_request_run', 'crm_agent_set_user_state', 'crm_enrich_prospect', 'crm_outreach_propose',
   'crm_outreach_pending', 'crm_outreach_decide', 'crm_linkedin_status',
   'crm_linkedin_revoke', 'crm_agent_activity', 'crm_agent_status', 'crm_linkedin_quota',
   'crm_graph_status', 'crm_graph_edges', 'crm_graph_sync',
@@ -743,6 +760,10 @@ export async function dispatchServiceTool(
         };
       }
       const out = (await kernelCall(toolName, rest, owner)) as Record<string, unknown>;
+      // A kernel refusal (paused ICP, per-person hold) carries its own
+      // `status`; decorating it as 'requested' told the caller a run was queued
+      // when nothing was.
+      if (out.refused || out.error) return { status: 'success', data: out };
       return {
         status: 'success',
         data: {
@@ -782,7 +803,8 @@ export async function dispatchServiceTool(
     }
 
     if (PASSTHROUGH.has(toolName)) {
-      const { employee_id: _drop, ...rest } = args;
+      // owner_user_id is stripped too: an app holds only its own employee's agents.
+      const { employee_id: _drop, owner_user_id: _own, ...rest } = args;
       return { status: 'success', data: await kernelCall(toolName, rest, owner) };
     }
     if (toolName === 'list_leads') {

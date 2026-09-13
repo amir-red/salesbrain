@@ -76,7 +76,16 @@ export async function GET(req: NextRequest) {
   const queued = ids.length === 0 ? none : await client.query(
         `SELECT icp_profile_id, agent, count(*)::int AS n FROM agent_runs
           WHERE icp_profile_id = ANY($1::uuid[]) AND status = 'requested' GROUP BY 1, 2`, [ids]);
-  const quota = await ownerQuotas(Array.from(new Set(icps.rows.map((r) => r.owner_user_id as string))), client);
+  const ownerIds = Array.from(new Set(icps.rows.map((r) => r.owner_user_id as string)));
+  const quota = await ownerQuotas(ownerIds, client);
+  const holds = ownerIds.length === 0 ? none : await client.query(
+        `SELECT owner_user_id, agent, state, reason, by_admin FROM user_agent_state
+          WHERE state <> 'running' AND owner_user_id = ANY($1::uuid[])`, [ownerIds]);
+  const holdsBy: Record<string, Record<string, string>> = {};
+  for (const h of holds.rows) {
+    (holdsBy[h.owner_user_id] ??= {})[h.agent] =
+      `${h.state} by ${h.by_admin ? 'an administrator' : 'the owner'}${h.reason ? `: ${h.reason}` : ''}`;
+  }
 
   const stagesBy: Record<string, StageCounts> = {};
   for (const r of stages.rows) (stagesBy[r.icp_profile_id] ??= {})[r.stage as keyof StageCounts] = r.n;
@@ -108,6 +117,7 @@ export async function GET(req: NextRequest) {
       };
     }),
     quota_by_owner: quota,
+    holds_by_owner: holdsBy,
   };
   return NextResponse.json(payload);
   } finally { client.release(); }
