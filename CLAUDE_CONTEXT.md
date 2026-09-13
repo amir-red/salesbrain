@@ -310,7 +310,7 @@ Exposes the FULL outreach pipeline (ICP → Leads Finder → Enricher → draft 
 
 - **Surface** `POST /api/service-mcp` — a SECOND MCP endpoint (JSON-RPC 2.0), separate from `/api/mcp`. Whitelisted in `middleware.ts` (`api/service-mcp$`, bearer-authed). Own curated catalog in `lib/service-mcp/dispatch.ts` (`SERVICE_TOOLS`) that deliberately includes the send/spend tools the public MCP hides.
 - **Two-layer identity**: (1) `Authorization: Bearer svc_…` = which APP (one token per app, table `service_tokens`, hashed like `mcp_tokens`); (2) `X-On-Behalf-Of: <employee_id>` = which of its users. The other app **registers each employee up front** (`register_user`), which provisions an un-loginable SalesBrain `users` row (migration-022 sentinel hash) and stores the map in `external_employees(app_key, employee_id → salesbrain_user_id)`. Every later call resolves the employee → owner; **unregistered employee = rejected** (register-then-use). One SalesBrain user per employee is the grain (no org/tenant layer exists).
-- **Tools** (`lib/service-mcp/`, 23 as of 2026-09-05): `register_user`, `suggest_icp` (partial input → scored ICP candidates, LLM, saves nothing), `crm_icp_define`/`crm_icp_preview`/`crm_icp_list`/`crm_icp_archive`/`crm_icp_rescore` (full ICP management; archive = standby, re-define same name revives; rescore after edits), `crm_leads_finder_run`/`crm_agent_request_run` (+ observability: `get_run_status` poll loop, `crm_agent_activity`, `crm_agent_status`, `crm_linkedin_quota`; the spending tools are budget-guarded and attach the fresh quota + near-limit warnings), `crm_enrich_prospect`, `list_leads` (direct SQL, owner-scoped), `crm_outreach_propose`, `crm_outreach_pending`, `crm_outreach_decide`, and LinkedIn onboarding (`linkedin_connect_start`/`linkedin_unbound_accounts`/`linkedin_link_account`/`crm_linkedin_status`/`crm_linkedin_revoke` — revoke added 2026-09-05: kernel passthrough that unbinds AND deletes the Unipile account via the ring's `linkedin_disconnect` event). Kernel tools pass straight through `kernelCall`; audit → `mcp_audit_log` with `{app_key, employee_id}` in `input`.
+- **Tools** (`lib/service-mcp/`, 33 as of 2026-09-13): `register_user`, `suggest_icp` (partial input → scored ICP candidates, LLM, saves nothing), `crm_icp_define`/`crm_icp_preview`/`crm_icp_list`/`crm_icp_archive`/`crm_icp_rescore` (full ICP management; archive = standby, re-define same name revives; rescore after edits), `crm_leads_finder_run`/`crm_agent_request_run` (+ observability: `get_run_status` poll loop, `crm_agent_activity`, `crm_agent_status`, `crm_linkedin_quota`; the spending tools are budget-guarded and attach the fresh quota + near-limit warnings), `crm_enrich_prospect`, `list_leads` (direct SQL, owner-scoped), `crm_outreach_propose`, `crm_outreach_pending`, `crm_outreach_decide`, and LinkedIn onboarding (`linkedin_connect_start`/`linkedin_unbound_accounts`/`linkedin_link_account`/`crm_linkedin_status`/`crm_linkedin_revoke` — revoke added 2026-09-05: kernel passthrough that unbinds AND deletes the Unipile account via the ring's `linkedin_disconnect` event). Kernel tools pass straight through `kernelCall`; audit → `mcp_audit_log` with `{app_key, employee_id}` in `input`.
 - **Decisions**: approvals render in the OTHER app's UI (`crm_outreach_pending` → `crm_outreach_decide`, not Telegram); each employee connects their OWN LinkedIn + email; **shared data pool** — external rows live in the same `prospects`/`accounts` tables, owned by the mapped user (recoverable as external-origin via `external_employees`). Reachability caveat: fresh LinkedIn leads with no existing thread are email-only (no cold invites).
 - **Admin**: mint tokens in the UI at `/profile → Service API` tab (admin-only, `components/profile/ServiceTokenPanel.tsx`) or `POST /api/admin/service-tokens {app_key,name}` (shown once); `lib/service-mcp/tokens.ts`. Rate limits: 120/min per app token + per-tool sub-limits (`lib/service-mcp/auth.ts`). Full contract for the other app's dev: `docs/service-mcp.md`.
 
@@ -522,6 +522,49 @@ filters, per-lead coverage dots) → Activity. The old in-place `IcpLeads` view 
 - Not built: policy editor (`/admin/policies`), an `icp_id` filter on `/api/agents/approvals` (the panel
   embeds them), SSE. Latency from a laptop is ~2–4 s per panel load (30 sequential round trips to
   eu-west-1); from the EC2 box it is well under a second.
+
+### 5.ae Users admin page + per-person agent holds (2026-09-13, core/hermes 0.33.0, migration 044)
+
+Amir, from `/icp`: "for each user, what are the MCP, what is running for them, manage (pause / stop / continue /
+delete) each agent, and add a filter." Decisions: **stop = hard off, no in-flight cancel**; **delete = archive an
+ICP** (not the user); a **new admin page `/admin/users`**.
+
+- **`user_agent_state`** (core migration 044) — `(owner_user_id, agent)` → `state` running | paused | stopped,
+  `reason`, `changed_by`, `by_admin`, `changed_at`. No row = running. Both held states mean "the agent never
+  plans this person until continued"; nothing in flight is cancelled and their queued `requested` rows wait.
+  `by_admin` mirrors 039's `paused_by_admin`: the partner app acts AS the employee and must not lift an
+  operator's hold. Pure rules in `policy/user_agent.py` (`hold_reason`, `refusal`, `can_lift`).
+- **Kernel** (`commands/agents.py`): `set_user_agent_state` (owner or admin; admin may hold anyone),
+  `user_hold`. `leads_finder_plan` LEFT JOINs the hold and returns held items under `held[]` — NOT `skipped[]`,
+  so a hold writes no skip row per ICP per tick; `enricher_plan` / `outreach_queue` filter in SQL and report
+  `held`; `graph_plan` exposes `hold_*` per owner and the script leaves them out. `request_run` /
+  `_request_owner_run` refuse with the icp_paused shape: `{error, refused: true, status: "user_paused" |
+  "user_stopped", agent, reason, by_admin}` — **a refusal, never a deferral** (no `resume_at`).
+  **`claim_requested` excludes held owners in SQL**: the scripts claim before they plan and close unmatched
+  claims as "nothing to do", which would have swallowed a held person's request. `agent_status` carries
+  `user_states`. `policy/leads_finder.should_run` gained the `user_hold` rung right after "agent disabled" (an
+  operator's hold is a decision, a paused account is a symptom).
+- **Ring**: `crm_agent_set_user_state {agent, state, reason?, owner_user_id?}` (`owner_user_id` honoured for
+  admins only). `holds.refuse_if_held` gates the four synchronous tools that bypass the planners
+  (`crm_leads_finder_run`, `crm_enrich_prospect`, `crm_route_expand` as an enricher run, `crm_graph_sync`).
+  Fixed on the way: `leads_finder.py` rebound `items` inside `for item in items`, so a paused account never
+  short-circuited the rest of its ICPs (now a `skip_accounts` set).
+- **App**: `/admin/users` (`lib/users-panel.ts` contract; `components/users/{UsersFilterBar,UserRow,AgentChip}`)
+  over `GET /api/admin/users/overview?q=&app=` — admin only, ONE checked-out client, 13 sequential queries,
+  `LIMIT 300`; `q`/`app` are server-side, agent/state/LinkedIn/running-now/errors filters are client-side
+  (`applyClientFilters`). **Per-person outreach is derived from `outreach_approvals`**: the outreach run row is
+  owned by the SERVICE user, so it never appears on an owner's feed. "Running now" is bounded to 6 h because
+  stranded `running` rows exist. Writes: `POST /api/admin/users/agent-state` → `crm_agent_set_user_state`;
+  Delete on an ICP = `POST /api/icp/[id]/state {state:'stopped'}` (admin-capable; `DELETE /api/icp/[id]` is
+  owner-only). `GET /api/agents/runs?owner=` (admin) feeds the expanded row. `/icp` and `/icp/[id]` list a held
+  owner in the blocker ladder ("Leads Finder is held for this user — …"). Sidebar gets its first role-gated
+  item (`Users`, via `/api/auth/me`); links from FleetStrip and `/agents`.
+- **Service MCP**: `crm_agent_set_user_state` passthrough (`owner_user_id` stripped — an app holds only its own
+  employee); **fixed** `crm_agent_request_run` decorating a kernel refusal as `status: "requested"` (it now
+  returns refusals unmodified — this also corrects today's `icp_paused` response). `docs/service-mcp.md`
+  §8 + changelog; 33 tools.
+- Not built: cancel-in-flight (the owner chose hard-off), deregistering an employee (no `revoked_at` on
+  `external_employees`; `contacts`/`prospects` FKs would block a hard delete anyway), a policy editor.
 
 ## 6. Env vars
 

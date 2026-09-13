@@ -40,7 +40,9 @@ export default function AgentChip({ agent, cell, enabled, killSwitch, outreach, 
         {off && <span className="text-[9px] shrink-0" style={{ color: 'var(--text-muted)' }} title={!killSwitch ? 'Kill switch — every agent is stopped' : 'Disabled on /agents'}>off</span>}
       </div>
       {cell.hold && (
-        <div className="text-[10px] truncate" style={{ color }}>{holdLabel(cell.hold)} · {relativeTime(cell.hold.changed_at)}</div>
+        <div className="text-[10px] truncate" style={{ color: cell.state === 'running' ? 'var(--text-muted)' : color }}>
+          {holdLabel(cell.hold)} · {relativeTime(cell.hold.changed_at)}
+        </div>
       )}
       {agent === 'outreach' && outreach ? (
         <div className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>

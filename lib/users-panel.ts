@@ -24,7 +24,8 @@ export interface UserHold {
   changed_by_name: string | null; changed_at: string;
 }
 
-/** One agent for one person. `hold` is null when no row exists (= running). */
+/** One agent for one person. `hold` is null when no row exists; a row with state
+ *  'running' is a lifted hold and records who continued it. */
 export interface AgentCell {
   state: HoldState; hold: UserHold | null;
   last_run: AgentRun | null;
@@ -77,7 +78,8 @@ export const EMPTY_FILTER: UsersFilter = {
 };
 
 export function holdLabel(h: UserHold | null): string {
-  if (!h || h.state === 'running') return 'running';
+  if (!h) return 'running';
+  if (h.state === 'running') return `continued by ${h.changed_by_name || (h.by_admin ? 'an administrator' : 'the owner')}`;
   const who = h.by_admin ? 'an administrator' : 'the owner';
   const by = h.changed_by_name ? ` (${h.changed_by_name})` : '';
   return `${h.state} by ${who}${by}${h.reason ? ` — ${h.reason}` : ''}`;
