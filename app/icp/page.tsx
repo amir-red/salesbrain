@@ -1,48 +1,40 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import IcpBuilder from '@/components/icp/IcpBuilder';
-import IcpLeads, { RunPill } from '@/components/icp/IcpLeads';
-import { PRODUCTS, OBJECTIVES, summarizeCriteria } from '@/lib/icp';
+import FleetStrip from '@/components/icp/FleetStrip';
+import IcpRow from '@/components/icp/IcpRow';
+import type { RunMode } from '@/components/icp/IcpRow';
 import type { IcpProfile } from '@/lib/icp';
+import type { FleetPayload, OverviewPayload } from '@/lib/icp-panel';
+import { usePoll } from '@/lib/use-poll';
 import { relativeTime } from '@/lib/time';
 
-type Mode = { kind: 'list' } | { kind: 'new' } | { kind: 'edit'; profile: IcpProfile } | { kind: 'leads'; profile: IcpProfile };
+type Mode = { kind: 'list' } | { kind: 'new' } | { kind: 'edit'; profile: IcpProfile };
 
 /**
- * /icp — the list of ideal-customer profiles and the builder. An ICP is what
- * crm_prospect_search sources against and what every prospect is scored by;
- * until now it could only be defined through the agent (crm_icp_define).
+ * /icp — the control panel's overview: the agent fleet at a glance, then one
+ * row per ICP with its funnel, coverage, run state and actions. Each row opens
+ * /icp/[id], the per-ICP drill-down. Polls every 45 s while visible.
  */
 export default function IcpPage() {
-  const [profiles, setProfiles] = useState<IcpProfile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [overview, setOverview] = useState<OverviewPayload | null>(null);
+  const [fleet, setFleet] = useState<FleetPayload | null>(null);
   const [mode, setMode] = useState<Mode>({ kind: 'list' });
   const [busy, setBusy] = useState<string | null>(null);
   const [estate, setEstate] = useState(false);       // admin: every employee's ICPs
-  const [isAdmin, setIsAdmin] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/icp${estate ? '?scope=all' : ''}`);
-      if (res.ok) {
-        const json = await res.json();
-        setProfiles(json.icps ?? []);
-        // The toggle only SHOWS for admins; the API ignores scope=all for
-        // everyone else, so this is presentation, not the security boundary.
-        setIsAdmin(Boolean(json.is_admin));
-      }
-    } catch { /* ignore */ } finally { setLoading(false); }
+    const [a, b] = await Promise.all([fetch(`/api/icp/overview${estate ? '?scope=all' : ''}`), fetch('/api/agents')]);
+    if (!a.ok) throw new Error('Failed to load ICPs');
+    setOverview(await a.json());
+    if (b.ok) setFleet(await b.json());
   }, [estate]);
-  useEffect(() => { load(); }, [load]);
+  const { refresh, loading, lastAt, error } = usePoll(load, 45_000);
 
-  /** running | paused | stopped — the per-ICP switch. Pause is the reversible
-   *  one: it holds sourcing, enrichment, drafting AND sending for this profile
-   *  alone, without touching any other ICP or anyone else's agents. */
-  const setState = async (p: IcpProfile, state: 'running' | 'paused' | 'stopped') => {
+  const setState = async (p: IcpProfile, state: 'running' | 'paused') => {
     let reason: string | undefined;
     if (state === 'paused') {
       const answer = prompt(`Pause "${p.name}"?\n\nSourcing, enrichment, drafting and sending stop for this ICP only. Its leads and history are untouched, and Resume puts it straight back.\n\nReason (optional):`);
@@ -51,36 +43,35 @@ export default function IcpPage() {
     }
     setBusy(p.id);
     try {
-      const res = await fetch(`/api/icp/${p.id}/state`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state, reason }),
-      });
+      const res = await fetch(`/api/icp/${p.id}/state`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state, reason }) });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || json.error) alert(json.error || 'Could not change the state');
-      await load();
+      await refresh();
     } finally { setBusy(null); }
   };
-
   const archive = async (p: IcpProfile) => {
     if (!confirm(`Archive "${p.name}"? Its prospects keep their link; re-creating the same name revives it.`)) return;
     setBusy(p.id);
     try {
       const res = await fetch(`/api/icp/${p.id}`, { method: 'DELETE' });
-      if (res.ok) await load();
+      if (res.ok) await refresh();
     } finally { setBusy(null); }
   };
-
-  const runAgent = (p: IcpProfile) => async (mode: 'now' | 'queue' | 'enrich') => {
-    const res = await fetch(`/api/icp/${p.id}/run`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }),
-    });
-    const out = await res.json();
-    load();
-    return out;
+  const runAgent = (p: IcpProfile) => async (m: RunMode) => {
+    const res = await fetch(`/api/icp/${p.id}/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: m }) });
+    const out = await res.json().catch(() => ({}));
+    void refresh();
+    return out as Record<string, unknown>;
   };
 
-  const productLabel = (k: string | null) => PRODUCTS.find((p) => p.key === k)?.label ?? k ?? '—';
+  const icps = overview?.icps ?? [];
+  const isAdmin = Boolean(overview?.is_admin);
+  const viewer = overview?.viewer_user_id ?? '';
+  const myQuota = overview?.quota_by_owner[viewer] ?? null;
+  const fleetFlags = {
+    kill_switch: fleet?.kill_switch ?? true,
+    leads_finder_enabled: fleet?.agents.find((a) => a.name === 'leads_finder')?.enabled ?? true,
+  };
 
   return (
     <div className="flex h-screen">
@@ -92,30 +83,21 @@ export default function IcpPage() {
               {mode.kind !== 'list' && (
                 <button onClick={() => setMode({ kind: 'list' })} className="text-sm" style={{ color: 'var(--text-muted)' }} title="Back">←</button>
               )}
-              {mode.kind === 'list' ? 'Ideal Customer Profiles' : mode.kind === 'new' ? 'New ICP' : mode.kind === 'leads' ? mode.profile.name : `Edit · ${mode.profile.name}`}
+              {mode.kind === 'list' ? 'Ideal Customer Profiles' : mode.kind === 'new' ? 'New ICP' : `Edit · ${mode.profile.name}`}
             </h1>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
               {mode.kind === 'list'
-                ? `${profiles.length} active · who to look for on LinkedIn, and what makes them a fit`
-                : mode.kind === 'leads'
-                  ? 'The list the Leads Finder fills for this ICP, and what it did on each tick.'
-                  : 'Every prospect sourced or imported is scored against this profile, with reasons.'}
+                ? <>{icps.length} active · who to look for, and what every agent is doing about it{lastAt && <> · updated {relativeTime(lastAt.toISOString())} · <button onClick={() => refresh()} className="underline">refresh</button></>}</>
+                : 'Every prospect sourced or imported is scored against this profile, with reasons.'}
             </p>
           </div>
           {mode.kind === 'list' && (
             <div className="flex items-center gap-3">
               <Link href="/prospecting" className="text-xs underline" style={{ color: 'var(--text-muted)' }}>Prospects →</Link>
-              {isAdmin && mode.kind === 'list' && (
-                <button
-                  onClick={() => setEstate((v) => !v)}
-                  className="px-3 py-1.5 rounded-lg text-xs"
-                  style={{
-                    border: '1px solid var(--border)',
-                    background: estate ? 'var(--accent)' : 'transparent',
-                    color: estate ? '#fff' : 'var(--text-muted)',
-                  }}
-                  title="Admin: every employee's ICPs, including those filed by the partner app"
-                >
+              {isAdmin && (
+                <button onClick={() => setEstate((v) => !v)} className="px-3 py-1.5 rounded-lg text-xs"
+                        style={{ border: '1px solid var(--border)', background: estate ? 'var(--accent)' : 'transparent', color: estate ? '#fff' : 'var(--text-muted)' }}
+                        title="Admin: every employee's ICPs, including those filed by the partner app">
                   {estate ? 'All employees' : 'Mine only'}
                 </button>
               )}
@@ -126,25 +108,20 @@ export default function IcpPage() {
           )}
         </div>
 
-        {mode.kind === 'leads' && <IcpLeads profile={mode.profile} onRun={runAgent(mode.profile)} />}
-        {mode.kind === 'leads' && (
-          <div className="px-4 pb-4">
-            <button onClick={() => setMode({ kind: 'edit', profile: mode.profile })} className="text-xs underline" style={{ color: 'var(--text-muted)' }}>Edit this ICP</button>
-          </div>
-        )}
-
         {(mode.kind === 'new' || mode.kind === 'edit') && (
           <IcpBuilder
             initial={mode.kind === 'edit' ? mode.profile : null}
-            onSaved={() => { setMode({ kind: 'list' }); load(); }}
+            onSaved={() => { setMode({ kind: 'list' }); void refresh(); }}
             onCancel={() => setMode({ kind: 'list' })}
           />
         )}
 
         {mode.kind === 'list' && (
-          <div className="p-4">
-            {loading && <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</p>}
-            {!loading && profiles.length === 0 && (
+          <div className="p-4 space-y-4">
+            {error && <div className="rounded-lg px-3 py-2 text-[11px]" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--red)' }}>Last refresh failed ({error}){overview ? '; showing the previous data.' : '.'}</div>}
+            <FleetStrip fleet={fleet} quota={myQuota} onChanged={refresh} />
+            {loading && !overview && <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</p>}
+            {overview && icps.length === 0 && (
               <div className="text-center py-16 space-y-2" style={{ color: 'var(--text-muted)' }}>
                 <p className="text-sm">No ICP yet.</p>
                 <p className="text-xs">Describe who you sell to — or paste your website and let AI draft the first one.</p>
@@ -153,86 +130,11 @@ export default function IcpPage() {
                 </button>
               </div>
             )}
-            <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-3">
-              {profiles.map((p) => (
-                <div key={p.id} className="rounded-xl p-4 space-y-3 flex flex-col" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="font-semibold truncate">{p.name}</div>
-                      <div className="text-[11px] flex items-center gap-1.5 flex-wrap" style={{ color: 'var(--text-muted)' }}>
-                        {productLabel(p.product)} · updated {relativeTime(p.updated_at)}
-                        {p.objective && (
-                          <span className="px-1.5 py-0.5 rounded" style={{ background: 'var(--bg-input)', color: 'var(--text)' }}>
-                            ⌾ {OBJECTIVES.find((o) => o.key === p.objective)?.label ?? p.objective}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <span className="shrink-0 text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>
-                      {p.prospects ?? 0} on list · {p.matched_prospects ?? 0} matched
-                    </span>
-                  </div>
-                  {p.description && <p className="text-xs line-clamp-2" style={{ color: 'var(--text-muted)' }}>{p.description}</p>}
-                  <p className="text-xs">{summarizeCriteria(p.criteria)}</p>
-                  <div className="flex flex-wrap gap-1">
-                    {p.criteria.titles.slice(0, 5).map((t) => <Chip key={t} text={t} />)}
-                    {p.criteria.titles.length > 5 && <Chip text={`+${p.criteria.titles.length - 5}`} />}
-                  </div>
-                  {(p.criteria.exclude_companies.length > 0) && (
-                    <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                      Avoids: {p.criteria.exclude_companies.join(', ')}
-                    </div>
-                  )}
-
-                  {p.paused_at && (
-                    <div className="rounded-lg px-2 py-1 text-xs" style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>
-                      ⏸ Paused {relativeTime(p.paused_at)}
-                      {p.paused_reason ? ` — ${p.paused_reason}` : ''}
-                      {p.paused_by_admin ? ' · by an administrator' : ''}
-                    </div>
-                  )}
-
-                  {p.owner_name && (
-                    <div className="flex flex-wrap items-center gap-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
-                      <span style={{ color: 'var(--text)' }}>{p.owner_name}</span>
-                      {p.owner_is_external && <span title="Registered by the partner app">· partner</span>}
-                      {p.owner_can_source
-                        ? <span title="LinkedIn connected — this profile can source">· can source</span>
-                        : <span title="No LinkedIn connected — this profile never runs">· inert</span>}
-                    </div>
-                  )}
-
-                  <div><RunPill run={p.last_run ?? null} queued={p.queued_runs ?? 0} state={p.agent_state ?? null} /></div>
-
-                  <div className="mt-auto flex gap-2 pt-1">
-                    {/* Editing stays with the owner. An admin gets a HOLD on
-                        someone else's profile, not authorship of it. */}
-                    {!p.owner_name && (
-                      <button onClick={() => setMode({ kind: 'edit', profile: p })} className="px-3 py-1.5 rounded-lg text-xs" style={{ border: '1px solid var(--border)', color: 'var(--text)' }}>Edit</button>
-                    )}
-                    {/* The leads endpoint is owner-scoped, so this would open
-                        an empty list on someone else's profile. The card already
-                        carries the counts and the run pill — enough to decide
-                        whether to hold it. */}
-                    {!p.owner_name && (
-                      <button onClick={() => setMode({ kind: 'leads', profile: p })} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'var(--accent)', color: '#fff' }} title="The list the Leads Finder fills, and its activity">
-                        Leads →
-                      </button>
-                    )}
-                    {p.paused_at ? (
-                      <button onClick={() => setState(p, 'running')} disabled={busy === p.id} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ border: '1px solid var(--accent)', color: 'var(--accent)' }} title="Resume sourcing, enrichment, drafting and sending for this ICP">
-                        Resume
-                      </button>
-                    ) : (
-                      <button onClick={() => setState(p, 'paused')} disabled={busy === p.id} className="px-3 py-1.5 rounded-lg text-xs disabled:opacity-40" style={{ border: '1px solid var(--border)', color: 'var(--text-muted)' }} title="Hold this ICP only — reversible, nothing is lost">
-                        Pause
-                      </button>
-                    )}
-                    {!p.owner_name && (
-                      <button onClick={() => archive(p)} disabled={busy === p.id} className="ml-auto px-3 py-1.5 rounded-lg text-xs disabled:opacity-40" style={{ color: 'var(--text-muted)' }}>Archive</button>
-                    )}
-                  </div>
-                </div>
+            <div className="space-y-3">
+              {icps.map((p) => (
+                <IcpRow key={p.id} icp={p} quota={overview?.quota_by_owner[p.owner_user_id] ?? null} viewerUserId={viewer} isAdmin={isAdmin}
+                        fleet={fleetFlags} busy={busy === p.id}
+                        onRun={runAgent(p)} onState={(s) => setState(p, s)} onArchive={() => archive(p)} />
               ))}
             </div>
           </div>
@@ -240,8 +142,4 @@ export default function IcpPage() {
       </div>
     </div>
   );
-}
-
-function Chip({ text }: { text: string }) {
-  return <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>{text}</span>;
 }

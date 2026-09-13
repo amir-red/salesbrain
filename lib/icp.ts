@@ -76,6 +76,9 @@ export interface AgentRun {
     variant?: string;
     filter_notes?: string[];
     exhausted?: boolean;
+    /** Enricher / graph_sync / outreach runs carry their own keys (note, employers, researched, emails, sources, mirror…). */
+    note?: string;
+    [key: string]: unknown;
   } | null;
   icp_name?: string | null;
   icp_profile_id?: string | null;

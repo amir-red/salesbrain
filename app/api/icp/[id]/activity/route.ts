@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { visibleIcp } from '@/lib/icp-server';
 
 /** Activity feed for one ICP — every agent tick that touched it, newest first. */
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const own = await pool.query(`SELECT id FROM icp_profiles WHERE id = $1 AND owner_user_id = $2`, [params.id, session.userId]);
-  if (!own.rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  if (!(await visibleIcp(params.id, session))) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const limit = Math.min(Math.max(Number(req.nextUrl.searchParams.get('limit')) || 40, 1), 200);
   const { rows } = await pool.query(
     `SELECT r.id, r.agent, r.trigger, r.source, r.status, r.started_at, r.finished_at,

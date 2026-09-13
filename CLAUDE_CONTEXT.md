@@ -487,6 +487,42 @@ Plan: `~/.claude/plans/but-let-s-step-back-buzzing-dongarra.md`.
   provider_id/id/member_id) — the profile fetch now backfills `linkedin_member_id` regardless.
   Not built: 3rd-degree yellows, posts engagement, reply detection, follow-up cadence.
 
+### 5.ad ICP control panel (`/icp` overview + `/icp/[id]` drill-down, 2026-09-13, app-only)
+
+One place to see how everything is happening for an ICP. `/icp` is now a **fleet overview**: `FleetStrip`
+(kill switch, one chip per agent with last run + 24 h counters and admin enable/disable, the viewer's
+quota bars, paused LinkedIn accounts + Resume) over one `IcpRow` per ICP (stage `FunnelBar`, coverage
+emp/res/email/warm/route, `RunPill`, "won't run: <reason>", pending-approval badge, the old actions).
+Each row opens **`/icp/[id]`**, the journey for that list in pipeline order: 2 · list funnel → 1 ·
+Definition (criteria + fit distribution) → 3 · Leads Finder (variant, cursor, empty runs, backoff,
+searches-today bar, 7-day sparkline, top finds, last runs) → 4 · Enricher (coverage over eligible leads,
+7-day attempts kind × result, credits/profile-fetch bars, failures) → 5 · Graph & routes (owner graph
+totals, mirror phase, degree split, hops histogram, shortest routes, Rebuild) → 6 · Outreach & intros
+(pending via `ApprovalsPanel`, decided counts, intro asks in flight) → Leads (`LeadsTable`, stage/score/warm
+filters, per-lead coverage dots) → Activity. The old in-place `IcpLeads` view is gone; `IcpLeads.tsx` keeps
+`RunPill`, `ActivityList`, `DegreeWarm`.
+
+- **Reads are direct SQL, polled** (`lib/use-poll.ts`: 45 s overview / 30 s drill-down, paused while the
+  tab is hidden, one request at a time): `GET /api/icp/overview` (`?scope=all` admin) and
+  `GET /api/icp/[id]/panel`; contract in `lib/icp-panel.ts`; quota port of the kernel's `linkedin_quota`
+  in `lib/quota-server.ts` (searches = `agent_runs`, profile fetches + email credits = `prospect_enrichment`,
+  LinkedIn action caps from `agents.linkedin_limits` over the Python DEFAULTS).
+- **LOAD-BEARING: never `Promise.all` a fan-out of queries on a polled route.** The Supabase pooler runs in
+  session mode with 15 clients shared with production; the first version of the panel route fired 22
+  queries at once and 500'd with `EMAXCONNSESSION`. Both panel reads check out ONE client
+  (`pool.connect()`), run their (merged) queries in sequence, and `ownerQuotas(ids, client)` takes it too.
+- **Visibility**: `visibleIcp(id, session)` in `lib/icp-server.ts` = owner OR admin, and returns
+  `owner_user_id` so prospects are scoped by the ICP's owner. This also fixed `GET /api/icp/[id]/leads`
+  and `/activity`, which filtered prospects by the SESSION user, so an admin could never see a colleague's
+  list. Write routes are unchanged: run/archive stay owner-only (buttons disabled with a tooltip for an
+  admin on a colleague's ICP), pause/resume goes through the kernel, approve/skip only renders for the
+  owner, Rebuild graph only for the owner (it is the session's own graph).
+- Shared primitives for this and future panels: `components/panel/{SectionCard,StatTile,ProgressBar,
+  FunnelBar,Sparkline}.tsx`. Other pages' private `MetricCard`/`Stat` copies were left alone.
+- Not built: policy editor (`/admin/policies`), an `icp_id` filter on `/api/agents/approvals` (the panel
+  embeds them), SSE. Latency from a laptop is ~2–4 s per panel load (30 sequential round trips to
+  eu-west-1); from the EC2 box it is well under a second.
+
 ## 6. Env vars
 
 All must be in `.env.local` (dev) and as GitHub repo secrets (prod — workflow writes them to `.env.production`).

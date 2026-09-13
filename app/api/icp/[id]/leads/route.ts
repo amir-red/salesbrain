@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { visibleIcp } from '@/lib/icp-server';
 
 /**
  * The ICP's list: every prospect the Leads Finder (or a manual search / import)
@@ -10,13 +11,16 @@ import { getSession } from '@/lib/auth';
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const own = await pool.query(`SELECT id, name FROM icp_profiles WHERE id = $1 AND owner_user_id = $2`, [params.id, session.userId]);
-  if (!own.rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  // Owner or admin may read; prospects are scoped by the ICP's OWNER, not the
+  // session, so an admin opening a colleague's list sees the colleague's leads.
+  const icp = await visibleIcp(params.id, session);
+  if (!icp) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const own = { rows: [{ id: icp.id, name: icp.name }] };
 
   const stage = req.nextUrl.searchParams.get('stage');
   const minScore = Number(req.nextUrl.searchParams.get('min_score') || 0);
   const warm = req.nextUrl.searchParams.get('warm') === '1';
-  const values: unknown[] = [params.id, session.userId];
+  const values: unknown[] = [params.id, icp.owner_user_id];
   const filters: string[] = [`p.icp_profile_id = $1`, `(p.owner_user_id = $2 OR p.owner_user_id IS NULL)`];
   if (stage) { values.push(stage); filters.push(`p.stage = $${values.length}`); }
   if (minScore > 0) { values.push(minScore); filters.push(`p.icp_score >= $${values.length}`); }
@@ -51,7 +55,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
               count(*) FILTER (WHERE engaged_at IS NOT NULL)::int AS engaged,
               count(*) FILTER (WHERE stage IN ('P8_DISQUALIFIED','P9_ARCHIVED'))::int AS archived
        FROM prospects p WHERE p.icp_profile_id = $1 AND (p.owner_user_id = $2 OR p.owner_user_id IS NULL)`,
-      [params.id, session.userId],
+      [params.id, icp.owner_user_id],
     ),
   ]);
   const pending = await pool.query(

@@ -36,3 +36,20 @@ export async function auditBestEffort(userId: string, command: string, input: Re
     );
   } catch { /* audit must never fail the request */ }
 }
+
+/**
+ * The ICP a request may READ: the owner's own, or any when the viewer is an
+ * admin (the control panel's "owners see theirs, admins see all" rule). The
+ * row carries `owner_user_id` so callers scope prospects by the ICP's owner,
+ * not by the session — the bug that made a colleague's list come back empty.
+ * Write routes keep their stricter owner-only checks.
+ */
+export async function visibleIcp(id: string, session: { userId: string; role: string }) {
+  const { rows } = await pool.query(
+    `SELECT i.*, u.name AS owner_name, u.email AS owner_email
+       FROM icp_profiles i JOIN users u ON u.id = i.owner_user_id
+      WHERE i.id = $1 AND (i.owner_user_id = $2 OR $3::boolean)`,
+    [id, session.userId, session.role === 'admin'],
+  );
+  return (rows[0] ?? null) as (Record<string, unknown> & { id: string; name: string; owner_user_id: string; owner_name: string; is_active: boolean; paused_at: string | null }) | null;
+}
