@@ -58,6 +58,45 @@ export interface OverviewPayload {
   holds_by_owner?: Record<string, Record<string, string>>;
 }
 
+/** The /icp list filter bar — search + owner narrow the row set, the rest just
+ *  reflect what's already visible. All client-side: the overview payload
+ *  already holds every field these need. */
+export interface IcpListFilter {
+  q: string;
+  owner: 'all' | string;          // owner_user_id, or 'all'
+  product: 'all' | string;
+  state: 'all' | 'running' | 'paused' | 'held';
+  pendingOnly: boolean;
+  noLinkedin: boolean;
+}
+export const EMPTY_ICP_FILTER: IcpListFilter = {
+  q: '', owner: 'all', product: 'all', state: 'all', pendingOnly: false, noLinkedin: false,
+};
+
+function icpState(icp: OverviewIcp, held: boolean): IcpListFilter['state'] {
+  if (held) return 'held';
+  return icp.paused_at ? 'paused' : 'running';
+}
+
+export function applyIcpFilters(
+  icps: OverviewIcp[],
+  filter: IcpListFilter,
+  holdsByOwner: Record<string, Record<string, string>> = {},
+): OverviewIcp[] {
+  const q = filter.q.trim().toLowerCase();
+  return icps.filter((icp) => {
+    if (filter.owner !== 'all' && icp.owner_user_id !== filter.owner) return false;
+    if (filter.product !== 'all' && (icp.product ?? '') !== filter.product) return false;
+    const held = Boolean(holdsByOwner[icp.owner_user_id]?.leads_finder);
+    if (filter.state !== 'all' && icpState(icp, held) !== filter.state) return false;
+    if (filter.pendingOnly && icp.approvals.pending <= 0) return false;
+    if (filter.noLinkedin && icp.owner_can_source !== false) return false;
+    if (q && !(icp.name.toLowerCase().includes(q) || icp.owner_name.toLowerCase().includes(q)
+        || (icp.description ?? '').toLowerCase().includes(q))) return false;
+    return true;
+  });
+}
+
 export interface AgentDef {
   name: string; label: string; description: string | null; kind: 'timer' | 'routine'; schedule: string | null;
   policy_key: string; enabled: boolean; config: Record<string, unknown>;

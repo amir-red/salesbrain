@@ -7,8 +7,10 @@ import IcpBuilder from '@/components/icp/IcpBuilder';
 import FleetStrip from '@/components/icp/FleetStrip';
 import IcpRow from '@/components/icp/IcpRow';
 import type { RunMode } from '@/components/icp/IcpRow';
+import IcpFilterBar from '@/components/icp/IcpFilterBar';
 import type { IcpProfile } from '@/lib/icp';
-import type { FleetPayload, OverviewPayload } from '@/lib/icp-panel';
+import { EMPTY_ICP_FILTER, applyIcpFilters } from '@/lib/icp-panel';
+import type { FleetPayload, IcpListFilter, OverviewPayload } from '@/lib/icp-panel';
 import { usePoll } from '@/lib/use-poll';
 import { relativeTime } from '@/lib/time';
 
@@ -25,6 +27,7 @@ export default function IcpPage() {
   const [mode, setMode] = useState<Mode>({ kind: 'list' });
   const [busy, setBusy] = useState<string | null>(null);
   const [estate, setEstate] = useState(false);       // admin: every employee's ICPs
+  const [filter, setFilter] = useState<IcpListFilter>(EMPTY_ICP_FILTER);
 
   const load = useCallback(async () => {
     const [a, b] = await Promise.all([fetch(`/api/icp/overview${estate ? '?scope=all' : ''}`), fetch('/api/agents')]);
@@ -65,6 +68,7 @@ export default function IcpPage() {
   };
 
   const icps = overview?.icps ?? [];
+  const shown = applyIcpFilters(icps, filter, overview?.holds_by_owner ?? {});
   const isAdmin = Boolean(overview?.is_admin);
   const viewer = overview?.viewer_user_id ?? '';
   const myQuota = overview?.quota_by_owner[viewer] ?? null;
@@ -95,7 +99,7 @@ export default function IcpPage() {
             <div className="flex items-center gap-3">
               <Link href="/prospecting" className="text-xs underline" style={{ color: 'var(--text-muted)' }}>Prospects →</Link>
               {isAdmin && (
-                <button onClick={() => setEstate((v) => !v)} className="px-3 py-1.5 rounded-lg text-xs"
+                <button onClick={() => { setEstate((v) => !v); setFilter((f) => ({ ...f, owner: 'all' })); }} className="px-3 py-1.5 rounded-lg text-xs"
                         style={{ border: '1px solid var(--border)', background: estate ? 'var(--accent)' : 'transparent', color: estate ? '#fff' : 'var(--text-muted)' }}
                         title="Admin: every employee's ICPs, including those filed by the partner app">
                   {estate ? 'All employees' : 'Mine only'}
@@ -120,6 +124,9 @@ export default function IcpPage() {
           <div className="p-4 space-y-4">
             {error && <div className="rounded-lg px-3 py-2 text-[11px]" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--red)' }}>Last refresh failed ({error}){overview ? '; showing the previous data.' : '.'}</div>}
             <FleetStrip fleet={fleet} quota={myQuota} onChanged={refresh} />
+            {icps.length > 0 && (
+              <IcpFilterBar filter={filter} icps={icps} showOwner={estate} shown={shown.length} total={icps.length} onChange={setFilter} />
+            )}
             {loading && !overview && <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</p>}
             {overview && icps.length === 0 && (
               <div className="text-center py-16 space-y-2" style={{ color: 'var(--text-muted)' }}>
@@ -130,8 +137,11 @@ export default function IcpPage() {
                 </button>
               </div>
             )}
+            {overview && icps.length > 0 && shown.length === 0 && (
+              <p className="text-sm py-10 text-center" style={{ color: 'var(--text-muted)' }}>No ICPs match these filters.</p>
+            )}
             <div className="space-y-3">
-              {icps.map((p) => (
+              {shown.map((p) => (
                 <IcpRow key={p.id} icp={p} quota={overview?.quota_by_owner[p.owner_user_id] ?? null} viewerUserId={viewer} isAdmin={isAdmin}
                         fleet={fleetFlags} hold={overview?.holds_by_owner?.[p.owner_user_id]?.leads_finder ?? null} busy={busy === p.id}
                         onRun={runAgent(p)} onState={(s) => setState(p, s)} onArchive={() => archive(p)} />
