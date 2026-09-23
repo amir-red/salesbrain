@@ -24,7 +24,7 @@ interface Approval {
   id: string; status: string; channel: string; subject: string | null; message: string; rationale: string | null;
   created_at: string; expires_at: string; person_name: string | null; title: string | null; company: string | null;
   icp_score: number | null; icp_name: string | null; owner_name: string | null;
-  kind?: string; intro_lead_name?: string | null;
+  kind?: string; intro_lead_name?: string | null; commercial?: boolean;
 }
 
 /**
@@ -206,16 +206,19 @@ export default function AgentsPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     {ap.kind === 'intro_request' && <div className="text-[10px] mb-0.5 inline-block px-1.5 py-0.5 rounded" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>\ud83e\udd1d Intro request \u2192 {ap.intro_lead_name || 'a lead'}</div>}
-                    <div className="font-semibold">{ap.person_name || '—'} <span className="font-normal text-xs" style={{ color: 'var(--text-muted)' }}>{[ap.title, ap.company].filter(Boolean).join(' · ')}</span></div>
-                    <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>via {ap.channel}{ap.icp_score !== null ? ` · fit ${ap.icp_score}` : ''}{ap.icp_name ? ` · ${ap.icp_name}` : ''}{ap.owner_name ? ` · for ${ap.owner_name}` : ''} · expires {relativeTime(ap.expires_at)}</div>
+                    {ap.kind === 'followup' && <div className="text-[10px] mb-0.5 inline-block px-1.5 py-0.5 rounded" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>🔁 Follow-up</div>}
+                    {ap.kind === 'proposal' && <div className="text-[10px] mb-0.5 inline-block px-1.5 py-0.5 rounded" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>💡 Supervisor proposal — approving runs it, sends nothing</div>}
+                    {ap.commercial && <div className="text-[10px] mb-0.5 ml-1 inline-block px-1.5 py-0.5 rounded" style={{ border: '1px solid var(--border)', color: 'var(--text-muted)' }}>contains an ask</div>}
+                    <div className="font-semibold">{ap.kind === 'proposal' ? (ap.subject || 'Proposal') : (ap.person_name || '—')} <span className="font-normal text-xs" style={{ color: 'var(--text-muted)' }}>{[ap.title, ap.company].filter(Boolean).join(' · ')}</span></div>
+                    <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{ap.kind === 'proposal' ? '' : `via ${ap.channel}`}{ap.icp_score !== null && ap.icp_score !== undefined ? ` · fit ${ap.icp_score}` : ''}{ap.icp_name ? ` · ${ap.icp_name}` : ''}{ap.owner_name ? ` · for ${ap.owner_name}` : ''} · expires {relativeTime(ap.expires_at)}</div>
                     {ap.rationale && <div className="text-[11px] mt-1 italic" style={{ color: 'var(--text-muted)' }}>{ap.rationale}</div>}
                   </div>
                   <div className="flex gap-2 shrink-0">
                     <button onClick={() => decide(ap.id, 'reject')} disabled={busy === ap.id} className="px-3 py-1.5 rounded-lg text-xs disabled:opacity-40" style={{ border: '1px solid var(--border)', color: 'var(--text)' }}>👎 Skip</button>
-                    <button onClick={() => decide(ap.id, 'approve')} disabled={busy === ap.id} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--green)', color: '#fff' }}>{busy === ap.id ? 'Working…' : '👍 Send'}</button>
+                    <button onClick={() => decide(ap.id, 'approve')} disabled={busy === ap.id} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--green)', color: '#fff' }}>{busy === ap.id ? 'Working…' : ap.kind === 'proposal' ? '👍 Do it' : '👍 Send'}</button>
                   </div>
                 </div>
-                {ap.subject && <div className="text-xs"><b>Subject:</b> {ap.subject}</div>}
+                {ap.subject && ap.kind !== 'proposal' && <div className="text-xs"><b>Subject:</b> {ap.subject}</div>}
                 <pre className="text-xs whitespace-pre-wrap rounded-lg p-3" style={{ background: 'var(--bg-input)', color: 'var(--text)', fontFamily: 'inherit' }}>{ap.message}</pre>
               </div>
             ))}

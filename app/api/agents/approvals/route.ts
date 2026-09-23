@@ -18,8 +18,8 @@ export async function GET(req: NextRequest) {
   if (session.role !== 'admin') { values.push(session.userId); where.push(`oa.owner_user_id = $${values.length}`); }
   if (!all) where.push(`oa.status = 'pending'`);
   const { rows } = await pool.query(
-    `SELECT oa.id, oa.status, oa.channel, oa.subject, oa.message, oa.rationale, oa.created_at, oa.decided_at,
-            oa.sent_at, oa.expires_at, oa.prospect_id, oa.person_id, oa.owner_user_id,
+    `SELECT oa.id, oa.status, oa.kind, oa.commercial, oa.channel, oa.subject, oa.message, oa.rationale,
+            oa.created_at, oa.decided_at, oa.sent_at, oa.expires_at, oa.prospect_id, oa.person_id, oa.owner_user_id,
             pe.full_name AS person_name, c.title, a.name AS company, p.icp_score, i.name AS icp_name,
             u.name AS owner_name
      FROM outreach_approvals oa
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
      LEFT JOIN prospects p ON p.id = oa.prospect_id
      LEFT JOIN contacts c ON c.id = p.contact_id
      LEFT JOIN accounts a ON a.id = p.account_id
-     LEFT JOIN icp_profiles i ON i.id = p.icp_profile_id
+     LEFT JOIN icp_profiles i ON i.id = COALESCE(oa.icp_profile_id, p.icp_profile_id)
      LEFT JOIN users u ON u.id = oa.owner_user_id
      ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
      ORDER BY oa.created_at DESC LIMIT 100`, values);

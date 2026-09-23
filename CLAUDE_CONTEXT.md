@@ -621,6 +621,26 @@ fan-out, aux LLM, delivery and the learning loop into Hermes. Plan: `~/.claude/p
   `agents.followup` (`spacing_days [4,7,10]`, `max_touches 3`, ships **disabled**); `followup_queue` feeds the
   outreach routine's new `followups` list (skill §2b: touch N+1, shorter, one new useful thing,
   `kind='followup'` → same card, same gate). `list_leads` returns the contact/reply columns.
+- **Phase E — L4 (core 047).** (1) **Supervisor** — the first agent that NOTICES: `commands/supervisor.py::
+  supervisor_queue` builds a per-owner dossier (per-ICP coverage, searches vs empty searches, funnel, approve/skip
+  counts, replies, stalled leads) and raises deterministic SIGNALS (`thin_list`, `search_exhausted`,
+  `searches_mostly_empty`, `low_approval_rate`, `no_replies`, `stalled_leads`); the routine
+  `ops:supervisor:daily` (08:30, skill `salesbrain-supervisor`) reasons over them and files **proposals** —
+  `outreach_approvals` rows of `kind='proposal'` with a whitelisted `proposal.action` (`queue_search`,
+  `queue_enrich`, `queue_graph_sync`, `followup_now`, `archive_prospect`, `note`). Same card, same 👍/👎;
+  approving runs `apply_proposal` (kernel commands a human could have issued — never a send). Capped per owner
+  (`agents.supervisor.proposals_per_owner`), ships disabled. (2) **Learn** — `ops:learn:weekly` (Sun 07:00) reads
+  the week's approved vs rejected drafts and replies (`learn_queue.py`) and may propose ONE `skill_manage` patch
+  to `salesbrain-outreach-agent`; `skills.write_approval: true` stages it for `/skills approve` — it is never
+  applied alone. Our skills are git-deployed READ-ONLY into `skills.external_dirs`
+  (`/root/.hermes/skills-salesbrain`); agent-authored ones go to `skills.create_dir` (`skills-agent`). Ships
+  disabled (`agents.learn`). (3) **Delegation** — `platform_toolsets.cron` gains `delegation` (+ `skills`); the
+  attention and outreach prompts fan out one `delegate_task` per person when a queue has >2 items (children
+  inherit the crm_* families and cannot send). (4) **Real profiles** — `deploy-server.sh::routine` creates a
+  routine's cron INSIDE its profile (`hermes -p outreach cron create`) when the operator has provisioned
+  `/root/.hermes/profiles/<p>/.env` (per-profile cron ticks since Hermes 0.21); otherwise it stays in the
+  default profile under the `ops:<profile>:` name the Workspace card binds to. `/agents` renders proposal /
+  follow-up / "contains an ask" badges; `AGENTS` now includes `supervisor` and `learn`.
 - **Known debt kept on purpose**: the app still writes `policy_rules` (kill switch), `icp_profiles`, `prospects`,
   `deals` directly; `lib/quota-server.ts` re-ports `policy/linkedin_limits.py`; 6 app-side LLM call sites remain.
 

@@ -10,10 +10,11 @@
 import type { AgentRun } from '@/lib/icp';
 import type { OwnerQuota } from '@/lib/icp-panel';
 
-export const AGENTS = ['leads_finder', 'enricher', 'graph_sync', 'outreach'] as const;
+export const AGENTS = ['leads_finder', 'enricher', 'graph_sync', 'outreach', 'supervisor', 'learn'] as const;
 export type AgentName = typeof AGENTS[number];
 export const AGENT_LABELS: Record<AgentName, string> = {
   leads_finder: 'Leads Finder', enricher: 'Enricher', graph_sync: 'Relationship Graph', outreach: 'Outreach',
+  supervisor: 'Supervisor', learn: 'Learn',
 };
 
 export type HoldState = 'running' | 'paused' | 'stopped';
