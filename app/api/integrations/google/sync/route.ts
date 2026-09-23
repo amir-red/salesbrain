@@ -9,6 +9,7 @@ import {
   extractEmail,
 } from '@/lib/google-oauth';
 import { normalizeCompanyName, normalizeDomain } from '@/lib/prospecting';
+import { kernelCall } from '@/lib/mcp/kernel-rpc';
 
 /**
  * POST body: { mode: 'contacts' | 'messages' | 'both', contact_id?: string, max?: number }
@@ -34,6 +35,7 @@ export async function POST(req: NextRequest) {
   const stats = {
     contacts_imported: 0,
     messages_imported: 0,
+    replies_recorded: 0,
     errors: 0,
     error_messages: [] as string[],
     account_email: token.email,
@@ -120,6 +122,19 @@ export async function POST(req: NextRequest) {
 
   // ── Messages sync ──
   if (mode === 'messages' || mode === 'both') {
+    // Reply detection (core 046): a RECEIVED mail from a contact who is one of
+    // this user's contacted prospects is a reply. The kernel records it once
+    // per Gmail message id, moves the lead to P6_REPLIED, stops the follow-up
+    // cadence and tells the owner. Only P4/P5 leads are worth the kernel call.
+    const contactedProspect = async (contactId: string): Promise<string | null> => {
+      const { rows } = await pool.query<{ id: string }>(
+        `SELECT id FROM prospects
+          WHERE contact_id = $1 AND owner_user_id = $2
+            AND stage IN ('P4_OUTREACH_DRAFTED', 'P5_SENT') LIMIT 1`,
+        [contactId, session.userId],
+      );
+      return rows[0]?.id ?? null;
+    };
     try {
       const contacts = body.contact_id
         ? await pool.query(
@@ -176,6 +191,22 @@ export async function POST(req: NextRequest) {
                 ]
               );
               stats.messages_imported++;
+
+              if (direction === 'received') {
+                const prospectId = await contactedProspect(contact.id);
+                if (prospectId) {
+                  try {
+                    const rec = await kernelCall('crm_record_reply', {
+                      channel: 'email', ref: `gmail:${m.id}`, prospect_id: prospectId,
+                      snippet: (parsed.body || parsed.subject || '').slice(0, 500),
+                      received_at: parsed.sent_at,
+                    }, session.userId);
+                    if (rec.recorded) stats.replies_recorded++;
+                  } catch (replyErr) {
+                    pushErr(`record-reply contact=${contact.id} mid=${m.id}`, replyErr);
+                  }
+                }
+              }
             } catch (msgErr) {
               pushErr(`gmail-insert contact=${contact.id} mid=${m.id}`, msgErr);
             }

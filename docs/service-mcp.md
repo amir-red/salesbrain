@@ -110,7 +110,7 @@ Four JSON-RPC methods:
 | Method | Purpose |
 |---|---|
 | `initialize` | Handshake — returns server info + protocol version. |
-| `tools/list` | The catalog (33 tools) with JSON-Schema for each. |
+| `tools/list` | The catalog (34 tools) with JSON-Schema for each. |
 | `tools/call` | Invoke one tool. This is where the work happens. |
 | `ping` | Health check. |
 
@@ -522,6 +522,11 @@ The approval is the ONLY way a message leaves. The kernel consumes the approved 
 approval, ever — a second attempt is refused as "already used"), and refuses any delivery it cannot tie to an
 owner's decision, whichever tool or surface asked. This is enforced in `salesbrain-core`, not in a prompt.
 
+**`crm_record_reply`** · write — Record that a contacted person replied. Moves the lead to `P6_REPLIED`, stops
+the cadence, logs an inbound interaction, marks a connector's intro ask replied, tells the owner. Idempotent.
+- `channel*` — `email` | `linkedin` · `ref*` — the provider message id · `prospect_id` / `person_id` — who
+- `snippet` — first lines, for the owner's digest · `received_at` — ISO timestamp
+
 ### LinkedIn
 
 **`linkedin_connect_start`** · write — Mint a hosted-auth link for the employee to connect their LinkedIn.
@@ -778,7 +783,16 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 
 ## 12. Changelog
 
-### 2026-09-23 — the send gate is a kernel invariant
+### 2026-09-23 — replies are detected; the send gate is a kernel invariant
+
+**Replies.** A prospect who answers — a new inbound LinkedIn message on a thread tied to them, or a received
+email the owner's Gmail sync sees — now moves to **`P6_REPLIED`** with `last_replied_at` / `reply_status`
+set, the follow-up cadence stops, and the owner is told. `list_leads` returns `last_contacted_at`,
+`touch_count`, `next_followup_at`, `last_replied_at`, `reply_status`. **New tool `crm_record_reply`**
+(`channel`, `ref` = provider message id, `prospect_id` or `person_id`, `snippet`) lets your app record a reply
+it saw itself (idempotent on `ref`). **Follow-ups**: `crm_outreach_propose(kind='followup')` files touch N+1;
+when `agents.followup` is enabled the outreach routine drafts them on the cadence policy.
+
 
 Every delivered message now consumes an owner-approved `outreach_approvals` row inside the kernel (`consumed_at`,
 one send per approval). Nothing on this surface changes for you: `crm_outreach_propose` → `crm_outreach_decide`

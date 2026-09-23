@@ -592,6 +592,35 @@ fan-out, aux LLM, delivery and the learning loop into Hermes. Plan: `~/.claude/p
   exists — configs list families. (3) `__version__` reads the installed distribution; `docs/architecture.md`
   and `docs/telegram-bot.md` rewritten for the post-Phase-5 system; dead `CRON_SECRET` /
   `TELEGRAM_WEBHOOK_SECRET` / `PUBLIC_FORM_BASE_URL` dropped from deploy; dead notify helpers removed.
+- **Phase B — scheduling into Hermes.** The seven deterministic sweeps (leads_finder, enricher, graph_sync,
+  linkedin_sync, grant_signals, board_nudge, pmi_sync) are `hermes cron --no-agent --script` jobs, created by
+  `deploy-server.sh` by name and **hard-replacing** the systemd timers (units deleted). Shared contract
+  `assets/scripts/_cron.py`: detail JSON → stderr (run log), ONE delivered line on stdout only when work
+  happened, `{"wakeAgent": false}` otherwise, exit 1 on failure (they used to `sys.exit(0)` on every error).
+  Config is written with `hermes config set` (no regex); `platform_toolsets.cron` = the five families the
+  routines need. App `lib/service-mcp/schedule.ts` follows the cron expressions.
+- **Phase C — Hermes 0.21.4 (v2026.9.21), public seams only.** `identity.py` reads the turn's task-local
+  session vars (`gateway.session_context.get_session_env`: platform / user id / chat id) — no more `state.db`
+  reads. `board_hook.py` replies via `ctx.dispatch_tool("send_message")` (the private
+  `gateway._adapter_for_source` is gone upstream) and pairs a linked user via `PairingStore.generate_code →
+  list_pending → approve_request`. `llm.py` routes aux calls through `ctx.llm` under the registered
+  `salesbrain_aux` auxiliary task (model in `auxiliary.salesbrain_aux.*`); the urllib Bedrock client remains
+  only as the out-of-process fallback for cron scripts. **`telegram_buttons.py`** handles `bv:`/`oa:` inline
+  taps inside the gateway (`ctx.register_telegram_handler`, pattern-scoped, early group) — `board_callbacks.py`
+  and its unit are deleted; no second poller on the CRM bot. `deploy-server.sh` runs the box upgrade only with
+  `UPGRADE_HERMES=1` (pre-flight, HERMES_HOME tarball, checkout tag, deps, `config migrate`); CI pins v2026.9.21
+  and `test_contract_registry.py` asserts every public seam we rely on (fails on 0.19.0, as it should).
+- **Phase D — senses (core 046).** `commands/replies.py::record_reply` is the one writer of "they answered":
+  `P6_REPLIED` (from P4/P5 only), `last_replied_at`, `reply_status`, `next_followup_at = NULL`, an INBOUND
+  `interactions` row (caps finally see both directions), `intro_requests.replied_at`, pending follow-up drafts
+  expired, `reply_events` ledger (idempotent on provider message id), owner DM. Sources: `sync_thread` emits
+  `reply_received` for a new `is_sender=false` message on a thread matched to a prospect (member id → handle →
+  slug; `linkedin_sync.py` and `crm_linkedin_sync` record them via `salesbrain_hermes.replies`), and the app's
+  Gmail sync calls **`crm_record_reply`** for a received mail from a P4/P5 prospect (also on the service MCP —
+  34 tools). Cadence: `mark_approval_result` bumps `touch_count` and arms `next_followup_at` from
+  `agents.followup` (`spacing_days [4,7,10]`, `max_touches 3`, ships **disabled**); `followup_queue` feeds the
+  outreach routine's new `followups` list (skill §2b: touch N+1, shorter, one new useful thing,
+  `kind='followup'` → same card, same gate). `list_leads` returns the contact/reply columns.
 - **Known debt kept on purpose**: the app still writes `policy_rules` (kill switch), `icp_profiles`, `prospects`,
   `deals` directly; `lib/quota-server.ts` re-ports `policy/linkedin_limits.py`; 6 app-side LLM call sites remain.
 

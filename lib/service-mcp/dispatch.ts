@@ -243,7 +243,9 @@ export const SERVICE_TOOLS: ToolDef[] = [
     name: 'list_leads',
     description:
       "This employee's prospects for an ICP (or all their ICPs), best fit first, with contact, " +
-      "company, score, stage, research summary, and reachability.",
+      "company, score, stage, research summary, reachability, and the send history: " +
+      "last_contacted_at, touch_count, next_followup_at, last_replied_at, reply_status " +
+      "(stage P6_REPLIED = they answered; follow-ups stop automatically).",
     inputSchema: obj({
       icp_id: { type: 'string' },
       stage: { type: 'string' },
@@ -319,6 +321,25 @@ export const SERVICE_TOOLS: ToolDef[] = [
         commercial: { type: 'boolean', description: 'True if the message contains an ask; shown on the card, drives the value gate at send' },
       },
       ['person_id', 'channel', 'message'],
+    ),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_record_reply',
+    description:
+      "Record that a contacted lead REPLIED (email or LinkedIn). Moves the lead to P6_REPLIED, stops the " +
+      "follow-up cadence, logs the inbound interaction and tells the owner. Idempotent on ref (the provider " +
+      "message id). Use when YOUR system sees a reply SalesBrain has not recorded.",
+    inputSchema: obj(
+      {
+        channel: { type: 'string', enum: ['email', 'linkedin'] },
+        ref: { type: 'string', description: 'Provider message id' },
+        prospect_id: { type: 'string' },
+        person_id: { type: 'string' },
+        snippet: { type: 'string' },
+        received_at: { type: 'string', description: 'ISO timestamp' },
+      },
+      ['channel', 'ref'],
     ),
     needsOwner: true,
   },
@@ -521,6 +542,8 @@ async function listLeads(ownerUserId: string, args: Record<string, unknown>): Pr
             p.network_degree, p.warm_paths, p.created_at, p.scored_at, p.engaged_at, p.converted_deal_id,
             p.icp_profile_id, p.person_id, c.full_name, c.title, c.email, c.linkedin_url,
             a.name AS company_name, a.industry, a.company_size,
+            -- steps 7-9: what has gone out, whether they answered, when the next touch is due
+            p.last_contacted_at, p.touch_count, p.next_followup_at, p.last_replied_at, p.reply_status,
             -- step 5 summary, from the stored route entry (crm_path_find)
             (SELECT (e->>'best_path_hops')::int FROM jsonb_array_elements(COALESCE(p.warm_paths, '[]'::jsonb)) e
               WHERE e->>'type' = 'route' LIMIT 1) AS best_path_hops,
@@ -687,7 +710,7 @@ const PASSTHROUGH = new Set([
   'crm_icp_define', 'crm_icp_preview', 'crm_icp_list', 'crm_icp_archive', 'crm_icp_set_state',
   'crm_icp_rescore', 'crm_leads_finder_run',
   'crm_agent_request_run', 'crm_agent_set_user_state', 'crm_enrich_prospect', 'crm_outreach_propose',
-  'crm_outreach_pending', 'crm_outreach_decide', 'crm_linkedin_status',
+  'crm_outreach_pending', 'crm_outreach_decide', 'crm_record_reply', 'crm_linkedin_status',
   'crm_linkedin_revoke', 'crm_agent_activity', 'crm_agent_status', 'crm_linkedin_quota',
   'crm_graph_status', 'crm_graph_edges', 'crm_graph_sync',
   'crm_graph_reach', 'crm_who_can_reach',
