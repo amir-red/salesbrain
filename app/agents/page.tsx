@@ -141,7 +141,7 @@ export default function AgentsPage() {
                           {a.enabled ? 'enabled' : 'off'}
                         </span>
                       </div>
-                      <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{a.kind === 'timer' ? 'systemd timer' : 'Hermes routine'} · {a.schedule}</div>
+                      <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{a.kind === 'timer' ? 'Hermes cron (no model)' : 'Hermes routine (model turn)'} · {a.schedule}</div>
                     </div>
                     {data.is_admin && (
                       <button onClick={() => patch({ agent: a.name, enabled: !a.enabled }, a.name)} disabled={busy === a.name}
