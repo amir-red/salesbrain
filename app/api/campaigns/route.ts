@@ -19,9 +19,9 @@ export async function GET() {
   const { rows } = await pool.query(
     `SELECT c.*, u.name as created_by_name,
        (SELECT COUNT(*)::int FROM prospects WHERE campaign_id = c.id) as prospect_count,
-       (SELECT COUNT(*)::int FROM outreach_messages om
-          JOIN prospects p ON p.id = om.prospect_id
-          WHERE p.campaign_id = c.id AND om.status = 'sent') as messages_sent
+       (SELECT COUNT(*)::int FROM outreach_approvals oa
+          JOIN prospects p ON p.id = oa.prospect_id
+          WHERE p.campaign_id = c.id AND oa.status = 'sent') as messages_sent
      FROM campaigns c
      LEFT JOIN users u ON u.id = c.created_by
      ORDER BY c.updated_at DESC`

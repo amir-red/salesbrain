@@ -29,10 +29,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const acting = await resolveActingUser(session, params.id, parseActAs(req.nextUrl.searchParams.get('as')), undefined, false);
   const actingUserId = 'error' in acting ? session.userId : acting.actingUserId;
 
-  const [briefs, scores, messages, events, approvals, intros, teammates, ownerCan, viewerCan] = await Promise.all([
+  const [briefs, scores, events, approvals, intros, teammates, ownerCan, viewerCan] = await Promise.all([
     pool.query(`SELECT * FROM research_briefs WHERE prospect_id = $1 ORDER BY created_at DESC`, [params.id]),
     pool.query(`SELECT * FROM qualification_scores WHERE prospect_id = $1 ORDER BY created_at DESC`, [params.id]),
-    pool.query(`SELECT * FROM outreach_messages WHERE prospect_id = $1 ORDER BY created_at ASC`, [params.id]),
     pool.query(`SELECT * FROM prospect_events WHERE prospect_id = $1 ORDER BY created_at DESC LIMIT 50`, [params.id]),
     // Kernel-side drafts for this lead: cold drafts (prospect_id) and intro
     // asks to a connector on the lead's behalf (intro_for_prospect_id).
@@ -65,7 +64,6 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     prospect: rows[0],
     briefs: briefs.rows,
     scores: scores.rows,
-    messages: messages.rows,
     events: events.rows,
     approvals: approvals.rows,
     intro_requests: intros.rows,
@@ -90,11 +88,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const entries = Object.entries(body).filter(([k]) => ALLOWED.has(k));
   if (entries.length === 0) return NextResponse.json({ error: 'No valid fields' }, { status: 400 });
 
-  const sets = entries.map(([k], i) => `${k} = $${i + 2}`).join(', ');
+  // Owner or admin only — a lead's owner_user_id is tenancy, not a preference.
+  const sets = entries.map(([k], i) => `${k} = $${i + 3}`).join(', ');
   const values = entries.map(([, v]) => v);
   const { rows } = await pool.query(
-    `UPDATE prospects SET ${sets} WHERE id = $1 RETURNING *`,
-    [params.id, ...values]
+    `UPDATE prospects SET ${sets} WHERE id = $1 AND (owner_user_id = $2 OR $${entries.length + 3}) RETURNING *`,
+    [params.id, session.userId, ...values, session.role === 'admin']
   );
   if (rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   return NextResponse.json(rows[0]);

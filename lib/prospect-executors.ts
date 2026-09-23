@@ -15,14 +15,12 @@
  *
  * What remains is app-owned work the kernel does not do:
  *   - create_or_import_prospect  (the /prospects and Discovery forms)
- *   - send_outreach_message      (the email send + its deliverability guards)
  *   - convert_prospect_to_deal   (the UI's Convert button)
  *   - research_company_from_url  (the Discovery "research all" button)
  */
 
 import Anthropic from '@anthropic-ai/sdk';
 import pool from './db';
-import { sendEmail } from './email';
 import { normalizeDomain, normalizeCompanyName, type ProspectStage } from './prospecting';
 import { MODEL, anthropic, webSearchTools } from './llm';
 
@@ -157,83 +155,6 @@ export async function exec_create_or_import_prospect(
 
 // ─── send_outreach_message ──────────────────────────────────────
 
-const DAILY_SEND_LIMIT_PER_USER = parseInt(process.env.OUTREACH_DAILY_LIMIT || '50', 10);
-const MIN_MINUTES_BETWEEN_SAME_DOMAIN = 3;
-
-function buildUnsubscribeFooter(prospectId: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL || 'https://salescrm.chipchip.social';
-  return `\n\n---\nIf you'd rather not hear from me, reply "unsubscribe" or ignore this message.\n(${base}/u/${prospectId})`;
-}
-
-export async function exec_send_outreach_message(input: { message_id: string }): Promise<Record<string, unknown>> {
-  const { rows } = await pool.query(
-    `SELECT om.*, p.stage as prospect_stage, p.owner_user_id FROM outreach_messages om
-     JOIN prospects p ON p.id = om.prospect_id WHERE om.id = $1`,
-    [input.message_id]
-  );
-  const msg = rows[0];
-  if (!msg) return { error: 'Message not found' };
-  if (msg.status === 'sent') return { error: 'Already sent' };
-  if (!msg.to_email) return { error: 'No recipient email on contact' };
-
-  // Suppression check
-  const domain = msg.to_email.includes('@') ? msg.to_email.split('@')[1].toLowerCase() : null;
-  const { rows: suppressed } = await pool.query(
-    `SELECT id FROM suppression_list WHERE (LOWER(email) = LOWER($1)) OR (domain IS NOT NULL AND LOWER(domain) = $2) LIMIT 1`,
-    [msg.to_email, domain]
-  );
-  if (suppressed.length > 0) {
-    await pool.query(`UPDATE outreach_messages SET status = 'canceled' WHERE id = $1`, [input.message_id]);
-    return { error: 'Recipient on suppression list', suppressed: true };
-  }
-
-  // Daily send limit per user (protects domain reputation)
-  if (msg.owner_user_id) {
-    const { rows: countRows } = await pool.query(
-      `SELECT COUNT(*)::int as n FROM outreach_messages om
-       JOIN prospects p ON p.id = om.prospect_id
-       WHERE p.owner_user_id = $1 AND om.status = 'sent' AND om.sent_at >= date_trunc('day', now())`,
-      [msg.owner_user_id]
-    );
-    if ((countRows[0]?.n || 0) >= DAILY_SEND_LIMIT_PER_USER) {
-      return { error: `Daily send limit (${DAILY_SEND_LIMIT_PER_USER}) reached for this user. Resume tomorrow or raise OUTREACH_DAILY_LIMIT.` };
-    }
-  }
-
-  // Per-domain throttle — space out sends to the same recipient domain
-  if (domain) {
-    const { rows: recent } = await pool.query(
-      `SELECT om.sent_at FROM outreach_messages om
-       WHERE om.status = 'sent' AND om.to_email LIKE '%@' || $1
-         AND om.sent_at >= now() - interval '${MIN_MINUTES_BETWEEN_SAME_DOMAIN} minutes'
-       ORDER BY om.sent_at DESC LIMIT 1`,
-      [domain]
-    );
-    if (recent.length > 0) {
-      return { error: `Throttled: another message to ${domain} was sent within the last ${MIN_MINUTES_BETWEEN_SAME_DOMAIN} minutes. Try again shortly.` };
-    }
-  }
-
-  const bodyWithFooter = msg.body + buildUnsubscribeFooter(msg.prospect_id);
-
-  try {
-    await sendEmail({ to: msg.to_email, subject: msg.subject || 'Hello', body: bodyWithFooter });
-    await pool.query(
-      `UPDATE outreach_messages SET status = 'sent', sent_at = now() WHERE id = $1`,
-      [input.message_id]
-    );
-    await pool.query(
-      `UPDATE prospects SET last_contacted_at = now() WHERE id = $1`,
-      [msg.prospect_id]
-    );
-    await advanceStage(msg.prospect_id, msg.prospect_stage, 'P5_SENT', 'Outreach sent');
-    return { sent: true, message_id: input.message_id };
-  } catch (err) {
-    await pool.query(`UPDATE outreach_messages SET status = 'failed' WHERE id = $1`, [input.message_id]);
-    return { error: err instanceof Error ? err.message : 'Send failed' };
-  }
-}
-
 // ─── convert_prospect_to_deal ──────────────────────────────────
 
 export async function exec_convert_prospect_to_deal(
@@ -265,7 +186,8 @@ export async function exec_convert_prospect_to_deal(
     [input.prospect_id]
   );
   const { rows: msgRows } = await pool.query(
-    `SELECT direction, subject, body, sent_at FROM outreach_messages WHERE prospect_id = $1 ORDER BY created_at ASC`,
+    `SELECT channel, subject, message AS body, sent_at FROM outreach_approvals
+      WHERE prospect_id = $1 AND status = 'sent' ORDER BY sent_at ASC`,
     [input.prospect_id]
   );
 
@@ -282,7 +204,7 @@ export async function exec_convert_prospect_to_deal(
   if (msgRows.length > 0) {
     notesParts.push('--- Outreach history ---');
     for (const m of msgRows) {
-      notesParts.push(`[${m.direction}] ${m.subject || ''}\n${m.body?.slice(0, 200) || ''}`);
+      notesParts.push(`[sent via ${m.channel}] ${m.subject || ''}\n${m.body?.slice(0, 200) || ''}`);
     }
   }
   const notes = notesParts.join('\n\n');

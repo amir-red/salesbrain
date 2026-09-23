@@ -110,7 +110,7 @@ Four JSON-RPC methods:
 | Method | Purpose |
 |---|---|
 | `initialize` | Handshake — returns server info + protocol version. |
-| `tools/list` | The catalog (24 tools) with JSON-Schema for each. |
+| `tools/list` | The catalog (33 tools) with JSON-Schema for each. |
 | `tools/call` | Invoke one tool. This is where the work happens. |
 | `ping` | Health check. |
 
@@ -501,11 +501,14 @@ SalesBrain administrator can only be lifted by one. `crm_agent_status` lists the
 
 ### Outreach
 
-**`crm_outreach_propose`** · write — File a first-message draft for the employee to approve. Sends nothing. One
-pending draft per person.
+**`crm_outreach_propose`** · write — File a draft for the employee to approve. Sends nothing. One
+pending draft per person per kind.
 - `person_id*` — the recipient · `channel*` — `email` | `linkedin` · `message*` — the full draft
 - `subject` — email only · `linkedin_thread_id` — LinkedIn only, an existing thread
 - `prospect_id` / `rationale` — link + one-line why
+- `kind` — `outreach` (default) | `followup` (touch N+1 to someone already contacted)
+- `commercial` — `true` when the message contains an ask. Recorded on the card so the approver sees the claim,
+  and it is the value the commercial gate runs on at send time — the sender cannot lower it later.
 
 **`crm_outreach_pending`** · read — The employee's drafts awaiting a decision, with the card text. Render these
 in your UI.
@@ -514,6 +517,10 @@ in your UI.
 **`crm_outreach_decide`** · send — Approve or reject as the owner. **Approve sends now** through the policy gate
 and reports the outcome; reject files it as skipped.
 - `approval_id*` — from `crm_outreach_pending` · `decision*` — `approve` | `reject`
+
+The approval is the ONLY way a message leaves. The kernel consumes the approved row when it sends (one send per
+approval, ever — a second attempt is refused as "already used"), and refuses any delivery it cannot tie to an
+owner's decision, whichever tool or surface asked. This is enforced in `salesbrain-core`, not in a prompt.
 
 ### LinkedIn
 
@@ -770,6 +777,13 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 ---
 
 ## 12. Changelog
+
+### 2026-09-23 — the send gate is a kernel invariant
+
+Every delivered message now consumes an owner-approved `outreach_approvals` row inside the kernel (`consumed_at`,
+one send per approval). Nothing on this surface changes for you: `crm_outreach_propose` → `crm_outreach_decide`
+was already the only lane. **New on propose:** `kind` (`outreach` | `followup`) and `commercial` (recorded on the
+card; the value gate runs on it at send time). Cards for a follow-up read "🔁 Follow-up #N".
 
 ### 2026-09-13 — per-person agent holds
 

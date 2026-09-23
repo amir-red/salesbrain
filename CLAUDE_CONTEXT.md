@@ -29,9 +29,9 @@ Long-term plan history lives in `~/.claude/plans/lazy-orbiting-sky.md` — every
 | Framework | **Next.js 14 (App Router)** with TypeScript strict mode | All API routes under `app/api/*` |
 | DB | **PostgreSQL via Supabase** (`pg` driver, no ORM) | Connection string in `DATABASE_URL`. Pooler endpoint. |
 | Auth | **`iron-session` + `bcryptjs`** | Session cookie `salesbrain_session`; sealed with `SESSION_SECRET`. Helper: `getSession()` in `lib/auth.ts`. |
-| AI | **`@anthropic-ai/sdk`** with Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`) | Tool-use loop in `lib/agent.ts`. Adaptive thinking, prompt caching on the system prefix. |
+| AI / agent | **Hermes Agent** (Nous Research) on the server runs every agent turn; the app has NO agent loop. Web chat = a Hermes api_server session (`lib/hermes-proxy.ts`). App-side one-shot model calls share `lib/llm.ts` (`MODEL` = Bedrock `claude-sonnet-4-6`; CI forbids literal ids). | Kernel = `salesbrain-core` (Python), plugin = `salesbrain-hermes`. See `docs/architecture.md` and §5.af. |
 | Email | **Resend** via `lib/email.ts` → `sendEmail({to, subject, body})` | `RESEND_API_KEY` + `EMAIL_FROM` |
-| Telegram | Bot API for board reviews | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOARD_CHAT_ID`, `TELEGRAM_WEBHOOK_SECRET` |
+| Telegram | The **Hermes gateway** owns the bot(s): chat, `/start LINK`, board votes, approval buttons. App only mints link codes and can nudge the board. | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOARD_CHAT_ID` (app); gateway tokens live in the Hermes `.env` on the box. |
 | Styling | **Tailwind v4** + CSS variables for dark theme | Vars: `--bg`, `--bg-card`, `--bg-input`, `--border`, `--text`, `--text-muted`, `--accent`, `--accent-glow`. Defined in `app/globals.css`. **Note:** old code may use `var(--card)` — the correct var is `var(--bg-card)`. |
 | Process mgr | **PM2** | `ecosystem.config.cjs` runs port 3002 |
 | Reverse proxy | **Caddy** | Adds `X-Forwarded-Host` / `X-Forwarded-Proto` |
@@ -137,22 +137,17 @@ All migrations have been **applied to Supabase**. `db/schema.sql` is the canonic
 
 ## 5. Major features (chronological, with key files)
 
-### 5.1 The agent loop (`lib/agent.ts`, `lib/tool-executors.ts`, `lib/tools.ts`)
+### 5.1 The agent runtime — Hermes (Phase 5, 2026-07; `lib/agent.ts` et al. deleted)
 
-- `POST /api/agent` streams NDJSON events of types `text`, `tool_start`, `tool_result`, `done`, `error`.
-- Per-turn flow: `loadHistory(dealId)` → append new user msg → loop `anthropic.messages.create` → for each `tool_use` block, execute, persist `tool_result` to `conversations`, push back → repeat until `stop_reason === 'end_turn'`.
-- **History sanitization** in `loadHistory()` has 5 phases. THIS IS THE TRICKY PART:
-  - **Phase 0:** Fetch `LIMIT 200` rows DESC, reverse to ASC, then trim leading non-`user` rows so the window starts at a cycle boundary.
-  - **Phase 1:** Reconstruct Anthropic message format from flat rows. Tool IDs are `hist_1`, `hist_2`, … (FIFO matched).
-  - **Phase 2:** Validate `tool_use`/`tool_result` pairing. Broken pairs → strip the tool_use, keep text-only.
-  - **Phase 3:** Ensure role alternation. Never drop a message containing structured blocks — merge content arrays if needed.
-  - **Phase 4a:** Strip orphan `tool_use` blocks (no matching tool_result after).
-  - **Phase 4b:** Strip orphan `tool_result` blocks (no matching tool_use before).
-  - **Phase 5:** Final shift loop — drop leading non-`user` rows AND leading `user` rows whose content is all `tool_result` blocks.
-
-This complexity exists because Anthropic 400s with `messages.0.content.0: unexpected tool_use_id` or `tool_use ids were found without tool_result blocks` if the array is malformed. Every line of this loader is fighting one specific failure mode we've actually hit in production. **Don't simplify it without strong reason.**
-
-- **Prompt caching:** `buildSystemPrompt()` returns `{ stable, dynamic }`. The `system` arg passed to Anthropic is a 2-element array where the stable region has `cache_control: { type: 'ephemeral' }`. Repeat calls within 5 min hit the cache. Verify via `response.usage.cache_read_input_tokens`.
+- `POST /api/agent` (`app/api/agent/route.ts`) checks deal visibility, then `lib/hermes-proxy.ts` opens/reuses a
+  Hermes **api_server** session (`HERMES_API_URL`, `HERMES_API_KEY`; mapping in `agent_sessions`), streams
+  the turn (SSE → the legacy NDJSON union `text|tool_start|tool_result|done|error`), and appends
+  `[context] deal_id=…`. History hydrates from `GET /api/sessions/{id}/messages`.
+- Tools, identity (`tool_request` middleware reading `agent_sessions` / Telegram links), memory (custom
+  `MemoryProvider`) and skills live in `salesbrain-hermes`. The 5-phase history sanitizer, `buildSystemPrompt`
+  and prompt caching described in earlier versions of this file no longer exist in this repo.
+- `lib/mcp/kernel-rpc.ts::kernelCall(tool, args, userId)` reaches the same Python handlers out of process
+  (`python -m salesbrain_hermes.rpc`, request in env, 30 s / 180 s timeouts) for UI routes and both MCP endpoints.
 
 ### 5.2 9-gate sales + 10-gate grant pipelines (`lib/gates.ts`)
 
@@ -166,13 +161,17 @@ This complexity exists because Anthropic 400s with `messages.0.content.0: unexpe
 
 - At G3/G7 (sales) or G3/G7/G9 (grant), agent calls `send_telegram` with a structured board summary.
 - `board_decisions` row created with `votes_required: 5`, `votes_to_block: 4`, `total_voters: 8`.
-- Telegram callbacks (`/api/telegram` webhook) post to `board_votes`. When 5 proceed → status flips to `approved`. Status visible on `/approvals`.
+- Votes arrive as replies in the board group and are counted by the ring's `pre_gateway_dispatch` hook (`salesbrain-hermes/src/salesbrain_hermes/board_hook.py`, no LLM in the vote path); button taps by the ring's callback handler. When 5 proceed → status flips to `approved`. Status visible on `/agents` and the deal page.
 - Flag `board_sent_g${N}` on the deal prevents duplicate sends.
 - G7 board summaries MUST include `deployment_plan` — enforced in the system prompt.
 
-### 5.4 Pre-deal prospecting (`lib/prospect-tools.ts`, `lib/prospect-executors.ts`)
+### 5.4 Pre-deal prospecting — now kernel + ring (`crm_prospect_*`, `crm_icp_*`)
 
-10-stage pipeline P0–P9. 12 AI tools — `create_or_import_prospect`, `enrich_prospect`, `score_prospect_fit`, `research_company_from_url` (fetches website + Claude analyzes), `generate_research_brief`, `draft_outreach_message`, `send_outreach_message` (Resend + daily-cap + 3-min per-domain throttle + auto unsubscribe footer), `classify_outreach_reply`, `convert_prospect_to_deal`, `archive_prospect`, `analyze_communication_style` (per-user scoped), `import_messages_from_user_text`.
+10-stage pipeline P0–P9 (`salesbrain-core/.../commands/prospecting.py`). The app keeps three executors in
+`lib/prospect-executors.ts` (create/import, convert to deal, research from URL); everything else — scoring,
+sourcing, enrichment, drafting, sending — is kernel/ring (§5.x–§5.af). The old `send_outreach_message` path
+and the `outreach_messages` table it read are gone (2026-09-23): every send is an approved
+`outreach_approvals` row.
 
 ### 5.5 Look-alike from won deals (planned only, not built)
 
@@ -180,7 +179,7 @@ Plan exists but no code. Skip unless asked.
 
 ### 5.6 Voice input + mobile + activity timeline + daily digest + decay monitor + meeting prep
 
-All shipped. Voice input uses `webkitSpeechRecognition`. Daily digest cron runs at `/api/cron/daily-digest`. Decay monitor at `lib/decay.ts`. Meeting prep is an agent tool (`prep_meeting`) that produces a structured brief.
+Voice input (`webkitSpeechRecognition`), mobile layout and the activity timeline shipped and remain. The daily digest, decay monitor and `prep_meeting` were part of the deleted in-app runtime; their successors are the ring's attention digest (§5.af) and `crm_*` tools.
 
 ### 5.7 Google integration (`lib/google-oauth.ts`)
 
@@ -566,6 +565,36 @@ ICP** (not the user); a **new admin page `/admin/users`**.
 - Not built: cancel-in-flight (the owner chose hard-off), deregistering an employee (no `revoked_at` on
   `external_employees`; `contacts`/`prospects` FKs would block a hard delete anyway), a policy editor.
 
+### 5.af Move the agent layer into Hermes (2026-09-23, feat/hermes-native, migrations 045 + 046)
+
+The 2026-09-21 audit (`Sales CRM/AUDIT.md`, artifact "SalesBrain on Hermes") found the product running *beside*
+Hermes: 8/10 workers on systemd with no agent turn, 119 tools in one toolset, our own LLM client / delivery /
+approvals / mailbox, four private Hermes seams, pin 11 releases behind, and human approval enforced by prompt
+text. Decision: keep the kernel (tenancy, RBAC, budgets, approvals-as-rows, **the send gate**); move triggers,
+fan-out, aux LLM, delivery and the learning loop into Hermes. Plan: `~/.claude/plans/salesbrain-hermes-logical-toast.md`.
+
+- **Phase A — the floor.** (1) **Kernel send gate** (core 045, `commands/outreach.py::send_gate`): a touch
+  that will be delivered (`record_outreach(..., for_delivery=True)`, `linkedin.send_message`) must consume an
+  approved, owner-decided `outreach_approvals` row (`consumed_at` set atomically — one send per approval) or,
+  only when `policy_rules['outreach.gate'].mode == 'policy_lanes'`, pass a kernel-evaluated `autonomy.*` lane
+  (`policy/autonomy.py`: non-commercial, listed channel, value ceiling; unknown value fails closed). Ships in
+  `approval_required` mode; `autonomy.searchfunder` finally has a reader. `outreach_approvals.commercial` is
+  recorded at propose time, shown on the card, and is what the commercial gate runs on at send —
+  `approve_and_send` used to omit it, so approved cold drafts skipped that gate. `crm_send_followup` (the only
+  un-gated customer email lane) now files a `kind='followup'` approval; the app's follow-up Send button
+  proposes + decides in one request (a click is the decision). `crm_record_outreach` (logging a call/meeting)
+  is not a delivery and needs no approval. The attention routine's "autonomous send" paragraph is gone; it files
+  drafts. App: `app/api/outreach/**`, `exec_send_outreach_message` and every `outreach_messages` reader deleted
+  (the table had no schema anywhere); `PATCH /api/prospects/[id]` scoped to owner/admin. The three `_rule()`
+  copies collapsed onto `policy/outreach._rule`. (2) **Toolset split**: each `tools/*.py` declares its family
+  (`crm_deals` 27, `crm_grants` 17, `crm_agents` 15+ping, `crm_prospecting` 14, `crm_linkedin` 13, `crm_people` 12,
+  `crm_outreach` 9, `crm_graph` 7, `crm_delivery` 4; `salesbrain_hermes.ALL_TOOLSETS`); `crm_core` no longer
+  exists — configs list families. (3) `__version__` reads the installed distribution; `docs/architecture.md`
+  and `docs/telegram-bot.md` rewritten for the post-Phase-5 system; dead `CRON_SECRET` /
+  `TELEGRAM_WEBHOOK_SECRET` / `PUBLIC_FORM_BASE_URL` dropped from deploy; dead notify helpers removed.
+- **Known debt kept on purpose**: the app still writes `policy_rules` (kill switch), `icp_profiles`, `prospects`,
+  `deals` directly; `lib/quota-server.ts` re-ports `policy/linkedin_limits.py`; 6 app-side LLM call sites remain.
+
 ## 6. Env vars
 
 All must be in `.env.local` (dev) and as GitHub repo secrets (prod — workflow writes them to `.env.production`).
@@ -584,10 +613,12 @@ EMAIL_FROM="SalesBrain <noreply@your-domain>"
 # Telegram
 TELEGRAM_BOT_TOKEN=...
 TELEGRAM_BOARD_CHAT_ID=...
-TELEGRAM_WEBHOOK_SECRET=...
 
-# Cron
-CRON_SECRET=...                # bearer token for /api/cron/* endpoints
+# Hermes (agent runtime + kernel RPC)
+HERMES_API_URL=http://127.0.0.1:8642
+HERMES_API_KEY=...
+HERMES_VENV_PYTHON=/usr/local/lib/hermes-agent/venv/bin/python   # kernelCall subprocess interpreter
+AWS_BEARER_TOKEN_BEDROCK=...   # shared with Hermes; lib/llm.ts uses Bedrock when set
 
 # Google OAuth
 GOOGLE_CLIENT_ID=...
@@ -595,7 +626,6 @@ GOOGLE_CLIENT_SECRET=...
 GOOGLE_REDIRECT_URI=https://salescrm.chipchip.social/api/integrations/google/callback
 
 # External API (zeami.io integration)
-PUBLIC_FORM_BASE_URL=https://zeami.io/onboarding
 ONBOARDING_API_KEY=CUiGAYEzyQVabB-eOhLEaNro5lOwPCj5CNOKl_Bm8QA      # generated 2026-05-11; rotate via openssl rand -base64 32
 PUBLIC_FORM_ALLOWED_ORIGIN=https://zeami.io                          # optional, CORS lockdown
 ```

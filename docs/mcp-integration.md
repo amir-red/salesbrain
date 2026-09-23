@@ -13,7 +13,9 @@ SalesBrain's CRM data + workflow tools as an MCP (Model Context Protocol) server
 
 - Read the pipeline, deals, sales leads, memories, and past lessons
 - Update deals, add notes, mark lost, create new deals, schedule followups
-- Admin users can also send Telegram, send email, advance gates
+- Admin users can also request board reviews (Telegram) and advance gates. Nothing on this surface sends a
+  customer message: `send_email` is withheld, and every outreach send in SalesBrain goes through an
+  owner-approved draft (`crm_outreach_propose` → `crm_outreach_decide`), enforced in the kernel.
 
 **Every action runs with the token owner's identity and inherits their web-UI visibility rules.** Mateo's Hermes only sees Mateo's deals. Amir's admin token sees everything.
 

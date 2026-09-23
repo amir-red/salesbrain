@@ -18,11 +18,10 @@ interface Brief {
   outreach_angle: string | null; talking_points: string | null; risks: string | null; created_at: string;
 }
 interface Score { id: string; total_score: number | null; verdict: string | null; reason_codes: string[] | null; disqualifiers: string[] | null; created_at: string }
-interface Message { id: string; direction: string; status: string; subject: string | null; body: string; to_email: string | null; sent_at: string | null; created_at: string }
 interface Event { id: string; event_type: string; from_stage: string | null; to_stage: string | null; reason: string | null; triggered_by: string | null; created_at: string }
 interface IntroRequest extends IntroRequestLite { channel: string | null; path_id: string | null; created_at: string; replied_at: string | null; approval_id: string | null }
 interface Payload {
-  prospect: Prospect; briefs: Brief[]; scores: Score[]; messages: Message[]; events: Event[];
+  prospect: Prospect; briefs: Brief[]; scores: Score[]; events: Event[];
   approvals: LeadApproval[]; intro_requests: IntroRequest[]; teammates_with_linkedin: number;
   acting_user_id: string; owner_can_source: boolean; viewer_can_source: boolean;
   viewer: { user_id: string; role: string; name: string };
@@ -81,14 +80,14 @@ export default function ProspectDetailPage() {
       refresh();
     } finally { setEnriching(false); }
   };
-  const approveMessage = async (id: string) => { await fetch(`/api/outreach/${id}/approve`, { method: 'POST' }); refresh(); };
-  const sendMessage = async (id: string) => { await fetch(`/api/outreach/${id}/send`, { method: 'POST' }); refresh(); };
   const jump = (key: JourneyKey) => refs.current[key]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   if (loading) return <div className="flex h-screen"><Sidebar /><div className="flex-1 flex items-center justify-center" style={{ color: 'var(--text-muted)' }}>Loading...</div></div>;
   if (!data) return <div className="flex h-screen"><Sidebar /><div className="flex-1 flex items-center justify-center" style={{ color: 'var(--text-muted)' }}>Prospect not found</div></div>;
 
-  const { prospect, briefs, scores, messages, events, approvals, intro_requests } = data;
+  const { prospect, briefs, scores, events, approvals, intro_requests } = data;
+  // Everything that ever left for this lead went through an approval (core 045).
+  const history = approvals.filter((a) => a.status === 'sent' || a.status === 'failed');
   const stageSpec = PROSPECT_STAGES.find((s) => s.stage === prospect.stage);
   const canConvert = !prospect.converted_deal_id && (prospect.icp_score ?? 0) >= 40;
   const state = journeyState(prospect, approvals, intro_requests);
@@ -213,25 +212,18 @@ export default function ProspectDetailPage() {
             </Section>
 
             <Section k="sent" n={6} title="Outreach history">
-              {messages.length === 0 ? (
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No cold messages yet. Ask the AI to draft one, or use a route above.</p>
+              {history.length === 0 ? (
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Nothing sent yet. Drafts wait for approval above; every send is an approved card.</p>
               ) : (
                 <div className="space-y-3">
-                  {messages.map((m) => (
-                    <div key={m.id} className="text-xs border-l-2 pl-3" style={{ borderColor: m.direction === 'outbound' ? 'var(--accent)' : 'var(--green)' }}>
+                  {history.map((a) => (
+                    <div key={a.id} className="text-xs border-l-2 pl-3" style={{ borderColor: a.status === 'sent' ? 'var(--accent)' : 'var(--red)' }}>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="font-medium" style={{ color: m.direction === 'outbound' ? 'var(--accent)' : 'var(--green)' }}>{m.direction} · {m.status}</span>
-                        <span style={{ color: 'var(--text-muted)' }}>{formatDate(m.created_at)}</span>
+                        <span className="font-medium" style={{ color: a.status === 'sent' ? 'var(--accent)' : 'var(--red)' }}>{a.kind === 'followup' ? 'follow-up' : a.kind === 'intro_request' ? 'intro ask' : 'outreach'} · {a.channel} · {a.status}</span>
+                        <span style={{ color: 'var(--text-muted)' }}>{formatDate(a.sent_at || a.created_at)}</span>
                       </div>
-                      {m.subject && <p className="font-medium">{m.subject}</p>}
-                      <p className="whitespace-pre-wrap" style={{ color: 'var(--text-muted)' }}>{m.body.slice(0, 300)}{m.body.length > 300 ? '...' : ''}</p>
-                      {m.status === 'draft' && (
-                        <div className="mt-2 flex gap-2">
-                          <button onClick={() => approveMessage(m.id)} className="text-[10px] px-2 py-1 rounded" style={{ background: 'var(--accent)', color: '#fff' }}>Approve</button>
-                          <button onClick={() => sendMessage(m.id)} className="text-[10px] px-2 py-1 rounded" style={{ background: 'var(--green)', color: '#fff' }}>Approve & Send</button>
-                        </div>
-                      )}
-                      {m.status === 'approved' && <button onClick={() => sendMessage(m.id)} className="mt-2 text-[10px] px-2 py-1 rounded" style={{ background: 'var(--green)', color: '#fff' }}>Send Now</button>}
+                      {a.subject && <p className="font-medium">{a.subject}</p>}
+                      <p className="whitespace-pre-wrap" style={{ color: 'var(--text-muted)' }}>{a.message.slice(0, 300)}{a.message.length > 300 ? '...' : ''}</p>
                     </div>
                   ))}
                 </div>

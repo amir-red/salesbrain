@@ -1,143 +1,86 @@
-# SalesBrain — Architecture
+# SalesBrain architecture — how the pieces fit (post-Phase-5)
 
-A one-page map of the system: the stack, the data model, the layers, how the surfaces (Web / Telegram / MCP) share the same tool executors, and the patterns to keep in mind when extending it.
+**Audience:** engineers picking up this codebase. Rewritten 2026-09-23 after the Hermes audit
+(`Sales CRM/AUDIT.md`); the previous version described the in-app agent runtime (`lib/agent.ts`, the Telegram
+webhook, `/api/cron/*`) that was deleted in July 2026 and survives only in git history.
 
-## Stack
+## The three repos
 
-- **Framework**: Next.js 14 (App Router, TypeScript, SSR + API routes)
-- **DB**: Postgres via Supabase (`pg` pool in `lib/db.ts`)
-- **Runtime**: single Node process on a VM, PM2 as supervisor (`pm2 restart salesbrain`)
-- **Deploy**: GitHub Actions on push to `Production` → SSH into `/srv/salesbrain`, `git pull`, `npm install && next build`, PM2 restart. Env vars land in `.env.production` from GitHub secrets.
-- **LLM**: Anthropic Claude (Opus 4.6, via `@anthropic-ai/sdk`) — one central `MODEL` constant in `lib/llm.ts`. Hosted `web_search` tool wired into the same call sites.
-- **Email**: Resend (`lib/email.ts`)
-- **Messaging**: Telegram Bot API (webhook mode)
-- **Auth (web)**: `iron-session` cookies (`lib/auth.ts`)
-- **Auth (agents)**: per-user MCP tokens (SHA-256 hashed), Telegram user linking
+| Repo | Role | Talks to |
+|---|---|---|
+| `salesbrain-core/` | The **kernel**: `salesbrain_core.commands.*` (every state change, RBAC, audit), `policy/*` (pure rules — scoring, quiet hours, caps, the send gate), `migrations/`. Deterministic; no LLM; no Hermes import. | Postgres |
+| `salesbrain-hermes/` | The **ring**: a Hermes Agent plugin. `register(ctx)` exposes the kernel as 119 `crm_*` tools in nine family toolsets, an identity middleware, a gateway hook and a relationship-memory provider. `assets/` holds the scripts Hermes cron runs, skills, routines, profiles. | Hermes runtime, Unipile, Bedrock, Telegram, Resend |
+| `salesbrain/` (this repo) | The **app**: Next.js UI + two MCP endpoints (`/api/mcp` public, `/api/service-mcp` for a sibling app). No agent loop of its own. | Hermes api_server (chat), kernel (subprocess), Postgres |
 
-## Data model — key tables
+Dependency direction: core → hermes → app. Contract changes land in core first.
 
-```
-users ─┬─ deals ─┬─ conversations       # chat history per deal
-       │         ├─ gate_events         # every gate move
-       │         ├─ board_decisions ─── board_votes
-       │         ├─ followups
-       │         ├─ file_attachments
-       │         ├─ client_onboardings  # post-G9 delivery kanban
-       │         ├─ lessons_learned     # losses with root cause
-       │         └─ pricing_quotes
-       ├─ sales_leads                    # zeami.io form + Calendly bookings
-       ├─ mcp_tokens ── mcp_audit_log   # per-user MCP tokens + audit
-       ├─ telegram_user_links           # SalesBrain ↔ Telegram identity
-       └─ (memory files on disk: memory/org.md, memory/users/*.md, tracked in git)
-```
-
-Soft-delete: `deals.deleted_at` is honored in every hot-path query.
-
-Board decision state machine: `pending → approved | rejected | amended | superseded`. Superseded is set automatically when a deal advances past a gate that still had a stale pending row.
-
-## Layered architecture
+## Where work happens
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│ SURFACES (external entry points)                                         │
-├──────────────────────────────────────────────────────────────────────────┤
-│ Web UI (App Router pages)   │  Telegram Bot     │  MCP server            │
-│ ── /pipeline, /deals/[id],  │  @MateSalesCRMBot │  /api/mcp              │
-│    /reports, /lessons,      │  ── DM agent      │  Streamable HTTP       │
-│    /sales-leads,            │  ── group @mention│  bearer token per user │
-│    /settings/{mcp,telegram} │  ── board vote    │  (Hermes, Claude       │
-│                             │    reply parsing  │   Desktop, etc.)       │
-│                             │  ── nudge cron    │                        │
-│ Public form (zeami.io) ─────┘                                             │
-│ Calendly webhook ───────────                                              │
-│ Onboarding public form (token) ─                                          │
-│ Cron endpoints (bearer) ─────                                             │
-└─────────────┬──────────────────┬──────────────┬───────────────────────────┘
-              │                  │              │
-              ▼                  ▼              ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│ APPLICATION LAYER                                                        │
-│                                                                          │
-│  Agent runtime (lib/agent.ts)                                            │
-│  ── loads deal + history + memory + relevant lessons                     │
-│  ── stable/dynamic prompt split for prompt-cache                         │
-│  ── tool loop, MAX_ITERATIONS = 6                                        │
-│                                                                          │
-│  Tool executors (lib/tool-executors.ts, lib/prospect-executors.ts)       │
-│  ── exec_update_deal, exec_send_telegram, exec_send_email,               │
-│     exec_mark_deal_lost, exec_assess_deal, exec_remember/forget,         │
-│     exec_schedule_followup, exec_generate_research_brief, ...            │
-│                                                                          │
-│  MCP layer (lib/mcp/*)                                                   │
-│  ── tool-definitions.ts (19+ tool JSON schemas)                          │
-│  ── tool-dispatch.ts (visibility scoping + admin/read-only guards)       │
-│  ── auth.ts (SHA-256 token lookup + rate limits)                         │
-│  ── audit.ts (per-tool call logging)                                     │
-│                                                                          │
-│  Telegram layer                                                          │
-│  ── lib/telegram.ts (send/format helpers)                                │
-│  ── lib/telegram-agent.ts (Claude+MCP bridge for DMs and group @mentions)│
-│  ── lib/telegram-notifications.ts (SLA breach, deal-assigned, board nudge)│
-│  ── lib/telegram-links.ts (link tokens, LinkedUser resolver)             │
-│                                                                          │
-│  Domain helpers                                                          │
-│  ── lib/gates.ts (SALES_GATES + GRANT_GATES, board flags, SLA days)      │
-│  ── lib/lessons.ts, lib/memory.ts (durable knowledge stores)             │
-│  ── lib/calendly.ts (webhook signature + payload parsers)                │
-│  ── lib/pricing/engine.ts (Excel-as-engine: SheetJS + HyperFormula)      │
-│  ── lib/onboarding.ts                                                    │
-└──────────────────────────────────────────────────────────────────────────┘
-              │
-              ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│ PERSISTENCE                                                              │
-│  Postgres pool (lib/db.ts) · file-backed memory in memory/*.md · git     │
-└──────────────────────────────────────────────────────────────────────────┘
+browser ──/api/agent──▶ lib/hermes-proxy.ts ──HTTP/SSE──▶ Hermes api_server ──▶ agent loop ──▶ crm_* tools ──▶ kernel ──▶ Postgres
+browser ──/api/*──────▶ route handlers ──▶ lib/mcp/kernel-rpc.ts kernelCall() ──subprocess `python -m salesbrain_hermes.rpc`──▶ kernel
+partner ──/api/service-mcp (Bearer svc_…, X-On-Behalf-Of)──▶ lib/service-mcp/dispatch.ts ──▶ kernelCall()
+Telegram ──▶ Hermes gateway ──▶ ring hook (votes, /start LINK) or agent turn ──▶ crm_* tools
+Hermes cron ──▶ assets/scripts/*.py (no LLM) or a routine (LLM turn + skill) ──▶ kernel
 ```
 
-## Two agent runtimes (both use Claude + the same tool executors)
+- **Web chat is a Hermes session.** `app/api/agent/route.ts` opens a session on the api_server and streams
+  the turn; the app appends `[context] deal_id=…`. The ring's `tool_request` middleware threads the acting
+  user from the shared `agent_sessions` table.
+- **`kernelCall(tool, args, userId)`** runs the same Python handlers out of process. It bypasses Hermes (no
+  middleware, no hooks): the route handler owns the session check, and the kernel re-checks RBAC on the
+  user id it is handed.
+- **Direct SQL** in the app is for reads and app-owned tables (`contacts`, `accounts`, `imported_messages`,
+  `campaigns`, …). Kernel-owned tables (`prospects`, `deals`, `outreach_approvals`, `agent_runs`,
+  `policy_rules`, `icp_profiles`) should be written through `kernelCall`; the remaining direct writes are
+  listed in `CLAUDE_CONTEXT.md` §5.af as debt.
 
-- **Deal-chat agent** (`lib/agent.ts runAgent`) — used by the `/deals/[id]` chat UI, streams events over Server-Sent Events, uses per-deal conversation history, loads memories + lessons into the dynamic prompt.
-- **Telegram bridge** (`lib/telegram-agent.ts processMessage`) — used by DMs and group @mentions, single-turn (no history), same 19+ MCP tools attached, group-mode system prompt is shorter and mobile-friendly.
+## Model calls
 
-## Auth model
+The app has one shared client, `lib/llm.ts` (`MODEL` = Bedrock `claude-sonnet-4-6`, Anthropic API fallback;
+CI forbids literal model ids). Call sites: ICP suggest/optimize, intro-ask drafting, network insights and the
+network chat tool loop, communication-style analysis, company research from a URL. Everything agentic
+(routines, drafting outreach, classifying LinkedIn threads) runs inside Hermes.
 
-- **Web UI**: iron-session cookie (`SESSION_SECRET`). Non-admin users see only deals where `user_id = me OR lead_id = me`; admins see everything.
-- **MCP**: `Authorization: Bearer <mcp_...>` → SHA-256 lookup in `mcp_tokens` → resolves to a `user_id` + role → same visibility rules apply.
-- **Telegram**: `telegram_user_links` binds a Telegram user to a SalesBrain user; DMs use that identity. Anonymous users in the allowlisted board group get **read-only, org-wide** scope (`AuthContext.read_only = true`, guarded in the tool dispatcher).
+## Human-in-the-loop — the one rule that is enforced in code
 
-## Scheduled work (external triggers)
+No outbound customer message leaves without an owner's decision the kernel can see. `crm_outreach_propose`
+(or a follow-up, or an intro ask) files an `outreach_approvals` row; the owner decides on Telegram, on
+`/agents`, on the prospect page, or through the service MCP; `crm_outreach_decide` → `approve_and_send`
+consumes that row inside `salesbrain_core.commands.outreach.record_outreach` (one send per approval, atomic).
+A send with no approval is refused by the kernel regardless of which tool or prompt asked. The policy row
+`outreach.gate` can switch to `policy_lanes` mode, where a kernel-evaluated `autonomy.*` lane (non-commercial,
+listed channel, value ceiling) may substitute for the approval; it ships in `approval_required` mode.
 
-- **GitHub Actions cron** hits `/api/cron/*` endpoints, guarded by `CRON_SECRET`.
-- `/api/cron` (daily-ish) — followups, SLA alerts, decay detection, autonomous prospecting.
-- `/api/cron/daily-digest` (daily) — pipeline summary to the board group.
-- `/api/cron/board-nudge` (Mon/Wed/Fri 11:00 EAT) — fresh board-vote reminders. Rewires `board_decisions.telegram_message_id` to the new message so replies still count as votes.
+## Scheduling and events
 
-## The Telegram webhook interior — one file to know
+All scheduling lives on the Hermes box. Deterministic sweeps (leads finder, enricher, graph sync, LinkedIn
+sync, grant signals, board nudge, PMI sync) are `hermes cron --no-agent --script` jobs; two routines
+(attention allocator, outreach drafter) are LLM turns with a skill. The app describes schedules from
+`agent_definitions.schedule` and never runs anything on a timer. Inbound events the app receives: the
+Calendly webhook and the zeami.io demo form; Telegram button taps and board votes arrive at the Hermes
+gateway. Reply detection (`P6_REPLIED`) is written by the kernel from mirrored LinkedIn threads and from the
+Gmail sync.
 
-`app/api/telegram/route.ts` orchestrates 4 routes based on message shape:
+## Auth and visibility
 
-- **Route 1** — `/start LINK-XXXXXX` in a private DM (identity linking).
-- **Route 2** — reply-to a pending board decision → parse vote → tally → resolve (5-of-8) → agent processes the outcome.
-- **Route 3** — free-text DM from a linked user → agent bridge.
-- **Route 4** — `@MateSalesCRMBot ...` in a group → agent bridge with `channel: 'group'`; unlinked users get read-only in the allowlisted board chat.
-- Plus a **vote-miss fallback** in Route 2 that re-anchors when someone replies to the wrong message.
+`iron-session` cookie for the UI; `mcp_*` bearer tokens for `/api/mcp`; `svc_*` app tokens plus
+`X-On-Behalf-Of` for `/api/service-mcp`. Deal visibility: creator or lead sees a deal, admins see all
+(`CLAUDE_CONTEXT.md` §5.14); prospects and ICPs are owner-scoped, admins may view. The kernel applies the
+same rules on its side (`policy/rbac.py`).
 
-## Key patterns to keep in mind
+## Deploy
 
-- **Single source of truth for the LLM model** → `lib/llm.ts`, one edit swaps every call site.
-- **Single source of truth for tools** → `MCP_TOOLS` in `lib/mcp/tool-definitions.ts`. The agent, MCP HTTP endpoint, and Telegram bridge all use the same list.
-- **Visibility as a query filter, not a middleware** — `dealVisibility(ctx)` in `lib/mcp/tool-dispatch.ts` is composed into every deal-touching SQL. No hidden "auth middleware," everything is explicit at the query.
-- **Fire-and-forget notifications** — every Telegram push uses `void ...` so a Telegram outage never blocks a DB write.
-- **Soft-delete** — `deals.deleted_at` is checked in every hot-path query; deleted deals aren't visible anywhere except the admin restore path.
-- **Board state machine** — `board_decisions.status`: `pending → approved | rejected | amended | superseded`. Superseded is set automatically when a deal advances past a gate that still had a stale pending row.
-- **Prompt cache split** — `buildSystemPrompt` returns `{stable, dynamic}`. Stable half (product KB, personality, rules, tools) rides Anthropic's ephemeral cache. Dynamic half (current deal state, memory, lessons) is per-turn.
-- **Migrations are additive + idempotent** — `db/migrations/NNN_*.sql` uses `IF NOT EXISTS` / `IF EXISTS`; `db/schema.sql` gets each migration appended, so fresh installs work from that file alone.
+App: push `Production` → GitHub Actions → SSH → `npm run build` → PM2 (`ecosystem.config.cjs`, port 3002,
+Caddy in front). Core + ring: `salesbrain-hermes/scripts/deploy-server.sh` (wheels, scripts, skills, cron
+jobs, config via `hermes config set`, gateway restart) — integration session only. Migrations are numbered
+SQL in `salesbrain-core/migrations/`, idempotent, applied by the integration session.
 
-## Extending safely — a short checklist
+## Adding a capability — checklist
 
-1. New DB field? Write `db/migrations/NNN_*.sql`, append to `db/schema.sql`, apply to prod via the same `node -e` pool runner used before.
-2. New agent capability? Add executor in `lib/tool-executors.ts`, register tool in `lib/mcp/tool-definitions.ts`, add dispatch case in `lib/mcp/tool-dispatch.ts`, run typecheck + build.
-3. Touching deal queries? Filter by `d.deleted_at IS NULL` and compose `dealVisibility(ctx)` — do not hand-roll `WHERE user_id = ...`.
-4. Adding a scheduled job? New route under `app/api/cron/*` with `CRON_SECRET` bearer guard, plus a GitHub Actions workflow to hit it.
-5. Doing anything the user will notice? Update `docs/*.md` — future-you or the next dev will thank you.
+1. Kernel command in `salesbrain-core/src/salesbrain_core/commands/`, tests in `tests/`.
+2. Ring tool in `salesbrain-hermes/src/salesbrain_hermes/tools/<family>.py` (declares `mcp` exposure and
+   inherits the family `TOOLSET`); roster tests in `tests/test_mcp_catalog.py` pick it up.
+3. App: call it through `kernelCall`; add to `lib/service-mcp/dispatch.ts` only if the sibling app needs it,
+   and document it in `docs/service-mcp.md`.
+4. If it can send anything to a customer, it must go through an approval row. No exceptions.

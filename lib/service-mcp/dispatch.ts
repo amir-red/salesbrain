@@ -302,9 +302,10 @@ export const SERVICE_TOOLS: ToolDef[] = [
   {
     name: 'crm_outreach_propose',
     description:
-      "File a first-message DRAFT for this employee to approve. Sends nothing. Email needs an email " +
-      "handle on the person; LinkedIn needs an EXISTING thread id (no cold invites). One pending draft " +
-      "per person. Surface the pending draft in YOUR UI and resolve it with crm_outreach_decide.",
+      "File a DRAFT for this employee to approve. Sends nothing. Email needs an email handle on the " +
+      "person; LinkedIn needs an EXISTING thread id (no cold invites). One pending draft per person per " +
+      "kind. Surface the pending draft in YOUR UI and resolve it with crm_outreach_decide — the approval " +
+      "is the only way a message leaves (enforced in the kernel).",
     inputSchema: obj(
       {
         person_id: { type: 'string' },
@@ -314,6 +315,8 @@ export const SERVICE_TOOLS: ToolDef[] = [
         subject: { type: 'string', description: 'Email only' },
         rationale: { type: 'string' },
         linkedin_thread_id: { type: 'string', description: 'LinkedIn only' },
+        kind: { type: 'string', enum: ['outreach', 'followup'], description: 'followup = touch N+1 to someone already contacted' },
+        commercial: { type: 'boolean', description: 'True if the message contains an ask; shown on the card, drives the value gate at send' },
       },
       ['person_id', 'channel', 'message'],
     ),
