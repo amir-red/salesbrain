@@ -644,7 +644,7 @@ fan-out, aux LLM, delivery and the learning loop into Hermes. Plan: `~/.claude/p
 - **Known debt kept on purpose**: the app still writes `policy_rules` (kill switch), `icp_profiles`, `prospects`,
   `deals` directly; `lib/quota-server.ts` re-ports `policy/linkedin_limits.py`; 6 app-side LLM call sites remain.
 
-### 5.ag Running costs — usage ledger + `/admin/costs` (2026-09-29, feat/running-costs, core migration 048)
+### 5.ag Running costs — usage ledger + `/admin/costs` (2026-09-29, core/hermes 0.35.0, migration 048)
 
 Amir: "is there a way to get how much it's costing us running?" Before this nothing in Postgres held a token or
 a dollar: Hermes kept its own ledger for agent turns (`state.db`, `hermes insights`), and every other model call
@@ -678,6 +678,8 @@ threw the response's usage block away. Plan: `~/.claude/plans/on-the-agents-runn
   (from "~EUR 49", unconfirmed); email credit prices and EC2 / Supabase / Resend are seeded at 0 = "not set".
 - Live numbers at build time (30 d, read-only check): 5 connected LinkedIn accounts (6 in window), 36 FullEnrich
   credits, Unipile calls 30.5k inbox_read / 4.0k profile_view / 1.7k relations / 295 search.
+- **LIVE since 2026-09-29 (0.35.0)**: migration 048 applied, ring + app deployed, first agent turn recorded the
+  same day. LLM history before that date is only in `hermes insights` and the AWS invoice.
 - Not built: a rates editor, budget alerts / spend caps, backfill from `state.db` (history before the deploy
   stays in `hermes insights`), `agent_runs` ↔ usage join (no run id reaches the hook).
 
