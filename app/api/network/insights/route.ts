@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import Anthropic from '@anthropic-ai/sdk';
-import { anthropic, MODEL } from '@/lib/llm';
+import { MODEL } from '@/lib/llm';
+import { createMessage } from '@/lib/llm-usage';
 import { getSession } from '@/lib/auth';
 
 
@@ -70,14 +71,14 @@ Rules:
 - Be specific (cite title/company), not generic.`;
 
   try {
-    const resp = await anthropic.messages.create({
+    const resp = await createMessage({
       // Shared constant, never a literal — a direct-API id does not exist on
       // Bedrock, where the client actually sends. See lib/llm.ts.
       model: MODEL,
       max_tokens: 2000,
       system: systemPrompt,
       messages: [{ role: 'user', content: JSON.stringify(summary) }],
-    });
+    }, { feature: 'network_insights', userId: session.userId });
 
     const text = resp.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { anthropic, MODEL } from '@/lib/llm';
+import { MODEL } from '@/lib/llm';
+import { createMessage } from '@/lib/llm-usage';
 import { COMPANY_SIZES, INDUSTRIES, LOCATION_GROUPS, ROLE_GROUPS, SENIORITY_BANDS, EXCLUDE_TITLE_PRESETS } from '@/lib/icp';
 import type { IcpSuggestion, SeniorityBand } from '@/lib/icp';
 import { fetchSite } from '@/lib/icp-site';
@@ -87,10 +88,10 @@ Return ONLY JSON:
 
   let raw: Record<string, unknown> | null = null;
   try {
-    const res = await anthropic.messages.create({
+    const res = await createMessage({
       model: MODEL, max_tokens: 1200,
       messages: [{ role: 'user', content: prompt }],
-    });
+    }, { feature: 'icp_suggest', userId: session.userId });
     const text = res.content.filter((c) => c.type === 'text').map((c) => (c as { text: string }).text).join('\n');
     raw = extractJson(text);
   } catch (err) {

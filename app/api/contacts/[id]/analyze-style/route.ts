@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import { anthropic, MODEL } from '@/lib/llm';
+import { MODEL } from '@/lib/llm';
+import { createMessage } from '@/lib/llm-usage';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 
@@ -62,13 +63,13 @@ Return ONLY the JSON object, no preamble.
 Messages:
 ${msgs.map((m, i) => `--- Message ${i + 1} (${m.direction}${m.sent_at ? ', ' + new Date(m.sent_at).toISOString().slice(0, 10) : ''}) ---\n${m.subject ? 'Subject: ' + m.subject + '\n' : ''}${m.body}`).join('\n\n')}`;
 
-  const response = await anthropic.messages.create({
+  const response = await createMessage({
     // Shared constant, never a literal — a direct-API id does not exist on
     // Bedrock, where the client actually sends. See lib/llm.ts.
     model: MODEL,
     max_tokens: 1500,
     messages: [{ role: 'user', content: analysisPrompt }],
-  });
+  }, { feature: 'contact_style', userId: session.userId });
 
   const text = response.content
     .filter((b): b is Anthropic.TextBlock => b.type === 'text')

@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
     website: body.website, description: body.description, product: body.product,
     objective: body.objective, criteria: body.criteria, filters: body.filters,
     n_candidates: body.n_candidates,
+    user_id: session.userId,
   });
   if ((out as { error?: string }).error) {
     return NextResponse.json({ error: (out as { error: string }).error }, { status: 422 });

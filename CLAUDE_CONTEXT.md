@@ -644,6 +644,41 @@ fan-out, aux LLM, delivery and the learning loop into Hermes. Plan: `~/.claude/p
 - **Known debt kept on purpose**: the app still writes `policy_rules` (kill switch), `icp_profiles`, `prospects`,
   `deals` directly; `lib/quota-server.ts` re-ports `policy/linkedin_limits.py`; 6 app-side LLM call sites remain.
 
+### 5.ag Running costs — usage ledger + `/admin/costs` (2026-09-29, feat/running-costs, core migration 048)
+
+Amir: "is there a way to get how much it's costing us running?" Before this nothing in Postgres held a token or
+a dollar: Hermes kept its own ledger for agent turns (`state.db`, `hermes insights`), and every other model call
+threw the response's usage block away. Plan: `~/.claude/plans/on-the-agents-running-elegant-spring.md`.
+
+- **`llm_usage`** (core 048) — daily buckets `(day, surface, feature, model, owner, hermes_session_id)` of
+  calls + input / output / cache-read / cache-write tokens. **Tokens are stored, never money**: prices live in
+  `policy_rules['costs.rates']` and are applied at read time, so correcting a rate re-prices history. The unique
+  index COALESCEs owner to an all-`f` sentinel (all-zero is the service user's real id).
+- **Four writers, one per call path** (`surface`): `hermes_turn` — the ring's `post_api_request` hook
+  (`usage_hook.py`: every model call of web chat, Telegram, the cron routines and delegated children; worker
+  thread, fail-open, feature = `cron:<job name>` or the platform); `hermes_aux` — `llm.py::_host_complete` reads
+  `res.usage` (plus `post_auxiliary_call` for Hermes' own titling/compression, registered ONLY when the host
+  has it — the pinned v2026.9.21 does not); `ring_fallback` — `llm.py::_bedrock_converse`, i.e. the model calls
+  of the `--no-agent` cron scripts that no ledger saw; `app` — `lib/llm-usage.ts::createMessage`, which all 7
+  app call sites now use instead of `anthropic.messages.create`. New call sites: use `createMessage(params,
+  { feature, userId })` in the app and `converse(..., feature=)` in the ring.
+- **Report** — kernel `commands/costs.py::cost_report(actor, days)` (admin), pricing in `policy/costs.py`
+  (pure). LLM priced by model-name substring, an unknown model is reported as `unpriced_tokens`, never guessed.
+  Unipile = connected `linkedin_accounts` x `unipile_account_month_usd`, prorated on `connected_at`/`revoked_at`
+  (call volume does not change the fee). Email credits = `prospect_enrichment.credits` x `email_credit_usd`.
+  Fixed items = `fixed_monthly_usd[]`. Plus monthly run rate and cost per lead (Leads Finder `created` only) /
+  approved draft / reply. **`gaps[]` names everything not priced or not recorded** — quote it with the total.
+- **Surfaces**: ring tool `crm_cost_report {days}` (mcp admin, `crm_agents` family; NOT on the service MCP) and
+  `/admin/costs` (`GET /api/admin/costs?days=` → `kernelCall`, loaded on demand, not polled; 7/30/90 d).
+  Sidebar `Costs` (admin), links from `/agents` and FleetStrip.
+- **Rates are seeded as estimates and SQL-edited**: LLM = Anthropic list prices per MTok (Sonnet 4.6 3/15,
+  Haiku 4.5 1/5, Opus 4.6 5/25; Bedrock bills separately — reconcile with the AWS invoice); Unipile 55 USD
+  (from "~EUR 49", unconfirmed); email credit prices and EC2 / Supabase / Resend are seeded at 0 = "not set".
+- Live numbers at build time (30 d, read-only check): 5 connected LinkedIn accounts (6 in window), 36 FullEnrich
+  credits, Unipile calls 30.5k inbox_read / 4.0k profile_view / 1.7k relations / 295 search.
+- Not built: a rates editor, budget alerts / spend caps, backfill from `state.db` (history before the deploy
+  stays in `hermes insights`), `agent_runs` ↔ usage join (no run id reaches the hook).
+
 ## 6. Env vars
 
 All must be in `.env.local` (dev) and as GitHub repo secrets (prod — workflow writes them to `.env.production`).

@@ -47,6 +47,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       lead: { name: r.full_name || 'the lead', title: r.title, company: r.company, research_summary: r.research_summary,
               qualification_reason: r.qualification_reason },
       product: r.product,
+      user_id: acting.actingUserId,
     });
     return NextResponse.json(out, { status: 'error' in out ? 502 : 200 });
   }

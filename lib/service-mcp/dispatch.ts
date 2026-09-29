@@ -748,6 +748,7 @@ export async function dispatchServiceTool(
         filters: (args.filters && typeof args.filters === 'object') ? args.filters as Record<string, unknown> : undefined,
         objective: typeof args.objective === 'string' ? args.objective : undefined,
         n_candidates: typeof args.n_candidates === 'number' ? args.n_candidates : undefined,
+        user_id: ctx.ownerUserId ?? undefined,
       });
       if ((out as { error?: string }).error) return { status: 'error', error: (out as { error: string }).error };
       return { status: 'success', data: out };

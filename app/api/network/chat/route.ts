@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import Anthropic from '@anthropic-ai/sdk';
-import { anthropic, MODEL } from '@/lib/llm';
+import { MODEL } from '@/lib/llm';
+import { createMessage } from '@/lib/llm-usage';
 import { getSession } from '@/lib/auth';
 
 
@@ -168,7 +169,7 @@ export async function POST(req: NextRequest) {
         while (iter < MAX_ITERATIONS) {
           iter++;
 
-          const response = await anthropic.messages.create({
+          const response = await createMessage({
             // Never hardcode a model id here. The shared client rewrites requests
             // to Bedrock's /model/{id}/invoke, and a direct-API id such as
             // claude-sonnet-4-5-20250929 does not exist there — so this route
@@ -178,7 +179,7 @@ export async function POST(req: NextRequest) {
             system: SYSTEM_PROMPT,
             tools: TOOLS,
             messages: convo,
-          });
+          }, { feature: 'network_chat', userId: session.userId });
 
           // Emit any text deltas first (non-streaming for simplicity — full
           // text comes back as one chunk). Then emit each tool_use as its

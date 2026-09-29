@@ -25,6 +25,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     account_id: params.id,
     website: parsed.data.website,
     prospect_id: parsed.data.prospect_id,
+    user_id: session.userId,
   });
   if (result.error) return NextResponse.json(result, { status: 400 });
   return NextResponse.json(result);

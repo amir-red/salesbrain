@@ -22,7 +22,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import pool from './db';
 import { normalizeDomain, normalizeCompanyName, type ProspectStage } from './prospecting';
-import { MODEL, anthropic, webSearchTools } from './llm';
+import { MODEL, webSearchTools } from './llm';
+import { createMessage } from './llm-usage';
 
 
 // ─── Helper: record a prospect_events row ───────────────────────
@@ -264,6 +265,7 @@ export async function exec_research_company_from_url(input: {
   account_id: string;
   website: string;
   prospect_id?: string;
+  user_id?: string;   // who asked — labels the spend in the cost ledger
 }): Promise<Record<string, unknown>> {
   const normalized = input.website.startsWith('http') ? input.website : `https://${input.website}`;
 
@@ -330,12 +332,12 @@ Return ONLY JSON (no preamble):
   // can pull recent press, leadership announcements, or product news beyond
   // what we scraped from the company's own site. Anthropic runs the search
   // server-side and returns the final text directly in response.content.
-  const response = await anthropic.messages.create({
+  const response = await createMessage({
     model: MODEL,
     max_tokens: 1500,
     tools: [...webSearchTools],
     messages: [{ role: 'user', content: prompt }],
-  });
+  }, { feature: 'account_research', userId: input.user_id });
 
   const text = response.content
     .filter((b): b is Anthropic.TextBlock => b.type === 'text')

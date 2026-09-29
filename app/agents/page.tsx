@@ -101,6 +101,12 @@ export default function AgentsPage() {
                 </Link>
               )}
               {data.is_admin && (
+                <Link href="/admin/costs" className="text-xs px-3 py-1.5 rounded-lg"
+                      style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                  Costs →
+                </Link>
+              )}
+              {data.is_admin && (
                 <Link href="/admin/service" className="text-xs px-3 py-1.5 rounded-lg"
                       style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
                   Service integrations →

@@ -15,7 +15,8 @@
  * vocabulary in lib/icp.
  */
 
-import { anthropic, MODEL } from './llm';
+import { MODEL } from './llm';
+import { createMessage } from './llm-usage';
 import { fetchSite } from './icp-site';
 import {
   COMPANY_SIZES, INDUSTRIES, LOCATION_GROUPS, ROLE_GROUPS, SENIORITY_BANDS,
@@ -32,6 +33,7 @@ export interface IcpOptimizeInput {
   filters?: Record<string, unknown>;
   objective?: string;         // one of OBJECTIVE_KEYS
   n_candidates?: number;      // 2–4, default 3
+  user_id?: string;           // who asked — labels the spend in the cost ledger
 }
 
 function extractJson(text: string): Record<string, unknown> | null {
@@ -174,10 +176,10 @@ Return ONLY JSON:
 
   let raw: Record<string, unknown> | null = null;
   try {
-    const res = await anthropic.messages.create({
+    const res = await createMessage({
       model: MODEL, max_tokens: 3000,
       messages: [{ role: 'user', content: prompt }],
-    });
+    }, { feature: 'icp_optimize', userId: input.user_id });
     const text = res.content.filter((c) => c.type === 'text').map((c) => (c as { text: string }).text).join('\n');
     raw = extractJson(text);
   } catch (err) {

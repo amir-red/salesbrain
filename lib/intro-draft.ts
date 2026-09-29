@@ -5,7 +5,8 @@
  * convention: a short personal note plus a forwardable blurb the connector can
  * paste to the lead as-is. Nothing is saved here; the user edits, then proposes.
  */
-import { anthropic, MODEL } from '@/lib/llm';
+import { MODEL } from '@/lib/llm';
+import { createMessage } from '@/lib/llm-usage';
 
 export interface IntroDraftInput {
   owner_name: string;
@@ -13,6 +14,7 @@ export interface IntroDraftInput {
   lead: { name: string; title?: string | null; company?: string | null; research_summary?: string | null;
           qualification_reason?: string | null };
   product?: string | null;
+  user_id?: string;   // who asked — labels the spend in the cost ledger
 }
 export interface IntroDraft { subject: string; message: string; forwardable_blurb: string; note?: string }
 
@@ -39,7 +41,8 @@ Rules: double opt-in — ask ${c.name} whether they'd be comfortable making the 
 Return ONLY JSON:
 {"subject": "…", "message": "…", "forwardable_blurb": "…"}`;
   try {
-    const res = await anthropic.messages.create({ model: MODEL, max_tokens: 800, messages: [{ role: 'user', content: prompt }] });
+    const res = await createMessage({ model: MODEL, max_tokens: 800, messages: [{ role: 'user', content: prompt }] },
+      { feature: 'intro_draft', userId: input.user_id });
     const text = res.content.filter((x) => x.type === 'text').map((x) => (x as { text: string }).text).join('\n');
     const raw = extractJson(text);
     if (!raw || typeof raw.message !== 'string') return { error: 'The model returned no usable draft — try again.' };
