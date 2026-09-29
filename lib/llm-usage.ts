@@ -5,7 +5,7 @@
  * ledger: the response's token usage is added to today's `llm_usage` bucket
  * (salesbrain-core migration 048) under `surface = 'app'` and the feature tag
  * the call site gives. Tokens are stored, never money — the kernel prices them
- * at read time (`crm_cost_report`), so there is no price table in this repo.
+ * at read time (`cost_report`), so there is no price table in this repo.
  *
  * Recording never blocks or fails the request: it is not awaited and every
  * error is swallowed.

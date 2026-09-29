@@ -668,9 +668,11 @@ threw the response's usage block away. Plan: `~/.claude/plans/on-the-agents-runn
   (call volume does not change the fee). Email credits = `prospect_enrichment.credits` x `email_credit_usd`.
   Fixed items = `fixed_monthly_usd[]`. Plus monthly run rate and cost per lead (Leads Finder `created` only) /
   approved draft / reply. **`gaps[]` names everything not priced or not recorded** — quote it with the total.
-- **Surfaces**: ring tool `crm_cost_report {days}` (mcp admin, `crm_agents` family; NOT on the service MCP) and
-  `/admin/costs` (`GET /api/admin/costs?days=` → `kernelCall`, loaded on demand, not polled; 7/30/90 d).
-  Sidebar `Costs` (admin), links from `/agents` and FleetStrip.
+- **One surface, internal management only**: `/admin/costs` (`GET /api/admin/costs?days=` →
+  `kernelCall('cost_report')`, loaded on demand, not polled; 7/30/90 d). Sidebar `Costs` (admin), links from
+  `/agents` and FleetStrip. **There is deliberately NO agent tool** (Amir, 2026-09-29): `cost_report` is an
+  app-only RPC in `rpc.py::_internal()` — not registered with Hermes, not in the MCP catalogue, not on the
+  service MCP. Put future admin-only kernel reads there, not in a `tools/*.py` list.
 - **Rates are seeded as estimates and SQL-edited**: LLM = Anthropic list prices per MTok (Sonnet 4.6 3/15,
   Haiku 4.5 1/5, Opus 4.6 5/25; Bedrock bills separately — reconcile with the AWS invoice); Unipile 55 USD
   (from "~EUR 49", unconfirmed); email credit prices and EC2 / Supabase / Resend are seeded at 0 = "not set".

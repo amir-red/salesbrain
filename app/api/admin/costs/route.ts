@@ -6,7 +6,8 @@ import { kernelCall } from '@/lib/mcp/kernel-rpc';
  * GET /api/admin/costs?days= — what the system cost to run over a window.
  * Admin only: it reads across owners.
  *
- * A passthrough to the kernel's `crm_cost_report`. Prices live in
+ * A passthrough to the kernel's `cost_report`, an app-only RPC: internal
+ * management, deliberately not an agent tool or an MCP tool. Prices live in
  * policy_rules['costs.rates'] and are applied in Python, so the app holds no
  * second copy of the arithmetic. Loaded on demand, not polled — a kernel call
  * is a subprocess, and spend does not change by the second.
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
   const days = Number.isFinite(raw) ? Math.max(1, Math.min(Math.trunc(raw), 365)) : 30;
 
   try {
-    return NextResponse.json(await kernelCall('crm_cost_report', { days }, session.userId));
+    return NextResponse.json(await kernelCall('cost_report', { days }, session.userId));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: `Cost report failed: ${msg}` }, { status: 502 });

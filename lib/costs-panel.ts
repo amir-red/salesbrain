@@ -1,5 +1,5 @@
 /**
- * Contract for /admin/costs — the shape of the kernel's `crm_cost_report`
+ * Contract for /admin/costs — the shape of the kernel's `cost_report`
  * (salesbrain-core commands/costs.py). Types and formatters only; client-safe.
  * Prices are applied in the kernel, so nothing here knows a rate.
  */

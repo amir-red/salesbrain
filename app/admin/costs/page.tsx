@@ -13,7 +13,7 @@ import type { CostBucket, CostReport } from '@/lib/costs-panel';
 /**
  * /admin/costs — what the system costs to run: LLM tokens, Unipile, email
  * credits and the flat monthly items, over 7 / 30 / 90 days. One kernel call
- * per load (`crm_cost_report`); refreshed by hand, not polled.
+ * per load (`cost_report`, app-only); refreshed by hand, not polled.
  */
 export default function CostsAdminPage() {
   const [days, setDays] = useState<number>(30);
