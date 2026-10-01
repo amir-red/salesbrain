@@ -641,6 +641,12 @@ fan-out, aux LLM, delivery and the learning loop into Hermes. Plan: `~/.claude/p
   `/root/.hermes/profiles/<p>/.env` (per-profile cron ticks since Hermes 0.21); otherwise it stays in the
   default profile under the `ops:<profile>:` name the Workspace card binds to. `/agents` renders proposal /
   follow-up / "contains an ask" badges; `AGENTS` now includes `supervisor` and `learn`.
+- **Hook replies bypass Hermes (0.35.1, 2026-10-01).** `send_message` is intentionally NOT a registered tool in
+  v2026.9.21 (`tools/send_message_tool.py`), so `ctx.dispatch_tool("send_message")` returned "Unknown tool" and
+  every `/start LINK-…` confirmation and board-vote reply was silently dropped from the 2026-09-23 upgrade on (the
+  link / vote itself was recorded). `board_hook._send` now uses `deliver._send_telegram` (CRM bot), falling back to
+  the gateway token. The tests stubbed `_send`; they now cover it. Never route a plugin reply through
+  `dispatch_tool("send_message")`.
 - **Known debt kept on purpose**: the app still writes `policy_rules` (kill switch), `icp_profiles`, `prospects`,
   `deals` directly; `lib/quota-server.ts` re-ports `policy/linkedin_limits.py`; 6 app-side LLM call sites remain.
 
