@@ -18,8 +18,8 @@ async function getUserId(): Promise<string | null> {
 }
 
 const GATE_COLORS: Record<number, string> = {
-  1: '#1D4ED8', 2: '#1D4ED8', 3: '#6D28D9', 4: '#1D4ED8',
-  5: '#6D28D9', 6: '#1D4ED8', 7: '#1D4ED8', 8: '#1D4ED8', 9: '#166534',
+  1: '#6C477D', 2: '#6C477D', 3: '#691C47', 4: '#6C477D',
+  5: '#691C47', 6: '#6C477D', 7: '#6C477D', 8: '#6C477D', 9: '#166534',
 };
 
 function MetricCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -126,11 +126,11 @@ export default async function ReportsPage() {
                         fill={GATE_COLORS[g.gate]}
                         opacity={0.85}
                       />
-                      <text x={x + 20} y={145} textAnchor="middle" fill="#8888a0" fontSize="9">
+                      <text x={x + 20} y={145} textAnchor="middle" style={{ fill: 'var(--text-muted)' }} fontSize="9">
                         G{g.gate}
                       </text>
                       {g.count > 0 && (
-                        <text x={x + 20} y={125 - barHeight} textAnchor="middle" fill="#e4e4ed" fontSize="10" fontWeight="600">
+                        <text x={x + 20} y={125 - barHeight} textAnchor="middle" style={{ fill: 'var(--text)' }} fontSize="10" fontWeight="600">
                           {g.count}
                         </text>
                       )}

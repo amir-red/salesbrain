@@ -42,15 +42,15 @@ const ROOT_CAUSE_LABEL: Record<RootCause, string> = {
 };
 
 const ROOT_CAUSE_COLOR: Record<RootCause, string> = {
-  price: '#ef4444',
-  timeline: '#f59e0b',
-  fit: '#a78bfa',
-  decision_maker: '#3b82f6',
-  capability: '#06b6d4',
-  competition: '#ec4899',
-  budget: '#eab308',
-  eligibility: '#8b5cf6',
-  other: '#94a3b8',
+  price: 'var(--red)',
+  timeline: 'var(--yellow)',
+  fit: 'var(--cat-violet)',
+  decision_maker: 'var(--cat-blue)',
+  capability: 'var(--cat-teal)',
+  competition: 'var(--cat-pink)',
+  budget: 'var(--yellow)',
+  eligibility: 'var(--cat-violet)',
+  other: 'var(--text-muted)',
 };
 
 export default function LessonsPage() {
@@ -145,7 +145,7 @@ export default function LessonsPage() {
           </div>
 
           {error && (
-            <div className="rounded p-3 mb-4 text-sm" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
+            <div className="rounded p-3 mb-4 text-sm" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>
               {error}
             </div>
           )}
@@ -183,8 +183,8 @@ export default function LessonsPage() {
                           {l.company}
                         </Link>
                         <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold"
-                              style={{ background: l.deal_type === 'grant' ? 'rgba(34,197,94,0.15)' : 'rgba(59,130,246,0.15)',
-                                       color: l.deal_type === 'grant' ? '#22c55e' : '#3b82f6' }}>
+                              style={{ background: l.deal_type === 'grant' ? 'color-mix(in srgb, var(--green) 15%, transparent)' : 'color-mix(in srgb, var(--accent) 15%, transparent)',
+                                       color: l.deal_type === 'grant' ? 'var(--green)' : 'var(--cat-blue)' }}>
                           {l.deal_type === 'grant' ? 'GRANT' : 'SALES'}
                         </span>
                         <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold"
@@ -209,9 +209,9 @@ export default function LessonsPage() {
                       {/* The lesson — the takeaway */}
                       <div
                         className="mt-2 p-2 rounded text-xs"
-                        style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', color: 'var(--text)' }}
+                        style={{ background: 'color-mix(in srgb, var(--green) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--green) 25%, transparent)', color: 'var(--text)' }}
                       >
-                        <span className="font-semibold" style={{ color: '#22c55e' }}>Lesson: </span>
+                        <span className="font-semibold" style={{ color: 'var(--green)' }}>Lesson: </span>
                         {l.lesson}
                       </div>
 
@@ -247,7 +247,7 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
       className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
       style={{
         background: active ? 'var(--accent)' : 'var(--bg-input)',
-        color: active ? '#fff' : 'var(--text-muted)',
+        color: active ? 'var(--accent-fg)' : 'var(--text-muted)',
         border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
       }}
     >

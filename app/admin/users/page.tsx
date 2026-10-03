@@ -96,8 +96,8 @@ export default function UsersAdminPage() {
         </div>
 
         <div className="p-4 space-y-4">
-          {forbidden && <div className="rounded-lg px-3 py-2 text-xs" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--red)' }}>Admin only — sign in as an administrator to manage users.</div>}
-          {error && <div className="rounded-lg px-3 py-2 text-[11px]" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--red)' }}>Last refresh failed ({error}){data ? '; showing the previous data.' : '.'}</div>}
+          {forbidden && <div className="rounded-lg px-3 py-2 text-xs" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>Admin only — sign in as an administrator to manage users.</div>}
+          {error && <div className="rounded-lg px-3 py-2 text-[11px]" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>Last refresh failed ({error}){data ? '; showing the previous data.' : '.'}</div>}
           {!forbidden && (
             <UsersFilterBar filter={filter} apps={data?.apps ?? []} shown={shown.length} total={data?.total ?? 0} onChange={setFilter} />
           )}

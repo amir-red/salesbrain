@@ -158,7 +158,7 @@ export default function PricingForm({ values, onChange, onCalculate, onReset, bu
           onClick={onCalculate}
           disabled={disabled || busy}
           className="flex-1 px-4 py-2 rounded text-sm font-semibold disabled:opacity-50"
-          style={{ background: 'var(--accent)', color: '#0b1220' }}
+          style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
         >
           {busy ? 'Calculating…' : 'Calculate'}
         </button>

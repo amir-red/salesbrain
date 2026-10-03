@@ -87,7 +87,7 @@ function fmtMoney(n: number | null, ccy: string) {
 function pill(text: string, color: string) {
   return (
     <span style={{
-      background: `${color}22`, color, border: `1px solid ${color}44`,
+      background: `color-mix(in srgb, ${color} 14%, transparent)`, color, border: `1px solid color-mix(in srgb, ${color} 28%, transparent)`,
       borderRadius: 999, padding: '2px 8px', fontSize: 11, fontWeight: 500,
     }}>{text}</span>
   );

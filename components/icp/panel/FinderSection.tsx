@@ -21,7 +21,7 @@ export default function FinderSection({ data, canAct, busy, onRun, disabledReaso
   const btn = (label: string, mode: RunMode, primary = false) => (
     <button onClick={() => onRun(mode)} disabled={!canAct || !!busy} title={canAct ? undefined : disabledReason}
             className="px-2.5 py-1 rounded-lg text-[11px] disabled:opacity-40"
-            style={primary ? { background: 'var(--accent)', color: '#fff' } : { border: '1px solid var(--border)', color: 'var(--text)' }}>
+            style={primary ? { background: 'var(--accent)', color: 'var(--accent-fg)' } : { border: '1px solid var(--border)', color: 'var(--text)' }}>
       {busy === mode ? '…' : label}
     </button>
   );

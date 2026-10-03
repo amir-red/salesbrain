@@ -106,7 +106,7 @@ export default function TelegramPanel() {
 
         <div className="p-4 max-w-3xl">
           {error && (
-            <div className="rounded p-2 mb-3 text-xs" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
+            <div className="rounded p-2 mb-3 text-xs" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>
               {error}
             </div>
           )}
@@ -119,7 +119,7 @@ export default function TelegramPanel() {
               <div className="flex items-center gap-3 mb-3">
                 <span
                   className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold"
-                  style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e' }}
+                  style={{ background: 'color-mix(in srgb, var(--green) 15%, transparent)', color: 'var(--green)' }}
                 >
                   Linked
                 </span>
@@ -133,7 +133,7 @@ export default function TelegramPanel() {
                 onClick={unlink}
                 disabled={busy}
                 className="mt-3 px-3 py-1.5 rounded text-xs"
-                style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}
+                style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)', border: '1px solid color-mix(in srgb, var(--red) 30%, transparent)' }}
               >
                 Unlink
               </button>
@@ -151,7 +151,7 @@ export default function TelegramPanel() {
               <button
                 onClick={generate}
                 disabled={busy}
-                className="px-4 py-2 rounded text-sm font-medium text-white disabled:opacity-50"
+                className="px-4 py-2 rounded text-sm font-medium text-[var(--accent-fg)] disabled:opacity-50"
                 style={{ background: 'var(--accent)' }}
               >
                 {busy ? 'Generating…' : 'Generate linking code'}
@@ -217,7 +217,7 @@ export default function TelegramPanel() {
                     href={`https://t.me/${reveal.botUsername}?start=${reveal.raw}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block w-full py-2 rounded text-sm font-medium text-center text-white"
+                    className="block w-full py-2 rounded text-sm font-medium text-center text-[var(--accent-fg)]"
                     style={{ background: 'var(--accent)' }}
                   >
                     Open in Telegram →

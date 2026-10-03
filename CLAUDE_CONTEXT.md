@@ -728,6 +728,28 @@ sent to, who accepted, who did not, whom we never asked." This reverses "connect
   hand-sent tracking; the first approved request tells you whether the send shape is right.
 - Not built: withdrawing a pending request, an AI-drafted note, a first message after acceptance to a
   1st-degree connection with no thread (the gap in §5.ac), a policy editor for the caps.
+### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
+
+The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
+obsidian as the dark theme, Poppins + JetBrains Mono (`next/font`, variables on `<body>` — `<html>`'s class belongs
+to the theme script), the supplied H12 wordmark (`components/ZeamiLogo.tsx`, `ZeamiStar` for the rail; never retype it).
+
+- **Tokens** (`app/globals.css`): same names as before (`--bg`, `--bg-card`, `--bg-input`, `--border`, `--text`,
+  `--text-muted`, `--accent`, `--accent-glow`, `--green/--yellow/--red/--orange`) plus **`--accent-fg`** (text on a solid
+  accent or status fill: white in light, obsidian in dark — never write `#fff` on `var(--accent)`), `--accent-soft`,
+  `--highlight`, `--logo`, `--blue`. Status tints are `color-mix(in srgb, var(--red) 10%, transparent)`, not literal rgba.
+  Primitives `.z-card`, `.z-input`, `.z-btn`, `.z-eyebrow` exist for the page-by-page pass.
+- **Sidebar**: grouped, labelled nav (Pipeline / Prospecting / Relationships / Funding / Insights / Admin; Profile,
+  theme and collapse at the foot). 224px on lg+, icon rail below lg or when collapsed (`salesbrain-nav-collapsed`).
+- Gate fills: heather `#6C477D`, board gates deep plum `#691C47` (fixed hexes: white header text sits on them).
+- **Contrast is computed, not eyeballed**: every status token (`--red/--green/--yellow/--orange`) and category token
+  (`--cat-blue/-violet/-teal/-pink`) passes 4.5:1 as small text on `--bg`, `--bg-card`, `--bg-input` and on its own
+  10–28% tint, in both themes. Badges tint with `color-mix(in srgb, ${color} 14%, transparent)` — never `${color}20`,
+  which breaks on a `var()`. Decided by Amir 2026-10-03: product name stays SalesBrain; grants / ChipChip pages get
+  the same Zeami look; errors must always be clearly visible.
+- Not done yet: per-page layout/UX pass (shared page header, cards at 16px radius, pill buttons, empty/loading/error
+  states), the cytoscape canvases (`NetworkGraph`, `RouteGraph` still use literal dark-theme colours); `LeadsTable` + `ApprovalsPanel` were left
+  untouched for ws-linkedin-connect.
 
 ## 6. Env vars
 

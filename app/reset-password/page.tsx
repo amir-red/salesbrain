@@ -69,7 +69,7 @@ function ResetPasswordForm() {
           <Link
             href="/forgot-password"
             className="block w-full py-2.5 rounded-lg text-sm font-medium text-center"
-            style={{ background: 'var(--accent)', color: '#fff' }}
+            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
           >
             Request a new link
           </Link>
@@ -95,7 +95,7 @@ function ResetPasswordForm() {
           {error && (
             <div
               className="px-3 py-2 rounded-lg text-sm"
-              style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--red)', border: '1px solid rgba(239,68,68,0.2)' }}
+              style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)', border: '1px solid color-mix(in srgb, var(--red) 20%, transparent)' }}
             >
               {error}
             </div>
@@ -144,7 +144,7 @@ function ResetPasswordForm() {
             type="submit"
             disabled={loading}
             className="w-full py-2.5 rounded-lg text-sm font-medium transition-opacity"
-            style={{ background: 'var(--accent)', color: '#fff', opacity: loading ? 0.6 : 1 }}
+            style={{ background: 'var(--accent)', color: 'var(--accent-fg)', opacity: loading ? 0.6 : 1 }}
           >
             {loading ? 'Saving...' : 'Reset password'}
           </button>

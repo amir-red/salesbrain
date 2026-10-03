@@ -142,7 +142,7 @@ Gamma Logistics, gamma.com, Sara Kim, , Director of Fleet`}
                 onClick={bulkImport}
                 disabled={importing || leads.length === 0}
                 className="px-4 py-2 rounded-lg text-sm font-medium"
-                style={{ background: 'var(--accent)', color: '#fff', opacity: importing ? 0.6 : 1 }}
+                style={{ background: 'var(--accent)', color: 'var(--accent-fg)', opacity: importing ? 0.6 : 1 }}
               >
                 {importing ? 'Importing...' : `Import ${leads.length} lead${leads.length !== 1 ? 's' : ''}`}
               </button>
@@ -170,7 +170,7 @@ Gamma Logistics, gamma.com, Sara Kim, , Director of Fleet`}
                 onClick={researchAll}
                 disabled={!!researching}
                 className="px-4 py-2 rounded-lg text-sm font-medium"
-                style={{ background: 'var(--green)', color: '#fff' }}
+                style={{ background: 'var(--green)', color: 'var(--accent-fg)' }}
               >
                 {researching ? 'Researching...' : `Research all ${importStats.results.filter((r) => r.prospect_id && r.input.website).length} websites with AI`}
               </button>
@@ -179,7 +179,7 @@ Gamma Logistics, gamma.com, Sara Kim, , Director of Fleet`}
               )}
               <div className="mt-3 space-y-1 max-h-80 overflow-y-auto">
                 {importStats.results.map((r, i) => (
-                  <div key={i} className="flex items-center justify-between text-xs p-2 rounded" style={{ background: r.error ? 'rgba(239,68,68,0.1)' : 'var(--bg-input)' }}>
+                  <div key={i} className="flex items-center justify-between text-xs p-2 rounded" style={{ background: r.error ? 'color-mix(in srgb, var(--red) 10%, transparent)' : 'var(--bg-input)' }}>
                     <div>
                       <span className="font-medium">{r.input.company_name}</span>
                       <span className="ml-2" style={{ color: 'var(--text-muted)' }}>{r.input.full_name}</span>

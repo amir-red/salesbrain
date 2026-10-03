@@ -82,12 +82,12 @@ export default function RoutePanel({ prospectId, route, intros, degree, teammate
         )}
         <div className="ml-auto flex gap-2">
           <button onClick={() => run('find')} disabled={!!busy} className="px-3 py-1 rounded-lg text-xs disabled:opacity-40" style={{ border: '1px solid var(--border)', color: 'var(--text)' }} title="Free — uses what the graph already knows">{busy === 'find' ? 'Finding…' : route ? 'Recompute' : 'Find route'}</button>
-          <button onClick={() => run('expand')} disabled={!!busy} className="px-3 py-1 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--accent)', color: '#fff' }} title={`Spends LinkedIn budget: the lead's profile, then a Connections-of search for a 2nd-degree lead, then ${teammatesWithLinkedin} teammate account${teammatesWithLinkedin === 1 ? '' : 's'}`}>{busy === 'expand' ? 'Looking up…' : 'Look up LinkedIn'}</button>
+          <button onClick={() => run('expand')} disabled={!!busy} className="px-3 py-1 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }} title={`Spends LinkedIn budget: the lead's profile, then a Connections-of search for a 2nd-degree lead, then ${teammatesWithLinkedin} teammate account${teammatesWithLinkedin === 1 ? '' : 's'}`}>{busy === 'expand' ? 'Looking up…' : 'Look up LinkedIn'}</button>
         </div>
       </div>
       {note && <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{note}</div>}
       {!actingCanSource && (
-        <div className="text-[11px] rounded-lg px-3 py-2" style={{ background: 'rgba(234,179,8,0.10)', color: 'var(--yellow)' }}>
+        <div className="text-[11px] rounded-lg px-3 py-2" style={{ background: 'color-mix(in srgb, var(--yellow) 10%, transparent)', color: 'var(--yellow)' }}>
           {runningAsOwner
             ? <>{actingName} has no LinkedIn account connected — Look up LinkedIn will only check teammates. Switch to <b>me</b> to use yours{acting.viewerCanSource ? '' : ' (not connected either)'}.</>
             : <>No LinkedIn account connected for you — Look up LinkedIn will only check teammates. <Link href="/profile?tab=linkedin" className="underline">Connect LinkedIn</Link>.</>}
@@ -134,7 +134,7 @@ export default function RoutePanel({ prospectId, route, intros, degree, teammate
                         ? <span className="text-[10px]" style={{ color: 'var(--green)' }}>you can message the lead directly ({first.channel})</span>
                         : asked
                           ? <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>intro ask {asked.state.replace(/_/g, ' ')}</span>
-                          : <button onClick={() => setAsk({ path: p, hop: first })} disabled={!first.actionable_now} className="px-2.5 py-1 rounded-lg text-[11px] font-medium disabled:opacity-40" style={{ background: 'var(--green)', color: '#fff' }}>Ask {first.to.name.split(' ')[0]} for an intro</button>}
+                          : <button onClick={() => setAsk({ path: p, hop: first })} disabled={!first.actionable_now} className="px-2.5 py-1 rounded-lg text-[11px] font-medium disabled:opacity-40" style={{ background: 'var(--green)', color: 'var(--accent-fg)' }}>Ask {first.to.name.split(' ')[0]} for an intro</button>}
                     </div>
                     {p.hops.map((h, j) => (
                       <div key={j} className="text-[11px] flex flex-wrap gap-x-2" style={{ color: 'var(--text-muted)' }}>
@@ -210,7 +210,7 @@ function IntroAskModal({ prospectId, path, hop, as, actingName, onClose, onFiled
           <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Files an approval in {actingName}&apos;s name — nothing is sent until it is approved.</span>
           <div className="flex gap-2">
             <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs" style={{ border: '1px solid var(--border)', color: 'var(--text)' }}>Cancel</button>
-            <button onClick={propose} disabled={!!busy || !message.trim()} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--accent)', color: '#fff' }}>{busy === 'propose' ? 'Filing…' : 'Propose for approval'}</button>
+            <button onClick={propose} disabled={!!busy || !message.trim()} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>{busy === 'propose' ? 'Filing…' : 'Propose for approval'}</button>
           </div>
         </div>
       </div>

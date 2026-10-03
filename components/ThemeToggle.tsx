@@ -2,34 +2,40 @@
 
 import { useEffect, useState } from 'react';
 
-export default function ThemeToggle() {
-  const [dark, setDark] = useState(true);
+const EVENT = 'salesbrain-theme';
+
+// Light is the default (brand: data tools start in the light product style).
+// Several toggles can be mounted at once (sidebar + a page header); they stay
+// in sync through the EVENT.
+export default function ThemeToggle({ label }: { label?: boolean }) {
+  const [dark, setDark] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem('salesbrain-theme');
-    const isDark = stored ? stored === 'dark' : true;
-    setDark(isDark);
-    document.documentElement.classList.toggle('dark', isDark);
-    document.documentElement.classList.toggle('light', !isDark);
+    const read = () => setDark(document.documentElement.classList.contains('dark'));
+    read();
+    window.addEventListener(EVENT, read);
+    return () => window.removeEventListener(EVENT, read);
   }, []);
 
   const toggle = () => {
     const next = !dark;
-    setDark(next);
     document.documentElement.classList.toggle('dark', next);
     document.documentElement.classList.toggle('light', !next);
-    localStorage.setItem('salesbrain-theme', next ? 'dark' : 'light');
+    try { localStorage.setItem('salesbrain-theme', next ? 'dark' : 'light'); } catch { /* private mode */ }
+    window.dispatchEvent(new Event(EVENT));
   };
 
+  const text = dark ? 'Light mode' : 'Dark mode';
   return (
     <button
       onClick={toggle}
-      className="p-1.5 rounded-md transition-colors hover:opacity-80"
+      className="p-1.5 rounded-md transition-colors hover:opacity-80 flex items-center gap-3"
       style={{ color: 'var(--text-muted)' }}
-      title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+      title={`Switch to ${text.toLowerCase()}`}
+      aria-label={`Switch to ${text.toLowerCase()}`}
     >
       {dark ? (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="5" />
           <line x1="12" y1="1" x2="12" y2="3" />
           <line x1="12" y1="21" x2="12" y2="23" />
@@ -41,10 +47,11 @@ export default function ThemeToggle() {
           <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
         </svg>
       ) : (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
         </svg>
       )}
+      {label && <span className="text-sm">{text}</span>}
     </button>
   );
 }

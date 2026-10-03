@@ -294,7 +294,7 @@ function ChatPanel({ nodes, companies, onApplyFilters, onHighlightContacts, onCl
           </div>
         ))}
 
-        {error && <p className="text-sm" style={{ color: '#fb7185' }}>{error}</p>}
+        {error && <p className="text-sm" style={{ color: 'var(--red)' }}>{error}</p>}
       </div>
 
       <form
@@ -314,7 +314,7 @@ function ChatPanel({ nodes, companies, onApplyFilters, onHighlightContacts, onCl
           type="submit"
           disabled={busy || !input.trim()}
           className="px-3 py-2 rounded text-sm font-medium disabled:opacity-40"
-          style={{ background: 'var(--accent)', color: '#0b1220' }}
+          style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
         >
           Ask
         </button>
@@ -633,7 +633,7 @@ function InsightsPanel({ nodes, onFocusNode }: Props) {
           </p>
           <button
             className="w-full px-3 py-2 rounded text-sm font-medium"
-            style={{ background: 'var(--accent)', color: '#0b1220' }}
+            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
             onClick={generate}
           >
             Generate insights
@@ -642,7 +642,7 @@ function InsightsPanel({ nodes, onFocusNode }: Props) {
       )}
 
       {loading && <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Analyzing network…</p>}
-      {error && <p className="text-sm" style={{ color: '#fb7185' }}>{error}</p>}
+      {error && <p className="text-sm" style={{ color: 'var(--red)' }}>{error}</p>}
 
       {insights && (
         <div className="space-y-4">

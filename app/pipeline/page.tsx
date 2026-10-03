@@ -28,34 +28,34 @@ async function getSessionInfo(): Promise<{ userId: string; isAdmin: boolean } | 
 }
 
 // Sales pipeline gate colors (9 gates).
-// Board gates are purple (#6D28D9): G3 (Review Board 1) and G7 (Review Board 2).
+// Board gates are purple (#691C47): G3 (Review Board 1) and G7 (Review Board 2).
 // Final won gate is green: G9 (Project Handover). Everything else is blue.
 const SALES_GATE_COLORS: Record<number, string> = {
-  1: '#1D4ED8', 2: '#1D4ED8',
-  3: '#6D28D9', 4: '#1D4ED8',
-  5: '#1D4ED8', 6: '#1D4ED8',  // G5 was '#6D28D9' before board review moved
-  7: '#6D28D9', 8: '#1D4ED8',  // G7 was '#1D4ED8' before becoming a board gate
+  1: '#6C477D', 2: '#6C477D',
+  3: '#691C47', 4: '#6C477D',
+  5: '#6C477D', 6: '#6C477D',  // G5 was '#691C47' before board review moved
+  7: '#691C47', 8: '#6C477D',  // G7 was '#6C477D' before becoming a board gate
   9: '#166534',
 };
 
 // Grant pipeline gate colors (10 gates) — board gates G3 + G7 + G9 purple, final G10 green
 const GRANT_GATE_COLORS: Record<number, string> = {
-  1: '#1D4ED8', 2: '#1D4ED8',
-  3: '#6D28D9',  // ← NEW: board gate
-  4: '#1D4ED8',
-  5: '#1D4ED8', 6: '#1D4ED8',
-  7: '#6D28D9', 8: '#1D4ED8',
-  9: '#6D28D9',
+  1: '#6C477D', 2: '#6C477D',
+  3: '#691C47',  // ← NEW: board gate
+  4: '#6C477D',
+  5: '#6C477D', 6: '#6C477D',
+  7: '#691C47', 8: '#6C477D',
+  9: '#691C47',
   10: '#166534',
 };
 
 // AI credit gate colors (5 gates, no board reviews) — application-in-flight
 // stages blue, Awarded amber (money in hand), Active green (being used).
 const AI_CREDIT_GATE_COLORS: Record<number, string> = {
-  1: '#1D4ED8',   // Discovered
-  2: '#1D4ED8',   // Qualified
-  3: '#1D4ED8',   // Applied
-  4: '#D97706',   // Awarded
+  1: '#6C477D',   // Discovered
+  2: '#6C477D',   // Qualified
+  3: '#6C477D',   // Applied
+  4: '#994708',   // Awarded
   5: '#166534',   // Active
 };
 
@@ -112,7 +112,7 @@ function buildGateData(deals: DealRow[], gates: typeof SALES_GATES, colors: Reco
     return {
       number: g.number,
       name: g.name,
-      color: colors[g.number] || '#1D4ED8',
+      color: colors[g.number] || '#6C477D',
       // Forward gate metadata to the kanban column header (info-icon tooltip + SLA badge)
       sla_days: g.slaDays,
       is_board: g.isBoard,
@@ -172,7 +172,7 @@ function buildGrantStageData(deals: DealRow[]) {
       number: 1,
       label: 'Securing',
       name: 'Securing',
-      color: '#1D4ED8',
+      color: '#6C477D',
       sla_days: 0,
       is_board: false,
       description: 'Actively pursuing the grant — opportunity through pre-signature G9. The board reviews at G3/G7/G9 still fire from inside this stage.',
@@ -339,7 +339,7 @@ export default async function PipelinePage() {
           />
           <SummaryCard
             label="Credits Pipeline"
-            accent="#D97706"
+            accent="var(--yellow)"
             summary={creditsSummary}
           />
         </div>
@@ -367,7 +367,7 @@ function SummaryCard({ label, accent, summary }: { label: string; accent: string
     <div className="rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderLeft: `3px solid ${accent}` }}>
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-semibold">{label}</h2>
-        <span className="text-[10px] px-2 py-0.5 rounded" style={{ background: `${accent}20`, color: accent }}>
+        <span className="text-[10px] px-2 py-0.5 rounded" style={{ background: `color-mix(in srgb, ${accent} 14%, transparent)`, color: accent }}>
           {summary.active_count} active
         </span>
       </div>
@@ -386,7 +386,7 @@ function SummaryCard({ label, accent, summary }: { label: string; accent: string
         <div className="mt-3 flex gap-3 text-[10px]" style={{ color: 'var(--text-muted)' }}>
           {summary.board_pending_count > 0 && (
             <span>
-              <span style={{ color: '#a78bfa', fontWeight: 600 }}>{summary.board_pending_count}</span> board pending
+              <span style={{ color: 'var(--cat-violet)', fontWeight: 600 }}>{summary.board_pending_count}</span> board pending
             </span>
           )}
           {summary.overdue_count > 0 && (
@@ -396,7 +396,7 @@ function SummaryCard({ label, accent, summary }: { label: string; accent: string
           )}
           {summary.lost_count > 0 && (
             <span>
-              <span style={{ color: '#ef4444', fontWeight: 600 }}>{summary.lost_count}</span>
+              <span style={{ color: 'var(--red)', fontWeight: 600 }}>{summary.lost_count}</span>
               {' '}
               lost · <a href="/lessons" className="hover:underline" style={{ color: 'var(--text-muted)' }}>see lessons</a>
             </span>

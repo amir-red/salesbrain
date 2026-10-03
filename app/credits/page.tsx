@@ -70,7 +70,7 @@ function fmtMoney(n: number | null | undefined, ccy: string) {
 function pill(text: string, color: string) {
   return (
     <span style={{
-      background: `${color}22`, color, border: `1px solid ${color}44`,
+      background: `color-mix(in srgb, ${color} 14%, transparent)`, color, border: `1px solid color-mix(in srgb, ${color} 28%, transparent)`,
       borderRadius: 999, padding: '2px 8px', fontSize: 11, fontWeight: 500,
     }}>{text}</span>
   );
@@ -174,7 +174,7 @@ function CreditsDashboardInner() {
             </p>
           </div>
           <button onClick={() => setShowBackfill(true)} style={{
-            background: '#D97706', color: '#fff', border: 'none',
+            background: 'var(--yellow)', color: 'var(--accent-fg)', border: 'none',
             borderRadius: 6, padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 500,
           }}>+ Add existing credit</button>
         </div>
@@ -210,7 +210,7 @@ function TabStrip({ tab, onSelect }: { tab: Tab; onSelect: (t: Tab) => void }) {
   const tabStyle = (active: boolean) => ({
     padding: '8px 16px', fontSize: 13, fontWeight: 500,
     color: active ? 'var(--text)' : 'var(--text-muted)',
-    borderBottom: active ? '2px solid #D97706' : '2px solid transparent',
+    borderBottom: active ? '2px solid var(--yellow)' : '2px solid transparent',
     cursor: 'pointer', background: 'transparent', border: 'none',
     borderRadius: 0,
   } as const);
@@ -484,7 +484,7 @@ function BackfillModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
           }}>Cancel</button>
           <button disabled={busy || !form.name || !form.provider || !form.credit_program_name || !form.award_amount}
                   onClick={submit} style={{
-            background: '#D97706', color: '#fff', border: 'none',
+            background: 'var(--yellow)', color: 'var(--accent-fg)', border: 'none',
             borderRadius: 6, padding: '8px 14px', fontSize: 13, cursor: 'pointer',
             opacity: busy ? 0.6 : 1,
           }}>{busy ? 'Adding…' : 'Add credit'}</button>

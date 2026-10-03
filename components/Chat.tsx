@@ -555,7 +555,7 @@ export default function Chat({ dealId, deal, onDealUpdate }: ChatProps) {
               className="p-2 rounded-lg transition-all"
               style={{
                 background: isListening ? 'var(--red)' : 'transparent',
-                color: isListening ? '#fff' : 'var(--text-muted)',
+                color: isListening ? 'var(--accent-fg)' : 'var(--text-muted)',
                 animation: isListening ? 'pulse 1.5s infinite' : 'none',
               }}
               title={isListening ? 'Stop recording' : 'Voice input'}
@@ -574,7 +574,7 @@ export default function Chat({ dealId, deal, onDealUpdate }: ChatProps) {
             className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
             style={{
               background: dealId && (input.trim() || attachments.length > 0) ? 'var(--accent)' : 'var(--border)',
-              color: dealId && (input.trim() || attachments.length > 0) ? '#fff' : 'var(--text-muted)',
+              color: dealId && (input.trim() || attachments.length > 0) ? 'var(--accent-fg)' : 'var(--text-muted)',
             }}
           >
             {isStreaming ? '...' : 'Send'}

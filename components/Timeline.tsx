@@ -19,7 +19,7 @@ const TYPE_CONFIG: Record<string, { color: string; label: string }> = {
   followup_sent: { color: 'var(--green)', label: 'Followup' },
   conversation: { color: 'var(--text-muted)', label: 'Message' },
   agent_action: { color: 'var(--accent)', label: 'Action' },
-  fact: { color: '#a78bfa', label: 'Learned' },
+  fact: { color: 'var(--cat-violet)', label: 'Learned' },
   interaction: { color: 'var(--green)', label: 'Touch' },
 };
 
@@ -95,7 +95,7 @@ export default function Timeline({ dealId }: { dealId: string }) {
               <div className="flex items-center gap-2">
                 <span
                   className="text-[9px] px-1 py-0.5 rounded"
-                  style={{ background: `${config.color}20`, color: config.color }}
+                  style={{ background: `color-mix(in srgb, ${config.color} 14%, transparent)`, color: config.color }}
                 >
                   {config.label}
                 </span>

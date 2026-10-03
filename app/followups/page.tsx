@@ -142,7 +142,7 @@ export default function FollowupsPage() {
           <button
             onClick={() => setShowForm(!showForm)}
             className="px-3 py-1.5 rounded-lg text-sm font-medium"
-            style={{ background: 'var(--accent)', color: '#fff' }}
+            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
           >
             + New followup
           </button>
@@ -207,7 +207,7 @@ export default function FollowupsPage() {
                 onClick={handleCreate}
                 disabled={submitting || !formDealId || !formBody || !formDueAt}
                 className="px-4 py-2 rounded-lg text-sm font-medium"
-                style={{ background: 'var(--green)', color: '#fff', opacity: submitting ? 0.6 : 1 }}
+                style={{ background: 'var(--green)', color: 'var(--accent-fg)', opacity: submitting ? 0.6 : 1 }}
               >
                 {submitting ? 'Creating...' : 'Create'}
               </button>
@@ -281,7 +281,7 @@ export default function FollowupsPage() {
                       <button
                         onClick={() => handleSend(f.id)}
                         className="px-2 py-1 rounded text-xs font-medium"
-                        style={{ background: 'var(--accent)', color: '#fff' }}
+                        style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
                       >
                         Send now
                       </button>

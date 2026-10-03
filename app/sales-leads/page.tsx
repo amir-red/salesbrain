@@ -107,7 +107,7 @@ const FILTERS: { key: StatusFilter; label: string }[] = [
 
 const statusColor: Record<SalesLead['status'], string> = {
   new: 'var(--accent)',
-  contacted: '#eab308',
+  contacted: 'var(--yellow)',
   converted: 'var(--green)',
   archived: 'var(--text-muted)',
 };
@@ -188,7 +188,7 @@ export default function SalesLeadsPage() {
                 className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
                 style={{
                   background: filter === f.key ? 'var(--accent)' : 'var(--bg-input)',
-                  color: filter === f.key ? '#fff' : 'var(--text-muted)',
+                  color: filter === f.key ? 'var(--accent-fg)' : 'var(--text-muted)',
                   border: `1px solid ${filter === f.key ? 'var(--accent)' : 'var(--border)'}`,
                 }}
               >
@@ -198,7 +198,7 @@ export default function SalesLeadsPage() {
           </div>
 
           {error && (
-            <div className="rounded-lg p-3 mb-4 text-sm" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--red)' }}>
+            <div className="rounded-lg p-3 mb-4 text-sm" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>
               {error}
             </div>
           )}
@@ -239,7 +239,7 @@ export default function SalesLeadsPage() {
                         {l.booking_status === 'scheduled' && (
                           <span
                             className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold"
-                            style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e' }}
+                            style={{ background: 'color-mix(in srgb, var(--green) 15%, transparent)', color: 'var(--green)' }}
                           >
                             Scheduled
                           </span>
@@ -247,7 +247,7 @@ export default function SalesLeadsPage() {
                         {l.booking_status === 'canceled' && (
                           <span
                             className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold"
-                            style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
+                            style={{ background: 'color-mix(in srgb, var(--red) 15%, transparent)', color: 'var(--red)' }}
                           >
                             Canceled
                           </span>
@@ -279,14 +279,14 @@ export default function SalesLeadsPage() {
                           <div
                             className="mt-2 rounded p-2 text-xs"
                             style={{
-                              background: 'rgba(34,197,94,0.08)',
-                              border: '1px solid rgba(34,197,94,0.3)',
+                              background: 'color-mix(in srgb, var(--green) 8%, transparent)',
+                              border: '1px solid color-mix(in srgb, var(--green) 30%, transparent)',
                               color: 'var(--text)',
                             }}
                           >
                             <div className="flex items-center gap-1.5 mb-1">
                               <span>✅</span>
-                              <strong style={{ color: '#22c55e' }}>Booked demo:</strong>
+                              <strong style={{ color: 'var(--green)' }}>Booked demo:</strong>
                               <span>{bookedLine || 'time TBD'}</span>
                             </div>
                             <div className="flex items-center gap-2 flex-wrap">
@@ -296,7 +296,7 @@ export default function SalesLeadsPage() {
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="px-2 py-1 rounded text-[11px] font-medium text-white"
-                                  style={{ background: '#22c55e' }}
+                                  style={{ background: 'var(--green)' }}
                                 >
                                   Join meeting →
                                 </a>
@@ -327,7 +327,7 @@ export default function SalesLeadsPage() {
                             className="text-xs mt-1.5 inline-flex items-center gap-1.5 px-2 py-1 rounded"
                             style={{ background: 'rgba(34,211,238,0.1)', color: 'var(--text)', border: '1px solid rgba(34,211,238,0.25)' }}
                           >
-                            <span style={{ color: '#22d3ee' }}>📅</span>
+                            <span style={{ color: 'var(--cat-teal)' }}>📅</span>
                             <span><strong>Preferred demo:</strong> {demoLine}</span>
                           </p>
                         ) : null;
@@ -353,7 +353,7 @@ export default function SalesLeadsPage() {
                         <button
                           onClick={() => convert(l.id)}
                           disabled={busyId === l.id}
-                          className="px-3 py-1.5 rounded text-xs font-medium text-white disabled:opacity-50"
+                          className="px-3 py-1.5 rounded text-xs font-medium text-[var(--accent-fg)] disabled:opacity-50"
                           style={{ background: 'var(--accent)' }}
                         >
                           {busyId === l.id ? '…' : 'Convert to deal'}

@@ -37,7 +37,7 @@ export function ActivityList({ runs, showIcp = false }: { runs: AgentRun[]; show
         return (
           <div key={r.id} className="p-3 grid grid-cols-[150px_1fr_220px] gap-3 items-start" style={{ borderTop: '1px solid var(--border)' }}>
             <div>
-              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ background: `${color}22`, color }}>{r.status}</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ background: `color-mix(in srgb, ${color} 14%, transparent)`, color }}>{r.status}</span>
               <div className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>{relativeTime(r.started_at)} · {r.trigger}</div>
               {showIcp && r.icp_name && <div className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>{r.icp_name}</div>}
             </div>
@@ -77,11 +77,11 @@ export function DegreeWarm({ degree, paths }: { degree: string | null; paths: { 
   const tip = warm.map((w) => w.note).join(' \u00b7 ') || (label ? `${label} degree connection` : '');
   return (
     <span className="ml-1 inline-flex items-center gap-1 align-middle" title={tip}>
-      {label && <span className="text-[9px] px-1 rounded" style={{ background: `${color}22`, color }}>{label}</span>}
+      {label && <span className="text-[9px] px-1 rounded" style={{ background: `color-mix(in srgb, ${color} 14%, transparent)`, color }}>{label}</span>}
       {warm.length > 0 && <span className="text-[9px]" style={{ color: colleague ? 'var(--accent)' : 'var(--green)' }}>{colleague ? '\ud83e\udd1d intro' : `\ud83d\udd25 ${warm.length}`}</span>}
       {route && (
         route.path_available
-          ? <span className="text-[9px] px-1 rounded" style={{ background: 'rgba(34,197,94,0.15)', color: 'var(--green)' }} title="a warm route exists">route \u00b7 {route.best_path_hops} hop{route.best_path_hops === 1 ? '' : 's'}</span>
+          ? <span className="text-[9px] px-1 rounded" style={{ background: 'color-mix(in srgb, var(--green) 15%, transparent)', color: 'var(--green)' }} title="a warm route exists">route \u00b7 {route.best_path_hops} hop{route.best_path_hops === 1 ? '' : 's'}</span>
           : <span className="text-[9px] px-1 rounded" style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }} title={(route.bridge_candidates?.length || 0) > 0 ? 'no route yet — bridge candidates exist' : 'no route yet'}>{(route.bridge_candidates?.length || 0) > 0 ? 'bridge' : 'cold'}</span>
       )}
     </span>

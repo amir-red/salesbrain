@@ -116,7 +116,7 @@ export default function IcpPanelPage() {
             <Link href="/icp" className="underline">Back to ICPs</Link>
           </div>
         )}
-        {error && data && <div className="mx-4 mt-3 rounded-lg px-3 py-2 text-[11px]" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--red)' }}>Last refresh failed ({error}); showing the previous data.</div>}
+        {error && data && <div className="mx-4 mt-3 rounded-lg px-3 py-2 text-[11px]" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>Last refresh failed ({error}); showing the previous data.</div>}
 
         {data && editing && (
           <IcpBuilder initial={data.icp} onSaved={() => { setEditing(false); void refresh(); }} onCancel={() => setEditing(false)} />
@@ -125,7 +125,7 @@ export default function IcpPanelPage() {
         {data && !editing && (
           <div className="p-4 space-y-4">
             {data.blockers.length > 0 && (
-              <div className="rounded-xl px-4 py-3 text-xs space-y-0.5" style={{ background: 'rgba(234,179,8,0.08)', border: '1px solid var(--yellow)' }}>
+              <div className="rounded-xl px-4 py-3 text-xs space-y-0.5" style={{ background: 'color-mix(in srgb, var(--yellow) 8%, transparent)', border: '1px solid var(--yellow)' }}>
                 <div className="font-medium" style={{ color: 'var(--yellow)' }}>The Leads Finder will not run for this ICP right now</div>
                 {data.blockers.map((b, i) => <div key={i} style={{ color: 'var(--text-muted)' }}>· {b}</div>)}
               </div>

@@ -48,7 +48,7 @@ export default function IcpRow({ icp, quota, viewerUserId, isAdmin, fleet, hold,
   const btn = (label: string, mode: RunMode, primary = false) => (
     <button onClick={() => run(mode)} disabled={!canRun || !!running || busy} title={canRun ? undefined : disabledTitle}
             className="px-2.5 py-1 rounded-lg text-[11px] disabled:opacity-40"
-            style={primary ? { background: 'var(--accent)', color: '#fff' } : { border: '1px solid var(--border)', color: 'var(--text)' }}>
+            style={primary ? { background: 'var(--accent)', color: 'var(--accent-fg)' } : { border: '1px solid var(--border)', color: 'var(--text)' }}>
       {running === mode ? '…' : label}
     </button>
   );
@@ -63,7 +63,7 @@ export default function IcpRow({ icp, quota, viewerUserId, isAdmin, fleet, hold,
           <div className="flex items-center gap-2 flex-wrap">
             <Link href={`/icp/${icp.id}`} className="font-semibold hover:underline truncate">{icp.name}</Link>
             {icp.paused_at && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }} title={`${icp.paused_reason || 'paused'}${icp.paused_by_admin ? ' · by an administrator' : ''}`}>⏸ paused {relativeTime(icp.paused_at)}</span>}
-            {icp.approvals.pending > 0 && <Link href={`/icp/${icp.id}#outreach`} className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(34,197,94,0.15)', color: 'var(--green)' }}>{icp.approvals.pending} to approve</Link>}
+            {icp.approvals.pending > 0 && <Link href={`/icp/${icp.id}#outreach`} className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'color-mix(in srgb, var(--green) 15%, transparent)', color: 'var(--green)' }}>{icp.approvals.pending} to approve</Link>}
           </div>
           <div className="text-[11px] flex items-center gap-1.5 flex-wrap" style={{ color: 'var(--text-muted)' }}>
             {PRODUCTS.find((p) => p.key === icp.product)?.label ?? icp.product ?? '—'}
@@ -93,7 +93,7 @@ export default function IcpRow({ icp, quota, viewerUserId, isAdmin, fleet, hold,
       <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>coverage · {coverageLine}</div>
 
       <div className="flex flex-wrap gap-2 items-center">
-        <Link href={`/icp/${icp.id}`} className="px-2.5 py-1 rounded-lg text-[11px] font-medium" style={{ background: 'var(--accent)', color: '#fff' }}>Open →</Link>
+        <Link href={`/icp/${icp.id}`} className="px-2.5 py-1 rounded-lg text-[11px] font-medium" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>Open →</Link>
         {btn('Find more now', 'now')}
         {btn('Queue a pass', 'queue')}
         {btn('Enrich now', 'enrich')}

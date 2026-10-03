@@ -177,7 +177,7 @@ function LeadPicker({ deal, onUpdate }: { deal: Deal; onUpdate?: () => void }) {
         <div className="flex items-center gap-3">
           <div
             className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-            style={{ background: 'var(--accent)', color: '#fff' }}
+            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
           >
             {initials}
           </div>
@@ -226,7 +226,7 @@ function LeadPicker({ deal, onUpdate }: { deal: Deal; onUpdate?: () => void }) {
             >
               <div
                 className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
-                style={{ background: 'var(--accent)', color: '#fff' }}
+                style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
               >
                 {u.name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2)}
               </div>
@@ -330,7 +330,7 @@ export default function DealPanel({ deal, onDealUpdate }: DealPanelProps) {
               <span
                 key={f}
                 className="px-2 py-0.5 rounded text-xs"
-                style={{ background: 'var(--red)', color: '#fff', opacity: 0.8 }}
+                style={{ background: 'var(--red)', color: 'var(--accent-fg)', opacity: 0.8 }}
               >
                 {f}
               </span>
@@ -368,7 +368,7 @@ export default function DealPanel({ deal, onDealUpdate }: DealPanelProps) {
                 className="px-2 py-0.5 rounded text-xs"
                 style={{
                   background: f.startsWith('sla_') ? 'var(--red)' : 'var(--bg-input)',
-                  color: f.startsWith('sla_') ? '#fff' : 'var(--text-muted)',
+                  color: f.startsWith('sla_') ? 'var(--accent-fg)' : 'var(--text-muted)',
                   border: `1px solid ${f.startsWith('sla_') ? 'var(--red)' : 'var(--border)'}`,
                 }}
               >

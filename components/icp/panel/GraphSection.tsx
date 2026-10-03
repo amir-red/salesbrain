@@ -58,7 +58,7 @@ export default function GraphSection({ data, onChanged }: { data: PanelPayload; 
             <div key={r.prospect_id} className="flex items-center gap-2">
               <Link href={`/prospects/${r.prospect_id}`} className="hover:underline truncate">{r.full_name || '—'}</Link>
               <span className="truncate" style={{ color: 'var(--text-muted)' }}>{r.company_name || ''}</span>
-              <span className="ml-auto shrink-0 px-1.5 rounded text-[10px]" style={{ background: 'rgba(34,197,94,0.15)', color: 'var(--green)' }}>{r.hops} hop{r.hops === 1 ? '' : 's'}</span>
+              <span className="ml-auto shrink-0 px-1.5 rounded text-[10px]" style={{ background: 'color-mix(in srgb, var(--green) 15%, transparent)', color: 'var(--green)' }}>{r.hops} hop{r.hops === 1 ? '' : 's'}</span>
               <span className="shrink-0" style={{ color: 'var(--text-muted)' }}>fit {r.icp_score ?? '—'}</span>
             </div>
           ))}

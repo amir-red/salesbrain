@@ -22,7 +22,7 @@ export default function AgentChip({ agent, cell, enabled, killSwitch, outreach, 
   const btn = (label: string, state: HoldState, tone: 'primary' | 'danger' | 'plain' = 'plain') => (
     <button key={label} onClick={() => onSetState(state)} disabled={busy}
             className="px-2 py-0.5 rounded text-[10px] disabled:opacity-40"
-            style={tone === 'primary' ? { background: 'var(--accent)', color: '#fff' }
+            style={tone === 'primary' ? { background: 'var(--accent)', color: 'var(--accent-fg)' }
                  : tone === 'danger' ? { border: '1px solid var(--red)', color: 'var(--red)' }
                  : { border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
       {label}
@@ -36,7 +36,7 @@ export default function AgentChip({ agent, cell, enabled, killSwitch, outreach, 
          title={cell.hold ? holdLabel(cell.hold) : undefined}>
       <div className="flex items-center gap-1.5 text-[11px] min-w-0">
         <span className="font-medium truncate">{AGENT_LABELS[agent]}</span>
-        <span className="px-1 rounded text-[9px] uppercase shrink-0" style={{ background: `${color}22`, color }}>{cell.state}</span>
+        <span className="px-1 rounded text-[9px] uppercase shrink-0" style={{ background: `color-mix(in srgb, ${color} 14%, transparent)`, color }}>{cell.state}</span>
         {off && <span className="text-[9px] shrink-0" style={{ color: 'var(--text-muted)' }} title={!killSwitch ? 'Kill switch — every agent is stopped' : 'Disabled on /agents'}>off</span>}
       </div>
       {cell.hold && (

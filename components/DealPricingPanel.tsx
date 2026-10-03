@@ -115,7 +115,7 @@ export default function DealPricingPanel({ deal }: { deal: DealLike }) {
         <button
           onClick={() => setShowForm((v) => !v)}
           className="text-xs px-2 py-1 rounded"
-          style={{ background: 'var(--accent)', color: '#0b1220' }}
+          style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
         >
           {showForm ? 'Hide form' : 'Generate quote'}
         </button>
@@ -155,7 +155,7 @@ export default function DealPricingPanel({ deal }: { deal: DealLike }) {
       {showForm && (
         <div className="space-y-4 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
           <PricingForm values={values} onChange={setValues} onCalculate={calculate} busy={busy} />
-          {error && <p className="text-sm" style={{ color: '#fb7185' }}>{error}</p>}
+          {error && <p className="text-sm" style={{ color: 'var(--red)' }}>{error}</p>}
           {result && (
             <>
               <PricingResult
@@ -168,7 +168,7 @@ export default function DealPricingPanel({ deal }: { deal: DealLike }) {
                 onClick={saveQuote}
                 disabled={saveBusy}
                 className="w-full px-3 py-2 rounded text-sm font-medium disabled:opacity-50"
-                style={{ background: 'var(--accent)', color: '#0b1220' }}
+                style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
               >
                 {saveBusy ? 'Saving…' : 'Save quote to this deal'}
               </button>

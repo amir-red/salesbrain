@@ -18,7 +18,7 @@ function ScorePill({ score }: { score: number | null }) {
   if (score === null) return <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>N/A</span>;
   const color = score >= 70 ? 'var(--green)' : score >= 40 ? 'var(--yellow)' : 'var(--red)';
   return (
-    <span className="text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ background: `${color}20`, color }}>
+    <span className="text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ background: `color-mix(in srgb, ${color} 14%, transparent)`, color }}>
       {score}
     </span>
   );
@@ -56,7 +56,7 @@ export default function ClientsPage() {
           <a
             href="/deals/new"
             className="px-3 py-1.5 rounded-lg text-sm font-medium"
-            style={{ background: 'var(--accent)', color: '#fff' }}
+            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
           >
             + New client / deal
           </a>

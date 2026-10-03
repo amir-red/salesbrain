@@ -120,7 +120,7 @@ function IntegrationsPageInner() {
         </div>
 
         {urlError && (
-          <div className="m-4 p-3 rounded-lg text-xs" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--red)' }}>
+          <div className="m-4 p-3 rounded-lg text-xs" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--red) 30%, transparent)', color: 'var(--red)' }}>
             OAuth error: {urlError}
           </div>
         )}
@@ -140,7 +140,7 @@ function IntegrationsPageInner() {
               )}
             </div>
             {!connected.google ? (
-              <a href="/api/integrations/google/connect" className="block px-3 py-2 rounded-lg text-sm text-center font-medium" style={{ background: 'var(--accent)', color: '#fff' }}>
+              <a href="/api/integrations/google/connect" className="block px-3 py-2 rounded-lg text-sm text-center font-medium" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
                 Connect Google
               </a>
             ) : (
@@ -152,7 +152,7 @@ function IntegrationsPageInner() {
                   <button onClick={() => runSync('messages')} disabled={syncing} className="px-3 py-1.5 rounded-lg text-xs" style={{ background: 'var(--bg-input)', color: 'var(--text)', border: '1px solid var(--border)' }}>
                     Sync recent emails
                   </button>
-                  <button onClick={() => runSync('both')} disabled={syncing} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'var(--accent)', color: '#fff' }}>
+                  <button onClick={() => runSync('both')} disabled={syncing} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
                     {syncing ? 'Syncing...' : 'Full sync'}
                   </button>
                   <button onClick={disconnectGoogle} className="px-3 py-1.5 rounded-lg text-xs" style={{ color: 'var(--red)', border: '1px solid var(--border)' }}>
@@ -214,7 +214,7 @@ function IntegrationsPageInner() {
                 onClick={importCsv}
                 disabled={!csvFile || csvUploading}
                 className="px-3 py-1.5 rounded-lg text-xs font-medium"
-                style={{ background: csvFile ? 'var(--accent)' : 'var(--border)', color: csvFile ? '#fff' : 'var(--text-muted)', opacity: csvUploading ? 0.6 : 1 }}
+                style={{ background: csvFile ? 'var(--accent)' : 'var(--border)', color: csvFile ? 'var(--accent-fg)' : 'var(--text-muted)', opacity: csvUploading ? 0.6 : 1 }}
               >
                 {csvUploading ? 'Uploading...' : 'Import LinkedIn Connections'}
               </button>
@@ -276,7 +276,7 @@ function IntegrationsPageInner() {
                 onClick={importMessages}
                 disabled={!selectedContact || !importText.trim()}
                 className="px-3 py-1.5 rounded-lg text-xs font-medium"
-                style={{ background: 'var(--accent)', color: '#fff' }}
+                style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
               >
                 Import Messages
               </button>
@@ -284,7 +284,7 @@ function IntegrationsPageInner() {
                 onClick={analyzeStyle}
                 disabled={!selectedContact}
                 className="px-3 py-1.5 rounded-lg text-xs font-medium"
-                style={{ background: 'var(--green)', color: '#fff' }}
+                style={{ background: 'var(--green)', color: 'var(--accent-fg)' }}
                 title="Analyze all imported messages for this contact and build a communication profile"
               >
                 Analyze Communication Style →

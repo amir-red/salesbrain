@@ -1,19 +1,27 @@
 import type { Metadata } from 'next';
+import { Poppins, JetBrains_Mono } from 'next/font/google';
 // @ts-expect-error -- CSS import handled by Next.js bundler
 import './globals.css';
 
+// Brand basics: Poppins for the product, JetBrains Mono for code / IDs only.
+const poppins = Poppins({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-poppins',
+  display: 'swap',
+});
+const jetbrains = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  variable: '--font-jetbrains',
+  display: 'swap',
+});
+
 export const metadata: Metadata = {
-  title: 'SalesBrain — Agentic B2B Sales CRM',
-  description: 'AI-powered sales pipeline management with Claude',
-  // Neural-node SB monogram lives at /public/logo.svg. Browsers render SVG
-  // favicons at native resolution — no separate favicon.ico needed.
+  title: 'SalesBrain — Zeami',
+  description: 'Sales and grants CRM with an agent at its core',
   icons: {
-    icon: [
-      { url: '/logo.svg', type: 'image/svg+xml' },
-    ],
-    // apple-touch-icon uses PNG. If a PNG variant is added at
-    // public/logo-192.png later, uncomment the next block.
-    // apple: [{ url: '/logo-192.png', sizes: '192x192', type: 'image/png' }],
+    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
   },
 };
 
@@ -21,19 +29,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Light product style is the default; a stored choice wins. */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
                 var t = localStorage.getItem('salesbrain-theme');
-                var d = t ? t === 'dark' : true;
-                document.documentElement.classList.add(d ? 'dark' : 'light');
+                document.documentElement.classList.add(t === 'dark' ? 'dark' : 'light');
               })();
             `,
           }}
         />
       </head>
-      <body className="antialiased min-h-screen">{children}</body>
+      {/* Font variables live on <body>: <html>'s class is owned by the theme script. */}
+      <body className={`${poppins.variable} ${jetbrains.variable} antialiased min-h-screen`}>{children}</body>
     </html>
   );
 }

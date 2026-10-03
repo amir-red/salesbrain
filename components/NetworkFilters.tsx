@@ -44,7 +44,7 @@ export default function NetworkFilters({ filters, onChange, industries, location
         {activeCount > 0 && (
           <span
             className="text-[10px] rounded-full px-1.5 py-0.5"
-            style={{ background: 'var(--accent)', color: '#0b1220' }}
+            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
           >
             {activeCount}
           </span>
@@ -119,7 +119,7 @@ export default function NetworkFilters({ filters, onChange, industries, location
             >Reset all</button>
             <button
               className="text-xs px-3 py-1 rounded"
-              style={{ background: 'var(--accent)', color: '#0b1220' }}
+              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
               onClick={() => setOpen(false)}
             >Done</button>
           </div>
@@ -208,7 +208,7 @@ function TriCheckbox({ label, value, onChange }: {
     else onChange(null);
   }
   const display = value === null ? 'Any' : value ? 'Yes' : 'No';
-  const color = value === null ? 'var(--text-muted)' : value ? '#34d399' : '#fb7185';
+  const color = value === null ? 'var(--text-muted)' : value ? 'var(--green)' : 'var(--red)';
   return (
     <button
       onClick={next}

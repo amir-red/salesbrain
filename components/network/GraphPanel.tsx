@@ -188,7 +188,7 @@ export default function GraphPanel() {
               className="rounded px-2 py-0.5 text-xs"
               style={{
                 background: source === null ? 'var(--accent)' : 'var(--bg-input)',
-                color: source === null ? '#fff' : 'var(--text-muted)',
+                color: source === null ? 'var(--accent-fg)' : 'var(--text-muted)',
               }}
             >
               All
@@ -200,7 +200,7 @@ export default function GraphPanel() {
                 className="rounded px-2 py-0.5 text-xs"
                 style={{
                   background: source === s.source ? 'var(--accent)' : 'var(--bg-input)',
-                  color: source === s.source ? '#fff' : 'var(--text-muted)',
+                  color: source === s.source ? 'var(--accent-fg)' : 'var(--text-muted)',
                 }}
               >
                 {SOURCE_LABELS[s.source] || s.source} ({s.edges.toLocaleString()})

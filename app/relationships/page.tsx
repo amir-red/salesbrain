@@ -42,17 +42,17 @@ type Stage = 'stranger' | 'acquaintance' | 'engaged' | 'trusted' | 'advocate';
 
 const STAGE_COLOR: Record<Stage, string> = {
   stranger: 'var(--text-muted)',
-  acquaintance: '#60a5fa',
-  engaged: '#a78bfa',
-  trusted: '#34d399',
-  advocate: '#fbbf24',
+  acquaintance: 'var(--cat-blue)',
+  engaged: 'var(--cat-violet)',
+  trusted: 'var(--green)',
+  advocate: 'var(--yellow)',
 };
 
 const TIER_COLOR: Record<string, string> = {
-  personal: '#fbbf24',
-  career: '#34d399',
-  company: '#60a5fa',
-  commercial: '#a78bfa',
+  personal: 'var(--yellow)',
+  career: 'var(--green)',
+  company: 'var(--cat-blue)',
+  commercial: 'var(--cat-violet)',
 };
 
 function ago(iso: string | null): string {
@@ -141,7 +141,7 @@ export default function RelationshipsPage() {
                     className="px-2 py-1 rounded-md text-[11px] font-medium transition-colors"
                     style={{
                       background: scope === s ? 'var(--accent)' : 'var(--bg-input)',
-                      color: scope === s ? '#fff' : 'var(--text-muted)',
+                      color: scope === s ? 'var(--accent-fg)' : 'var(--text-muted)',
                       border: `1px solid ${scope === s ? 'var(--accent)' : 'var(--border)'}`,
                     }}
                   >
@@ -157,7 +157,7 @@ export default function RelationshipsPage() {
                     className="px-2 py-1 rounded-md text-[11px] font-medium transition-colors"
                     style={{
                       background: stage === s ? 'var(--accent)' : 'var(--bg-input)',
-                      color: stage === s ? '#fff' : 'var(--text-muted)',
+                      color: stage === s ? 'var(--accent-fg)' : 'var(--text-muted)',
                       border: `1px solid ${stage === s ? 'var(--accent)' : 'var(--border)'}`,
                     }}
                   >

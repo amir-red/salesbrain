@@ -182,7 +182,7 @@ export default function NetworkPage() {
           <button
             onClick={() => setInsightsOpen(true)}
             className="px-3 py-1.5 rounded text-sm font-medium"
-            style={{ background: 'var(--accent)', color: '#0b1220' }}
+            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
           >
             AI Insights
           </button>
@@ -201,7 +201,7 @@ export default function NetworkPage() {
             </div>
           )}
           {error && (
-            <div className="absolute inset-0 flex items-center justify-center" style={{ color: '#fb7185' }}>
+            <div className="absolute inset-0 flex items-center justify-center" style={{ color: 'var(--red)' }}>
               {error}
             </div>
           )}

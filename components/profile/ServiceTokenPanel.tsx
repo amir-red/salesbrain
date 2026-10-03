@@ -124,7 +124,7 @@ export default function ServiceTokenPanel() {
             <button
               onClick={generate}
               disabled={!appKey.trim() || !newName.trim() || creating}
-              className="px-4 py-2 rounded text-sm font-medium text-white disabled:opacity-50"
+              className="px-4 py-2 rounded text-sm font-medium text-[var(--accent-fg)] disabled:opacity-50"
               style={{ background: 'var(--accent)' }}
             >
               {creating ? 'Generating…' : 'Generate'}
@@ -136,7 +136,7 @@ export default function ServiceTokenPanel() {
         <section>
           <h2 className="text-sm font-semibold mb-2">Active tokens</h2>
           {error && (
-            <div className="rounded p-2 mb-3 text-xs" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
+            <div className="rounded p-2 mb-3 text-xs" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>
               {error}
             </div>
           )}
@@ -170,7 +170,7 @@ export default function ServiceTokenPanel() {
                   <button
                     onClick={() => revoke(t.id, t.name)}
                     className="px-3 py-1.5 rounded text-xs"
-                    style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}
+                    style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)', border: '1px solid color-mix(in srgb, var(--red) 30%, transparent)' }}
                   >
                     Revoke
                   </button>
@@ -201,11 +201,11 @@ export default function ServiceTokenPanel() {
         >
           <div
             className="w-full max-w-lg rounded-xl overflow-hidden"
-            style={{ background: 'var(--bg-card)', border: '2px solid #eab308' }}
+            style={{ background: 'var(--bg-card)', border: '2px solid var(--yellow)' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b" style={{ borderColor: 'var(--border)' }}>
-              <h2 className="text-base font-bold" style={{ color: '#eab308' }}>
+              <h2 className="text-base font-bold" style={{ color: 'var(--yellow)' }}>
                 ⚠️ Save this token now
               </h2>
               <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
@@ -230,7 +230,7 @@ export default function ServiceTokenPanel() {
             <div className="px-4 py-3 border-t flex justify-end" style={{ borderColor: 'var(--border)' }}>
               <button
                 onClick={() => setRevealed(null)}
-                className="px-4 py-2 rounded text-xs font-medium text-white"
+                className="px-4 py-2 rounded text-xs font-medium text-[var(--accent-fg)]"
                 style={{ background: 'var(--accent)' }}
               >
                 I&apos;ve saved it — close

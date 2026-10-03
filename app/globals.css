@@ -2,34 +2,66 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-:root {
-  --bg: #0a0a0f;
-  --bg-card: #12121a;
-  --bg-input: #1a1a25;
-  --border: #2a2a3a;
-  --text: #e4e4ed;
-  --text-muted: #8888a0;
-  --accent: #3b82f6;
-  --accent-glow: rgba(59, 130, 246, 0.15);
-  --green: #22c55e;
-  --yellow: #eab308;
-  --red: #ef4444;
-  --orange: #f97316;
+/* Zeami brand basics — docs/brand/zeami-brand-basics.md.
+   Light product style is the default; `.dark` is the obsidian app style.
+   Components reference these tokens only; never a literal brand hex. */
+@theme inline {
+  --font-sans: var(--font-poppins), system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+:root,
 .light {
-  --bg: #f5f5f9;
-  --bg-card: #ffffff;
-  --bg-input: #e8e8ee;
-  --border: #d0d0da;
-  --text: #1a1a2e;
-  --text-muted: #6b6b80;
-  --accent: #2563eb;
-  --accent-glow: rgba(37, 99, 235, 0.1);
-  --green: #16a34a;
-  --yellow: #ca8a04;
-  --red: #dc2626;
-  --orange: #ea580c;
+  color-scheme: light;
+  --bg: #fafafa;            /* product-paper */
+  --bg-card: #ffffff;       /* product-surface */
+  --bg-input: #f6f0f8;      /* band */
+  --border: #e2e8f0;        /* product-line */
+  --text: #0f172a;          /* product-ink */
+  --text-muted: #475569;    /* product-muted */
+  --accent: #691c47;        /* primary — deep plum on light */
+  --accent-fg: #ffffff;     /* text on a solid accent / status fill */
+  --accent-soft: #ebdff0;   /* soft */
+  --accent-glow: rgba(105, 28, 71, 0.08);
+  --highlight: #c6abd7;     /* mauve */
+  --logo: #691c47;
+  --green: #046c4e;         /* success-light */
+  --yellow: #994708;        /* warning-light */
+  --red: #b6171d;           /* error #ED2027, darkened: ≥4.5:1 as small text on every surface and tint */
+  --orange: #a5370a;
+  --blue: #6c477d;          /* heather — the neutral "info" tone */
+  /* categorical badges (stages, lesson types): each passes 4.5:1 on its own tint */
+  --cat-blue: #1b589b;
+  --cat-violet: #6c477d;
+  --cat-teal: #0d606a;
+  --cat-pink: #9b2268;
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.dark {
+  color-scheme: dark;
+  --bg: #0d0d14;            /* obsidian */
+  --bg-card: #1d1a20;       /* dark-card */
+  --bg-input: #27222b;
+  --border: #3a2e3c;        /* dark-line */
+  --text: #e2e8f0;          /* dark-ink */
+  --text-muted: #94a3b8;    /* dark-muted */
+  --accent: #d9a6c4;        /* plum — pale plum on dark */
+  --accent-fg: #0d0d14;
+  --accent-soft: #2e2433;
+  --accent-glow: rgba(217, 166, 196, 0.14);
+  --highlight: #c6abd7;
+  --logo: #fcf9fd;          /* ivory reverse */
+  --green: #10b981;         /* success-dark */
+  --yellow: #f59e0b;        /* warning-dark */
+  --red: #f57b7f;
+  --orange: #fb923c;
+  --blue: #c6abd7;
+  --cat-blue: #84b8f1;
+  --cat-violet: #c6abd7;
+  --cat-teal: #5cc8d6;
+  --cat-pink: #f09ac8;
+  --shadow-card: none;
 }
 
 * {
@@ -39,12 +71,38 @@
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-poppins), system-ui, -apple-system, 'Segoe UI', sans-serif;
+  line-height: 1.5;
+}
+
+h1, h2, h3 {
+  letter-spacing: -0.02em;
+}
+
+/* Metrics and tables line up */
+table, .tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
 }
 
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -52,6 +110,52 @@ body {
 ::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 3px;
+}
+
+/* ─── Shared primitives (brand shapes: card 16px, input 12px, pill buttons) ─── */
+.z-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  box-shadow: var(--shadow-card);
+}
+.z-input {
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.875rem;
+  transition: border-color 150ms, box-shadow 150ms;
+}
+.z-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.z-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 1.25rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  background: var(--accent);
+  color: var(--accent-fg);
+  transition: opacity 150ms;
+}
+.z-btn:hover { opacity: 0.9; }
+.z-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.z-eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 /* Markdown in messages */
@@ -72,6 +176,7 @@ body {
   padding: 0.15em 0.4em;
   border-radius: 4px;
   font-size: 0.9em;
+  font-family: var(--font-mono);
 }
 .markdown-body strong {
   color: var(--text);
@@ -79,6 +184,13 @@ body {
 
 /* Mic pulse animation */
 @keyframes pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-  50% { opacity: 0.85; box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in srgb, var(--red) 40%, transparent); }
+  50% { opacity: 0.85; box-shadow: 0 0 0 8px transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
