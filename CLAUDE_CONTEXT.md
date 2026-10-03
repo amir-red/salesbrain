@@ -689,6 +689,46 @@ threw the response's usage block away. Plan: `~/.claude/plans/on-the-agents-runn
 - Not built: a rates editor, budget alerts / spend caps, backfill from `state.db` (history before the deploy
   stays in `hermes insights`), `agent_runs` ↔ usage join (no run id reaches the hook).
 
+### 5.ah LinkedIn connection requests — approved, capped, tracked (2026-10-03, core/hermes 0.36.0, migration 049)
+
+Amir, for the NRW campaign on Matthias Poschmann's account: "use Unipile to connect to people and track who we
+sent to, who accepted, who did not, whom we never asked." This reverses "connecting stays a human gesture"
+(unipile-trial-results §7) — under the product's one rule for sends: **a request is a draft the owner approves.**
+
+- **Approval kind `connect`** (`outreach_approvals`, channel `linkedin`, message = the optional note, may be
+  empty). Filed by `commands/invitations.py::propose_connect` (one lead) or `propose_connect_batch` (one ICP:
+  best fit first, one person per company before a second, never more than the cap still allows). Same card,
+  same 👍/👎, same `decide_outreach`. `mark_approval_result` leaves the prospect alone for this kind — a request
+  is not a message: no `P5_SENT`, no touch, no cadence — and `outreach_queue` / `followup_queue` ignore it.
+- **Gate** `consume_connect`: caps checked first (`policy/invitations.py`, `policy_rules['agents.linkedin_connect']`:
+  `per_day` 5, `per_week` 25, `note_max_chars` 200, `no_answer_after_days` 21), then the approval is consumed
+  atomically (one send per approval). Requests sent by hand count toward the caps. The Unipile guard has an
+  `invite` class as a backstop only (`policy/linkedin_limits.py`; `users/invite` must classify above `users/`).
+- **Send** (ring `outreach_agent._send_connect`): resolves the member id with one profile fetch when the lead
+  only has a slug, skips the send if the profile says 1st degree, then `unipile.send_invitation`, then
+  `record_invitation` writes the ledger. Never call `send_invitation` from anywhere else.
+- **Ledger `linkedin_invitations`** (one row per account + member): `pending | accepted | not_accepted | failed`,
+  `source` salesbrain | linkedin. The hourly `linkedin_sync.py` passes LinkedIn's sent list and the newest
+  connections to `reconcile_invitations`: a pending row that left the sent list is `accepted` if the member is
+  now a connection, else `not_accepted` (LinkedIn never reports a decline); a member who shows up later is
+  corrected to `accepted`; a paginated (incomplete) sent list closes nothing; a row sent less than 12 h ago and
+  never seen in the list is left alone. Accepting sets `prospects.network_degree = '1'`.
+- **Lead state** is derived, never stored: `connected` (1st degree OR accepted) · `pending` · `no_answer`
+  (pending ≥ 21 d) · `not_accepted` · `failed` · `not_invited` · `no_profile`. Kernel: `pi.lead_state`; the app
+  ports it in `lib/connect.ts` (adds `awaiting_approval`) because the leads list is direct SQL — change both.
+- **Tools**: `crm_linkedin_connect_propose`, `crm_linkedin_connect_batch` (both `mcp=None`),
+  `crm_linkedin_connect_status` (read). 125 tools. Not on the service MCP.
+- **App**: `/icp/[id]` Leads table gets a LinkedIn column + filter + totals strip, **Connect** per lead
+  (`POST /api/prospects/[id]/connect`, runs as the lead's owner for an admin) and **Queue next N for approval**
+  (`POST /api/icp/[id]/connect`, runs as the list owner). `ApprovalsPanel` labels the kind.
+- **Fixed on the way**: `unipile._request` percent-encodes the path — a slug with ö/é raised
+  `UnicodeEncodeError` on every profile fetch (8 NRW leads; their `warm_paths = []` rows still need a re-run).
+- **UNVERIFIED against a live account**: the `users/invite` body and the `users/invite/sent` item keys
+  (`unipile.sent_invitation` takes several spellings). Probe one real sent-list response before trusting the
+  hand-sent tracking; the first approved request tells you whether the send shape is right.
+- Not built: withdrawing a pending request, an AI-drafted note, a first message after acceptance to a
+  1st-degree connection with no thread (the gap in §5.ac), a policy editor for the caps.
+
 ## 6. Env vars
 
 All must be in `.env.local` (dev) and as GitHub repo secrets (prod — workflow writes them to `.env.production`).
