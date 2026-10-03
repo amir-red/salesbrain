@@ -95,7 +95,7 @@ export default function ServiceAdminPage() {
 
         <div className="p-4 max-w-5xl">
           {error && (
-            <div className="rounded p-3 mb-4 text-xs" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: '#ef4444' }}>{error}</div>
+            <div className="rounded p-3 mb-4 text-xs" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>{error}</div>
           )}
           {loading ? (
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Loading…</p>
@@ -247,7 +247,7 @@ export default function ServiceAdminPage() {
 function Chips({ label, items, tone }: { label: string; items?: string[]; tone?: 'exclude' }) {
   if (!items || items.length === 0) return null;
   const bg = tone === 'exclude' ? 'color-mix(in srgb, var(--red) 10%, transparent)' : 'var(--bg-input)';
-  const fg = tone === 'exclude' ? '#ef4444' : 'var(--text)';
+  const fg = tone === 'exclude' ? 'var(--red)' : 'var(--text)';
   return (
     <div className="flex flex-wrap items-baseline gap-1.5 mb-1.5">
       <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)', minWidth: 74 }}>{label}</span>

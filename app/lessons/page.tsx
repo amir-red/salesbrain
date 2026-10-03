@@ -145,7 +145,7 @@ export default function LessonsPage() {
           </div>
 
           {error && (
-            <div className="rounded p-3 mb-4 text-sm" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: '#ef4444' }}>
+            <div className="rounded p-3 mb-4 text-sm" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>
               {error}
             </div>
           )}
@@ -184,7 +184,7 @@ export default function LessonsPage() {
                         </Link>
                         <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold"
                               style={{ background: l.deal_type === 'grant' ? 'color-mix(in srgb, var(--green) 15%, transparent)' : 'color-mix(in srgb, var(--accent) 15%, transparent)',
-                                       color: l.deal_type === 'grant' ? '#22c55e' : '#3b82f6' }}>
+                                       color: l.deal_type === 'grant' ? 'var(--green)' : '#3b82f6' }}>
                           {l.deal_type === 'grant' ? 'GRANT' : 'SALES'}
                         </span>
                         <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold"
@@ -211,7 +211,7 @@ export default function LessonsPage() {
                         className="mt-2 p-2 rounded text-xs"
                         style={{ background: 'color-mix(in srgb, var(--green) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--green) 25%, transparent)', color: 'var(--text)' }}
                       >
-                        <span className="font-semibold" style={{ color: '#22c55e' }}>Lesson: </span>
+                        <span className="font-semibold" style={{ color: 'var(--green)' }}>Lesson: </span>
                         {l.lesson}
                       </div>
 

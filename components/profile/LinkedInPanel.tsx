@@ -122,7 +122,7 @@ function LinkedInSettings() {
 
         <div className="p-4 max-w-3xl">
           {error && (
-            <div className="rounded p-2 mb-3 text-xs" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: '#ef4444' }}>
+            <div className="rounded p-2 mb-3 text-xs" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>
               {error}
             </div>
           )}
@@ -136,7 +136,7 @@ function LinkedInSettings() {
               <div className="flex items-center gap-3 mb-3">
                 <span
                   className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold"
-                  style={{ background: 'color-mix(in srgb, var(--green) 15%, transparent)', color: '#22c55e' }}
+                  style={{ background: 'color-mix(in srgb, var(--green) 15%, transparent)', color: 'var(--green)' }}
                 >
                   Connected
                 </span>
@@ -162,7 +162,7 @@ function LinkedInSettings() {
               <button
                 onClick={disconnect}
                 className="mt-3 px-3 py-1.5 rounded text-xs"
-                style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: '#ef4444', border: '1px solid color-mix(in srgb, var(--red) 30%, transparent)' }}
+                style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)', border: '1px solid color-mix(in srgb, var(--red) 30%, transparent)' }}
               >
                 Disconnect
               </button>

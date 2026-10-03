@@ -57,7 +57,7 @@ function DealCard({ deal }: { deal: Deal }) {
         background: deal.is_lost ? 'color-mix(in srgb, var(--red) 5%, transparent)' : 'var(--bg-input)',
         border: '1px solid var(--border)',
         borderLeft: deal.is_lost
-          ? '3px solid #ef4444'
+          ? '3px solid var(--red)'
           : deal.is_overdue
             ? '3px solid var(--red)'
             : '3px solid transparent',
@@ -67,7 +67,7 @@ function DealCard({ deal }: { deal: Deal }) {
       <div className="flex items-center gap-1.5">
         {deal.is_lost && (
           <span className="text-[9px] uppercase tracking-wider px-1 py-0.5 rounded font-semibold flex-shrink-0"
-                style={{ background: 'color-mix(in srgb, var(--red) 18%, transparent)', color: '#ef4444' }}>
+                style={{ background: 'color-mix(in srgb, var(--red) 18%, transparent)', color: 'var(--red)' }}>
             Lost
           </span>
         )}

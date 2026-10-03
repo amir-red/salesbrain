@@ -116,7 +116,7 @@ export default function McpPanel() {
           <section>
             <h2 className="text-sm font-semibold mb-2">Your tokens</h2>
             {error && (
-              <div className="rounded p-2 mb-3 text-xs" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: '#ef4444' }}>
+              <div className="rounded p-2 mb-3 text-xs" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>
                 {error}
               </div>
             )}
@@ -146,7 +146,7 @@ export default function McpPanel() {
                     <button
                       onClick={() => revoke(t.id, t.name)}
                       className="px-3 py-1.5 rounded text-xs"
-                      style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: '#ef4444', border: '1px solid color-mix(in srgb, var(--red) 30%, transparent)' }}
+                      style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)', border: '1px solid color-mix(in srgb, var(--red) 30%, transparent)' }}
                     >
                       Revoke
                     </button>
@@ -172,11 +172,11 @@ export default function McpPanel() {
         >
           <div
             className="w-full max-w-lg rounded-xl overflow-hidden"
-            style={{ background: 'var(--bg-card)', border: '2px solid #eab308' }}
+            style={{ background: 'var(--bg-card)', border: '2px solid var(--yellow)' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b" style={{ borderColor: 'var(--border)' }}>
-              <h2 className="text-base font-bold" style={{ color: '#eab308' }}>
+              <h2 className="text-base font-bold" style={{ color: 'var(--yellow)' }}>
                 ⚠️ Save this token now
               </h2>
               <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>

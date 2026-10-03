@@ -79,7 +79,7 @@ export default function LinkedInHealthPage() {
         </div>
 
         <div className="p-4 max-w-5xl">
-          {error && <div className="rounded p-3 mb-4 text-xs" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: '#ef4444' }}>{error}</div>}
+          {error && <div className="rounded p-3 mb-4 text-xs" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>{error}</div>}
           {loading ? (
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Loading…</p>
           ) : !data?.accounts.length && !error ? (
@@ -107,7 +107,7 @@ export default function LinkedInHealthPage() {
                         <div className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
                           {a.owner_name || '—'}
                           {a.errors_24h > 0 && <span> · {a.errors_24h} errors/24h</span>}
-                          {a.blocks_24h > 0 && <span style={{ color: '#ef4444' }}> · {a.blocks_24h} blocked</span>}
+                          {a.blocks_24h > 0 && <span style={{ color: 'var(--red)' }}> · {a.blocks_24h} blocked</span>}
                         </div>
                       </div>
                       {a.paused_at && (
@@ -120,7 +120,7 @@ export default function LinkedInHealthPage() {
                     </div>
 
                     {a.paused_at && (
-                      <div className="rounded p-2 mb-3 text-[11px]" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: '#ef4444' }}>
+                      <div className="rounded p-2 mb-3 text-[11px]" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>
                         ⏸ Paused {relativeTime(a.paused_at)} — {a.pause_reason || 'agent paused'}
                       </div>
                     )}
@@ -130,12 +130,12 @@ export default function LinkedInHealthPage() {
                       {ACTIONS.map((k) => {
                         const used = a.today[k] || 0; const cap = a.caps[k] || 0;
                         const pct = cap ? Math.min(100, Math.round((used / cap) * 100)) : 0;
-                        const col = pct >= 90 ? '#ef4444' : pct >= 70 ? 'var(--yellow)' : 'var(--accent)';
+                        const col = pct >= 90 ? 'var(--red)' : pct >= 70 ? 'var(--yellow)' : 'var(--accent)';
                         return (
                           <div key={k}>
                             <div className="flex justify-between text-[10px] mb-1" style={{ color: 'var(--text-muted)' }}>
                               <span>{LABEL[k]}</span>
-                              <span className="font-mono" style={{ color: pct >= 90 ? '#ef4444' : 'var(--text)' }}>{used}/{cap || '∞'}</span>
+                              <span className="font-mono" style={{ color: pct >= 90 ? 'var(--red)' : 'var(--text)' }}>{used}/{cap || '∞'}</span>
                             </div>
                             <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg-input)' }}>
                               <div className="h-full rounded-full" style={{ width: `${pct}%`, background: col }} />

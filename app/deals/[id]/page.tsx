@@ -224,7 +224,7 @@ export default function DealViewPage() {
                 {isLost && (
                   <span
                     className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded font-semibold"
-                    style={{ background: 'color-mix(in srgb, var(--red) 15%, transparent)', color: '#ef4444' }}
+                    style={{ background: 'color-mix(in srgb, var(--red) 15%, transparent)', color: 'var(--red)' }}
                     title="This deal was marked lost — see /lessons for the captured lesson"
                   >
                     Lost

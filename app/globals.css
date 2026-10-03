@@ -25,10 +25,10 @@
   --accent-glow: rgba(105, 28, 71, 0.08);
   --highlight: #c6abd7;     /* mauve */
   --logo: #691c47;
-  --green: #047857;         /* success-light */
-  --yellow: #b45309;        /* warning-light */
-  --red: #d11a21;           /* error #ED2027, darkened to pass AA as small text on white */
-  --orange: #c2410c;
+  --green: #046c4e;         /* success-light */
+  --yellow: #994708;        /* warning-light */
+  --red: #b6171d;           /* error #ED2027, darkened: ≥4.5:1 as small text on every surface and tint */
+  --orange: #a5370a;
   --blue: #6c477d;          /* heather — the neutral "info" tone */
   --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
 }
@@ -49,7 +49,7 @@
   --logo: #fcf9fd;          /* ivory reverse */
   --green: #10b981;         /* success-dark */
   --yellow: #f59e0b;        /* warning-dark */
-  --red: #f2555a;
+  --red: #f57b7f;
   --orange: #fb923c;
   --blue: #c6abd7;
   --shadow-card: none;

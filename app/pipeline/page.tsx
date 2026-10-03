@@ -396,7 +396,7 @@ function SummaryCard({ label, accent, summary }: { label: string; accent: string
           )}
           {summary.lost_count > 0 && (
             <span>
-              <span style={{ color: '#ef4444', fontWeight: 600 }}>{summary.lost_count}</span>
+              <span style={{ color: 'var(--red)', fontWeight: 600 }}>{summary.lost_count}</span>
               {' '}
               lost · <a href="/lessons" className="hover:underline" style={{ color: 'var(--text-muted)' }}>see lessons</a>
             </span>

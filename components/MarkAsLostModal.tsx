@@ -95,7 +95,7 @@ export default function MarkAsLostModal({
       >
         {/* Header */}
         <div className="p-4 border-b" style={{ borderColor: 'var(--border)' }}>
-          <h2 className="text-base font-bold" style={{ color: 'var(--red, #ef4444)' }}>
+          <h2 className="text-base font-bold" style={{ color: 'var(--red)' }}>
             Mark as Lost
           </h2>
           <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
@@ -106,7 +106,7 @@ export default function MarkAsLostModal({
         {/* Body */}
         <div className="p-4 space-y-3">
           {error && (
-            <div className="rounded p-2 text-xs" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: '#ef4444' }}>
+            <div className="rounded p-2 text-xs" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>
               {error}
             </div>
           )}
@@ -177,7 +177,7 @@ export default function MarkAsLostModal({
             onClick={submit}
             disabled={!canSubmit || submitting}
             className="px-3 py-1.5 rounded text-xs font-medium text-white disabled:opacity-50"
-            style={{ background: '#ef4444' }}
+            style={{ background: 'var(--red)' }}
           >
             {submitting ? 'Saving…' : 'Mark as Lost'}
           </button>
@@ -191,7 +191,7 @@ function Field({ label, required, children }: { label: string; required?: boolea
   return (
     <div>
       <label className="text-[10px] uppercase tracking-wider block mb-1" style={{ color: 'var(--text-muted)' }}>
-        {label}{required && <span style={{ color: '#ef4444' }}> *</span>}
+        {label}{required && <span style={{ color: 'var(--red)' }}> *</span>}
       </label>
       {children}
     </div>
