@@ -12,6 +12,7 @@ interface PersonRow {
   preferred_channel: string | null;
   cadence_days: number | null;
   last_interaction_at: string | null;
+  mine: boolean;
   handles: { channel: string; handle: string }[];
   open_commitments: number;
   facts: number;
@@ -68,6 +69,7 @@ export default function RelationshipsPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [stage, setStage] = useState<'all' | Stage>('all');
+  const [scope, setScope] = useState<'mine' | 'everyone'>('mine');
   const [selected, setSelected] = useState<string | null>(null);
   const [dossier, setDossier] = useState<Dossier | null>(null);
   const [dossierLoading, setDossierLoading] = useState(false);
@@ -99,6 +101,7 @@ export default function RelationshipsPage() {
   const q = search.trim().toLowerCase();
   const filtered = people.filter(
     (p) =>
+      (scope === 'everyone' || p.mine) &&
       (stage === 'all' || p.stage === stage) &&
       (!q ||
         p.full_name.toLowerCase().includes(q) ||
@@ -130,6 +133,22 @@ export default function RelationshipsPage() {
                 className="w-full rounded-lg px-3 py-2 text-sm outline-none"
                 style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }}
               />
+              <div className="flex gap-1.5">
+                {(['mine', 'everyone'] as const).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setScope(s)}
+                    className="px-2 py-1 rounded-md text-[11px] font-medium transition-colors"
+                    style={{
+                      background: scope === s ? 'var(--accent)' : 'var(--bg-input)',
+                      color: scope === s ? '#fff' : 'var(--text-muted)',
+                      border: `1px solid ${scope === s ? 'var(--accent)' : 'var(--border)'}`,
+                    }}
+                  >
+                    {s === 'mine' ? 'Only me' : 'Everyone'}
+                  </button>
+                ))}
+              </div>
               <div className="flex gap-1.5 flex-wrap">
                 {(['all', 'stranger', 'acquaintance', 'engaged', 'trusted', 'advocate'] as const).map((s) => (
                   <button
@@ -154,7 +173,11 @@ export default function RelationshipsPage() {
               ) : error ? (
                 <p className="text-sm p-2" style={{ color: 'var(--red)' }}>{error}</p>
               ) : filtered.length === 0 ? (
-                <p className="text-sm p-2" style={{ color: 'var(--text-muted)' }}>No people match.</p>
+                <p className="text-sm p-2" style={{ color: 'var(--text-muted)' }}>
+                  {scope === 'mine' && !q && stage === 'all'
+                    ? 'No relationships of your own yet — switch to Everyone to see the company-wide graph.'
+                    : 'No people match.'}
+                </p>
               ) : (
                 filtered.map((p) => (
                   <button

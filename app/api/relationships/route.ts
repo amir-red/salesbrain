@@ -10,7 +10,8 @@ export const dynamic = 'force-dynamic';
  * plus the counts the attention allocator scores on. Read-only — the graph
  * is written exclusively through the kernel (agent tools / distill), never
  * from this UI. Org-wide visibility: relationships belong to the company,
- * not to an owner (unlike deals).
+ * not to an owner (unlike deals) — but each row says whether it is the
+ * viewer's own (`mine`), so the page can default to "only me".
  */
 export async function GET() {
   const session = await getSession();
@@ -19,6 +20,7 @@ export async function GET() {
   const { rows } = await pool.query(`
     SELECT p.id, p.full_name, p.organization, r.stage, r.preferred_channel,
            r.cadence_days, r.last_interaction_at,
+           (r.owner_user_id = $1) AS mine,
            (SELECT COALESCE(json_agg(json_build_object('channel', h.channel, 'handle', h.handle)), '[]'::json)
               FROM channel_handles h WHERE h.person_id = p.id) AS handles,
            (SELECT count(*)::int FROM commitments c
@@ -33,7 +35,7 @@ export async function GET() {
     FROM people p
     JOIN relationships r ON r.person_id = p.id
     ORDER BY r.last_interaction_at DESC NULLS LAST, p.full_name
-  `);
+  `, [session.userId]);
 
   return NextResponse.json({ people: rows });
 }
