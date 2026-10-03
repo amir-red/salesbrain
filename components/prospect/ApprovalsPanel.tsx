@@ -52,7 +52,7 @@ export default function ApprovalsPanel({ approvals, onChanged }: { approvals: Le
             </div>
             <div className="flex gap-2 shrink-0">
               <button onClick={() => decide(ap.id, 'reject')} disabled={busy === ap.id} className="px-2.5 py-1 rounded-lg text-xs disabled:opacity-40" style={{ border: '1px solid var(--border)', color: 'var(--text)' }}>👎 Skip</button>
-              <button onClick={() => decide(ap.id, 'approve')} disabled={busy === ap.id} className="px-2.5 py-1 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--green)', color: '#fff' }}>{busy === ap.id ? 'Working…' : '👍 Send'}</button>
+              <button onClick={() => decide(ap.id, 'approve')} disabled={busy === ap.id} className="px-2.5 py-1 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--green)', color: 'var(--accent-fg)' }}>{busy === ap.id ? 'Working…' : '👍 Send'}</button>
             </div>
           </div>
           {ap.subject && <div className="text-xs"><b>Subject:</b> {ap.subject}</div>}

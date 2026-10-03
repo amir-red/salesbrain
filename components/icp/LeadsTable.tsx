@@ -128,7 +128,7 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
             disabled={busy !== null || !c.linkedin || !c.enabled || room <= 0 || !(tally.not_invited > 0)}
             title={room <= 0 ? 'Today\'s limit is reached or already queued for approval' : 'Files requests for approval — nothing is sent until each one is approved'}
             className="px-2.5 py-1 rounded-lg text-xs font-medium disabled:opacity-40"
-            style={{ background: 'var(--accent)', color: '#fff' }}>
+            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
             {busy === 'batch' ? 'Filing…' : `Queue next ${room > 0 ? room : ''} for approval`}
           </button>
         </div>
@@ -185,7 +185,7 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
                         <div style={{ color: 'var(--text-muted)' }}>{[l.industry, l.company_size].filter(Boolean).join(' · ')}</div>
                       </td>
                       <td className="p-2">
-                        <button onClick={() => setOpen(open === l.id ? null : l.id)} className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: `${fitColor(l.icp_score)}22`, color: fitColor(l.icp_score) }} title="why?">
+                        <button onClick={() => setOpen(open === l.id ? null : l.id)} className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: `color-mix(in srgb, ${fitColor(l.icp_score)} 14%, transparent)`, color: fitColor(l.icp_score) }} title="why?">
                           {l.icp_score ?? '—'} · {(l.fit_label || 'unscored').replace(/_/g, ' ')}
                         </button>
                       </td>
@@ -194,7 +194,7 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
                         {l.converted_deal_id && <Link href={`/deals/${l.converted_deal_id}`} className="ml-1 underline" style={{ color: 'var(--accent)' }}>deal→</Link>}
                       </td>
                       <td className="p-2 text-[10px] whitespace-nowrap">
-                        <span title={csTitle} className="px-1.5 py-0.5 rounded" style={{ background: `${CONNECT_COLOR[cs]}22`, color: CONNECT_COLOR[cs] }}>
+                        <span title={csTitle} className="px-1.5 py-0.5 rounded" style={{ background: `color-mix(in srgb, ${CONNECT_COLOR[cs]} 14%, transparent)`, color: CONNECT_COLOR[cs] }}>
                           {CONNECT_LABEL[cs]}{(cs === 'pending' || cs === 'no_answer') && l.invite_sent_at ? ` · ${relativeTime(l.invite_sent_at)}` : ''}
                         </span>
                         {(cs === 'not_invited' || cs === 'not_accepted' || cs === 'failed') && l.linkedin_public_id && c?.linkedin && (

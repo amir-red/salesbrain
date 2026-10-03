@@ -372,7 +372,7 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
                         <div className="truncate" style={{ color: 'var(--text-muted)' }}>{[m.title, m.company].filter(Boolean).join(' · ') || '—'}</div>
                         <div className="truncate text-[10px]" style={{ color: 'var(--text-muted)' }}>{[m.industry, m.location].filter(Boolean).join(' · ')}</div>
                       </div>
-                      <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{ background: `${fitColor(m.icp_score)}22`, color: fitColor(m.icp_score) }}>{m.icp_score}</span>
+                      <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{ background: `color-mix(in srgb, ${fitColor(m.icp_score)} 14%, transparent)`, color: fitColor(m.icp_score) }}>{m.icp_score}</span>
                     </div>
                     <button type="button" onClick={() => setOpenReasons(openReasons === m.contact_id ? null : m.contact_id)} className="mt-1 text-[10px] underline" style={{ color: 'var(--text-muted)' }}>
                       {openReasons === m.contact_id ? 'hide why' : 'why?'}
