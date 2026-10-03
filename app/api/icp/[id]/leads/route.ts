@@ -30,7 +30,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     pool.query(
       `SELECT p.id, p.stage, p.icp_score, p.fit_label, p.qualification_reason, p.research_summary,
               p.source_type, p.source_detail, p.linkedin_public_id, p.candidate_location,
-              p.network_degree, p.warm_paths,
+              p.network_degree, p.warm_paths, p.priority_rank,
               p.created_at, p.scored_at, p.engaged_at, p.converted_deal_id,
               c.full_name, c.title, c.email, c.linkedin_url,
               a.name AS company_name, a.industry, a.company_size,
@@ -50,7 +50,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
                  OR i.provider_id = p.linkedin_member_id)
           ORDER BY i.sent_at DESC LIMIT 1) inv ON true
        WHERE ${filters.join(' AND ')}
-       ORDER BY p.icp_score DESC NULLS LAST, p.created_at DESC LIMIT 300`,
+       -- a hand-ranked list is worked in its own order (050); fit decides the rest
+       ORDER BY p.priority_rank NULLS LAST, p.icp_score DESC NULLS LAST, p.created_at DESC LIMIT 300`,
       values,
     ),
     pool.query(`SELECT * FROM icp_agent_state WHERE icp_profile_id = $1`, [params.id]),

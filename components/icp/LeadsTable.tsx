@@ -16,7 +16,7 @@ export interface Lead {
   company_name: string | null; industry: string | null; company_size: string | null;
   network_degree: string | null;
   warm_paths: { type: string; value?: string; note: string }[] | null;
-  linkedin_public_id: string | null;
+  linkedin_public_id: string | null; priority_rank: number | null;
   invite_status: string | null; invite_sent_at: string | null; invite_source: string | null;
   invite_error: string | null; connect_approval: string | null;
 }
@@ -181,7 +181,10 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
                         <DegreeWarm degree={l.network_degree} paths={l.warm_paths} />
                       </td>
                       <td className="p-2 text-xs">
-                        <div>{l.company_name || '—'}</div>
+                        <div>
+                          {l.priority_rank != null && <span title="priority rank on this list" className="mr-1.5 px-1 rounded text-[10px] font-medium" style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>#{l.priority_rank}</span>}
+                          {l.company_name || '—'}
+                        </div>
                         <div style={{ color: 'var(--text-muted)' }}>{[l.industry, l.company_size].filter(Boolean).join(' · ')}</div>
                       </td>
                       <td className="p-2">

@@ -144,7 +144,7 @@ export default function IcpPanelPage() {
             </div>
             <div id="outreach"><OutreachSection data={data} onChanged={refresh} /></div>
 
-            <SectionCard title="Leads" subtitle="best fit first · coverage: E employer · R research · @ email · 🔥 warm angle · ↝ warm route">
+            <SectionCard title="Leads" subtitle="priority rank first, then best fit · coverage: E employer · R research · @ email · 🔥 warm angle · ↝ warm route">
               <LeadsTable icpId={id} tick={tick} />
             </SectionCard>
 
