@@ -42,7 +42,9 @@ export default function ApprovalsPanel({ approvals, onChanged }: { approvals: Le
         <div key={ap.id} className="rounded-lg p-3 space-y-2" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
           <div className="flex items-start justify-between gap-3">
             <div>
-              {ap.kind === 'intro_request'
+              {ap.kind === 'connect'
+                ? <div className="text-[10px] mb-0.5 inline-block px-1.5 py-0.5 rounded" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>🔗 Connection request → {ap.intro_lead_name || ap.person_name || 'lead'}</div>
+                : ap.kind === 'intro_request'
                 ? <div className="text-[10px] mb-0.5 inline-block px-1.5 py-0.5 rounded" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>🤝 Intro ask → to {ap.person_name || 'connector'}</div>
                 : <div className="text-[10px] mb-0.5 inline-block px-1.5 py-0.5 rounded" style={{ background: 'var(--bg-card)', color: 'var(--text-muted)' }}>✉️ Cold message</div>}
               <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>via {ap.channel} · expires {relativeTime(ap.expires_at)}{ap.owner_name ? ` · for ${ap.owner_name}` : ''}</div>
@@ -54,7 +56,7 @@ export default function ApprovalsPanel({ approvals, onChanged }: { approvals: Le
             </div>
           </div>
           {ap.subject && <div className="text-xs"><b>Subject:</b> {ap.subject}</div>}
-          <pre className="text-xs whitespace-pre-wrap rounded-lg p-2" style={{ background: 'var(--bg-card)', color: 'var(--text)', fontFamily: 'inherit' }}>{ap.message}</pre>
+          <pre className="text-xs whitespace-pre-wrap rounded-lg p-2" style={{ background: 'var(--bg-card)', color: 'var(--text)', fontFamily: 'inherit' }}>{ap.message || (ap.kind === 'connect' ? 'No note — a plain connection request.' : '')}</pre>
         </div>
       ))}
       {past.length > 0 && (
@@ -62,7 +64,7 @@ export default function ApprovalsPanel({ approvals, onChanged }: { approvals: Le
           {past.map((ap) => (
             <div key={ap.id} className="text-[11px] flex items-center gap-2" style={{ color: 'var(--text-muted)' }}>
               <span style={{ color: statusColor(ap.status) }}>{ap.status}</span>
-              <span>{ap.kind === 'intro_request' ? `intro ask to ${ap.person_name || '?'}` : 'cold message'} · {ap.channel}</span>
+              <span>{ap.kind === 'connect' ? `connection request to ${ap.intro_lead_name || ap.person_name || '?'}` : ap.kind === 'intro_request' ? `intro ask to ${ap.person_name || '?'}` : 'cold message'} · {ap.channel}</span>
               <span>· {relativeTime(ap.sent_at || ap.decided_at || ap.created_at)}</span>
             </div>
           ))}
