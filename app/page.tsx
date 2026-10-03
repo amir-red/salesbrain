@@ -150,7 +150,7 @@ export default function Home() {
         <button
           onClick={() => setShowNewDeal(!showNewDeal)}
           className="w-full py-2 rounded-lg text-sm font-medium transition-colors"
-          style={{ background: 'var(--accent)', color: '#fff' }}
+          style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
         >
           + New Deal
         </button>
@@ -165,7 +165,7 @@ export default function Home() {
               className="flex-1 py-1.5 rounded text-xs font-medium transition-colors"
               style={{
                 background: newDealType === 'sales' ? 'var(--accent)' : 'transparent',
-                color: newDealType === 'sales' ? '#fff' : 'var(--text-muted)',
+                color: newDealType === 'sales' ? 'var(--accent-fg)' : 'var(--text-muted)',
               }}
             >
               Sales (Zeami)
@@ -175,7 +175,7 @@ export default function Home() {
               className="flex-1 py-1.5 rounded text-xs font-medium transition-colors"
               style={{
                 background: newDealType === 'grant' ? 'var(--accent)' : 'transparent',
-                color: newDealType === 'grant' ? '#fff' : 'var(--text-muted)',
+                color: newDealType === 'grant' ? 'var(--accent-fg)' : 'var(--text-muted)',
               }}
             >
               Grant (ChipChip)
@@ -199,7 +199,7 @@ export default function Home() {
             onClick={createDeal}
             disabled={!newDealName.trim() || !newDealCompany.trim()}
             className="w-full py-2 rounded-lg text-sm"
-            style={{ background: 'var(--green)', color: '#fff' }}
+            style={{ background: 'var(--green)', color: 'var(--accent-fg)' }}
           >
             Create
           </button>
@@ -231,7 +231,7 @@ export default function Home() {
                   {deal.deal_type === 'grant' && (
                     <span
                       className="text-[8px] px-1 py-0.5 rounded font-bold flex-shrink-0"
-                      style={{ background: 'var(--green)', color: '#fff' }}
+                      style={{ background: 'var(--green)', color: 'var(--accent-fg)' }}
                     >
                       GRANT
                     </span>
@@ -249,7 +249,7 @@ export default function Home() {
             </div>
             {deal.lead_name && (
               <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: 'var(--text-muted)' }}>
-                <span className="inline-flex w-4 h-4 rounded-full items-center justify-center text-[8px] font-bold" style={{ background: 'var(--accent)', color: '#fff' }}>
+                <span className="inline-flex w-4 h-4 rounded-full items-center justify-center text-[8px] font-bold" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
                   {deal.lead_name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}
                 </span>
                 {deal.lead_name}

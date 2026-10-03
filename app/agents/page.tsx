@@ -121,7 +121,7 @@ export default function AgentsPage() {
               {data.is_admin && (
                 <button onClick={() => { if (data.kill_switch ? confirm('Stop every background agent on its next tick?') : true) patch({ kill_switch: !data.kill_switch }, 'ks'); }}
                         disabled={busy === 'ks'} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40"
-                        style={{ background: data.kill_switch ? 'var(--red)' : 'var(--green)', color: '#fff' }}>
+                        style={{ background: data.kill_switch ? 'var(--red)' : 'var(--green)', color: 'var(--accent-fg)' }}>
                   {data.kill_switch ? 'Stop all agents' : 'Resume all agents'}
                 </button>
               )}
@@ -130,7 +130,7 @@ export default function AgentsPage() {
         </div>
 
         <div className="p-4 space-y-4">
-          {err && <div className="text-xs px-3 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: 'var(--red)' }}>{err}</div>}
+          {err && <div className="text-xs px-3 py-2 rounded-lg" style={{ background: 'color-mix(in srgb, var(--red) 12%, transparent)', color: 'var(--red)' }}>{err}</div>}
           {!data && <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</p>}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -143,7 +143,7 @@ export default function AgentsPage() {
                     <div>
                       <div className="font-semibold flex items-center gap-2">
                         {a.label}
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: a.enabled ? 'rgba(34,197,94,0.15)' : 'var(--bg-input)', color: a.enabled ? 'var(--green)' : 'var(--text-muted)' }}>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: a.enabled ? 'color-mix(in srgb, var(--green) 15%, transparent)' : 'var(--bg-input)', color: a.enabled ? 'var(--green)' : 'var(--text-muted)' }}>
                           {a.enabled ? 'enabled' : 'off'}
                         </span>
                       </div>
@@ -186,7 +186,7 @@ export default function AgentsPage() {
           </div>
 
           {data && data.paused_accounts.length > 0 && (
-            <div className="rounded-xl p-4 space-y-2" style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid var(--red)' }}>
+            <div className="rounded-xl p-4 space-y-2" style={{ background: 'color-mix(in srgb, var(--red) 6%, transparent)', border: '1px solid var(--red)' }}>
               <div className="text-sm font-semibold" style={{ color: 'var(--red)' }}>Paused LinkedIn accounts</div>
               {data.paused_accounts.map((p) => (
                 <div key={p.unipile_account_id} className="flex items-center gap-3 text-xs">
@@ -202,7 +202,7 @@ export default function AgentsPage() {
           <div className="pt-2 space-y-2">
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-semibold">Pending approvals</h2>
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: approvals.length ? 'rgba(234,179,8,0.15)' : 'var(--bg-input)', color: approvals.length ? 'var(--yellow)' : 'var(--text-muted)' }}>{approvals.length}</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: approvals.length ? 'color-mix(in srgb, var(--yellow) 15%, transparent)' : 'var(--bg-input)', color: approvals.length ? 'var(--yellow)' : 'var(--text-muted)' }}>{approvals.length}</span>
               <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Drafts the Outreach agent filed for you — same 👍/👎 as the Telegram card.</span>
             </div>
             {decideNote && <div className="text-xs" style={{ color: decideNote.startsWith('Not sent') || decideNote === 'Failed' ? 'var(--red)' : 'var(--text-muted)' }}>{decideNote}</div>}
@@ -221,7 +221,7 @@ export default function AgentsPage() {
                   </div>
                   <div className="flex gap-2 shrink-0">
                     <button onClick={() => decide(ap.id, 'reject')} disabled={busy === ap.id} className="px-3 py-1.5 rounded-lg text-xs disabled:opacity-40" style={{ border: '1px solid var(--border)', color: 'var(--text)' }}>👎 Skip</button>
-                    <button onClick={() => decide(ap.id, 'approve')} disabled={busy === ap.id} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--green)', color: '#fff' }}>{busy === ap.id ? 'Working…' : ap.kind === 'proposal' ? '👍 Do it' : '👍 Send'}</button>
+                    <button onClick={() => decide(ap.id, 'approve')} disabled={busy === ap.id} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--green)', color: 'var(--accent-fg)' }}>{busy === ap.id ? 'Working…' : ap.kind === 'proposal' ? '👍 Do it' : '👍 Send'}</button>
                   </div>
                 </div>
                 {ap.subject && ap.kind !== 'proposal' && <div className="text-xs"><b>Subject:</b> {ap.subject}</div>}

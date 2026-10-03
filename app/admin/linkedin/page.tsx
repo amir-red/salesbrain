@@ -79,7 +79,7 @@ export default function LinkedInHealthPage() {
         </div>
 
         <div className="p-4 max-w-5xl">
-          {error && <div className="rounded p-3 mb-4 text-xs" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>{error}</div>}
+          {error && <div className="rounded p-3 mb-4 text-xs" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: '#ef4444' }}>{error}</div>}
           {loading ? (
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Loading…</p>
           ) : !data?.accounts.length && !error ? (
@@ -112,7 +112,7 @@ export default function LinkedInHealthPage() {
                       </div>
                       {a.paused_at && (
                         <button onClick={() => resume(a.unipile_account_id)} disabled={busy === a.unipile_account_id}
-                          className="px-3 py-1.5 rounded text-xs font-medium text-white disabled:opacity-50"
+                          className="px-3 py-1.5 rounded text-xs font-medium text-[var(--accent-fg)] disabled:opacity-50"
                           style={{ background: 'var(--green)' }}>
                           {busy === a.unipile_account_id ? '…' : 'Resume'}
                         </button>
@@ -120,7 +120,7 @@ export default function LinkedInHealthPage() {
                     </div>
 
                     {a.paused_at && (
-                      <div className="rounded p-2 mb-3 text-[11px]" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
+                      <div className="rounded p-2 mb-3 text-[11px]" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: '#ef4444' }}>
                         ⏸ Paused {relativeTime(a.paused_at)} — {a.pause_reason || 'agent paused'}
                       </div>
                     )}

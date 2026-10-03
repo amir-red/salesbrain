@@ -187,7 +187,7 @@ export default function PricingPage() {
                       onClick={saveQuote}
                       disabled={saveBusy}
                       className="w-full px-3 py-2 rounded text-sm font-medium disabled:opacity-50"
-                      style={{ background: 'var(--accent)', color: '#0b1220' }}
+                      style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
                     >
                       {saveBusy ? 'Saving…' : 'Save quote'}
                     </button>

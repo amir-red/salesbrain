@@ -141,7 +141,7 @@ export default function RelationshipsPage() {
                     className="px-2 py-1 rounded-md text-[11px] font-medium transition-colors"
                     style={{
                       background: scope === s ? 'var(--accent)' : 'var(--bg-input)',
-                      color: scope === s ? '#fff' : 'var(--text-muted)',
+                      color: scope === s ? 'var(--accent-fg)' : 'var(--text-muted)',
                       border: `1px solid ${scope === s ? 'var(--accent)' : 'var(--border)'}`,
                     }}
                   >
@@ -157,7 +157,7 @@ export default function RelationshipsPage() {
                     className="px-2 py-1 rounded-md text-[11px] font-medium transition-colors"
                     style={{
                       background: stage === s ? 'var(--accent)' : 'var(--bg-input)',
-                      color: stage === s ? '#fff' : 'var(--text-muted)',
+                      color: stage === s ? 'var(--accent-fg)' : 'var(--text-muted)',
                       border: `1px solid ${stage === s ? 'var(--accent)' : 'var(--border)'}`,
                     }}
                   >

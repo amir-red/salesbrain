@@ -65,7 +65,7 @@ export default function CampaignsPage() {
             <h1 className="text-lg font-bold">Campaigns</h1>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{campaigns.length} campaigns</p>
           </div>
-          <button onClick={() => setShowNew(!showNew)} className="px-3 py-1.5 rounded-lg text-sm font-medium" style={{ background: 'var(--accent)', color: '#fff' }}>
+          <button onClick={() => setShowNew(!showNew)} className="px-3 py-1.5 rounded-lg text-sm font-medium" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
             + New Campaign
           </button>
         </div>
@@ -77,7 +77,7 @@ export default function CampaignsPage() {
             <input value={persona} onChange={(e) => setPersona(e.target.value)} placeholder="Persona target (e.g. VP Ops at mid-market logistics)" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }} />
             <input value={angle} onChange={(e) => setAngle(e.target.value)} placeholder="Positioning angle" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }} />
             <div className="flex gap-2">
-              <button onClick={create} disabled={!name.trim()} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: 'var(--green)', color: '#fff' }}>Create</button>
+              <button onClick={create} disabled={!name.trim()} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: 'var(--green)', color: 'var(--accent-fg)' }}>Create</button>
               <button onClick={() => setShowNew(false)} className="px-4 py-2 rounded-lg text-sm" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Cancel</button>
             </div>
           </div>

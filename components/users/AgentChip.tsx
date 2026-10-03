@@ -22,7 +22,7 @@ export default function AgentChip({ agent, cell, enabled, killSwitch, outreach, 
   const btn = (label: string, state: HoldState, tone: 'primary' | 'danger' | 'plain' = 'plain') => (
     <button key={label} onClick={() => onSetState(state)} disabled={busy}
             className="px-2 py-0.5 rounded text-[10px] disabled:opacity-40"
-            style={tone === 'primary' ? { background: 'var(--accent)', color: '#fff' }
+            style={tone === 'primary' ? { background: 'var(--accent)', color: 'var(--accent-fg)' }
                  : tone === 'danger' ? { border: '1px solid var(--red)', color: 'var(--red)' }
                  : { border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
       {label}

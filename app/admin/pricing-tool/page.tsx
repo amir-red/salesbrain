@@ -120,7 +120,7 @@ export default function PricingToolAdmin() {
               onClick={upload}
               disabled={!file || busy}
               className="mt-3 px-3 py-2 rounded text-sm font-medium disabled:opacity-50"
-              style={{ background: 'var(--accent)', color: '#0b1220' }}
+              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
             >
               {busy ? 'Uploading…' : 'Upload'}
             </button>

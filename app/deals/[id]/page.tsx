@@ -224,7 +224,7 @@ export default function DealViewPage() {
                 {isLost && (
                   <span
                     className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded font-semibold"
-                    style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
+                    style={{ background: 'color-mix(in srgb, var(--red) 15%, transparent)', color: '#ef4444' }}
                     title="This deal was marked lost — see /lessons for the captured lesson"
                   >
                     Lost
@@ -254,7 +254,7 @@ export default function DealViewPage() {
                 style={{
                   background: 'transparent',
                   color: '#ef4444',
-                  border: '1px solid rgba(239,68,68,0.4)',
+                  border: '1px solid color-mix(in srgb, var(--red) 40%, transparent)',
                 }}
                 title="Mark this deal lost and capture a lesson"
               >
@@ -281,7 +281,7 @@ export default function DealViewPage() {
                 onClick={handleRestore}
                 disabled={busy}
                 className="px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                style={{ background: 'var(--accent)', color: '#fff' }}
+                style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
               >
                 Restore
               </button>
@@ -290,7 +290,7 @@ export default function DealViewPage() {
               <Link
                 href={`/?deal=${deal.id}`}
                 className="px-4 py-2 rounded-lg text-sm font-medium"
-                style={{ background: 'var(--accent)', color: '#fff' }}
+                style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
               >
                 Open Chat →
               </Link>
@@ -303,8 +303,8 @@ export default function DealViewPage() {
           <div
             className="mx-6 mt-4 p-4 rounded-xl flex items-start gap-3"
             style={{
-              background: 'rgba(234, 179, 8, 0.1)',
-              border: '1px solid rgba(234, 179, 8, 0.4)',
+              background: 'color-mix(in srgb, var(--yellow) 10%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--yellow) 40%, transparent)',
               color: 'var(--text)',
             }}
           >
@@ -321,7 +321,7 @@ export default function DealViewPage() {
                   <span
                     key={f}
                     className="text-[10px] px-1.5 py-0.5 rounded font-mono"
-                    style={{ background: 'rgba(234, 179, 8, 0.2)', color: 'var(--yellow)' }}
+                    style={{ background: 'color-mix(in srgb, var(--yellow) 20%, transparent)', color: 'var(--yellow)' }}
                   >
                     {f}
                   </span>
@@ -330,7 +330,7 @@ export default function DealViewPage() {
               <Link
                 href={`/?deal=${deal.id}`}
                 className="inline-block mt-3 px-3 py-1.5 rounded-lg text-xs font-medium"
-                style={{ background: 'var(--accent)', color: '#fff' }}
+                style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
               >
                 Open chat to fill →
               </Link>
@@ -379,7 +379,7 @@ export default function DealViewPage() {
                 <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>Project Lead</p>
                 {deal.lead_name ? (
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: 'var(--accent)', color: '#fff' }}>
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
                       {leadInitials}
                     </div>
                     <div>
@@ -443,7 +443,7 @@ export default function DealViewPage() {
             {deal.missing.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {deal.missing.map((f) => (
-                  <span key={f} className="px-2 py-0.5 rounded text-xs" style={{ background: 'var(--red)', color: '#fff', opacity: 0.8 }}>
+                  <span key={f} className="px-2 py-0.5 rounded text-xs" style={{ background: 'var(--red)', color: 'var(--accent-fg)', opacity: 0.8 }}>
                     {f.replace(/_/g, ' ')}
                   </span>
                 ))}
@@ -464,7 +464,7 @@ export default function DealViewPage() {
                     className="px-2 py-0.5 rounded text-xs"
                     style={{
                       background: f.startsWith('sla_') || f.startsWith('decay_') ? 'var(--red)' : 'var(--bg-input)',
-                      color: f.startsWith('sla_') || f.startsWith('decay_') ? '#fff' : 'var(--text-muted)',
+                      color: f.startsWith('sla_') || f.startsWith('decay_') ? 'var(--accent-fg)' : 'var(--text-muted)',
                       border: `1px solid ${f.startsWith('sla_') || f.startsWith('decay_') ? 'var(--red)' : 'var(--border)'}`,
                     }}
                   >

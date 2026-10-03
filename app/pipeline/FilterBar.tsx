@@ -54,7 +54,7 @@ function DealCard({ deal }: { deal: Deal }) {
       style={{
         // Lost cards: dim background + red left-border so they're visually
         // distinct from active overdue ones (which are red border + normal bg).
-        background: deal.is_lost ? 'rgba(239,68,68,0.05)' : 'var(--bg-input)',
+        background: deal.is_lost ? 'color-mix(in srgb, var(--red) 5%, transparent)' : 'var(--bg-input)',
         border: '1px solid var(--border)',
         borderLeft: deal.is_lost
           ? '3px solid #ef4444'
@@ -67,7 +67,7 @@ function DealCard({ deal }: { deal: Deal }) {
       <div className="flex items-center gap-1.5">
         {deal.is_lost && (
           <span className="text-[9px] uppercase tracking-wider px-1 py-0.5 rounded font-semibold flex-shrink-0"
-                style={{ background: 'rgba(239,68,68,0.18)', color: '#ef4444' }}>
+                style={{ background: 'color-mix(in srgb, var(--red) 18%, transparent)', color: '#ef4444' }}>
             Lost
           </span>
         )}
@@ -92,7 +92,7 @@ function DealCard({ deal }: { deal: Deal }) {
       </div>
       {deal.lead_name && (
         <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: 'var(--text-muted)' }}>
-          <span className="inline-flex w-3.5 h-3.5 rounded-full items-center justify-center text-[7px] font-bold" style={{ background: 'var(--accent)', color: '#fff' }}>
+          <span className="inline-flex w-3.5 h-3.5 rounded-full items-center justify-center text-[7px] font-bold" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
             {deal.lead_name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}
           </span>
           {deal.lead_name}
@@ -162,7 +162,7 @@ export default function FilterBar({ salesGates, grantGates, grantStages, creditG
           className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           style={{
             background: pipeline === 'sales' ? 'var(--accent)' : 'var(--bg-card)',
-            color: pipeline === 'sales' ? '#fff' : 'var(--text-muted)',
+            color: pipeline === 'sales' ? 'var(--accent-fg)' : 'var(--text-muted)',
             border: `1px solid ${pipeline === 'sales' ? 'var(--accent)' : 'var(--border)'}`,
           }}
         >
@@ -173,7 +173,7 @@ export default function FilterBar({ salesGates, grantGates, grantStages, creditG
           className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           style={{
             background: pipeline === 'grant' ? 'var(--green)' : 'var(--bg-card)',
-            color: pipeline === 'grant' ? '#fff' : 'var(--text-muted)',
+            color: pipeline === 'grant' ? 'var(--accent-fg)' : 'var(--text-muted)',
             border: `1px solid ${pipeline === 'grant' ? 'var(--green)' : 'var(--border)'}`,
           }}
         >
@@ -184,7 +184,7 @@ export default function FilterBar({ salesGates, grantGates, grantStages, creditG
           className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           style={{
             background: pipeline === 'ai_credit' ? '#D97706' : 'var(--bg-card)',
-            color: pipeline === 'ai_credit' ? '#fff' : 'var(--text-muted)',
+            color: pipeline === 'ai_credit' ? 'var(--accent-fg)' : 'var(--text-muted)',
             border: `1px solid ${pipeline === 'ai_credit' ? '#D97706' : 'var(--border)'}`,
           }}
         >
@@ -225,7 +225,7 @@ export default function FilterBar({ salesGates, grantGates, grantStages, creditG
             className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
             style={{
               background: filter === f ? 'var(--accent)' : 'var(--bg-input)',
-              color: filter === f ? '#fff' : 'var(--text-muted)',
+              color: filter === f ? 'var(--accent-fg)' : 'var(--text-muted)',
               border: `1px solid ${filter === f ? 'var(--accent)' : 'var(--border)'}`,
             }}
           >

@@ -40,7 +40,7 @@ function Section({ n, title, sub, children }: { n: number; title: string; sub?: 
     <section className="rounded-xl p-4 space-y-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
       <div className="flex items-start gap-3">
         <span className="w-6 h-6 rounded-full text-[11px] font-bold flex items-center justify-center shrink-0"
-              style={{ background: 'var(--accent)', color: '#fff' }}>{n}</span>
+              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>{n}</span>
         <div>
           <h2 className="text-sm font-semibold">{title}</h2>
           {sub && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{sub}</p>}
@@ -208,7 +208,7 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
                           onClick={() => setObjective(objective === o.key ? '' : o.key)}
                           className="text-[11px] px-2 py-1 rounded-full border"
                           style={objective === o.key
-                            ? { background: 'var(--accent)', color: '#fff', borderColor: 'transparent' }
+                            ? { background: 'var(--accent)', color: 'var(--accent-fg)', borderColor: 'transparent' }
                             : { background: 'var(--bg)', color: 'var(--text-muted)', borderColor: 'var(--border)' }}>
                     {o.label}
                   </button>
@@ -220,7 +220,7 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
                      onKeyDown={(e) => { if (e.key === 'Enter' && !suggesting) suggest(); }}
                      className="flex-1 px-3 py-1.5 rounded-lg text-sm outline-none" style={{ ...inputStyle, background: 'var(--bg)' }} />
               <button type="button" onClick={suggest} disabled={suggesting}
-                      className="px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-40 whitespace-nowrap" style={{ background: 'var(--accent)', color: '#fff' }}>
+                      className="px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-40 whitespace-nowrap" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
                 {suggesting ? 'Thinking…' : 'Suggest ICPs'}
               </button>
             </div>
@@ -241,7 +241,7 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
                         <span className="text-[9px]" style={{ color: 'var(--text-muted)' }}>{cand.confidence} confidence</span>
                       </div>
                       <button type="button" onClick={() => useCandidate(cand)}
-                              className="text-[11px] px-2 py-1 rounded whitespace-nowrap" style={{ background: 'var(--accent)', color: '#fff' }}>Use this</button>
+                              className="text-[11px] px-2 py-1 rounded whitespace-nowrap" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>Use this</button>
                     </div>
                     <div className="grid gap-1 mt-2" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
                       {OBJECTIVES.map((o) => {
@@ -389,11 +389,11 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
           )}
         </div>
 
-        {error && <div className="text-xs px-3 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: 'var(--red)' }}>{error}</div>}
+        {error && <div className="text-xs px-3 py-2 rounded-lg" style={{ background: 'color-mix(in srgb, var(--red) 12%, transparent)', color: 'var(--red)' }}>{error}</div>}
 
         <div className="flex gap-2">
           <button type="button" onClick={save} disabled={!canSave || saving}
-                  className="flex-1 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-40" style={{ background: 'var(--green)', color: '#fff' }}>
+                  className="flex-1 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-40" style={{ background: 'var(--green)', color: 'var(--accent-fg)' }}>
             {saving ? 'Saving…' : initial ? 'Save changes' : 'Save ICP'}
           </button>
           <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg text-sm" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Cancel</button>

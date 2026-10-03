@@ -2,6 +2,7 @@
 
 import { useState, FormEvent } from 'react';
 import Link from 'next/link';
+import ZeamiLogo from '@/components/ZeamiLogo';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -31,7 +32,8 @@ export default function ForgotPasswordPage() {
         style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
       >
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold mb-1">SalesBrain</h1>
+          <div className="flex justify-center mb-4" style={{ color: 'var(--logo)' }}><ZeamiLogo height={34} /></div>
+          <h1 className="z-eyebrow mb-2">SalesBrain</h1>
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Reset your password</p>
         </div>
 
@@ -39,7 +41,7 @@ export default function ForgotPasswordPage() {
           <div className="space-y-4">
             <div
               className="px-3 py-3 rounded-lg text-sm"
-              style={{ background: 'rgba(34,197,94,0.1)', color: 'var(--green)', border: '1px solid rgba(34,197,94,0.2)' }}
+              style={{ background: 'color-mix(in srgb, var(--green) 10%, transparent)', color: 'var(--green)', border: '1px solid color-mix(in srgb, var(--green) 20%, transparent)' }}
             >
               If an account exists for <strong>{email}</strong>, a reset link has been sent.
               Check your inbox (and spam folder). The link expires in 1 hour.
@@ -81,7 +83,7 @@ export default function ForgotPasswordPage() {
               type="submit"
               disabled={loading}
               className="w-full py-2.5 rounded-lg text-sm font-medium transition-opacity"
-              style={{ background: 'var(--accent)', color: '#fff', opacity: loading ? 0.6 : 1 }}
+              style={{ background: 'var(--accent)', color: 'var(--accent-fg)', opacity: loading ? 0.6 : 1 }}
             >
               {loading ? 'Sending...' : 'Send reset link'}
             </button>

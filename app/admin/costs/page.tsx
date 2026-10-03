@@ -55,7 +55,7 @@ export default function CostsAdminPage() {
             <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
               {WINDOWS.map((w) => (
                 <button key={w} onClick={() => setDays(w)} className="px-2.5 py-1"
-                        style={{ background: days === w ? 'var(--accent)' : 'transparent', color: days === w ? '#fff' : 'var(--text-muted)' }}>
+                        style={{ background: days === w ? 'var(--accent)' : 'transparent', color: days === w ? 'var(--accent-fg)' : 'var(--text-muted)' }}>
                   {w}d
                 </button>
               ))}
@@ -67,8 +67,8 @@ export default function CostsAdminPage() {
         </div>
 
         <div className="p-4 space-y-4">
-          {forbidden && <div className="rounded-lg px-3 py-2 text-xs" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--red)' }}>Admin only — sign in as an administrator to see costs.</div>}
-          {error && <div className="rounded-lg px-3 py-2 text-[11px]" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--red)' }}>{error}{data ? ' — showing the previous data.' : ''}</div>}
+          {forbidden && <div className="rounded-lg px-3 py-2 text-xs" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>Admin only — sign in as an administrator to see costs.</div>}
+          {error && <div className="rounded-lg px-3 py-2 text-[11px]" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>{error}{data ? ' — showing the previous data.' : ''}</div>}
           {loading && !data && !forbidden && <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</p>}
 
           {data && (

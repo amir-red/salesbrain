@@ -3,6 +3,7 @@
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import ZeamiLogo from '@/components/ZeamiLogo';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -44,13 +45,14 @@ export default function LoginPage() {
         style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
       >
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold mb-1">SalesBrain</h1>
+          <div className="flex justify-center mb-4" style={{ color: 'var(--logo)' }}><ZeamiLogo height={34} /></div>
+          <h1 className="z-eyebrow mb-2">SalesBrain</h1>
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Sign in to your account</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="px-3 py-2 rounded-lg text-sm" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--red)', border: '1px solid rgba(239,68,68,0.2)' }}>
+            <div className="px-3 py-2 rounded-lg text-sm" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)', border: '1px solid color-mix(in srgb, var(--red) 20%, transparent)' }}>
               {error}
             </div>
           )}
@@ -95,7 +97,7 @@ export default function LoginPage() {
             type="submit"
             disabled={loading}
             className="w-full py-2.5 rounded-lg text-sm font-medium transition-opacity"
-            style={{ background: 'var(--accent)', color: '#fff', opacity: loading ? 0.6 : 1 }}
+            style={{ background: 'var(--accent)', color: 'var(--accent-fg)', opacity: loading ? 0.6 : 1 }}
           >
             {loading ? 'Signing in...' : 'Sign in'}
           </button>

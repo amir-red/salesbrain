@@ -274,7 +274,7 @@ function ResourceTable({ dealId, rows, onChange }: {
                 style={{ ...inputStyle(), marginTop: 2, display: 'block' }} />
             </label>
             <button onClick={addResource} style={{
-              background: 'var(--accent)', color: '#fff', border: 'none',
+              background: 'var(--accent)', color: 'var(--accent-fg)', border: 'none',
               borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: 'pointer',
             }}>Add</button>
           </div>

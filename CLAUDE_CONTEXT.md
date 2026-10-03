@@ -689,6 +689,24 @@ threw the response's usage block away. Plan: `~/.claude/plans/on-the-agents-runn
 - Not built: a rates editor, budget alerts / spend caps, backfill from `state.db` (history before the deploy
   stays in `hermes insights`), `agent_runs` ↔ usage join (no run id reaches the hook).
 
+### 5.ah Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
+
+The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
+obsidian as the dark theme, Poppins + JetBrains Mono (`next/font`, variables on `<body>` — `<html>`'s class belongs
+to the theme script), the supplied H12 wordmark (`components/ZeamiLogo.tsx`, `ZeamiStar` for the rail; never retype it).
+
+- **Tokens** (`app/globals.css`): same names as before (`--bg`, `--bg-card`, `--bg-input`, `--border`, `--text`,
+  `--text-muted`, `--accent`, `--accent-glow`, `--green/--yellow/--red/--orange`) plus **`--accent-fg`** (text on a solid
+  accent or status fill: white in light, obsidian in dark — never write `#fff` on `var(--accent)`), `--accent-soft`,
+  `--highlight`, `--logo`, `--blue`. Status tints are `color-mix(in srgb, var(--red) 10%, transparent)`, not literal rgba.
+  Primitives `.z-card`, `.z-input`, `.z-btn`, `.z-eyebrow` exist for the page-by-page pass.
+- **Sidebar**: grouped, labelled nav (Pipeline / Prospecting / Relationships / Funding / Insights / Admin; Profile,
+  theme and collapse at the foot). 224px on lg+, icon rail below lg or when collapsed (`salesbrain-nav-collapsed`).
+- Gate fills: heather `#6C477D`, board gates deep plum `#691C47`.
+- Not done yet: per-page layout/UX pass (shared page header, cards at 16px radius, pill buttons, empty/loading/error
+  states), categorical chart colours on `/network`, `/reports`, `/credits`; `LeadsTable` + `ApprovalsPanel` were left
+  untouched for ws-linkedin-connect.
+
 ## 6. Env vars
 
 All must be in `.env.local` (dev) and as GitHub repo secrets (prod — workflow writes them to `.env.production`).

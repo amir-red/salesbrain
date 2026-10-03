@@ -126,9 +126,9 @@ export default function ProspectDetailPage() {
             <div className="flex items-center gap-2">
               <span className="text-xs px-2 py-1 rounded" style={card}>{prospect.stage} · {stageSpec?.label}</span>
               {prospect.converted_deal_id ? (
-                <Link href={`/deals/${prospect.converted_deal_id}`} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: 'var(--green)', color: '#fff' }}>View Deal →</Link>
+                <Link href={`/deals/${prospect.converted_deal_id}`} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: 'var(--green)', color: 'var(--accent-fg)' }}>View Deal →</Link>
               ) : (
-                <button onClick={convertToDeal} disabled={!canConvert || converting} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: canConvert ? 'var(--accent)' : 'var(--border)', color: canConvert ? '#fff' : 'var(--text-muted)', opacity: converting ? 0.6 : 1 }}>
+                <button onClick={convertToDeal} disabled={!canConvert || converting} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: canConvert ? 'var(--accent)' : 'var(--border)', color: canConvert ? 'var(--accent-fg)' : 'var(--text-muted)', opacity: converting ? 0.6 : 1 }}>
                   {converting ? 'Converting...' : 'Convert to Deal'}
                 </button>
               )}
@@ -161,7 +161,7 @@ export default function ProspectDetailPage() {
                 <div className="mt-2 flex flex-wrap gap-1">{scores[0].reason_codes.map((r, i) => <span key={i} className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>{r}</span>)}</div>
               )}
               {scores[0]?.disqualifiers && scores[0].disqualifiers.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1">{scores[0].disqualifiers.map((r, i) => <span key={i} className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--red)', color: '#fff', opacity: 0.8 }}>{r}</span>)}</div>
+                <div className="mt-2 flex flex-wrap gap-1">{scores[0].disqualifiers.map((r, i) => <span key={i} className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--red)', color: 'var(--accent-fg)', opacity: 0.8 }}>{r}</span>)}</div>
               )}
               {prospect.qualification_reason && <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>{prospect.qualification_reason}</p>}
             </Section>

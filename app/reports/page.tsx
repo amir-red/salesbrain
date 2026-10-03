@@ -18,8 +18,8 @@ async function getUserId(): Promise<string | null> {
 }
 
 const GATE_COLORS: Record<number, string> = {
-  1: '#1D4ED8', 2: '#1D4ED8', 3: '#6D28D9', 4: '#1D4ED8',
-  5: '#6D28D9', 6: '#1D4ED8', 7: '#1D4ED8', 8: '#1D4ED8', 9: '#166534',
+  1: '#6C477D', 2: '#6C477D', 3: '#691C47', 4: '#6C477D',
+  5: '#691C47', 6: '#6C477D', 7: '#6C477D', 8: '#6C477D', 9: '#166534',
 };
 
 function MetricCard({ label, value, sub }: { label: string; value: string; sub?: string }) {

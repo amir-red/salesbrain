@@ -106,7 +106,7 @@ export default function MarkAsLostModal({
         {/* Body */}
         <div className="p-4 space-y-3">
           {error && (
-            <div className="rounded p-2 text-xs" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
+            <div className="rounded p-2 text-xs" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: '#ef4444' }}>
               {error}
             </div>
           )}

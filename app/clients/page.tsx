@@ -56,7 +56,7 @@ export default function ClientsPage() {
           <a
             href="/deals/new"
             className="px-3 py-1.5 rounded-lg text-sm font-medium"
-            style={{ background: 'var(--accent)', color: '#fff' }}
+            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
           >
             + New client / deal
           </a>

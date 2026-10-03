@@ -113,7 +113,7 @@ export default function ProspectingPage() {
             <button
               onClick={() => setShowNew(!showNew)}
               className="px-3 py-1.5 rounded-lg text-sm font-medium"
-              style={{ background: 'var(--accent)', color: '#fff' }}
+              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
             >
               + New Prospect
             </button>
@@ -134,7 +134,7 @@ export default function ProspectingPage() {
               <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Title" className="px-3 py-2 rounded-lg text-sm outline-none" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }} />
             </div>
             <div className="flex gap-2">
-              <button onClick={createProspect} disabled={!newCompany.trim() || !newFullName.trim()} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: 'var(--green)', color: '#fff' }}>Create</button>
+              <button onClick={createProspect} disabled={!newCompany.trim() || !newFullName.trim()} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: 'var(--green)', color: 'var(--accent-fg)' }}>Create</button>
               <button onClick={() => setShowNew(false)} className="px-4 py-2 rounded-lg text-sm" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Cancel</button>
             </div>
           </div>
@@ -145,7 +145,7 @@ export default function ProspectingPage() {
           <button
             onClick={() => setStageFilter(null)}
             className="px-2.5 py-1 rounded text-xs"
-            style={{ background: stageFilter === null ? 'var(--accent)' : 'var(--bg-input)', color: stageFilter === null ? '#fff' : 'var(--text-muted)' }}
+            style={{ background: stageFilter === null ? 'var(--accent)' : 'var(--bg-input)', color: stageFilter === null ? 'var(--accent-fg)' : 'var(--text-muted)' }}
           >
             All ({prospects.length})
           </button>
@@ -156,7 +156,7 @@ export default function ProspectingPage() {
               className="px-2.5 py-1 rounded text-xs"
               style={{
                 background: s.stage === stageFilter ? STAGE_COLORS[s.stage] : 'var(--bg-input)',
-                color: s.stage === stageFilter ? '#fff' : 'var(--text-muted)',
+                color: s.stage === stageFilter ? 'var(--accent-fg)' : 'var(--text-muted)',
                 border: `1px solid ${s.stage === stageFilter ? STAGE_COLORS[s.stage] : 'var(--border)'}`,
               }}
               title={s.description}

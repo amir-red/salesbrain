@@ -182,7 +182,7 @@ export default function NetworkPage() {
           <button
             onClick={() => setInsightsOpen(true)}
             className="px-3 py-1.5 rounded text-sm font-medium"
-            style={{ background: 'var(--accent)', color: '#0b1220' }}
+            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
           >
             AI Insights
           </button>

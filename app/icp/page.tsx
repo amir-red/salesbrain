@@ -100,12 +100,12 @@ export default function IcpPage() {
               <Link href="/prospecting" className="text-xs underline" style={{ color: 'var(--text-muted)' }}>Prospects →</Link>
               {isAdmin && (
                 <button onClick={() => { setEstate((v) => !v); setFilter((f) => ({ ...f, owner: 'all' })); }} className="px-3 py-1.5 rounded-lg text-xs"
-                        style={{ border: '1px solid var(--border)', background: estate ? 'var(--accent)' : 'transparent', color: estate ? '#fff' : 'var(--text-muted)' }}
+                        style={{ border: '1px solid var(--border)', background: estate ? 'var(--accent)' : 'transparent', color: estate ? 'var(--accent-fg)' : 'var(--text-muted)' }}
                         title="Admin: every employee's ICPs, including those filed by the partner app">
                   {estate ? 'All employees' : 'Mine only'}
                 </button>
               )}
-              <button onClick={() => setMode({ kind: 'new' })} className="px-3 py-1.5 rounded-lg text-sm font-medium" style={{ background: 'var(--accent)', color: '#fff' }}>
+              <button onClick={() => setMode({ kind: 'new' })} className="px-3 py-1.5 rounded-lg text-sm font-medium" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
                 + New ICP
               </button>
             </div>
@@ -122,7 +122,7 @@ export default function IcpPage() {
 
         {mode.kind === 'list' && (
           <div className="p-4 space-y-4">
-            {error && <div className="rounded-lg px-3 py-2 text-[11px]" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--red)' }}>Last refresh failed ({error}){overview ? '; showing the previous data.' : '.'}</div>}
+            {error && <div className="rounded-lg px-3 py-2 text-[11px]" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>Last refresh failed ({error}){overview ? '; showing the previous data.' : '.'}</div>}
             <FleetStrip fleet={fleet} quota={myQuota} onChanged={refresh} />
             {icps.length > 0 && (
               <IcpFilterBar filter={filter} icps={icps} showOwner={estate} shown={shown.length} total={icps.length} onChange={setFilter} />
@@ -132,7 +132,7 @@ export default function IcpPage() {
               <div className="text-center py-16 space-y-2" style={{ color: 'var(--text-muted)' }}>
                 <p className="text-sm">No ICP yet.</p>
                 <p className="text-xs">Describe who you sell to — or paste your website and let AI draft the first one.</p>
-                <button onClick={() => setMode({ kind: 'new' })} className="mt-2 px-4 py-2 rounded-lg text-sm font-medium" style={{ background: 'var(--accent)', color: '#fff' }}>
+                <button onClick={() => setMode({ kind: 'new' })} className="mt-2 px-4 py-2 rounded-lg text-sm font-medium" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
                   Create your first ICP
                 </button>
               </div>

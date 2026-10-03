@@ -71,7 +71,7 @@ export default function FleetStrip({ fleet, quota, onChanged }: {
             <div key={a.name} className="rounded-lg px-3 py-2 space-y-1" style={{ background: 'var(--bg-input)', opacity: a.enabled ? 1 : 0.7 }}>
               <div className="flex items-center gap-2 text-xs">
                 <span className="font-medium truncate">{a.label}</span>
-                <span className="text-[9px] px-1.5 py-0.5 rounded-full" style={{ background: a.enabled ? 'rgba(34,197,94,0.15)' : 'var(--bg-card)', color: a.enabled ? 'var(--green)' : 'var(--text-muted)' }}>{a.enabled ? 'on' : 'off'}</span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded-full" style={{ background: a.enabled ? 'color-mix(in srgb, var(--green) 15%, transparent)' : 'var(--bg-card)', color: a.enabled ? 'var(--green)' : 'var(--text-muted)' }}>{a.enabled ? 'on' : 'off'}</span>
                 {fleet.is_admin && (
                   <button onClick={() => patch({ agent: a.name, enabled: !a.enabled }, a.name)} disabled={busy === a.name}
                           className="ml-auto text-[10px] underline disabled:opacity-40" style={{ color: 'var(--text-muted)' }}>
@@ -111,12 +111,12 @@ export default function FleetStrip({ fleet, quota, onChanged }: {
       )}
 
       {fleet.paused_accounts.length > 0 && (
-        <div className="rounded-lg p-2 text-[11px] space-y-1" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid var(--red)' }}>
+        <div className="rounded-lg p-2 text-[11px] space-y-1" style={{ background: 'color-mix(in srgb, var(--red) 8%, transparent)', border: '1px solid var(--red)' }}>
           {fleet.paused_accounts.map((p) => (
             <div key={p.unipile_account_id} className="flex items-center gap-2">
               <span style={{ color: 'var(--red)' }}>⏸</span>
               <span><b>{p.display_name || p.unipile_account_id}</b> ({p.owner_name}) paused {relativeTime(p.agent_paused_at)} — {p.agent_pause_reason || `${p.agent_consecutive_errors} provider errors`}</span>
-              <button onClick={() => resume(p.unipile_account_id)} disabled={busy === p.unipile_account_id} className="ml-auto px-2 py-0.5 rounded text-[10px] font-medium text-white disabled:opacity-40" style={{ background: 'var(--green)' }}>Resume</button>
+              <button onClick={() => resume(p.unipile_account_id)} disabled={busy === p.unipile_account_id} className="ml-auto px-2 py-0.5 rounded text-[10px] font-medium text-[var(--accent-fg)] disabled:opacity-40" style={{ background: 'var(--green)' }}>Resume</button>
             </div>
           ))}
         </div>

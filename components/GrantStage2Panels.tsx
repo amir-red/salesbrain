@@ -200,7 +200,7 @@ function HandoverPanel({ deal, users, onUpdate }: {
             You can also hand the deal off to a new lead in the same step.
           </div>
           <button onClick={() => setSigning(true)} style={{
-            background: 'var(--accent)', color: '#fff', border: 'none',
+            background: 'var(--accent)', color: 'var(--accent-fg)', border: 'none',
             borderRadius: 6, padding: '8px 14px', fontSize: 13, cursor: 'pointer',
           }}>Record signature</button>
         </>
@@ -229,7 +229,7 @@ function HandoverPanel({ deal, users, onUpdate }: {
           {err && <div style={{ fontSize: 12, color: 'var(--red)' }}>{err}</div>}
           <div style={{ display: 'flex', gap: 8 }}>
             <button disabled={busy} onClick={submit} style={{
-              background: 'var(--accent)', color: '#fff', border: 'none',
+              background: 'var(--accent)', color: 'var(--accent-fg)', border: 'none',
               borderRadius: 6, padding: '8px 14px', fontSize: 13, cursor: 'pointer',
               opacity: busy ? 0.6 : 1,
             }}>{busy ? 'Recording…' : 'Confirm & sign'}</button>
@@ -320,7 +320,7 @@ function ResourceRow({ r, onChange, onDelete }: {
         {editing ? (
           <>
             <button onClick={save} disabled={busy}
-              style={{ background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 8px', fontSize: 11, cursor: 'pointer', marginRight: 4 }}>Save</button>
+              style={{ background: 'var(--accent)', color: 'var(--accent-fg)', border: 'none', borderRadius: 4, padding: '4px 8px', fontSize: 11, cursor: 'pointer', marginRight: 4 }}>Save</button>
             <button onClick={() => { setEditing(false); setForm({}); }}
               style={{ background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 4, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
           </>
@@ -413,7 +413,7 @@ function GrantResourcesPanel({ dealId }: { dealId: string }) {
                 style={{ ...inputStyle(), marginTop: 2, display: 'block' }} />
             </label>
             <button onClick={add} style={{
-              background: 'var(--accent)', color: '#fff', border: 'none',
+              background: 'var(--accent)', color: 'var(--accent-fg)', border: 'none',
               borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: 'pointer',
             }}>Add</button>
           </div>
@@ -570,7 +570,7 @@ function GrantReportsPanel({ dealId }: { dealId: string }) {
                 style={{ ...inputStyle(), marginTop: 2, display: 'block' }} />
             </label>
             <button onClick={add} style={{
-              background: 'var(--accent)', color: '#fff', border: 'none',
+              background: 'var(--accent)', color: 'var(--accent-fg)', border: 'none',
               borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: 'pointer',
             }}>Add</button>
           </div>
