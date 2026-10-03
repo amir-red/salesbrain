@@ -124,7 +124,7 @@ export default function PricingToolAdmin() {
             >
               {busy ? 'Uploading…' : 'Upload'}
             </button>
-            {error && <p className="mt-2 text-sm" style={{ color: '#fb7185' }}>{error}</p>}
+            {error && <p className="mt-2 text-sm" style={{ color: 'var(--red)' }}>{error}</p>}
           </section>
 
           {/* Version list */}

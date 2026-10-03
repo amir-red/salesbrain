@@ -42,15 +42,15 @@ const ROOT_CAUSE_LABEL: Record<RootCause, string> = {
 };
 
 const ROOT_CAUSE_COLOR: Record<RootCause, string> = {
-  price: '#ef4444',
-  timeline: '#f59e0b',
-  fit: '#a78bfa',
-  decision_maker: '#3b82f6',
-  capability: '#06b6d4',
-  competition: '#ec4899',
-  budget: '#eab308',
-  eligibility: '#8b5cf6',
-  other: '#94a3b8',
+  price: 'var(--red)',
+  timeline: 'var(--yellow)',
+  fit: 'var(--cat-violet)',
+  decision_maker: 'var(--cat-blue)',
+  capability: 'var(--cat-teal)',
+  competition: 'var(--cat-pink)',
+  budget: 'var(--yellow)',
+  eligibility: 'var(--cat-violet)',
+  other: 'var(--text-muted)',
 };
 
 export default function LessonsPage() {
@@ -184,7 +184,7 @@ export default function LessonsPage() {
                         </Link>
                         <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold"
                               style={{ background: l.deal_type === 'grant' ? 'color-mix(in srgb, var(--green) 15%, transparent)' : 'color-mix(in srgb, var(--accent) 15%, transparent)',
-                                       color: l.deal_type === 'grant' ? 'var(--green)' : '#3b82f6' }}>
+                                       color: l.deal_type === 'grant' ? 'var(--green)' : 'var(--cat-blue)' }}>
                           {l.deal_type === 'grant' ? 'GRANT' : 'SALES'}
                         </span>
                         <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold"

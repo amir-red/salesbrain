@@ -107,7 +107,7 @@ const FILTERS: { key: StatusFilter; label: string }[] = [
 
 const statusColor: Record<SalesLead['status'], string> = {
   new: 'var(--accent)',
-  contacted: '#eab308',
+  contacted: 'var(--yellow)',
   converted: 'var(--green)',
   archived: 'var(--text-muted)',
 };
@@ -327,7 +327,7 @@ export default function SalesLeadsPage() {
                             className="text-xs mt-1.5 inline-flex items-center gap-1.5 px-2 py-1 rounded"
                             style={{ background: 'rgba(34,211,238,0.1)', color: 'var(--text)', border: '1px solid rgba(34,211,238,0.25)' }}
                           >
-                            <span style={{ color: '#22d3ee' }}>📅</span>
+                            <span style={{ color: 'var(--cat-teal)' }}>📅</span>
                             <span><strong>Preferred demo:</strong> {demoLine}</span>
                           </p>
                         ) : null;

@@ -30,6 +30,11 @@
   --red: #b6171d;           /* error #ED2027, darkened: ≥4.5:1 as small text on every surface and tint */
   --orange: #a5370a;
   --blue: #6c477d;          /* heather — the neutral "info" tone */
+  /* categorical badges (stages, lesson types): each passes 4.5:1 on its own tint */
+  --cat-blue: #1b589b;
+  --cat-violet: #6c477d;
+  --cat-teal: #0d606a;
+  --cat-pink: #9b2268;
   --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
 }
 
@@ -52,6 +57,10 @@
   --red: #f57b7f;
   --orange: #fb923c;
   --blue: #c6abd7;
+  --cat-blue: #84b8f1;
+  --cat-violet: #c6abd7;
+  --cat-teal: #5cc8d6;
+  --cat-pink: #f09ac8;
   --shadow-card: none;
 }
 

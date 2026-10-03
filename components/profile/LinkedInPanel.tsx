@@ -142,7 +142,7 @@ function LinkedInSettings() {
                 </span>
                 <p className="text-sm font-medium">{acc.display_name || acc.public_identifier}</p>
                 {hasSalesNav && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: '#3b82f6' }}>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: 'var(--cat-blue)' }}>
                     Sales Navigator
                   </span>
                 )}

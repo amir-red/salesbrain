@@ -208,7 +208,7 @@ function TriCheckbox({ label, value, onChange }: {
     else onChange(null);
   }
   const display = value === null ? 'Any' : value ? 'Yes' : 'No';
-  const color = value === null ? 'var(--text-muted)' : value ? '#34d399' : '#fb7185';
+  const color = value === null ? 'var(--text-muted)' : value ? 'var(--green)' : 'var(--red)';
   return (
     <button
       onClick={next}

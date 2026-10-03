@@ -201,7 +201,7 @@ export default function NetworkPage() {
             </div>
           )}
           {error && (
-            <div className="absolute inset-0 flex items-center justify-center" style={{ color: '#fb7185' }}>
+            <div className="absolute inset-0 flex items-center justify-center" style={{ color: 'var(--red)' }}>
               {error}
             </div>
           )}

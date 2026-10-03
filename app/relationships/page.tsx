@@ -42,17 +42,17 @@ type Stage = 'stranger' | 'acquaintance' | 'engaged' | 'trusted' | 'advocate';
 
 const STAGE_COLOR: Record<Stage, string> = {
   stranger: 'var(--text-muted)',
-  acquaintance: '#60a5fa',
-  engaged: '#a78bfa',
-  trusted: '#34d399',
-  advocate: '#fbbf24',
+  acquaintance: 'var(--cat-blue)',
+  engaged: 'var(--cat-violet)',
+  trusted: 'var(--green)',
+  advocate: 'var(--yellow)',
 };
 
 const TIER_COLOR: Record<string, string> = {
-  personal: '#fbbf24',
-  career: '#34d399',
-  company: '#60a5fa',
-  commercial: '#a78bfa',
+  personal: 'var(--yellow)',
+  career: 'var(--green)',
+  company: 'var(--cat-blue)',
+  commercial: 'var(--cat-violet)',
 };
 
 function ago(iso: string | null): string {

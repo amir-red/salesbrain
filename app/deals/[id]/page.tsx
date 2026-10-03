@@ -90,7 +90,7 @@ function ScoreRing({ score }: { score: number | null }) {
 
 function Badge({ label, color }: { label: string; color: string }) {
   return (
-    <span className="px-2.5 py-1 rounded-full text-xs font-medium" style={{ background: `${color}20`, color, border: `1px solid ${color}40` }}>
+    <span className="px-2.5 py-1 rounded-full text-xs font-medium" style={{ background: `color-mix(in srgb, ${color} 14%, transparent)`, color, border: `1px solid ${color}40` }}>
       {label}
     </span>
   );
@@ -253,7 +253,7 @@ export default function DealViewPage() {
                 className="px-3 py-2 rounded-lg text-sm font-medium transition-colors"
                 style={{
                   background: 'transparent',
-                  color: '#ef4444',
+                  color: 'var(--red)',
                   border: '1px solid color-mix(in srgb, var(--red) 40%, transparent)',
                 }}
                 title="Mark this deal lost and capture a lesson"

@@ -56,7 +56,7 @@ export default function ChipSelect({
       onClick={onClick}
       className="px-2.5 py-1 rounded-full text-xs border transition-colors"
       style={{
-        background: on ? `${accent}22` : 'var(--bg-input)',
+        background: on ? `color-mix(in srgb, ${accent} 14%, transparent)` : 'var(--bg-input)',
         borderColor: on ? accent : 'var(--border)',
         color: on ? accent : 'var(--text-muted)',
       }}

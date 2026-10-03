@@ -155,7 +155,7 @@ export default function DealPricingPanel({ deal }: { deal: DealLike }) {
       {showForm && (
         <div className="space-y-4 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
           <PricingForm values={values} onChange={setValues} onCalculate={calculate} busy={busy} />
-          {error && <p className="text-sm" style={{ color: '#fb7185' }}>{error}</p>}
+          {error && <p className="text-sm" style={{ color: 'var(--red)' }}>{error}</p>}
           {result && (
             <>
               <PricingResult

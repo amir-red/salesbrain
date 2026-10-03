@@ -126,11 +126,11 @@ export default async function ReportsPage() {
                         fill={GATE_COLORS[g.gate]}
                         opacity={0.85}
                       />
-                      <text x={x + 20} y={145} textAnchor="middle" fill="#8888a0" fontSize="9">
+                      <text x={x + 20} y={145} textAnchor="middle" style={{ fill: 'var(--text-muted)' }} fontSize="9">
                         G{g.gate}
                       </text>
                       {g.count > 0 && (
-                        <text x={x + 20} y={125 - barHeight} textAnchor="middle" fill="#e4e4ed" fontSize="10" fontWeight="600">
+                        <text x={x + 20} y={125 - barHeight} textAnchor="middle" style={{ fill: 'var(--text)' }} fontSize="10" fontWeight="600">
                           {g.count}
                         </text>
                       )}

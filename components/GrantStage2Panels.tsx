@@ -105,7 +105,7 @@ function inputStyle() {
 function statusColor(status: string): string {
   if (['accepted', 'fully_utilized', 'reconciled'].includes(status)) return 'var(--green)';
   if (['overdue'].includes(status)) return 'var(--red)';
-  if (['submitted', 'fully_available', 'internal_review'].includes(status)) return 'var(--blue, #3b82f6)';
+  if (['submitted', 'fully_available', 'internal_review'].includes(status)) return 'var(--blue)';
   if (['drafting', 'partly_available', 'requested'].includes(status)) return 'var(--yellow)';
   return 'var(--text-muted)';
 }
@@ -113,7 +113,7 @@ function statusColor(status: string): string {
 function pill(text: string, color: string) {
   return (
     <span style={{
-      background: `${color}22`, color, border: `1px solid ${color}44`,
+      background: `color-mix(in srgb, ${color} 14%, transparent)`, color, border: `1px solid color-mix(in srgb, ${color} 28%, transparent)`,
       borderRadius: 999, padding: '2px 8px', fontSize: 11, fontWeight: 500,
       whiteSpace: 'nowrap',
     }}>{text}</span>

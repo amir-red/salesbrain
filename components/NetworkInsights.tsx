@@ -294,7 +294,7 @@ function ChatPanel({ nodes, companies, onApplyFilters, onHighlightContacts, onCl
           </div>
         ))}
 
-        {error && <p className="text-sm" style={{ color: '#fb7185' }}>{error}</p>}
+        {error && <p className="text-sm" style={{ color: 'var(--red)' }}>{error}</p>}
       </div>
 
       <form
@@ -642,7 +642,7 @@ function InsightsPanel({ nodes, onFocusNode }: Props) {
       )}
 
       {loading && <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Analyzing network…</p>}
-      {error && <p className="text-sm" style={{ color: '#fb7185' }}>{error}</p>}
+      {error && <p className="text-sm" style={{ color: 'var(--red)' }}>{error}</p>}
 
       {insights && (
         <div className="space-y-4">

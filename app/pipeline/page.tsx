@@ -55,7 +55,7 @@ const AI_CREDIT_GATE_COLORS: Record<number, string> = {
   1: '#6C477D',   // Discovered
   2: '#6C477D',   // Qualified
   3: '#6C477D',   // Applied
-  4: '#D97706',   // Awarded
+  4: '#994708',   // Awarded
   5: '#166534',   // Active
 };
 
@@ -339,7 +339,7 @@ export default async function PipelinePage() {
           />
           <SummaryCard
             label="Credits Pipeline"
-            accent="#D97706"
+            accent="var(--yellow)"
             summary={creditsSummary}
           />
         </div>
@@ -367,7 +367,7 @@ function SummaryCard({ label, accent, summary }: { label: string; accent: string
     <div className="rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderLeft: `3px solid ${accent}` }}>
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-semibold">{label}</h2>
-        <span className="text-[10px] px-2 py-0.5 rounded" style={{ background: `${accent}20`, color: accent }}>
+        <span className="text-[10px] px-2 py-0.5 rounded" style={{ background: `color-mix(in srgb, ${accent} 14%, transparent)`, color: accent }}>
           {summary.active_count} active
         </span>
       </div>
@@ -386,7 +386,7 @@ function SummaryCard({ label, accent, summary }: { label: string; accent: string
         <div className="mt-3 flex gap-3 text-[10px]" style={{ color: 'var(--text-muted)' }}>
           {summary.board_pending_count > 0 && (
             <span>
-              <span style={{ color: '#a78bfa', fontWeight: 600 }}>{summary.board_pending_count}</span> board pending
+              <span style={{ color: 'var(--cat-violet)', fontWeight: 600 }}>{summary.board_pending_count}</span> board pending
             </span>
           )}
           {summary.overdue_count > 0 && (

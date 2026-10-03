@@ -137,7 +137,7 @@ export default function PricingPage() {
               onReset={reset}
               busy={busy}
             />
-            {error && <p className="mt-3 text-sm" style={{ color: '#fb7185' }}>{error}</p>}
+            {error && <p className="mt-3 text-sm" style={{ color: 'var(--red)' }}>{error}</p>}
           </div>
 
           <div>

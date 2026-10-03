@@ -702,9 +702,14 @@ to the theme script), the supplied H12 wordmark (`components/ZeamiLogo.tsx`, `Ze
   Primitives `.z-card`, `.z-input`, `.z-btn`, `.z-eyebrow` exist for the page-by-page pass.
 - **Sidebar**: grouped, labelled nav (Pipeline / Prospecting / Relationships / Funding / Insights / Admin; Profile,
   theme and collapse at the foot). 224px on lg+, icon rail below lg or when collapsed (`salesbrain-nav-collapsed`).
-- Gate fills: heather `#6C477D`, board gates deep plum `#691C47`.
+- Gate fills: heather `#6C477D`, board gates deep plum `#691C47` (fixed hexes: white header text sits on them).
+- **Contrast is computed, not eyeballed**: every status token (`--red/--green/--yellow/--orange`) and category token
+  (`--cat-blue/-violet/-teal/-pink`) passes 4.5:1 as small text on `--bg`, `--bg-card`, `--bg-input` and on its own
+  10–28% tint, in both themes. Badges tint with `color-mix(in srgb, ${color} 14%, transparent)` — never `${color}20`,
+  which breaks on a `var()`. Decided by Amir 2026-10-03: product name stays SalesBrain; grants / ChipChip pages get
+  the same Zeami look; errors must always be clearly visible.
 - Not done yet: per-page layout/UX pass (shared page header, cards at 16px radius, pill buttons, empty/loading/error
-  states), categorical chart colours on `/network`, `/reports`, `/credits`; `LeadsTable` + `ApprovalsPanel` were left
+  states), the cytoscape canvases (`NetworkGraph`, `RouteGraph` still use literal dark-theme colours); `LeadsTable` + `ApprovalsPanel` were left
   untouched for ws-linkedin-connect.
 
 ## 6. Env vars

@@ -81,11 +81,11 @@ function DealCard({ deal }: { deal: Deal }) {
           </span>
         )}
         {deal.is_board ? (
-          <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(109,40,217,0.2)', color: '#a78bfa' }}>
+          <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: 'var(--cat-violet)' }}>
             Board
           </span>
         ) : (
-          <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: `${badgeColor}20`, color: badgeColor }}>
+          <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: `color-mix(in srgb, ${badgeColor} 14%, transparent)`, color: badgeColor }}>
             {deal.days_in_gate}d / {deal.sla_days}d
           </span>
         )}
@@ -183,9 +183,9 @@ export default function FilterBar({ salesGates, grantGates, grantStages, creditG
           onClick={() => setPipeline('ai_credit')}
           className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           style={{
-            background: pipeline === 'ai_credit' ? '#D97706' : 'var(--bg-card)',
+            background: pipeline === 'ai_credit' ? 'var(--yellow)' : 'var(--bg-card)',
             color: pipeline === 'ai_credit' ? 'var(--accent-fg)' : 'var(--text-muted)',
-            border: `1px solid ${pipeline === 'ai_credit' ? '#D97706' : 'var(--border)'}`,
+            border: `1px solid ${pipeline === 'ai_credit' ? 'var(--yellow)' : 'var(--border)'}`,
           }}
         >
           Credits ({creditCount})
@@ -314,7 +314,7 @@ function GateInfoTooltip({ gate }: { gate: Gate }) {
           {gate.is_board && (
             <span
               className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold"
-              style={{ background: 'rgba(109, 40, 217, 0.2)', color: '#a78bfa' }}
+              style={{ background: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: 'var(--cat-violet)' }}
             >
               Board
             </span>
