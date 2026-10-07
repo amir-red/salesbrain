@@ -726,6 +726,15 @@ sent to, who accepted, who did not, whom we never asked." This reverses "connect
 - **UNVERIFIED against a live account**: the `users/invite` body and the `users/invite/sent` item keys
   (`unipile.sent_invitation` takes several spellings). Probe one real sent-list response before trusting the
   hand-sent tracking; the first approved request tells you whether the send shape is right.
+- **0.36.2 (2026-10-03)**: `prospects.priority_rank` (migration 050, backfilled from `source_detail` "rank N") — the
+  leads list and the connect queue follow the owner's own order first, fit second. **0.37.0 (2026-10-07)**: Amir:
+  "ten taps for ten requests is not fast enough" → `crm_linkedin_connect_send_batch {limit, icp_id?, owner?}`
+  (`connect_batch.py`): the owner's ONE chat instruction ("send the next 10") is the decision for the batch —
+  each request is still filed, decided (`decide_outreach` by the owner), consumed by `consume_connect` and
+  recorded; same caps. Paced ~8–16 s per person in a worker thread on the gateway (inline under the one-shot
+  RPC process), one summary DM when done. Admin may pass `owner` (email), audited as `act_as`. Caps raised by
+  Amir 2026-10-06 to 15/day, 75/week (`agents.linkedin_connect`) and the guard's `free.invite` to 15
+  (`agents.linkedin_limits` row, now exists).
 - Not built: withdrawing a pending request, an AI-drafted note, a first message after acceptance to a
   1st-degree connection with no thread (the gap in §5.ac), a policy editor for the caps.
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
