@@ -737,7 +737,7 @@ sent to, who accepted, who did not, whom we never asked." This reverses "connect
   (`agents.linkedin_limits` row, now exists).
 - Not built: withdrawing a pending request, an AI-drafted note, a first message after acceptance to a
   1st-degree connection with no thread (the gap in §5.ac), a policy editor for the caps.
-### 5.ah.1 Find a lead's LinkedIn profile by name (2026-10-09, feat/linkedin-find, core/hermes 0.38.0, migration 051)
+### 5.ah.1 Find a lead's LinkedIn profile by name (2026-10-09, feat/linkedin-find, core/hermes 0.38.2, migrations 051 + 052)
 
 Amir, on Stefan Ickler (NRW rank 54) showing "No profile" while Google finds him instantly: "how is that?".
 Cause: the NRW list was imported as name + company + title; 129 of its 204 leads carried no LinkedIn URL, and
@@ -774,6 +774,15 @@ step, not a failure**: 0 of the 129 had ever been searched. Plan: `~/.claude/pla
   `{public_identifier, member_id?}` = `crm_linkedin_link_prospect`. Both run as the lead's owner for an admin.
 - **Budget reality**: classic search is capped at 20/day/account by the guard (`free.search`), so the 129 NRW
   leads take ~7 sweeps unless Amir raises that cap for the push. Each lookup = 1 search.
+- **LIVE 2026-10-09 (0.38.2, both migrations applied, box + Production deployed).** First walk on rank 54 as
+  Matthias: search found exactly one Stefan Ickler but `no_match` — LinkedIn's search item says `location:
+  "Ruhr Region"` (a metro label), the list says "Sprockhövel, North Rhine-Westphalia"; no literal word in common.
+  **0.38.1**: `place_tokens` collapses multi-word states to one token, maps LinkedIn's German metro labels /
+  known cities to their state (`_LI_REGIONS`) and drops directional words, so "Rhine" alone never ties Frankfurt
+  to NRW. Rerun: `found` ("same place (nordrheinwestfalen)"), slug + member id + contact URL + two handles
+  written. Rank 60 (vombaur): `duplicate` → "already lead #54" as designed — but its log row was silently refused:
+  033 has a SECOND check, on `result`. **Migration 052** adds `ambiguous | candidates | duplicate`. Lesson: when
+  adding an enrichment outcome, check BOTH constraints, and don't trust a best-effort logger to tell you.
 - Not built: Sales Navigator search for the lookup (the `api` arg exists), re-running the 9 warm lookups that
   failed on the ö/é bug on 2026-10-03 (eligible again 2026-10-17), Matthias's failing `graph_sync` runs
   (`phase:mirror_pending` since 2026-10-05 — separate issue, not touched).
