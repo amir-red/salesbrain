@@ -787,6 +787,39 @@ step, not a failure**: 0 of the 129 had ever been searched. Plan: `~/.claude/pla
   failed on the ö/é bug on 2026-10-03 (eligible again 2026-10-17), Matthias's failing `graph_sync` runs
   (`phase:mirror_pending` since 2026-10-05 — separate issue, not touched).
 
+### 5.ah.2 First message to a 1st-degree connection — the new-chat lane (2026-10-09, core/hermes 0.39.1)
+
+Amir: "start sending a message to all the connected ones" (Fakuma, 12–16 Oct 2026, Friedrichshafen). This closes the
+gap §5.ac named: the ring only ever replied into existing chats, so a connection with no thread could not be messaged.
+Decision (Amir, by instruction): build it under the one rule for sends.
+
+- **Kernel** (`commands/linkedin.py`): `propose_first_message(actor, prospect_id, text)` files a normal `outreach`
+  approval on channel linkedin with **`linkedin_thread_id NULL`** — refuses no profile, not 1st-degree (degree '1' or an
+  accepted request on this account), or an existing thread ("reply there"); `send_first_message(actor, approval_id)` =
+  `record_outreach(..., for_delivery=True)` (send gate consumes the approval once + every outreach policy check) →
+  `linkedin_start_chat` event; `record_chat_started` mirrors the new chat via `sync_thread` (state waiting, person
+  linked, our message as the first row) so the hourly sync and reply detection see it at once.
+  `policy/linkedin_limits.classify`: `POST chats` = `message` (was inbox_read).
+- **Ring**: `unipile.start_chat` (POST /chats, JSON first, multipart fallback — Unipile documents multipart; the JSON
+  form worked live), `outreach_agent._send_first_message` (profile fetch for a member id when only a slug; refuses if
+  the profile is not degree 1), `approve_and_send` routes a linkedin approval WITHOUT a thread there, so the Telegram /
+  /agents card works too. `message_batch.py` = the connect-batch pattern (file → decide → gated send → record, paced
+  8–16 s, one summary). Tools `crm_linkedin_first_message_propose` (card) and **`crm_linkedin_first_message_send_batch
+  {prospect_ids[], text, owner?}`** (the owner's one instruction decides the batch; admin may name the owner). Both
+  `mcp=None`. 129 tools. `mark_approval_result` moves the lead to P5_SENT + touch (plain `outreach` kind).
+- **Live 2026-10-09 ~14:00 Addis**: 21 NRW connections messaged from Matthias's account, each exactly once (audited:
+  approvals + mirrored threads). The first batch was interrupted client-side after 11 but **the RPC process kept running
+  on the box** and finished the list; the second run (text without "Hallo,") was refused per person by the thread check /
+  the once-only gate — no duplicate went out. 18 got the "Hallo," text, 3 (Niedhart, Schmolke, Barlog) the
+  greeting-free one. Lesson: an inline batch over ssh is not cancelled by killing the client; prefer the gateway
+  (background thread) or `kill` on the box.
+- **The connections dig (same day)**: `linkedin/search` classic with `network_distance: [1]` + ICP terms
+  (Geschäftsführer, Kunststoff, …; 10 items/page, 9 searches) over Matthias's 1st degree → 35 people, 25 not on the
+  list; 10 landed as `source_type='connections'` (research + a profile fetch for title-less headlines, `rescore_icp`).
+  Matthias's `graph_sync` still errors every tick (`phase:mirror_pending`, error "0") — the full relations mirror would
+  make this a query instead of searches. Not fixed.
+- Not built: an app button for the first message (LeadsTable), withdrawing, a per-ICP "message all connected".
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
