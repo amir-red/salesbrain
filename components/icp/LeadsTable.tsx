@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { PROSPECT_STAGES } from '@/lib/prospecting';
 import { relativeTime } from '@/lib/time';
 import { DegreeWarm } from '@/components/icp/IcpLeads';
-import { CONNECT_COLOR, CONNECT_LABEL, connectState, type ConnectState } from '@/lib/connect';
+import { CONNECT_COLOR, CONNECT_LABEL, connectState, describeLookup, type ConnectState, type ProfileLookup } from '@/lib/connect';
 
 export interface Lead {
   id: string; stage: string; icp_score: number | null; fit_label: string | null;
@@ -19,6 +19,7 @@ export interface Lead {
   linkedin_public_id: string | null; priority_rank: number | null;
   invite_status: string | null; invite_sent_at: string | null; invite_source: string | null;
   invite_error: string | null; connect_approval: string | null;
+  profile_lookup: ProfileLookup | null;
 }
 interface ConnectInfo {
   linkedin: boolean; enabled: boolean; per_day: number; per_week: number; no_answer_after_days: number;
@@ -26,7 +27,8 @@ interface ConnectInfo {
 }
 interface Payload { leads: Lead[]; counts: { total: number }; connect?: ConnectInfo }
 
-const CONNECT_FILTERS: ConnectState[] = ['not_invited', 'awaiting_approval', 'pending', 'no_answer', 'connected', 'not_accepted', 'failed', 'no_profile'];
+const CONNECT_FILTERS: ConnectState[] = ['not_invited', 'awaiting_approval', 'pending', 'no_answer', 'connected', 'not_accepted', 'failed', 'awaiting_pick', 'no_profile'];
+const FIND_PER_CLICK = 10;
 
 const fitColor = (s: number | null) =>
   s === null ? 'var(--text-muted)' : s >= 75 ? 'var(--green)' : s >= 60 ? 'var(--yellow)' : s >= 40 ? 'var(--orange)' : 'var(--red)';
@@ -46,6 +48,7 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
   const [conn, setConn] = useState<'' | ConnectState>('');
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [pick, setPick] = useState<string | null>(null);   // lead whose profile candidates are open
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/icp/${icpId}/leads?` + new URLSearchParams({
@@ -72,10 +75,17 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
     try {
       const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const out = await res.json().catch(() => ({}));
-      setMsg(out.error ? `Not filed: ${out.error}` : (out.note || 'Filed for approval.'));
+      setMsg(out.error ? `Error: ${out.error}` : (out.note || 'Filed for approval.'));
       await load();
     } finally { setBusy(null); }
   };
+  // Profile lookups write a slug only on exactly one strong match; a pick is a person's decision.
+  const findOne = (l: Lead) => post(l.id, `/api/prospects/${l.id}/find-linkedin`, {});
+  const pickOne = (l: Lead, public_identifier: string, member_id: string | null) => {
+    setPick(null);
+    void post(l.id, `/api/prospects/${l.id}/find-linkedin`, { public_identifier, ...(member_id ? { member_id } : {}) });
+  };
+  const findNext = () => post('find', `/api/icp/${icpId}/find-linkedin`, { limit: FIND_PER_CLICK });
   const connectOne = (l: Lead) => {
     const note = window.prompt(
       `Connection request to ${l.full_name || 'this person'}.\n\nOptional note (max 200 characters, no pitch). Leave empty for a plain request.`, '');
@@ -115,7 +125,7 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
       {data && c && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-3 py-2 text-[11px]" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
           <span className="font-medium" style={{ color: 'var(--text)' }}>LinkedIn connections</span>
-          {(['connected', 'pending', 'awaiting_approval', 'no_answer', 'not_accepted', 'not_invited'] as ConnectState[]).map((st) => (
+          {(['connected', 'pending', 'awaiting_approval', 'no_answer', 'not_accepted', 'not_invited', 'awaiting_pick', 'no_profile'] as ConnectState[]).map((st) => (
             <button key={st} onClick={() => setConn(conn === st ? '' : st)} style={{ color: tally[st] ? CONNECT_COLOR[st] : 'var(--text-muted)', textDecoration: conn === st ? 'underline' : 'none' }}>
               {tally[st] ?? 0} {CONNECT_LABEL[st].toLowerCase()}
             </button>
@@ -123,6 +133,18 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
           <span className="ml-auto">
             {c.linkedin ? `${c.sent_today}/${c.per_day} sent today · ${c.sent_week}/${c.per_week} this week` : 'no LinkedIn account connected'}
           </span>
+          {(tally.no_profile ?? 0) > 0 && (
+            <button
+              onClick={findNext}
+              disabled={busy !== null || !c.linkedin}
+              title={c.linkedin
+                ? `Search LinkedIn by name + company for the next ${Math.min(FIND_PER_CLICK, tally.no_profile)} leads without a profile. A profile is attached only on one clear match; the rest wait for your pick. Each lookup costs one search on the owner's account.`
+                : 'Needs the list owner\'s LinkedIn account'}
+              className="px-2.5 py-1 rounded-lg text-xs font-medium disabled:opacity-40"
+              style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+              {busy === 'find' ? 'Searching…' : `Find next ${Math.min(FIND_PER_CLICK, tally.no_profile)} on LinkedIn`}
+            </button>
+          )}
           <button
             onClick={() => post('batch', `/api/icp/${icpId}/connect`, { limit: room })}
             disabled={busy !== null || !c.linkedin || !c.enabled || room <= 0 || !(tally.not_invited > 0)}
@@ -133,7 +155,7 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
           </button>
         </div>
       )}
-      {msg && <div className="text-xs" style={{ color: msg.startsWith('Not filed') ? 'var(--red)' : 'var(--text-muted)' }}>{msg}</div>}
+      {msg && <div className="text-xs" style={{ color: msg.startsWith('Error') ? 'var(--red)' : 'var(--text-muted)' }}>{msg}</div>}
 
       <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
         {data && data.leads.length === 0 && (
@@ -160,7 +182,12 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
                 const csTitle = cs === 'failed' ? (l.invite_error || 'the request could not be sent')
                   : cs === 'connected' ? (l.invite_status === 'accepted' ? 'accepted our request' : '1st-degree connection')
                   : l.invite_sent_at ? `sent ${relativeTime(l.invite_sent_at)}${l.invite_source === 'linkedin' ? ' · by hand in LinkedIn' : ''}`
-                  : cs === 'awaiting_approval' ? 'filed — waiting for the owner to approve' : '';
+                  : cs === 'awaiting_approval' ? 'filed — waiting for the owner to approve'
+                  : (cs === 'no_profile' || cs === 'awaiting_pick') && l.profile_lookup
+                    ? `${describeLookup(l.profile_lookup)} (searched ${relativeTime(l.profile_lookup.created_at)})`
+                  : cs === 'no_profile' ? 'no LinkedIn profile on file — not searched yet' : '';
+                const cands = (l.profile_lookup?.candidates ?? []).filter((x) => x.public_identifier);
+                const strong = new Set(l.profile_lookup?.strong ?? []);
                 const warm = (l.warm_paths || []).filter((w) => w.type !== 'route');
                 const route = (l.warm_paths || []).find((w) => w.type === 'route') as { path_available?: boolean } | undefined;
                 const dots: { k: string; on: boolean; title: string }[] = [
@@ -205,6 +232,17 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
                             {busy === l.id ? '…' : cs === 'not_invited' ? 'Connect' : 'Ask again'}
                           </button>
                         )}
+                        {cs === 'no_profile' && c?.linkedin && (
+                          <button onClick={() => findOne(l)} disabled={busy !== null} className="ml-1.5 underline disabled:opacity-40" style={{ color: 'var(--accent)' }}
+                                  title="One LinkedIn search by name + company on the owner's account; attached only on one clear match">
+                            {busy === l.id ? '…' : l.profile_lookup ? 'Search again' : 'Find on LinkedIn'}
+                          </button>
+                        )}
+                        {(cs === 'awaiting_pick' || (cs === 'no_profile' && cands.length > 0)) && (
+                          <button onClick={() => setPick(pick === l.id ? null : l.id)} disabled={busy !== null} className="ml-1.5 underline disabled:opacity-40" style={{ color: 'var(--accent)' }}>
+                            {pick === l.id ? 'Close' : `Pick (${cands.length})`}
+                          </button>
+                        )}
                       </td>
                       <td className="p-2">
                         <span className="inline-flex gap-1">
@@ -222,6 +260,36 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
                       <tr style={{ background: 'var(--bg-card)' }}>
                         <td colSpan={7} className="p-2 text-[11px]" style={{ color: 'var(--text-muted)' }}>
                           {(l.qualification_reason || 'no reasons recorded').split('; ').map((r, i) => <div key={i}>· {r}</div>)}
+                        </td>
+                      </tr>
+                    )}
+                    {pick === l.id && (
+                      <tr style={{ background: 'var(--bg-card)' }}>
+                        <td colSpan={7} className="p-2 text-[11px]">
+                          <div className="mb-1" style={{ color: 'var(--text-muted)' }}>
+                            Which LinkedIn profile is {l.full_name || 'this person'} ({l.company_name || 'company unknown'})?
+                            {l.profile_lookup?.reason ? ` ${l.profile_lookup.reason}.` : ''} A wrong pick cannot be undone once a request goes out.
+                          </div>
+                          <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
+                            {cands.map((x) => (
+                              <div key={x.public_identifier!} className="rounded-lg px-2 py-1.5 flex items-start gap-2" style={{ border: `1px solid ${strong.has(x.public_identifier!) ? 'var(--green)' : 'var(--border)'}`, background: 'var(--bg-input)' }}>
+                                <div className="min-w-0 flex-1">
+                                  <div className="font-medium truncate" style={{ color: 'var(--text)' }}>
+                                    {x.name || x.public_identifier}
+                                    {strong.has(x.public_identifier!) && <span className="ml-1 text-[9px] px-1 rounded" style={{ background: 'color-mix(in srgb, var(--green) 14%, transparent)', color: 'var(--green)' }}>likely</span>}
+                                    {x.network_distance && <span className="ml-1 text-[9px]" style={{ color: 'var(--text-muted)' }}>{String(x.network_distance).replace('DISTANCE_', '')}°</span>}
+                                  </div>
+                                  <div className="truncate" style={{ color: 'var(--text-muted)' }}>{x.headline || '—'}</div>
+                                  <div className="truncate" style={{ color: 'var(--text-muted)' }}>{x.location || ''}</div>
+                                  <a href={`https://www.linkedin.com/in/${x.public_identifier}`} target="_blank" rel="noreferrer" className="underline" style={{ color: 'var(--accent)' }}>open ↗</a>
+                                </div>
+                                <button onClick={() => pickOne(l, x.public_identifier!, x.provider_id)} disabled={busy !== null}
+                                        className="px-2 py-1 rounded-lg text-[11px] font-medium disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
+                                  Use this
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         </td>
                       </tr>
                     )}

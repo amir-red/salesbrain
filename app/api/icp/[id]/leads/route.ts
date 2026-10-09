@@ -38,7 +38,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
               inv.error AS invite_error,
               (SELECT oa.status FROM outreach_approvals oa
                 WHERE oa.prospect_id = p.id AND oa.kind = 'connect'
-                  AND oa.status IN ('pending', 'approved') LIMIT 1) AS connect_approval
+                  AND oa.status IN ('pending', 'approved') LIMIT 1) AS connect_approval,
+              -- the newest "find the profile by name" attempt, for leads without one (051)
+              CASE WHEN p.linkedin_public_id IS NULL AND lk.result IS NOT NULL THEN jsonb_build_object(
+                'result', lk.result, 'reason', lk.detail->>'reason',
+                'candidates', COALESCE(lk.detail->'candidates', '[]'::jsonb),
+                'strong', COALESCE(lk.detail->'strong', '[]'::jsonb),
+                'duplicate_of', lk.detail->>'duplicate_of', 'created_at', lk.created_at) END AS profile_lookup
        FROM prospects p
        LEFT JOIN contacts c ON c.id = p.contact_id
        LEFT JOIN accounts a ON a.id = p.account_id
@@ -49,6 +55,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
             AND (i.prospect_id = p.id OR lower(i.public_identifier) = lower(p.linkedin_public_id)
                  OR i.provider_id = p.linkedin_member_id)
           ORDER BY i.sent_at DESC LIMIT 1) inv ON true
+       LEFT JOIN LATERAL (
+         SELECT e.result, e.detail, e.created_at FROM prospect_enrichment e
+          WHERE e.prospect_id = p.id AND e.kind = 'linkedin'
+          ORDER BY e.created_at DESC LIMIT 1) lk ON true
        WHERE ${filters.join(' AND ')}
        -- a hand-ranked list is worked in its own order (050); fit decides the rest
        ORDER BY p.priority_rank NULLS LAST, p.icp_score DESC NULLS LAST, p.created_at DESC LIMIT 300`,

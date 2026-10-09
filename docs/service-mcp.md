@@ -110,7 +110,7 @@ Four JSON-RPC methods:
 | Method | Purpose |
 |---|---|
 | `initialize` | Handshake — returns server info + protocol version. |
-| `tools/list` | The catalog (34 tools) with JSON-Schema for each. |
+| `tools/list` | The catalog (36 tools) with JSON-Schema for each. |
 | `tools/call` | Invoke one tool. This is where the work happens. |
 | `ping` | Health check. |
 
@@ -193,7 +193,10 @@ Re-run with the same `name` to refine; criteria are data, no redeploy.
 `crm_agent_request_run` to queue a background pass when it needn't happen this second.
 
 ### 6. Enrich the best ones
-`crm_enrich_prospect` fills employer, company research + website, and an email address. It contacts no one. This
+`crm_enrich_prospect` fills the LinkedIn profile (for a lead that has none: one people search by name +
+company, attached only on exactly one strong match — otherwise the candidates are kept and `list_leads` shows
+the lead without a `linkedin_public_id` until someone picks via `crm_linkedin_find_person(prospect_id)` →
+`crm_linkedin_link_prospect`), employer, company research + website, and an email address. It contacts no one. This
 is what makes a lead reachable and a draft specific.
 
 ### 7. Read the list & draft
@@ -338,7 +341,9 @@ employee's data.
 | **Sourcing** | `crm_leads_finder_run` | write | Source one page now. Spends LinkedIn search quota |
 | | `crm_agent_request_run` | write | Queue a background run instead of waiting |
 | | `crm_agent_set_user_state` | write | **running / paused / stopped** — one agent, for this employee |
-| | `crm_enrich_prospect` | write | Fill employer, company, email for one lead |
+| | `crm_enrich_prospect` | write | Find the LinkedIn profile (by name), fill employer, company, email for one lead |
+| | `crm_linkedin_find_person` | read | Candidates for a lead's LinkedIn profile, strong ones marked — writes nothing |
+| | `crm_linkedin_link_prospect` | write | Attach the profile your user picked to a lead |
 | | `list_leads` | read | The lead list, filterable by ICP, stage and fit |
 | **Visibility** | `get_run_status` | read | Poll a queued or finished run. The poll loop |
 | | `crm_agent_activity` | read | Recent runs and why a tick was skipped |
@@ -782,6 +787,19 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 ---
 
 ## 12. Changelog
+
+### 2026-10-09 — a lead's LinkedIn profile can be found by name
+
+Leads you import with a name + company but no LinkedIn URL used to stay at "no profile" forever: every
+LinkedIn step (employer, warm paths, route, connect) starts from a stored profile identifier and nothing
+searched for one. Now **`crm_enrich_prospect`** runs a `linkedin` kind first (and the scheduled Enricher does
+the same, `agents.enricher.linkedin_finds_per_run` per sweep): one people search by name + company on the
+employee's account; the slug is written **only when exactly one candidate matches the name AND names the company
+in its headline or shares the lead's city/region**. Anything else is kept, not guessed. **New tools:**
+`crm_linkedin_find_person` now takes `prospect_id` and returns the candidates with `strong[]` marked (writes
+nothing); **`crm_linkedin_link_prospect`** `{prospect_id, public_identifier, member_id?}` attaches the one your
+user picked and reports `duplicate_of` when that profile is already another lead of theirs (one person on a list
+under two companies). Each lookup costs one `search` on the account's daily budget (`crm_linkedin_quota`).
 
 ### 2026-09-23 — replies are detected; the send gate is a kernel invariant
 

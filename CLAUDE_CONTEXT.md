@@ -737,6 +737,47 @@ sent to, who accepted, who did not, whom we never asked." This reverses "connect
   (`agents.linkedin_limits` row, now exists).
 - Not built: withdrawing a pending request, an AI-drafted note, a first message after acceptance to a
   1st-degree connection with no thread (the gap in §5.ac), a policy editor for the caps.
+### 5.ah.1 Find a lead's LinkedIn profile by name (2026-10-09, feat/linkedin-find, core/hermes 0.38.0, migration 051)
+
+Amir, on Stefan Ickler (NRW rank 54) showing "No profile" while Google finds him instantly: "how is that?".
+Cause: the NRW list was imported as name + company + title; 129 of its 204 leads carried no LinkedIn URL, and
+`prospects.linkedin_public_id` was only ever written at INSERT (`upsert_candidate`). Every LinkedIn step
+(Enricher employer/warm, `route_expand`, `propose_connect`) starts from that slug and skipped them — **a missing
+step, not a failure**: 0 of the 129 had ever been searched. Plan: `~/.claude/plans/you-said-there-s-not-splendid-toast.md`.
+
+- **Pure rule** `policy/linkedin_find.py::pick(candidates, full_name, company, location)`: a candidate is STRONG
+  when its name equals the lead's (titles, punctuation, diacritics stripped: "Prof. Dr.-Ing. Robert Gröning" =
+  "robert groning") AND its headline names the company (legal forms dropped) OR its location shares a city/region
+  (country words dropped). Exactly one strong → `found`; several → `ambiguous`; none → `no_match`. Amir's
+  decision: auto-save only one strong match; everything else waits for a person.
+- **Kernel** `commands/prospecting.py::set_prospect_linkedin` — the first writer of a slug after landing (also
+  `contacts.linkedin_url/linkedin_slug`, then `ensure_prospect_person` for the handles). Refuses to overwrite; on
+  the `(owner, lower(slug))` unique index it returns `duplicate_of` + `duplicate_rank` instead of failing — the
+  same human sits on the NRW list twice (#54 JUMBO-Textil, #60 vombaur). Attempts land in `prospect_enrichment`
+  **`kind='linkedin'`** (migration 051 extends the CHECK): result found | ambiguous | no_match | duplicate | error
+  | candidates, `detail` = query, candidates (≤5), strong[], reason — so the UI offers the pick without a second
+  search and `retry_days` keeps a miss from being searched daily. `enricher_plan` gains the kind (first in
+  pipeline order, `linkedin_finds_per_run` 10, needs an unpaused Unipile account).
+- **Ring** `linkedin_find.py::find_profile(actor, prospect_id, account_id, auto=True)` — one classic people
+  search (`search_terms` drops legal forms), guard-bound to the owner's account (one `search` on
+  `agents.linkedin_limits`), `pick`, write, log. Callers: `route_expand` step 0 (runs BEFORE the person node is
+  minted so handles land on the right row; `expand.find`), `enrich_one` first step (default kinds now start with
+  `linkedin`), the Enricher sweep (`profiles` / `ambiguous` counters, digest line), `crm_linkedin_find_person
+  {prospect_id}` (auto=False: candidates + strong, writes nothing) and NEW **`crm_linkedin_link_prospect`**
+  (the explicit pick; 127 tools). Both on the service MCP (36 tools).
+- **App**: `lib/connect.ts` gains `awaiting_pick` (newest `kind='linkedin'` row is ambiguous/candidates) and
+  `describeLookup`; `/api/icp/[id]/leads` joins that row as `profile_lookup`; `LeadsTable` gets **Find on
+  LinkedIn** per no-profile lead, an inline **Pick (N)** candidate chooser ("likely" = strong, open ↗, Use this),
+  and **Find next N on LinkedIn** on the totals strip (`POST /api/icp/[id]/find-linkedin`, ≤10 per click,
+  sequential as the list owner, skips leads searched in the last 14 days, stops on the first refusal).
+  `POST /api/prospects/[id]/find-linkedin {}` = `crm_enrich_prospect kinds=['linkedin']`;
+  `{public_identifier, member_id?}` = `crm_linkedin_link_prospect`. Both run as the lead's owner for an admin.
+- **Budget reality**: classic search is capped at 20/day/account by the guard (`free.search`), so the 129 NRW
+  leads take ~7 sweeps unless Amir raises that cap for the push. Each lookup = 1 search.
+- Not built: Sales Navigator search for the lookup (the `api` arg exists), re-running the 9 warm lookups that
+  failed on the ö/é bug on 2026-10-03 (eligible again 2026-10-17), Matthias's failing `graph_sync` runs
+  (`phase:mirror_pending` since 2026-10-05 — separate issue, not touched).
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

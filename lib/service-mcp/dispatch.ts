@@ -228,14 +228,49 @@ export const SERVICE_TOOLS: ToolDef[] = [
   {
     name: 'crm_enrich_prospect',
     description:
-      "Run the Enricher on ONE prospect now: employer, company research + website, and an email " +
-      "(free in-DB match + configured provider). Contacts no one.",
+      "Run the Enricher on ONE prospect now: the LinkedIn profile found by name + company when the lead " +
+      "has none (one search; attached only on exactly one strong match, otherwise candidates are kept — " +
+      "see crm_linkedin_find_person / crm_linkedin_link_prospect), employer, company research + website, " +
+      "and an email (free in-DB match + configured provider). Contacts no one.",
     inputSchema: obj(
       {
         prospect_id: { type: 'string' },
-        kinds: { type: 'array', items: { type: 'string', enum: ['employer', 'research', 'email'] } },
+        kinds: { type: 'array', items: { type: 'string', enum: ['linkedin', 'employer', 'research', 'email'] } },
       },
       ['prospect_id'],
+    ),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_linkedin_find_person',
+    description:
+      "Search LinkedIn for a lead's profile by name + company (pass prospect_id) and return the " +
+      "candidates with the strong ones marked. Writes nothing — your user picks, then call " +
+      "crm_linkedin_link_prospect. One search on the employee's LinkedIn account.",
+    inputSchema: obj(
+      {
+        prospect_id: { type: 'string', description: 'A lead from list_leads with no linkedin_public_id' },
+        name: { type: 'string', description: 'Free search instead of a lead: the name' },
+        company: { type: 'string' },
+        limit: { type: 'integer', default: 5 },
+      },
+      [],
+    ),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_linkedin_link_prospect',
+    description:
+      "Attach a LinkedIn profile to a lead that has none — your user's pick among the candidates. " +
+      "Refuses to overwrite an existing profile; returns duplicate_of when the same profile is already " +
+      "another lead of theirs (one person, two companies).",
+    inputSchema: obj(
+      {
+        prospect_id: { type: 'string' },
+        public_identifier: { type: 'string', description: 'The vanity slug or profile URL' },
+        member_id: { type: 'string', description: 'provider_id from the candidate, if known' },
+      },
+      ['prospect_id', 'public_identifier'],
     ),
     needsOwner: true,
   },
@@ -711,6 +746,7 @@ const PASSTHROUGH = new Set([
   'crm_icp_rescore', 'crm_leads_finder_run',
   'crm_agent_request_run', 'crm_agent_set_user_state', 'crm_enrich_prospect', 'crm_outreach_propose',
   'crm_outreach_pending', 'crm_outreach_decide', 'crm_record_reply', 'crm_linkedin_status',
+  'crm_linkedin_find_person', 'crm_linkedin_link_prospect',
   'crm_linkedin_revoke', 'crm_agent_activity', 'crm_agent_status', 'crm_linkedin_quota',
   'crm_graph_status', 'crm_graph_edges', 'crm_graph_sync',
   'crm_graph_reach', 'crm_who_can_reach',
