@@ -818,6 +818,15 @@ Decision (Amir, by instruction): build it under the one rule for sends.
   list; 10 landed as `source_type='connections'` (research + a profile fetch for title-less headlines, `rescore_icp`).
   Matthias's `graph_sync` still errors every tick (`phase:mirror_pending`, error "0") — the full relations mirror would
   make this a query instead of searches. Not fixed.
+- **Replies, live 2026-10-09/10**: five NRW leads answered within a day (Lob confirmed a Fakuma slot; two are not
+  attending; Jannack on holiday). Detection + owner DM worked. Approving the agent's drafted LinkedIn reply on the
+  Telegram card then failed twice, two bugs: (1) **0.39.2** `approve_and_send` sent every `kind='followup'` row down
+  the EMAIL follow-up lane (`consume_followup`: channel email, no person) — the agent files LinkedIn replies as
+  `followup` + `linkedin_thread_id`; the lane now requires `followup_id`, a LinkedIn follow-up is a reply
+  (`kl.send_message`). The gate's refusal text also named the channel mismatch before the person one. (2) **0.39.3**
+  `policy/outreach.check_frequency_cap` counted yesterday's first message as "1/1 in 24h" against a next-day reply;
+  it now counts only outbound touches since the person's latest inbound. Rule of thumb: every send lane must be
+  exercised once from the Telegram card, not only from the batch tool.
 - Not built: an app button for the first message (LeadsTable), withdrawing, a per-ICP "message all connected".
 
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
