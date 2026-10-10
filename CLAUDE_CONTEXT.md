@@ -825,7 +825,7 @@ headline said "Owner, Fischer Elektronik". The LinkedIn classic people search re
   ("Geschäftsführer bei …") when the person query had already listed the same slug with a truncated one
   (candidates now MERGE, richer headline wins, discovery runs over the company query's full result). One-word
   company names ("Kaiser") skip leader discovery — the web pads them with namesakes. The guard's search counter
-  keeps counting REFUSED attempts (shows 45/20 after a batch) — cosmetic, not fixed.
+  keeps counting REFUSED attempts (shows 45/20 after a batch) — cosmetic, not fixed. 0.40.4: DuckDuckGo's result set varies per call, so `search_company_leaders` runs a plainer second query (`"<company>" Geschäftsführer`) when the first returns no leader title. Verified: Jörg Deutz (CEO STAUFF) landed via Walter Stauffenberg; Waldminghaus found for Schulte Elektrotechnik but was already a lead; an assistant was correctly refused.
 - DuckDuckGo is rate-limited (1.5 s pace, occasional empty answers); a paid web backend (Exa/Tavily key in the
   Hermes `.env` — none configured) is the upgrade path. Not built: Sales Navigator rung (no entitlement on
   Matthias's account), the classic `company` filter (schema unread).
