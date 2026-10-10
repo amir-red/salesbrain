@@ -863,7 +863,7 @@ which makes the SigV4 path work and needs no patch):
   `agent/auxiliary_client.py`: `if is_anthropic_bedrock_model(final_model) and not resolve_bedrock_bearer_token():`
   `hermes_cli/runtime_provider_backends.py`: `has_bearer_token = bool(resolve_bedrock_bearer_token())`
 then `systemctl --user restart hermes-gateway`. Converse converts `data:` image URLs to image blocks, so vision
-works through it. Not applied by the session that found it (remote write blocked by the permission classifier).
+works through it. **Applied by Amir 2026-10-10 17:00 Addis and verified**: an aux `vision` call answered "Red" on a test image; `hermes cron run attention-allocator` succeeded after 16 failures. Check `ops:outreach:daily` at its next 10:00 tick.
 
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
