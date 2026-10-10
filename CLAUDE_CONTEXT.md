@@ -827,6 +827,19 @@ Decision (Amir, by instruction): build it under the one rule for sends.
   `policy/outreach.check_frequency_cap` counted yesterday's first message as "1/1 in 24h" against a next-day reply;
   it now counts only outbound touches since the person's latest inbound. Rule of thumb: every send lane must be
   exercised once from the Telegram card, not only from the batch tool.
+- **"Not yet messaged" was wrong (0.39.4, 2026-10-10).** `crm_linkedin_pending_followups` listed 12 connections as
+  never messaged the day after 11 of them got the first message: it read `linkedin_relations.followup_state`, a flag
+  only the manual `crm_linkedin_set_followup` ever wrote. The bot then looped the single propose tool, hit three
+  "conversation already exists" refusals + Hermes's repeated-tool guard, and declared "all 12 already sent" with an
+  invented explanation (two were truly unmessaged). Now: the queue is DERIVED (`_RELATION_MESSAGED`: a mirrored
+  conversation holding a message from us — product or hand-sent — or an outbound LinkedIn interaction since
+  detection); `_mark_relation_messaged` runs from `sync_thread` and `send_message`; a filed first-message draft marks
+  `drafted`; the historic mirror (`graph.record_relations_page`) inserts `skipped`; `connect_status` carries
+  `messaged_at` / `messaged` / `stage` + `connected_(not_)messaged` counts and names the per-lead `invite_error`
+  (Hermes logged a per-lead `error` key as a tool failure). Tool text + `salesbrain-prospecting` SKILL §LinkedIn:
+  connect_status answers both questions, several people = ONE batch call, never generalise from a refusal.
+  One-off backfill set `sent` on every messaged relation. Lesson: any "did we do X" list must be derived from
+  the record of X, never from a flag a separate tool is supposed to set.
 - Not built: an app button for the first message (LeadsTable), withdrawing, a per-ICP "message all connected".
 
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
