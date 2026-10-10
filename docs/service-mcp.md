@@ -193,8 +193,9 @@ Re-run with the same `name` to refine; criteria are data, no redeploy.
 `crm_agent_request_run` to queue a background pass when it needn't happen this second.
 
 ### 6. Enrich the best ones
-`crm_enrich_prospect` fills the LinkedIn profile (for a lead that has none: one people search by name +
-company, attached only on exactly one strong match — otherwise the candidates are kept and `list_leads` shows
+`crm_enrich_prospect` fills the LinkedIn profile (for a lead that has none: a web search first, then LinkedIn's
+people search, then a company-first search that also lands the company's decision makers as new leads with
+`source_type='company_discovery'`; attached only after one verified strong match — otherwise the candidates are kept and `list_leads` shows
 the lead without a `linkedin_public_id` until someone picks via `crm_linkedin_find_person(prospect_id)` →
 `crm_linkedin_link_prospect`), employer, company research + website, and an email address. It contacts no one. This
 is what makes a lead reachable and a draft specific.

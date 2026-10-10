@@ -44,7 +44,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
                 'result', lk.result, 'reason', lk.detail->>'reason',
                 'candidates', COALESCE(lk.detail->'candidates', '[]'::jsonb),
                 'strong', COALESCE(lk.detail->'strong', '[]'::jsonb),
-                'duplicate_of', lk.detail->>'duplicate_of', 'created_at', lk.created_at) END AS profile_lookup
+                'duplicate_of', lk.detail->>'duplicate_of', 'created_at', lk.created_at,
+                'rung', lk.detail->>'rung', 'discovered', COALESCE(lk.detail->'discovered', '[]'::jsonb),
+                'queries', COALESCE(lk.detail->'queries', '[]'::jsonb)) END AS profile_lookup
        FROM prospects p
        LEFT JOIN contacts c ON c.id = p.contact_id
        LEFT JOIN accounts a ON a.id = p.account_id

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { PROSPECT_STAGES } from '@/lib/prospecting';
 import { relativeTime } from '@/lib/time';
 import { DegreeWarm } from '@/components/icp/IcpLeads';
-import { CONNECT_COLOR, CONNECT_LABEL, connectState, describeLookup, type ConnectState, type ProfileLookup } from '@/lib/connect';
+import { CONNECT_COLOR, CONNECT_LABEL, RUNG_LABEL, connectState, describeLookup, type ConnectState, type ProfileLookup } from '@/lib/connect';
 
 export interface Lead {
   id: string; stage: string; icp_score: number | null; fit_label: string | null;
@@ -28,7 +28,7 @@ interface ConnectInfo {
 interface Payload { leads: Lead[]; counts: { total: number }; connect?: ConnectInfo }
 
 const CONNECT_FILTERS: ConnectState[] = ['not_invited', 'awaiting_approval', 'pending', 'no_answer', 'connected', 'not_accepted', 'failed', 'awaiting_pick', 'no_profile'];
-const FIND_PER_CLICK = 10;
+const FIND_PER_CLICK = 25;
 
 const fitColor = (s: number | null) =>
   s === null ? 'var(--text-muted)' : s >= 75 ? 'var(--green)' : s >= 60 ? 'var(--yellow)' : s >= 40 ? 'var(--orange)' : 'var(--red)';
@@ -138,7 +138,7 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
               onClick={findNext}
               disabled={busy !== null || !c.linkedin}
               title={c.linkedin
-                ? `Search LinkedIn by name + company for the next ${Math.min(FIND_PER_CLICK, tally.no_profile)} leads without a profile. A profile is attached only on one clear match; the rest wait for your pick. Each lookup costs one search on the owner's account.`
+                ? `Find the next ${Math.min(FIND_PER_CLICK, tally.no_profile)} profiles: web search first (free), then LinkedIn search, then a company-first search that also adds the company's decision makers as new leads. A profile is attached only after one clear, verified match; the rest wait for your pick.`
                 : 'Needs the list owner\'s LinkedIn account'}
               className="px-2.5 py-1 rounded-lg text-xs font-medium disabled:opacity-40"
               style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text)' }}>
@@ -211,6 +211,7 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
                         <div>
                           {l.priority_rank != null && <span title="priority rank on this list" className="mr-1.5 px-1 rounded text-[10px] font-medium" style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>#{l.priority_rank}</span>}
                           {l.company_name || '—'}
+                          {l.source_type === 'company_discovery' && <span title={l.source_detail || 'found by starting from the company'} className="ml-1.5 px-1 rounded text-[10px] font-medium" style={{ background: 'color-mix(in srgb, var(--accent) 14%, transparent)', color: 'var(--accent)' }}>via company</span>}
                         </div>
                         <div style={{ color: 'var(--text-muted)' }}>{[l.industry, l.company_size].filter(Boolean).join(' · ')}</div>
                       </td>
@@ -242,6 +243,11 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
                           <button onClick={() => setPick(pick === l.id ? null : l.id)} disabled={busy !== null} className="ml-1.5 underline disabled:opacity-40" style={{ color: 'var(--accent)' }}>
                             {pick === l.id ? 'Close' : `Pick (${cands.length})`}
                           </button>
+                        )}
+                        {(l.profile_lookup?.discovered ?? []).filter((d) => d.landed).length > 0 && (
+                          <div className="mt-0.5 text-[10px]" style={{ color: 'var(--text-muted)' }} title="decision makers found by starting from the company, added as new leads">
+                            via company: {(l.profile_lookup?.discovered ?? []).filter((d) => d.landed).map((d) => d.name).join(', ')}
+                          </div>
                         )}
                       </td>
                       <td className="p-2">
@@ -277,6 +283,7 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
                                   <div className="font-medium truncate" style={{ color: 'var(--text)' }}>
                                     {x.name || x.public_identifier}
                                     {strong.has(x.public_identifier!) && <span className="ml-1 text-[9px] px-1 rounded" style={{ background: 'color-mix(in srgb, var(--green) 14%, transparent)', color: 'var(--green)' }}>likely</span>}
+                                    {x.rung && <span className="ml-1 text-[9px]" style={{ color: 'var(--text-muted)' }} title="where this candidate came from">{RUNG_LABEL[x.rung] || x.rung}</span>}
                                     {x.network_distance && <span className="ml-1 text-[9px]" style={{ color: 'var(--text-muted)' }}>{String(x.network_distance).replace('DISTANCE_', '')}°</span>}
                                   </div>
                                   <div className="truncate" style={{ color: 'var(--text-muted)' }}>{x.headline || '—'}</div>

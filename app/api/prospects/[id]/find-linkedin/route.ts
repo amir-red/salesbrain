@@ -40,7 +40,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (out.error) return NextResponse.json({ ...out, acted_as: actedAs }, { status: 400 });
     const lookup = (typeof out.linkedin === 'object' && out.linkedin ? out.linkedin : null) as Parameters<typeof describeLookup>[0];
     const note = typeof out.linkedin === 'string' ? out.linkedin : describeLookup(lookup);
-    return NextResponse.json({ lookup, note, run_id: out.run_id, acted_as: actedAs });
+    // web-first ladder: say which rungs ran so "no match" is never read as "not searched"
+    const q = (lookup as { queries?: string[] } | null)?.queries;
+    return NextResponse.json({ lookup, note: q?.length ? `${note} (${q.length} search${q.length > 1 ? 'es' : ''}: web + LinkedIn)` : note, run_id: out.run_id, acted_as: actedAs });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });
   }

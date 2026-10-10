@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth';
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
 import { auditBestEffort, visibleIcp } from '@/lib/icp-server';
 
-const MAX_PER_CLICK = 10;
+const MAX_PER_CLICK = 25;   // the web rungs are free; the LinkedIn rung is guard-bounded
 const RETRY_DAYS = 14;
 
 /**
@@ -36,7 +36,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         AND NOT EXISTS (SELECT 1 FROM prospect_enrichment e
                          WHERE e.prospect_id = p.id AND e.kind = 'linkedin'
                            AND e.created_at > now() - ($3 || ' days')::interval)
-      ORDER BY p.priority_rank NULLS LAST, p.icp_score DESC NULLS LAST, p.created_at
+      -- strong fits first, then the list's own order: the LinkedIn rung's budget should go to the best leads
+      ORDER BY (p.icp_score >= 75) DESC, p.priority_rank NULLS LAST, p.icp_score DESC NULLS LAST, p.created_at
       LIMIT $4`,
     [icp.id, icp.owner_user_id, String(RETRY_DAYS), limit]);
   if (rows.length === 0) {
@@ -45,7 +46,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const onBehalf = icp.owner_user_id !== session.userId;
   if (onBehalf) await auditBestEffort(session.userId, 'act_as', { icp_id: icp.id, as: icp.owner_user_id, command: 'crm_enrich_prospect:linkedin', count: rows.length });
 
-  const results: { prospect_id: string; name: string | null; result: string; linkedin_public_id?: string | null; reason?: string | null }[] = [];
+  const results: { prospect_id: string; name: string | null; result: string; linkedin_public_id?: string | null; reason?: string | null; rung?: string | null; discovered?: number }[] = [];
+  let discoveredTotal = 0;
   for (const r of rows) {
     try {
       const out = (await kernelCall('crm_enrich_prospect', { prospect_id: r.id, kinds: ['linkedin'] }, icp.owner_user_id)) as Record<string, unknown>;
@@ -56,7 +58,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         if (out.error) break;
         continue;
       }
-      results.push({ prospect_id: r.id, name: r.full_name, result: String(li.result), linkedin_public_id: (li.linkedin_public_id as string | null) ?? null, reason: (li.reason as string | null) ?? null });
+      const landed = Array.isArray(li.discovered) ? (li.discovered as { landed?: boolean }[]).filter((d) => d.landed).length : 0;
+      discoveredTotal += landed;
+      results.push({ prospect_id: r.id, name: r.full_name, result: String(li.result), linkedin_public_id: (li.linkedin_public_id as string | null) ?? null, reason: (li.reason as string | null) ?? null, rung: (li.rung as string | null) ?? null, discovered: landed });
       if (li.result === 'error' && /budget|cap reached|paused|no LinkedIn account/i.test(String(li.reason || ''))) break;
     } catch (err) {
       results.push({ prospect_id: r.id, name: r.full_name, result: 'error', reason: err instanceof Error ? err.message : String(err) });
@@ -69,6 +73,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (n('no_match')) parts.push(`${n('no_match')} no match`);
   if (n('duplicate')) parts.push(`${n('duplicate')} already on the list`);
   if (n('error')) parts.push(`${n('error')} error${n('error') > 1 ? 's' : ''}`);
+  if (discoveredTotal) parts.push(`${discoveredTotal} decision maker${discoveredTotal > 1 ? 's' : ''} found via company and added`);
   const stopped = results.length < rows.length ? ` Stopped after ${results.length} of ${rows.length}: ${results[results.length - 1]?.reason || 'refused'}.` : '';
   return NextResponse.json({
     attempted: results.length, results,

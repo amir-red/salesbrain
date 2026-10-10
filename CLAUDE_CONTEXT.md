@@ -787,6 +787,36 @@ step, not a failure**: 0 of the 129 had ever been searched. Plan: `~/.claude/pla
   failed on the ö/é bug on 2026-10-03 (eligible again 2026-10-17), Matthias's failing `graph_sync` runs
   (`phase:mirror_pending` since 2026-10-05 — separate issue, not touched).
 
+### 5.ah.1b Deep-dive profile discovery: web first, then LinkedIn, then company-first (2026-10-10, 0.40.0)
+
+Amir found Mike Böing-Meßing on Google in one query while the product said "No profile". Of the first 14 lookups,
+10 missed: 5 got ZERO LinkedIn candidates when name + company were searched together, 3 failed on name variants
+(middle name / initial / double surname), 1 was "ambiguous" because five Thomas Fischers sit in NRW though only one
+headline said "Owner, Fischer Elektronik". The LinkedIn classic people search rejects the `company` filter (400).
+- **Ladder** (`salesbrain-hermes/linkedin_find.py::find_profile`, rungs `web → linkedin_name → linkedin_name_only →
+  company_web`, stop at the first write): **web** = `web_find.py`, keyless DuckDuckGo (`ddgs`, the package
+  `research.py` already used) `"<name>" <company words> site:linkedin.com/in`, parsed by
+  `policy.linkedin_find.parse_web_hit` ("Name – Headline | LinkedIn"; posts skipped; slug URL-decoded, **lower() not
+  casefold()** — casefold turns ß into ss and the slug stops resolving; `prospecting._slug` had the same bug, fixed).
+  A web hit is **never written unverified**: one `get_profile` (profile_view class) re-runs the pick on the real
+  name/headline/location. `linkedin_name_only` runs only when the fuller query returned nobody. **company_web** =
+  `"<company>" (Geschäftsführer OR Inhaber OR CEO) site:linkedin.com/in`: the lead's own name there is a candidate;
+  other people with a `leader_title` headline naming the company are verified and landed as NEW leads via
+  `commands/prospecting.land_discovered_leader` (`source_type='company_discovery'`, `source_detail="found via <co> ·
+  for lead #N <name> · company_web"`, same account + ICP, ≤2 per lead per run). Amir's decision: add them, don't
+  just report. Every rung's candidates accumulate into `prospect_enrichment.detail` (`rung`, `queries`,
+  `candidates[].source/rung`, `discovered[]`).
+- **Rule changes** (`policy/linkedin_find.py`): `same_person_name` = same first name + a shared surname part
+  (middle names/initials ignored, double surnames match on either half); tiers — company named in the headline
+  (tier 1) beats a shared place (tier 2); exactly one tier-1 wins even with tier-2 namesakes; the person's OWN
+  surname is excluded from company evidence ("Fischer" in "T.Fischer-Technik" ≠ Fischer Elektronik).
+- **App**: Find next **25** per click (web rungs are free; LinkedIn rung still guard-bounded), strong fits first;
+  picker shows each candidate's rung; "via company: …" under the lead; a `via company` badge on discovered leads.
+  `agents.enricher.linkedin_finds_per_run` default 25.
+- DuckDuckGo is rate-limited (1.5 s pace, occasional empty answers); a paid web backend (Exa/Tavily key in the
+  Hermes `.env` — none configured) is the upgrade path. Not built: Sales Navigator rung (no entitlement on
+  Matthias's account), the classic `company` filter (schema unread).
+
 ### 5.ah.2 First message to a 1st-degree connection — the new-chat lane (2026-10-09, core/hermes 0.39.1)
 
 Amir: "start sending a message to all the connected ones" (Fakuma, 12–16 Oct 2026, Friedrichshafen). This closes the
