@@ -817,6 +817,15 @@ headline said "Owner, Fischer Elektronik". The LinkedIn classic people search re
 - **App**: Find next **25** per click (web rungs are free; LinkedIn rung still guard-bounded), strong fits first;
   picker shows each candidate's rung; "via company: …" under the lead; a `via company` badge on discovered leads.
   `agents.enricher.linkedin_finds_per_run` default 25.
+- **First live batch (26 leads, 2026-10-10)**: 10 found (5 web-verified, 5 LinkedIn), 3 → picker, 15 no match;
+  NRW no-profile 127 → 120. Three ladder bugs found and fixed in 0.40.2/0.40.3: the LinkedIn search cap (20/day,
+  hit mid-batch) also disabled profile verification and leader landing (budgets are now separate: `search_ok` /
+  `profile_ok`); an unverified strong candidate was logged `found` without a write (now `candidates` with a
+  "not written — confirm" reason; 4 rows relabelled); dedupe by slug dropped the company query's richer title
+  ("Geschäftsführer bei …") when the person query had already listed the same slug with a truncated one
+  (candidates now MERGE, richer headline wins, discovery runs over the company query's full result). One-word
+  company names ("Kaiser") skip leader discovery — the web pads them with namesakes. The guard's search counter
+  keeps counting REFUSED attempts (shows 45/20 after a batch) — cosmetic, not fixed.
 - DuckDuckGo is rate-limited (1.5 s pace, occasional empty answers); a paid web backend (Exa/Tavily key in the
   Hermes `.env` — none configured) is the upgrade path. Not built: Sales Navigator rung (no entitlement on
   Matthias's account), the classic `company` filter (schema unread).
