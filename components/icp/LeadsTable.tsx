@@ -188,6 +188,7 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
                   : cs === 'no_profile' ? 'no LinkedIn profile on file — not searched yet' : '';
                 const cands = (l.profile_lookup?.candidates ?? []).filter((x) => x.public_identifier);
                 const strong = new Set(l.profile_lookup?.strong ?? []);
+                const possible = new Set(l.profile_lookup?.possible ?? []);
                 const warm = (l.warm_paths || []).filter((w) => w.type !== 'route');
                 const route = (l.warm_paths || []).find((w) => w.type === 'route') as { path_available?: boolean } | undefined;
                 const dots: { k: string; on: boolean; title: string }[] = [
@@ -278,11 +279,12 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
                           </div>
                           <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
                             {cands.map((x) => (
-                              <div key={x.public_identifier!} className="rounded-lg px-2 py-1.5 flex items-start gap-2" style={{ border: `1px solid ${strong.has(x.public_identifier!) ? 'var(--green)' : 'var(--border)'}`, background: 'var(--bg-input)' }}>
+                              <div key={x.public_identifier!} className="rounded-lg px-2 py-1.5 flex items-start gap-2" style={{ border: `1px solid ${strong.has(x.public_identifier!) ? 'var(--green)' : possible.has(x.public_identifier!) ? 'var(--yellow)' : 'var(--border)'}`, background: 'var(--bg-input)' }}>
                                 <div className="min-w-0 flex-1">
                                   <div className="font-medium truncate" style={{ color: 'var(--text)' }}>
                                     {x.name || x.public_identifier}
                                     {strong.has(x.public_identifier!) && <span className="ml-1 text-[9px] px-1 rounded" style={{ background: 'color-mix(in srgb, var(--green) 14%, transparent)', color: 'var(--green)' }}>likely</span>}
+                                    {!strong.has(x.public_identifier!) && possible.has(x.public_identifier!) && <span className="ml-1 text-[9px] px-1 rounded" title="same name and same state only — confirm on the profile" style={{ background: 'color-mix(in srgb, var(--yellow) 14%, transparent)', color: 'var(--yellow)' }}>possible</span>}
                                     {x.rung && <span className="ml-1 text-[9px]" style={{ color: 'var(--text-muted)' }} title="where this candidate came from">{RUNG_LABEL[x.rung] || x.rung}</span>}
                                     {x.network_distance && <span className="ml-1 text-[9px]" style={{ color: 'var(--text-muted)' }}>{String(x.network_distance).replace('DISTANCE_', '')}°</span>}
                                   </div>

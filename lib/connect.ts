@@ -28,6 +28,7 @@ export interface ProfileLookup {
   reason: string | null;
   candidates: ProfileCandidate[];
   strong: string[];               // public identifiers the rule marked as strong
+  possible?: string[];            // same name + same state only — a person must confirm
   duplicate_of: string | null;
   created_at: string;
   rung?: string | null;           // which rung wrote (found) — null when nothing did

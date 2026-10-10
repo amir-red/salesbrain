@@ -808,8 +808,12 @@ headline said "Owner, Fischer Elektronik". The LinkedIn classic people search re
   `candidates[].source/rung`, `discovered[]`).
 - **Rule changes** (`policy/linkedin_find.py`): `same_person_name` = same first name + a shared surname part
   (middle names/initials ignored, double surnames match on either half); tiers — company named in the headline
-  (tier 1) beats a shared place (tier 2); exactly one tier-1 wins even with tier-2 namesakes; the person's OWN
-  surname is excluded from company evidence ("Fischer" in "T.Fischer-Technik" ≠ Fischer Elektronik).
+  (tier 1) beats a shared TOWN (tier 2); exactly one tier-1 wins even with tier-2 namesakes; the person's OWN
+  surname is excluded from company evidence ("Fischer" in "T.Fischer-Technik" ≠ Fischer Elektronik). **Same state
+  only is tier 3 = "possible"**: never written, shown in the picker with a yellow badge (0.40.1 — the first live
+  batch auto-wrote a "Siegfried Schulte, Geschäftsführer, Cologne Bonn Region" for Schulte Elektrotechnik in
+  Lüdenscheid; reverted). This also means Stefan Ickler's 2026-10-09 match ("Ruhr Region" vs Sprockhövel) would
+  now wait for a pick — it was right, and stays.
 - **App**: Find next **25** per click (web rungs are free; LinkedIn rung still guard-bounded), strong fits first;
   picker shows each candidate's rung; "via company: …" under the lead; a `via company` badge on discovered leads.
   `agents.enricher.linkedin_finds_per_run` default 25.
