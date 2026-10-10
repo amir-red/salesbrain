@@ -842,6 +842,29 @@ Decision (Amir, by instruction): build it under the one rule for sends.
   the record of X, never from a flag a separate tool is supposed to set.
 - Not built: an app button for the first message (LeadsTable), withdrawing, a per-ICP "message all connected".
 
+### 5.ah.3 Telegram "I can't view the image" + the two failing routines = one Hermes Bedrock bug (2026-10-10)
+
+The bot DID receive the photo; `vision_analyze` died with `could not resolve credentials from session`
+(`anthropic/lib/bedrock/_auth.py:65`). Same error has failed `attention-allocator` and `ops:outreach:daily` on every
+run since 2026-09-24 ("16 failures in a row"). Cause, in Hermes v2026.9.21: the box authenticates to Bedrock with a
+**Bedrock API key** (`AWS_BEARER_TOKEN_BEDROCK`); the main runtime knows "AnthropicBedrock is SigV4-only, bearer
+users go through Converse" (`hermes_cli/runtime_provider_backends.py::_resolve_bedrock_runtime`), but (1) the
+**auxiliary** client builder `agent/auxiliary_client.py::_build_bedrock_client` sends every Claude model to
+`build_anthropic_bedrock_client` without that bearer check → SigV4 → `AWS_PROFILE=hermes` has no credentials
+(`~/.aws/config` is region-only, no `credentials` file, no instance role) → every aux call (vision, compression,
+titles, our `salesbrain_aux`) fails; (2) `_resolve_bedrock_runtime` reads the bearer from `os.environ`, which the
+gateway scrubs into the profile secret scope after start, so a cron job's main runtime resolved later sees no
+bearer and takes the SigV4 path too — interactive chats resolved at start-up still work. The OpenAI-compatible
+`…/openai/v1` endpoint in `model.base_url` does NOT serve `us.anthropic.claude-sonnet-4-6` at all
+("model_not_found", probed 2026-10-10) — it is dead config; the working path is Converse + bearer.
+**Fix = two one-line patches on the box** (originals kept as `*.orig-2026.9.21`; re-apply after any
+`UPGRADE_HERMES=1`, or add real IAM credentials / an EC2 instance role with `bedrock:InvokeModel*` instead,
+which makes the SigV4 path work and needs no patch):
+  `agent/auxiliary_client.py`: `if is_anthropic_bedrock_model(final_model) and not resolve_bedrock_bearer_token():`
+  `hermes_cli/runtime_provider_backends.py`: `has_bearer_token = bool(resolve_bedrock_bearer_token())`
+then `systemctl --user restart hermes-gateway`. Converse converts `data:` image URLs to image blocks, so vision
+works through it. Not applied by the session that found it (remote write blocked by the permission classifier).
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
