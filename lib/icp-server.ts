@@ -23,6 +23,8 @@ export const IcpBodySchema = z.object({
   product: z.string().trim().max(40).nullable().optional(),
   description: z.string().trim().max(2000).nullable().optional(),
   objective: z.enum(['speed_to_market', 'volume', 'margin', 'logo', 'test_cases']).nullable().optional(),
+  // What the list sends once a connection request is accepted (053): one approval card per acceptance.
+  first_message_template: z.string().trim().max(1900).nullable().optional(),
   criteria: CriteriaSchema,
 });
 

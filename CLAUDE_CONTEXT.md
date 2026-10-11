@@ -936,6 +936,26 @@ which makes the SigV4 path work and needs no patch):
 then `systemctl --user restart hermes-gateway`. Converse converts `data:` image URLs to image blocks, so vision
 works through it. **Applied by Amir 2026-10-10 17:00 Addis and verified**: an aux `vision` call answered "Red" on a test image; `hermes cron run attention-allocator` succeeded after 16 failures. Check `ops:outreach:daily` at its next 10:00 tick.
 
+### 5.ah.4 The acceptance loop: accepted request → first-message card (2026-10-11, core/hermes 0.41.0, migration 053)
+
+Amir: "if we are connected to a new person, we need to know and aim for outreach." Before: the hourly sync's digest
+said only "N new connections accepted", no names, no next step; the loop closed only when someone asked the bot.
+- **`icp_profiles.first_message_template`** (053) — what a list sends once a connection request is accepted;
+  placeholders `{first_name} {full_name} {company}` (`commands/prospecting.render_first_message`, pure). Set in the
+  ICP builder ("First message after they accept"), via `crm_icp_define` / `crm_icp_set_first_message`, or the
+  service MCP `crm_icp_define`. `prospect_first_message(actor, prospect_id)` renders it for one lead.
+- **Hook**: `reconcile_invitations` now returns `accepted_leads[]` (prospect ids) next to the names;
+  `assets/scripts/linkedin_sync.py` passes them to **`accept_followup.file_cards_for_accepted`** → one
+  `propose_first_message` per person (the normal first-message lane: approval card to the owner's Telegram, 👍 =
+  `approve_and_send` → `start_chat`, 👎 skip). Nothing is sent by itself; a list without a template files nothing and
+  the digest says why. The digest now names who accepted and how many cards wait; it also fires on acceptances
+  alone (it used to need inbox activity).
+- The NRW list's template was seeded with the "Diese Woche" Fakuma text (change it after the fair); the four
+  acceptances that pre-dated the hook (Ickler, Dachrodt, Schwarzkopf, Th. Poschmann) got their cards filed by hand
+  through the same helper on 2026-10-11.
+- Not built: a per-list toggle to skip cards for people the owner excluded (today: 👎 on the card), a reminder
+  when a card sits unanswered, and the same loop for email-only leads.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

@@ -95,6 +95,7 @@ export const SERVICE_TOOLS: ToolDef[] = [
       'Call crm_icp_list first to see what already exists, and crm_icp_archive to retire one.',
     inputSchema: obj(
       {
+        first_message_template: { type: 'string', description: 'Sent (as an approval card) to each person on this list who accepts a connection request. Placeholders {first_name} {full_name} {company}.' },
         name: {
           type: 'string',
           description:

@@ -61,6 +61,7 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
   const [name, setName] = useState(initial?.name ?? '');
   const [product, setProduct] = useState<string>(initial?.product ?? 'zeami');
   const [description, setDescription] = useState(initial?.description ?? '');
+  const [firstMessage, setFirstMessage] = useState<string>(((initial as { first_message_template?: string | null } | undefined)?.first_message_template) ?? '');
   const [criteria, setCriteria] = useState<IcpCriteria>(initial?.criteria ?? emptyCriteria());
 
   const [website, setWebsite] = useState('');
@@ -156,7 +157,7 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
   const save = async () => {
     setSaving(true); setError(null);
     try {
-      const body = { name: name.trim(), product: product || null, description: description.trim() || null, objective: objective || null, criteria };
+      const body = { name: name.trim(), product: product || null, description: description.trim() || null, objective: objective || null, criteria, first_message_template: firstMessage.trim() || null };
       const res = await fetch(initial ? `/api/icp/${initial.id}` : '/api/icp', {
         method: initial ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -199,6 +200,15 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2}
                     placeholder="What we sell and to whom (used by the agent when drafting outreach)"
                     className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y" style={inputStyle} />
+          <div>
+            <div className="text-xs font-medium mb-1">First message after they accept <span style={{ color: 'var(--text-muted)' }}>(optional)</span></div>
+            <textarea value={firstMessage} onChange={(e) => setFirstMessage(e.target.value)} rows={4}
+                      placeholder={'When someone on this list accepts a connection request, a card with this text is filed for your 👍. Placeholders: {first_name} {full_name} {company}'}
+                      className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y" style={inputStyle} />
+            <div className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
+              Nothing is sent by itself: each acceptance becomes one approval card on Telegram and on the list page. Leave empty to only be told who accepted.
+            </div>
+          </div>
           <div className="rounded-lg p-3 space-y-3" style={{ background: 'var(--bg-input)', border: '1px dashed var(--border)' }}>
             <div>
               <div className="text-xs font-medium mb-1">Optimize for <span style={{ color: 'var(--text-muted)' }}>(optional)</span></div>
