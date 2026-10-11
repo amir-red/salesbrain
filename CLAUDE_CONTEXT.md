@@ -411,6 +411,20 @@ colleague a person node. NO ranking, NO target expansion, NO intro campaigns yet
   to 379316691: unblock @MateSalesCRMBot from that account, then change the env + `AMIR_DM` in the deploy
   script. The Hermes gateway bot (@SalesBrainZeamiBot, `TELEGRAM_BOT_TOKEN`) is the reverse: it reaches
   379316691 and not 7666216888.
+  (4) **The flood came back (fixed 0.40.5, 2026-10-11)** — "⚠️ routed to you" graph / Leads Finder digests in the
+  board group again. Cause: `_supervisor_chat()` fell back to `TELEGRAM_BOARD_CHAT_ID`, and the `crm` profile's
+  `.env` (`/root/.hermes/profiles/crm/.env`, a COPY cloned 2026-09-23 from a main `.env` that still said
+  `SALESBRAIN_DIGEST_CHAT_ID=<board id>`) is what the cron scripts resolved the digest chat from — the deploy
+  guard only ever corrected the main `.env`. Now: the ring never uses the board id as the supervisor chat (unset or
+  equal to the board id → the message is dropped, not posted), every routine per-owner digest (leads_finder,
+  enricher, grant_signals per-owner, graph_sync) is `fallback=False` — owner's DM or nothing — and the deploy guard
+  loops over `profiles/*/.env`. Only escalations keep the fallback (paused LinkedIn account, unowned grant signals,
+  the attention routine's `crm_notify_user`). Rule: profile `.env` files are copies, not links — a fix to the main
+  `.env` must be applied to each.
+  Chat ids as of 2026-10-11 (DB, not the older note above): `7666216888` has been linked to the **Matthias** user
+  since 2026-10-01 (Amir reads that account for the NRW campaign) and stays `SALESBRAIN_DIGEST_CHAT_ID`; Amir's own
+  user re-linked `379316691` the same day, and @MateSalesCRMBot reaches BOTH (sendChatAction ok) — the 09-12 block
+  is gone. Moving the supervisor chat to 379316691 is now a one-line env change if Amir wants it.
 - **Still open from spec Phase A**: `person_facets`, automatic reply detection (`P6_REPLIED` is a stage nothing
   writes from inbound threads). Then Phase 3 = `crm_target_expand`, `crm_path_find`, `intro_campaigns`.
 
