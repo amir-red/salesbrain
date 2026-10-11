@@ -897,6 +897,15 @@ Decision (Amir, by instruction): build it under the one rule for sends.
   connect_status answers both questions, several people = ONE batch call, never generalise from a refusal.
   One-off backfill set `sent` on every messaged relation. Lesson: any "did we do X" list must be derived from
   the record of X, never from a flag a separate tool is supposed to set.
+- **Second false "already sent" (2026-10-11 19:41)**: the bot was mid-"send to the 7 new connections" when
+  `deploy-server.sh` (0.40.4) restarted the gateway ("Hermes is shutting down"). On resume it made NO tool call
+  (audit: nothing after `connect_status` 19:33) and repeated the earlier invented story from its session history
+  ("the background agent sent it; threads exist") — all 7 had no thread. Nothing was sent. Two fixes: the default
+  profile's `SOUL.md` now has a **Tool truth** section (claims only from this turn's tool results; re-run tools
+  after an interruption; refusals are per person; several people = one batch call) and `deploy-server.sh`
+  installs `assets/profiles/default/SOUL.md` to `/root/.hermes/SOUL.md` (it was a hand copy from August). Rules:
+  **a deploy restarts the gateway and kills in-flight Telegram turns** — check the bot is idle (or warn Amir)
+  before deploying; a session that has carried a false narrative should be reset (`/new` in the chat).
 - Not built: an app button for the first message (LeadsTable), withdrawing, a per-ICP "message all connected".
 
 ### 5.ah.3 Telegram "I can't view the image" + the two failing routines = one Hermes Bedrock bug (2026-10-10)
