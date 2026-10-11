@@ -906,6 +906,11 @@ Decision (Amir, by instruction): build it under the one rule for sends.
   installs `assets/profiles/default/SOUL.md` to `/root/.hermes/SOUL.md` (it was a hand copy from August). Rules:
   **a deploy restarts the gateway and kills in-flight Telegram turns** — check the bot is idle (or warn Amir)
   before deploying; a session that has carried a false narrative should be reset (`/new` in the chat).
+- **0.40.5 (same evening)**: after `/new` the bot answered "newly accepted?" with `crm_linkedin_pending_followups`
+  → "39 accepted connections not messaged", counting the owner's June connections as fresh acceptances.
+  `pending_followups` now defaults to `scope='requests'` (acceptances of requests WE sent, `linkedin_invitations`
+  accepted, newest first, with company + rank; live answer: 4) and takes `scope='all'` for every older unmessaged
+  connection (39); the tool text and SOUL say which question each answers.
 - Not built: an app button for the first message (LeadsTable), withdrawing, a per-ICP "message all connected".
 
 ### 5.ah.3 Telegram "I can't view the image" + the two failing routines = one Hermes Bedrock bug (2026-10-10)
