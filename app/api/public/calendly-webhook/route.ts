@@ -39,6 +39,7 @@ import {
   sendTeamBookingNotification,
   sendTeamCancellationNotification,
 } from '@/lib/demo-emails';
+import { notifySalesLead } from '@/lib/sales-lead-notify';
 
 /**
  * Format a Calendly `start_time` (ISO 8601 UTC) as a human-readable slot
@@ -154,6 +155,7 @@ async function handleCreated(body: Record<string, unknown>): Promise<void> {
   let companyForEmail: string;
   let fullNameForEmail: string;
   let timezone: string | null = null;
+  let isNewLead = false;
 
   if (existing[0]?.id) {
     leadId = existing[0].id as string;
@@ -219,6 +221,7 @@ async function handleCreated(body: Record<string, unknown>): Promise<void> {
       ],
     );
     leadId = inserted[0].id as string;
+    isNewLead = true;
     fullNameForEmail = e.name;
     companyForEmail = e.company || 'Unknown';
   }
@@ -233,6 +236,21 @@ async function handleCreated(body: Record<string, unknown>): Promise<void> {
     meetLink: e.meet_link,
     rescheduleUrl: e.reschedule_url,
     cancelUrl: e.cancel_url,
+  });
+
+  // Telegram heads-up to the board group. A re-delivered event for an
+  // already-linked row (same uuid, slot unchanged) would repeat the message;
+  // Calendly only re-delivers on non-2xx, and we always answer 200.
+  void notifySalesLead({
+    event: isNewLead ? 'booked_direct' : 'booked',
+    fullName: fullNameForEmail,
+    company: companyForEmail,
+    email: e.email,
+    website: e.website || null,
+    description: isNewLead ? e.description || null : null,
+    source: isNewLead ? 'zeami.io:calendly-direct' : null,
+    bookedSlot: bookedSlotLabel ?? null,
+    meetLink: e.meet_link || null,
   });
 
   console.log(`[calendly-webhook] booked lead ${leadId} for ${e.email} at ${e.start_time}`);

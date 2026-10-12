@@ -21,6 +21,7 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import pool from '@/lib/db';
 import { requireApiKey, jsonWithCors, corsOptions } from '@/lib/public-api';
+import { notifySalesLead } from '@/lib/sales-lead-notify';
 
 const BodySchema = z.object({
   full_name: z.string().trim().min(1).max(200),
@@ -92,6 +93,19 @@ export async function POST(req: NextRequest) {
   // If a marketing campaign ever needs the pre-Calendly dual-email flow
   // (prospect + team both notified at lead capture), import `sendDemoEmails`
   // from lib/demo-emails.ts and call it here — it remains available.
+
+  // Telegram heads-up to the board group (fire-and-forget, never throws).
+  const preferredSlot = [preferred_demo_date, preferred_demo_time?.slice(0, 5), preferred_demo_timezone]
+    .filter(Boolean).join(' ') || null;
+  void notifySalesLead({
+    event: 'submitted',
+    fullName: full_name,
+    company,
+    email,
+    description: description ?? null,
+    source: source ?? 'zeami.io:request-demo',
+    preferredSlot,
+  });
 
   return jsonWithCors(req, { id: rows[0].id, created_at: rows[0].created_at }, 201);
 }
