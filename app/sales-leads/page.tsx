@@ -189,8 +189,8 @@ export default function SalesLeadsPage() {
             {([
               { key: 'all', label: 'Total leads', color: 'var(--text)', hint: 'everything on this page' },
               { key: 'new', label: 'New', color: statusColor.new, hint: 'not handled yet' },
-              { key: 'contacted', label: 'Contacted', color: statusColor.contacted, hint: 'we sent a message' },
-              { key: 'replied', label: 'Replied', color: statusColor.replied, hint: 'they answered' },
+              { key: 'contacted', label: 'Contacted', color: statusColor.contacted, hint: 'we sent a message (replied included)' },
+              { key: 'replied', label: 'Replied', color: statusColor.replied, hint: 'of those, they answered' },
               { key: 'converted', label: 'Converted', color: statusColor.converted, hint: 'became a deal' },
               { key: 'booked', label: 'Demos booked', color: 'var(--green)', hint: 'Calendly slot confirmed' },
             ] as { key: keyof Counts; label: string; color: string; hint: string }[]).map((c) => {

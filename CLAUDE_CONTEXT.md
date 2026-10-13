@@ -637,7 +637,7 @@ fan-out, aux LLM, delivery and the learning loop into Hermes. Plan: `~/.claude/p
   prospect keyed on `raw_payload.prospect_id`, each event appends a dated line, the ladder new → contacted → replied
   only moves forward (converted/archived untouched), written in a savepoint so the mirror never costs the caller's own
   write. No Telegram post. The page shows summary cards + per-tab counts (`GET /api/sales-leads` returns `counts`)
-  and a Replied tab. Cadence: `mark_approval_result` bumps `touch_count` and arms `next_followup_at` from
+  and a Replied tab; Contacted = everyone we messaged (replied ⊂ contacted) in the list, the counts and `crm_list_sales_leads`. Cadence: `mark_approval_result` bumps `touch_count` and arms `next_followup_at` from
   `agents.followup` (`spacing_days [4,7,10]`, `max_touches 3`, ships **disabled**); `followup_queue` feeds the
   outreach routine's new `followups` list (skill §2b: touch N+1, shorter, one new useful thing,
   `kind='followup'` → same card, same gate). `list_leads` returns the contact/reply columns.

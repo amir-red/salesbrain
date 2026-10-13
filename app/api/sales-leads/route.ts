@@ -3,6 +3,8 @@
  *
  *   GET /api/sales-leads?status=new|contacted|replied|converted|archived|all
  *     → { leads, counts: { new, contacted, replied, converted, archived, all, booked } }
+ *   `contacted` = everyone we messaged, replied included (replied ⊂ contacted), both in the
+ *   list filter and in `counts`.
  *
  * Org-wide visibility (any signed-in user sees the inbox). Default filter is
  * `new` so the page opens to "what needs triage."
@@ -23,8 +25,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: `Invalid status: ${status}` }, { status: 400 });
   }
 
-  const filterClause = status === 'all' ? '' : 'WHERE l.status = $1';
-  const params = status === 'all' ? [] : [status];
+  const filterClause = status === 'all' ? ''
+    : status === 'contacted' ? "WHERE l.status IN ('contacted', 'replied')"
+    : 'WHERE l.status = $1';
+  const params = status === 'all' || status === 'contacted' ? [] : [status];
 
   const { rows } = await pool.query(
     `SELECT l.id, l.full_name, l.company, l.email, l.description, l.source,
@@ -54,6 +58,7 @@ export async function GET(req: NextRequest) {
     counts.all += r.n;
     counts.booked += r.booked;
   }
+  counts.contacted += counts.replied;   // replied people were contacted first
 
   return NextResponse.json({ leads: rows, counts });
 }
