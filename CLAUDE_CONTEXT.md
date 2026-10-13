@@ -1008,8 +1008,15 @@ to its own Notion database and called it the CRM. The audit log showed only read
 - **Ring** `crm_prospect_add` (`mcp="write"`, family `crm_prospecting`, 131 tools); **service MCP** passthrough
   (37 tools, `docs/service-mcp.md` "Sourcing & enrichment" + changelog). Not on the public MCP withheld list — it sends
   nothing.
+- **0.43.1 (same evening)**: a hand-added lead is also mirrored into **`/sales-leads` as `new`** (`sales_leads.py`
+  gained the `new` rung and an "Added by hand to <owner>'s leads" head; response carries `sales_lead_id`) — Amir: "we
+  should have them in the sales-leads". The bot's first four calls (Fedler, Maras, Volkenrath, Barlog) ran as
+  **EMP-0092 = Osman** although Mateo sent the Telegram message — the service MCP's owner is whatever
+  `X-On-Behalf-Of` the app sends, so the Zeami side must map the Telegram sender to the employee id itself; the four
+  rows were re-owned to Mateo by hand, my two stand-ins deleted, all four mirrored. There is deliberately no
+  "reassign owner" tool on the service surface (an app acts only as its own employee).
 - Not built: an "Add lead" form in the app (the ICP leads table has no manual entry either), a second phone column
-  (goes in `notes`), merging the two KIMW cards from Notion (do it through the tool once deployed).
+  (goes in `notes`).
 
 ### 5.aj Marketing — paid ads inside the CRM (2026-10-13, feat/marketing, round 1 app-only)
 
