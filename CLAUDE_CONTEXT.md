@@ -962,6 +962,17 @@ said only "N new connections accepted", no names, no next step; the loop closed 
 - Not built: a per-list toggle to skip cards for people the owner excluded (today: 👎 on the card), a reminder
   when a card sits unanswered, and the same loop for email-only leads.
 
+### 5.ah.4b NRW persona list → merged into one NRW ICP (2026-10-12/13, data only)
+
+The 537 NRW member firms were scored on Amir's persona (network / desktop-heavy / tech-positive / growing / outside 100k+
+cities; banks, insurers, law firms, publishers, software vendors, investors excluded) — sheet
+`Sales CRM/reports/NRW member companies - persona.xlsx` ("Persona fit" tab). 389 people at 217 firms (names from each
+firm's Impressum + the Excel, `source_type='kimw_persona'`, no LinkedIn URLs) were imported under Matthias as a second
+ICP, then on Amir's "they are one" **merged into the Top 100 ICP**, which is now **"NRW Kunststoff-Netzwerk"**
+(`2e2c3cf8-9717-4cf5-8bd9-0c7d85d214cd`, 607 leads): the original 100 keep ranks 1–100, persona leads follow at
+101–465 in persona order. The persona ICP row is archived (`is_active=false`, 0 leads). The known twin-account bug
+(`upsert_candidate` matches by stripped name, stores the full one) made ~123 account rows for the 86 first-wave firms.
+
 ### 5.ah.5 `/followups` = the LinkedIn follow-up board (2026-10-13, 0.42.3, app + one kernel line)
 
 Amir: "delete all of the previous ones and add a follow-up from LinkedIn automatically." The 113 stale deal reminders /
