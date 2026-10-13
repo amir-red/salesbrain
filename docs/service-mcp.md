@@ -471,7 +471,11 @@ Contacts no one.
   `location` (the person) · `address` (the company) · `notes` (where you met, what was agreed — stored as a
   dossier fact) · `icp_id` (score against it; omitted = the employee's single active ICP, else unscored) ·
   `source_detail` (e.g. `"business card, Fakuma 2026"`)
-- Returns `{ created, prospect_id, person_id, matched_by, icp_id, icp_score, fit_label, stage, note_recorded, note }`.
+- Returns `{ created, prospect_id, person_id, matched_by, icp_id, icp_score, fit_label, stage, note_recorded,
+  sales_lead_id, note }`. The lead also appears in the team's `/sales-leads` inbox as `new`.
+- **The owner is the employee in `X-On-Behalf-Of`.** A card captured from a chat message belongs to the person who
+  sent that message — map your sender (e.g. the Telegram user) to their `employee_id` before calling; there is no
+  tool to move a lead to another employee afterwards.
   **Never a duplicate**: an existing lead of this employee with the same LinkedIn profile, email, or name at the same
   company comes back as `created: false` with `matched_by: "linkedin" | "email" | "name_at_company"`; its blank
   fields are filled from your input and nothing already known is overwritten.
