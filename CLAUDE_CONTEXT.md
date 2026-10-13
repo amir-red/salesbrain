@@ -631,12 +631,13 @@ fan-out, aux LLM, delivery and the learning loop into Hermes. Plan: `~/.claude/p
   `reply_received` for a new `is_sender=false` message on a thread matched to a prospect (member id → handle →
   slug; `linkedin_sync.py` and `crm_linkedin_sync` record them via `salesbrain_hermes.replies`), and the app's
   Gmail sync calls **`crm_record_reply`** for a received mail from a P4/P5 prospect (also on the service MCP —
-  34 tools). **Since 0.41.2 (2026-10-13) every reply on a prospect also lands on `/sales-leads`**
-  (`upsert_sales_lead_for_reply`, in a savepoint so a failure never loses the reply): first reply creates a row
-  (status `replied` since 0.42.0 / core migration 054 — an existing new/contacted row is lifted to it; source `linkedin:reply` / `email:reply`, email '' when unknown, reply + LinkedIn link in the
-  description, `raw_payload.prospect_id` = the key), later replies append a dated line. `/sales-leads` shows summary cards + per-tab counts (`GET /api/sales-leads` returns
-  `counts`) and a Replied tab. No Telegram post — the
-  app's group notifier lives only on the zeami.io form + Calendly routes. Cadence: `mark_approval_result` bumps `touch_count` and arms `next_followup_at` from
+  34 tools). **`/sales-leads` mirrors every conversation (0.42.1, 2026-10-13, core migration 054,
+  `commands/sales_leads.py`)**: a sent message (`mark_approval_result`, kinds outreach/followup — never `connect`)
+  creates the prospect's row as `contacted`; a reply (`record_reply`) creates it as `replied` or lifts it. One row per
+  prospect keyed on `raw_payload.prospect_id`, each event appends a dated line, the ladder new → contacted → replied
+  only moves forward (converted/archived untouched), written in a savepoint so the mirror never costs the caller's own
+  write. No Telegram post. The page shows summary cards + per-tab counts (`GET /api/sales-leads` returns `counts`)
+  and a Replied tab. Cadence: `mark_approval_result` bumps `touch_count` and arms `next_followup_at` from
   `agents.followup` (`spacing_days [4,7,10]`, `max_touches 3`, ships **disabled**); `followup_queue` feeds the
   outreach routine's new `followups` list (skill §2b: touch N+1, shorter, one new useful thing,
   `kind='followup'` → same card, same gate). `list_leads` returns the contact/reply columns.
