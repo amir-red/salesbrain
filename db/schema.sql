@@ -248,7 +248,7 @@ CREATE TABLE IF NOT EXISTS sales_leads (
   -- Triage state. 'new' is the inbox; 'converted' means a deal was created;
   -- 'archived' is the "not worth pursuing" graveyard.
   status TEXT NOT NULL DEFAULT 'new'
-    CHECK (status IN ('new', 'contacted', 'converted', 'archived')),
+    CHECK (status IN ('new', 'contacted', 'replied', 'converted', 'archived')),  -- 'replied' since core 054
 
   -- Set when status flips to 'converted' — link to the deal we created.
   converted_deal_id UUID REFERENCES deals(id) ON DELETE SET NULL,

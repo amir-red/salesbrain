@@ -1,7 +1,8 @@
 /**
  * Internal (authenticated) API for browsing demo-form submissions.
  *
- *   GET /api/sales-leads?status=new|contacted|converted|archived|all
+ *   GET /api/sales-leads?status=new|contacted|replied|converted|archived|all
+ *     → { leads, counts: { new, contacted, replied, converted, archived, all, booked } }
  *
  * Org-wide visibility (any signed-in user sees the inbox). Default filter is
  * `new` so the page opens to "what needs triage."
@@ -17,7 +18,7 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const status = url.searchParams.get('status') || 'new';
 
-  const validStatuses = new Set(['new', 'contacted', 'converted', 'archived', 'all']);
+  const validStatuses = new Set(['new', 'contacted', 'replied', 'converted', 'archived', 'all']);
   if (!validStatuses.has(status)) {
     return NextResponse.json({ error: `Invalid status: ${status}` }, { status: 400 });
   }
@@ -41,5 +42,18 @@ export async function GET(req: NextRequest) {
     params,
   );
 
-  return NextResponse.json({ leads: rows });
+  // Tab counts + summary cards: one grouped query, run after the list (no fan-out).
+  const { rows: countRows } = await pool.query(
+    `SELECT status, count(*)::int AS n,
+            count(*) FILTER (WHERE booking_status = 'scheduled')::int AS booked
+     FROM sales_leads GROUP BY status`,
+  );
+  const counts: Record<string, number> = { new: 0, contacted: 0, replied: 0, converted: 0, archived: 0, all: 0, booked: 0 };
+  for (const r of countRows) {
+    counts[r.status] = r.n;
+    counts.all += r.n;
+    counts.booked += r.booked;
+  }
+
+  return NextResponse.json({ leads: rows, counts });
 }

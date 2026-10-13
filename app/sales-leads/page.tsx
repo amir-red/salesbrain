@@ -11,7 +11,7 @@ interface SalesLead {
   email: string;
   description: string | null;
   source: string;
-  status: 'new' | 'contacted' | 'converted' | 'archived';
+  status: 'new' | 'contacted' | 'replied' | 'converted' | 'archived';
   created_at: string;
   converted_at: string | null;
   converted_deal_id: string | null;
@@ -95,11 +95,13 @@ function formatDemoTime(lead: SalesLead): string | null {
   }
 }
 
-type StatusFilter = 'new' | 'contacted' | 'converted' | 'archived' | 'all';
+type StatusFilter = 'new' | 'contacted' | 'replied' | 'converted' | 'archived' | 'all';
+type Counts = Record<StatusFilter | 'booked', number>;
 
 const FILTERS: { key: StatusFilter; label: string }[] = [
   { key: 'new', label: 'New' },
   { key: 'contacted', label: 'Contacted' },
+  { key: 'replied', label: 'Replied' },
   { key: 'converted', label: 'Converted' },
   { key: 'archived', label: 'Archived' },
   { key: 'all', label: 'All' },
@@ -108,6 +110,7 @@ const FILTERS: { key: StatusFilter; label: string }[] = [
 const statusColor: Record<SalesLead['status'], string> = {
   new: 'var(--accent)',
   contacted: 'var(--yellow)',
+  replied: 'var(--cat-teal)',
   converted: 'var(--green)',
   archived: 'var(--text-muted)',
 };
@@ -118,6 +121,7 @@ export default function SalesLeadsPage() {
   const [filter, setFilter] = useState<StatusFilter>('new');
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [counts, setCounts] = useState<Counts | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -127,6 +131,7 @@ export default function SalesLeadsPage() {
       if (!res.ok) throw new Error((await res.json()).error || 'Failed to load');
       const data = await res.json();
       setLeads(data.leads || []);
+      if (data.counts) setCounts(data.counts);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load');
     } finally {
@@ -136,7 +141,7 @@ export default function SalesLeadsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function setStatus(id: string, status: 'contacted' | 'archived' | 'new') {
+  async function setStatus(id: string, status: 'contacted' | 'replied' | 'archived' | 'new') {
     setBusyId(id);
     try {
       const res = await fetch(`/api/sales-leads/${id}`, {
@@ -174,13 +179,46 @@ export default function SalesLeadsPage() {
         <div className="p-4 border-b" style={{ borderColor: 'var(--border)' }}>
           <h1 className="text-lg font-bold">Sales Leads</h1>
           <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-            Demo-request submissions from zeami.io and other intake forms. Convert promising ones to a sales deal at G1.
+            Demo requests from zeami.io and Calendly, plus everyone who replied to our outreach. Convert promising ones to a sales deal at G1.
           </p>
         </div>
 
         <div className="p-4">
+          {/* Summary cards — counts across every lead, whatever tab is open. */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-4">
+            {([
+              { key: 'all', label: 'Total leads', color: 'var(--text)', hint: 'everything on this page' },
+              { key: 'new', label: 'New', color: statusColor.new, hint: 'not handled yet' },
+              { key: 'contacted', label: 'Contacted', color: statusColor.contacted, hint: 'we sent a message' },
+              { key: 'replied', label: 'Replied', color: statusColor.replied, hint: 'they answered' },
+              { key: 'converted', label: 'Converted', color: statusColor.converted, hint: 'became a deal' },
+              { key: 'booked', label: 'Demos booked', color: 'var(--green)', hint: 'Calendly slot confirmed' },
+            ] as { key: keyof Counts; label: string; color: string; hint: string }[]).map((c) => {
+              const clickable = c.key !== 'booked';
+              return (
+                <button
+                  key={c.key}
+                  type="button"
+                  disabled={!clickable}
+                  onClick={() => clickable && setFilter(c.key as StatusFilter)}
+                  className="rounded-lg p-3 text-left disabled:cursor-default"
+                  style={{
+                    background: 'var(--bg-card)',
+                    border: `1px solid ${filter === c.key ? c.color : 'var(--border)'}`,
+                  }}
+                >
+                  <div className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>{c.label}</div>
+                  <div className="text-2xl font-bold leading-tight" style={{ color: c.color }}>
+                    {counts ? counts[c.key] : '–'}
+                  </div>
+                  <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{c.hint}</div>
+                </button>
+              );
+            })}
+          </div>
+
           {/* Filter chips */}
-          <div className="flex gap-2 mb-4">
+          <div className="flex flex-wrap gap-2 mb-4">
             {FILTERS.map((f) => (
               <button
                 key={f.key}
@@ -193,6 +231,7 @@ export default function SalesLeadsPage() {
                 }}
               >
                 {f.label}
+                {counts && <span className="ml-1.5 opacity-80">{counts[f.key]}</span>}
               </button>
             ))}
           </div>
@@ -229,7 +268,7 @@ export default function SalesLeadsPage() {
                         <span className="text-xs font-medium truncate" style={{ color: 'var(--text)' }}>{l.company}</span>
                         <span
                           className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold"
-                          style={{ background: `${statusColor[l.status]}20`, color: statusColor[l.status] }}
+                          style={{ background: `color-mix(in srgb, ${statusColor[l.status]} 14%, transparent)`, color: statusColor[l.status] }}
                         >
                           {l.status}
                         </span>
@@ -367,6 +406,16 @@ export default function SalesLeadsPage() {
                           style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }}
                         >
                           Mark contacted
+                        </button>
+                      )}
+                      {l.status === 'contacted' && (
+                        <button
+                          onClick={() => setStatus(l.id, 'replied')}
+                          disabled={busyId === l.id}
+                          className="px-3 py-1.5 rounded text-xs font-medium disabled:opacity-50"
+                          style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }}
+                        >
+                          Mark replied
                         </button>
                       )}
                       {l.status !== 'archived' && l.status !== 'converted' && (

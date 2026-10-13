@@ -1,7 +1,7 @@
 /**
  * Internal API for a single sales lead.
  *
- *   PATCH /api/sales-leads/:id   — update status (new|contacted|archived)
+ *   PATCH /api/sales-leads/:id   — update status (new|contacted|replied|archived)
  *                                  (use /convert to flip to 'converted')
  *   DELETE /api/sales-leads/:id  — remove a lead entirely (e.g. spam)
  */
@@ -11,7 +11,7 @@ import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 
 const PatchSchema = z.object({
-  status: z.enum(['new', 'contacted', 'archived']),
+  status: z.enum(['new', 'contacted', 'replied', 'archived']),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
