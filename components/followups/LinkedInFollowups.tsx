@@ -52,6 +52,48 @@ export function LinkedInFollowups({ tab, onCounts }: { tab: 'pending' | 'sent'; 
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<Record<string, string>>({});
+  // "Show in English": display-only translations, fetched in one batch and kept per text.
+  const [english, setEnglish] = useState<boolean>(() => {
+    try { return localStorage.getItem('followups-english') === '1'; } catch { return false; }
+  });
+  const [tr, setTr] = useState<Record<string, string>>({});
+  const [trBusy, setTrBusy] = useState(false);
+  const [trError, setTrError] = useState<string | null>(null);
+
+  useEffect(() => {
+    try { localStorage.setItem('followups-english', english ? '1' : '0'); } catch { /* private window */ }
+  }, [english]);
+
+  useEffect(() => {
+    if (!english || !data) return;
+    const texts = new Set<string>();
+    for (const it of data.items) {
+      if (it.last_sent?.message) texts.add(it.last_sent.message);
+      if (it.pending?.message) texts.add(it.pending.message);
+    }
+    for (const s of data.sent) if (s.message) texts.add(s.message);
+    for (const d of Object.values(draft)) if (d?.trim()) texts.add(d);
+    const missing = Array.from(texts).filter((t) => tr[t] === undefined).slice(0, 40);
+    if (!missing.length) return;
+    let cancelled = false;
+    setTrBusy(true);
+    setTrError(null);
+    fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texts: missing }) })
+      .then(async (res) => {
+        const out = await res.json();
+        if (!res.ok) throw new Error(out.error || 'Translation failed');
+        if (cancelled) return;
+        setTr((m) => { const c = { ...m }; missing.forEach((t, i) => { c[t] = out.translations[i] ?? t; }); return c; });
+      })
+      .catch((err) => { if (!cancelled) setTrError(err instanceof Error ? err.message : 'Translation failed'); })
+      .finally(() => { if (!cancelled) setTrBusy(false); });
+    return () => { cancelled = true; };
+  }, [english, data, draft, tr]);
+
+  const show = (text: string | null | undefined): string => {
+    if (!text) return '';
+    return english ? (tr[text] ?? text) : text;
+  };
 
   const load = useCallback(async () => {
     try {
@@ -98,7 +140,10 @@ export function LinkedInFollowups({ tab, onCounts }: { tab: 'pending' | 'sent'; 
     if (data.sent.length === 0) return null;
     return (
       <div className="mb-6">
-        <h3 className="text-xs font-medium uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>LinkedIn follow-ups sent</h3>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>LinkedIn follow-ups sent</h3>
+          <EnglishToggle english={english} setEnglish={setEnglish} busy={trBusy} error={trError} />
+        </div>
         {data.sent.map((s) => (
           <div key={s.id} className="p-3 rounded-lg mb-2" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
             <div className="flex items-center gap-2 mb-1">
@@ -106,7 +151,7 @@ export function LinkedInFollowups({ tab, onCounts }: { tab: 'pending' | 'sent'; 
               {s.company && <span className="text-xs" style={{ color: 'var(--text-muted)' }}>· {s.company}</span>}
               <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>by {s.owner_name} · {formatDate(s.sent_at)}</span>
             </div>
-            <p className="text-xs whitespace-pre-wrap" style={{ color: 'var(--text-muted)' }}>{s.message}</p>
+            <p className="text-xs whitespace-pre-wrap" style={{ color: 'var(--text-muted)' }}>{show(s.message)}</p>
           </div>
         ))}
       </div>
@@ -129,9 +174,12 @@ export function LinkedInFollowups({ tab, onCounts }: { tab: 'pending' | 'sent'; 
         <h3 className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
           LinkedIn follow-ups · {data.items.length}
         </h3>
-        <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-          cadence {data.spacing_days.join(' / ')} days, max {data.max_touches} touches · a draft is sent only after the owner approves it
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+            cadence {data.spacing_days.join(' / ')} days, max {data.max_touches} touches · a draft is sent only after the owner approves it
+          </span>
+          <EnglishToggle english={english} setEnglish={setEnglish} busy={trBusy} error={trError} />
+        </div>
       </div>
       {Array.from(grouped.entries()).map(([label, items]) => (
         <div key={label} className="mb-4">
@@ -160,14 +208,14 @@ export function LinkedInFollowups({ tab, onCounts }: { tab: 'pending' | 'sent'; 
                     </p>
                     {it.last_sent?.message && (
                       <p className="text-xs mt-1.5 whitespace-pre-wrap line-clamp-3" style={{ color: 'var(--text-muted)' }}>
-                        <span className="font-medium">We wrote:</span> {it.last_sent.message}
+                        <span className="font-medium">We wrote:</span> {show(it.last_sent.message)}
                       </p>
                     )}
                     {it.pending && (
                       <div className="mt-2 rounded p-2 text-xs" style={{ background: 'color-mix(in srgb, var(--yellow) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--yellow) 30%, transparent)' }}>
                         <span className="font-medium" style={{ color: 'var(--yellow)' }}>Draft awaiting the owner&apos;s approval</span>
                         <span style={{ color: 'var(--text-muted)' }}> — on Telegram or <Link href="/agents" className="underline">/agents</Link></span>
-                        <p className="mt-1 whitespace-pre-wrap" style={{ color: 'var(--text)' }}>{it.pending.message}</p>
+                        <p className="mt-1 whitespace-pre-wrap" style={{ color: 'var(--text)' }}>{show(it.pending.message)}</p>
                       </div>
                     )}
                     {draft[it.id] !== undefined && !it.pending && (
@@ -179,6 +227,11 @@ export function LinkedInFollowups({ tab, onCounts }: { tab: 'pending' | 'sent'; 
                           className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y"
                           style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }}
                         />
+                        {english && tr[draft[it.id]] && (
+                          <p className="text-xs mt-1 whitespace-pre-wrap" style={{ color: 'var(--text-muted)' }}>
+                            <span className="font-medium">In English:</span> {tr[draft[it.id]]}
+                          </p>
+                        )}
                         <div className="flex gap-2 mt-1.5">
                           <button onClick={() => act(it.id, 'propose')} disabled={isBusy || !draft[it.id]?.trim()}
                                   className="px-3 py-1.5 rounded text-xs font-medium disabled:opacity-50"
@@ -221,5 +274,15 @@ export function LinkedInFollowups({ tab, onCounts }: { tab: 'pending' | 'sent'; 
         </div>
       ))}
     </div>
+  );
+}
+
+
+function EnglishToggle({ english, setEnglish, busy, error }: { english: boolean; setEnglish: (v: boolean) => void; busy: boolean; error: string | null }) {
+  return (
+    <label className="flex items-center gap-1.5 text-[11px] cursor-pointer select-none" style={{ color: error ? 'var(--red)' : 'var(--text-muted)' }} title={error || 'Translate the messages for display; what gets sent stays in the original language'}>
+      <input type="checkbox" checked={english} onChange={(e) => setEnglish(e.target.checked)} className="accent-[var(--accent)]" />
+      Show in English{busy ? '…' : ''}{error ? ' (failed)' : ''}
+    </label>
   );
 }
