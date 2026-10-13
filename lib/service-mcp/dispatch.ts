@@ -276,6 +276,34 @@ export const SERVICE_TOOLS: ToolDef[] = [
     needsOwner: true,
   },
   {
+    name: 'crm_prospect_add',
+    description:
+      "Add ONE lead by hand for this employee — a business card, an event note, a referral — so it goes " +
+      "through the same journey as a sourced lead (enrich, route, approve, send, reply). Never duplicates: " +
+      "an existing lead with the same LinkedIn profile, email, or name at the same company is returned " +
+      "(created=false, matched_by) with its blanks filled in and nothing overwritten. Scored against icp_id " +
+      "or the employee's single active ICP, else it lands unscored (P0_IMPORTED). `notes` become a dossier " +
+      "fact. Contacts no one.",
+    inputSchema: obj(
+      {
+        full_name: { type: 'string' },
+        company: { type: 'string' },
+        title: { type: 'string', description: 'Role / job title' },
+        email: { type: 'string' },
+        phone: { type: 'string', description: 'One number; put a second one in notes' },
+        linkedin_url: { type: 'string', description: 'Profile URL or vanity slug' },
+        website: { type: 'string', description: 'Company website' },
+        location: { type: 'string', description: 'Where the person is based' },
+        address: { type: 'string', description: 'Company postal address' },
+        notes: { type: 'string', description: 'Where you met, what was agreed, who introduced' },
+        icp_id: { type: 'string', description: 'From crm_icp_list' },
+        source_detail: { type: 'string', description: "e.g. 'business card, Fakuma 2026'" },
+      },
+      ['full_name'],
+    ),
+    needsOwner: true,
+  },
+  {
     name: 'list_leads',
     description:
       "This employee's prospects for an ICP (or all their ICPs), best fit first, with contact, " +
@@ -747,7 +775,7 @@ const PASSTHROUGH = new Set([
   'crm_icp_rescore', 'crm_leads_finder_run',
   'crm_agent_request_run', 'crm_agent_set_user_state', 'crm_enrich_prospect', 'crm_outreach_propose',
   'crm_outreach_pending', 'crm_outreach_decide', 'crm_record_reply', 'crm_linkedin_status',
-  'crm_linkedin_find_person', 'crm_linkedin_link_prospect',
+  'crm_linkedin_find_person', 'crm_linkedin_link_prospect', 'crm_prospect_add',
   'crm_linkedin_revoke', 'crm_agent_activity', 'crm_agent_status', 'crm_linkedin_quota',
   'crm_graph_status', 'crm_graph_edges', 'crm_graph_sync',
   'crm_graph_reach', 'crm_who_can_reach',

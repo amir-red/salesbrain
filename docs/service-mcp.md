@@ -110,7 +110,7 @@ Four JSON-RPC methods:
 | Method | Purpose |
 |---|---|
 | `initialize` | Handshake — returns server info + protocol version. |
-| `tools/list` | The catalog (36 tools) with JSON-Schema for each. |
+| `tools/list` | The catalog (37 tools) with JSON-Schema for each. |
 | `tools/call` | Invoke one tool. This is where the work happens. |
 | `ping` | Health check. |
 
@@ -345,6 +345,7 @@ employee's data.
 | | `crm_enrich_prospect` | write | Find the LinkedIn profile (by name), fill employer, company, email for one lead |
 | | `crm_linkedin_find_person` | read | Candidates for a lead's LinkedIn profile, strong ones marked — writes nothing |
 | | `crm_linkedin_link_prospect` | write | Attach the profile your user picked to a lead |
+| | `crm_prospect_add` | write | Add one lead by hand (business card, event note, referral). Never duplicates |
 | | `list_leads` | read | The lead list, filterable by ICP, stage and fit |
 | **Visibility** | `get_run_status` | read | Poll a queued or finished run. The poll loop |
 | | `crm_agent_activity` | read | Recent runs and why a tick was skipped |
@@ -461,6 +462,20 @@ paused ICP, and `status: "user_paused" | "user_stopped"` when that agent is held
 **`crm_enrich_prospect`** · write — Enrich one prospect now: employer, company research + website, and an email.
 Contacts no one.
 - `prospect_id*` — from `list_leads` · `kinds` — subset of `employer`, `research`, `email`
+
+**`crm_prospect_add`** · write — Add ONE lead by hand: a business card, an event note, a referral. The person
+lands exactly like a sourced lead (account → contact → prospect, person node with email / LinkedIn handles) and goes
+through every later step unchanged — `crm_enrich_prospect`, `crm_path_find`, `crm_outreach_propose`, replies.
+Contacts no one.
+- `full_name*` · `company` · `title` · `email` · `phone` · `linkedin_url` (profile URL or slug) · `website` ·
+  `location` (the person) · `address` (the company) · `notes` (where you met, what was agreed — stored as a
+  dossier fact) · `icp_id` (score against it; omitted = the employee's single active ICP, else unscored) ·
+  `source_detail` (e.g. `"business card, Fakuma 2026"`)
+- Returns `{ created, prospect_id, person_id, matched_by, icp_id, icp_score, fit_label, stage, note_recorded, note }`.
+  **Never a duplicate**: an existing lead of this employee with the same LinkedIn profile, email, or name at the same
+  company comes back as `created: false` with `matched_by: "linkedin" | "email" | "name_at_company"`; its blank
+  fields are filled from your input and nothing already known is overwritten.
+- Refuses an email without `@`, and a `linkedin_url` that is a member id (`ACoAA…`) rather than a profile.
 
 **`list_leads`** · read — The employee's prospects for an ICP (or all), best fit first — contact, company, score,
 stage, research summary, reachability.
@@ -788,6 +803,13 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 ---
 
 ## 12. Changelog
+
+### 2026-10-13 — leads can be added by hand
+
+Until now a person could only enter SalesBrain through the Leads Finder, a CSV upload or the graph mirrors, so a
+chat assistant handed a business card had nowhere to put it. **`crm_prospect_add`** `{full_name, company, title,
+email, phone, linkedin_url, website, location, address, notes, icp_id, source_detail}` lands one lead for the
+employee through the same path as sourced leads (same dedup ladder, same scoring, same journey afterwards). 37 tools.
 
 ### 2026-10-09 — a lead's LinkedIn profile can be found by name
 

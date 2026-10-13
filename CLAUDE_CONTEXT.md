@@ -992,6 +992,25 @@ follow-up form/table stay for manual use.
 - Not built: email follow-ups on the board (`followup_queue` covers them; the page is LinkedIn-only), a reminder when
   a card sits unapproved, enabling the agent to draft by itself (`agents.followup.enabled`).
 
+### 5.ai.1 Add a lead by hand — `crm_prospect_add` (2026-10-13, feat/add-lead, core/hermes, no migration)
+
+Mateo's Zeami Omni bot said "Captured and added to the CRM" for two KIMW business cards (Marius Fedler, Jan-Ole Maras)
+— nothing landed: the service MCP (token "Zeami AppnMCP") had 36 tools and none could create a person, so the bot wrote
+to its own Notion database and called it the CRM. The audit log showed only reads + `register_user`.
+- **Kernel** `commands/prospecting.py::add_lead(actor, full_name, company?, title?, email?, phone?, linkedin_url?,
+  website?, location?, address?, notes?, icp_id?, source_detail?)` — guards first (name, `@` in email, member id is not a
+  slug), then the dedup ladder on the owner's leads (slug → email → name at company; returns `matched_by`, never a
+  duplicate), else `upsert_candidate(source_type='manual')` so there is still ONE landing path; then COALESCE-fills
+  `contacts.phone/title/email/linkedin_url` and `accounts.website/domain/hq_location` (domain with qualify()'s unique
+  guard), `ensure_prospect_person` for the handles, and `notes` → `people.record_fact(source='manual')` — a dossier fact,
+  not `contacts.notes` (which nothing reads). ICP: explicit, else the owner's single active one, else unscored P0_IMPORTED
+  (the response's `note` says which). Audit `lead_added`.
+- **Ring** `crm_prospect_add` (`mcp="write"`, family `crm_prospecting`, 131 tools); **service MCP** passthrough
+  (37 tools, `docs/service-mcp.md` "Sourcing & enrichment" + changelog). Not on the public MCP withheld list — it sends
+  nothing.
+- Not built: an "Add lead" form in the app (the ICP leads table has no manual entry either), a second phone column
+  (goes in `notes`), merging the two KIMW cards from Notion (do it through the tool once deployed).
+
 ### 5.aj Marketing — paid ads inside the CRM (2026-10-13, feat/marketing, round 1 app-only)
 
 Amir: "we are starting ads in Google Ads and LinkedIn Ads — add a marketing menu, connectors, pull our performance
