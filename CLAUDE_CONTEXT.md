@@ -992,6 +992,25 @@ follow-up form/table stay for manual use.
 - Not built: email follow-ups on the board (`followup_queue` covers them; the page is LinkedIn-only), a reminder when
   a card sits unapproved, enabling the agent to draft by itself (`agents.followup.enabled`).
 
+### 5.aj Marketing — paid ads inside the CRM (2026-10-13, feat/marketing, round 1 app-only)
+
+Amir: "we are starting ads in Google Ads and LinkedIn Ads — add a marketing menu, connectors, pull our performance
+data." Plan of record: `docs/marketing-ads.md` (two systems of record, closed loop via `gclid`/`li_fat_id` + UTMs on the
+zeami.io form, daily restated metrics, offline conversions back to the platforms in round 4).
+- **Round 1 (shipped)**: Sidebar group **Marketing** (`/marketing` overview frame with the six committed KPIs and an
+  honest empty state; `/marketing/connectors` with one card per provider — status, scopes, prerequisites, live server
+  env check). `lib/marketing.ts` = `AdProvider`, `PROVIDER_META`, `ConnectorStatus`. API:
+  `GET /api/marketing/connectors` (reads `oauth_tokens` rows `provider in ('google_ads','linkedin_ads')`),
+  `GET …/[provider]/connect` (501 + `missing_env[]` until round 2 adds the redirect/callback), `POST …/[provider]/disconnect`.
+  Sidebar active state is now longest-prefix, so a parent item is not lit on its child route.
+- **Rounds 2–4 (planned, not built)**: core migrations 055 (`ad_accounts`, `ad_campaigns`, `ad_metrics_daily`),
+  056 (`lead_touchpoints`), 057 (`agents.ads_sync` policy + `ad_conversion_outbox`); OAuth flows (Google: existing client
+  + `adwords` scope + developer token + MCC id; LinkedIn: new app, Advertising API approval, `r_ads_reporting`);
+  `ads_sync` Hermes `--no-agent` cron at 05:30 with 3-day lookback; `commands/ads.py` + `policy/ads.py` +
+  `crm_ads_summary/_campaigns/_sync_now` (family `crm_marketing`); public sales-leads form takes UTM + click ids;
+  LinkedIn Lead Gen Forms → `/sales-leads`; reporting; offline conversion upload. Outside-code lead times to start now:
+  LinkedIn Advertising API approval, Google developer token, zeami.io form change.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

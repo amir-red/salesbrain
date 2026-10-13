@@ -161,6 +161,26 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    href: '/marketing',
+    label: 'Marketing',
+    icon: (
+      // Megaphone — paid acquisition: ads performance across channels
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 10v4a1 1 0 0 0 1 1h3l5 4V5L7 9H4a1 1 0 0 0-1 1z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M18.5 5.5a9 9 0 0 1 0 13" />
+      </svg>
+    ),
+  },
+  {
+    href: '/marketing/connectors',
+    label: 'Ad Connectors',
+    icon: (
+      // Plug — the Google Ads / LinkedIn Ads accounts this CRM reads from
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 22v-5" /><path d="M9 8V2" /><path d="M15 8V2" /><path d="M18 8v5a6 6 0 0 1-12 0V8z" />
+      </svg>
+    ),
+  },
+  {
     href: '/campaigns',
     label: 'Campaigns',
     icon: (
@@ -239,6 +259,7 @@ const NAV_ITEMS: NavItem[] = [
 const GROUPS: { label: string; hrefs: string[] }[] = [
   { label: 'Pipeline', hrefs: ['/', '/pipeline', '/followups', '/sales-leads'] },
   { label: 'Prospecting', hrefs: ['/icp', '/prospecting', '/discovery', '/campaigns', '/agents'] },
+  { label: 'Marketing', hrefs: ['/marketing', '/marketing/connectors'] },
   { label: 'Relationships', hrefs: ['/relationships', '/network', '/clients'] },
   { label: 'Funding', hrefs: ['/grants', '/credits'] },
   { label: 'Insights', hrefs: ['/reports', '/lessons', '/pricing'] },
@@ -266,7 +287,18 @@ export default function Sidebar() {
 
   const wide = collapsed ? 'hidden' : 'hidden lg:block';      // shown only in the expanded nav
   const narrow = collapsed ? 'block' : 'block lg:hidden';     // shown only in the rail
-  const isActive = (href: string) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
+  // Longest matching href wins, so a parent item (/marketing) is not lit while
+  // one of its children (/marketing/connectors) is the page.
+  const activeHref = (() => {
+    let best = '';
+    for (const item of NAV_ITEMS) {
+      const h = item.href;
+      const hit = h === '/' ? pathname === '/' : pathname === h || pathname.startsWith(h + '/');
+      if (hit && h.length > best.length) best = h;
+    }
+    return best;
+  })();
+  const isActive = (href: string) => href === activeHref;
 
   const link = (item: NavItem) => {
     const active = isActive(item.href);
