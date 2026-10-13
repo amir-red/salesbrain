@@ -631,7 +631,7 @@ fan-out, aux LLM, delivery and the learning loop into Hermes. Plan: `~/.claude/p
   `reply_received` for a new `is_sender=false` message on a thread matched to a prospect (member id → handle →
   slug; `linkedin_sync.py` and `crm_linkedin_sync` record them via `salesbrain_hermes.replies`), and the app's
   Gmail sync calls **`crm_record_reply`** for a received mail from a P4/P5 prospect (also on the service MCP —
-  34 tools). **Since 0.41.1 (2026-10-13) every reply on a prospect also lands on `/sales-leads`**
+  34 tools). **Since 0.41.2 (2026-10-13) every reply on a prospect also lands on `/sales-leads`**
   (`upsert_sales_lead_for_reply`, in a savepoint so a failure never loses the reply): first reply creates a row
   (status `contacted`, source `linkedin:reply` / `email:reply`, email '' when unknown, reply + LinkedIn link in the
   description, `raw_payload.prospect_id` = the key), later replies append a dated line. No Telegram post — the
