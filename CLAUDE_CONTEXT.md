@@ -992,6 +992,53 @@ follow-up form/table stay for manual use.
 - Not built: email follow-ups on the board (`followup_queue` covers them; the page is LinkedIn-only), a reminder when
   a card sits unapproved, enabling the agent to draft by itself (`agents.followup.enabled`).
 
+### 5.aj Hermes self-improvement loop on every surface (2026-10-13, feat/self-improvement, app + hermes)
+
+Amir: "the self-improvement skill is really important and we need to use it everywhere … integrate the skills and
+memory toolsets everywhere." Plan: `~/.claude/plans/hermes-self-improvement.md`. **What Hermes ships** (v2026.9.21):
+the `memory` tool (MEMORY.md + USER.md per profile), `skill_manage` (procedural memory, nudged by the system prompt),
+a **post-turn background review** fork that saves a memory / patches a skill after a conversation
+(`agent/turn_finalizer.py`; gated by `memory.nudge_interval` and `skills.creation_nudge_interval` + `skill_manage` in
+the toolset; **never for cron**, `cron/scheduler.py skip_background_review=True`), `skills.write_approval` /
+`memory.write_approval` (non-CLI writes are STAGED to `$HERMES_HOME/pending/{skills,memory}/<id>.json`, one queue PER
+PROFILE, reviewed with `/skills pending|diff|approve|reject`, `/memory pending|approve|reject`), the curator (weekly
+prune of agent-created skills), `/learn <source>`, `/refine`.
+- **Found live**: `memory.memory_enabled=false` + `nudge_interval=0` since 2026-08-31 → the memory tool was gone from
+  every surface and the review never ran; web chat (`api_server=[crm_core]`) and the team bot
+  (`crm` profile `telegram=[crm_core, web]`) had no `skills` either; `crm_core` is a dead name since 0.34.0 (resolves to
+  nothing — the crm_* families were only reaching the bots because plugin toolsets are on by default); the crm profile
+  had **no `skills.external_dirs`** → the team bot never loaded a `salesbrain-*` skill; one background-review skill
+  write (`pending/skills/9e58e6a1.json`, "salesbrain-admin-diagnostics") had waited unreviewed since 2026-09-24.
+- **deploy-server.sh**: built-in memory ON next to the `salesbrain-memory` provider (Hermes: an external provider is
+  additive), `memory.nudge_interval 10`, `skills.creation_nudge_interval 10`, background review routed to Haiku 4.5
+  on Bedrock with `max_input_tokens 48000`, `display.memory_notifications verbose`. **`ensure_toolsets`** MERGES
+  `skills` + `memory` + the nine crm_* families into `platform_toolsets.telegram` / `api_server` (default profile)
+  and `telegram` (crm profile), drops `crm_core`, keeps everything else (the hand-set lists survive); cron gets
+  `memory`. Decision: the default profile (Amir's own agent) writes memory directly (`memory.write_approval false`);
+  the **crm profile stages both** (`memory.write_approval true` — one teammate's correction must not silently become
+  everyone's context); skills are staged on every profile. The crm profile also gets `skills.external_dirs` and the
+  shared `skills.create_dir /root/.hermes/skills-agent`. The verify block REFUSES a deploy that leaves memory off or a
+  chat surface without both toolsets. New `--no-agent` job **`learning-digest`** (09:15): one line to the operator's
+  chat while anything waits (`assets/scripts/learning_digest.py`).
+- **Ring** `src/salesbrain_hermes/learning.py` (+ `rpc._internal`: `learning_pending`, `learning_decide`, app-only,
+  admin): lists staged writes across profiles from the files (no Hermes import needed), skill diffs via Hermes'
+  `skill_pending_diff` when importable, flags a patch that targets a git-deployed skill (`targets_repo_skill` — it
+  applies on approve, root ignores `a-w`, and the next deploy overwrites it: port it to `assets/skills/`), reads
+  MEMORY.md / USER.md, lists agent-authored skills, loop status per surface. Approve replays through Hermes' own
+  applier (`hermes_cli.write_approval_commands.handle_pending_subcommand`) under `set_hermes_home_override` so profile
+  B's queue applies against profile B's config; reject is a file delete. `pyyaml` is now a declared ring dependency.
+- **SOULs** (default + crm): a "Learn" section — save a correction / preference / fact with `memory` at once, record a
+  repeatable procedure with `skill_manage`, say what you staged, never rewrite the git-deployed `salesbrain-*` skills.
+- **App** `/admin/learning` (`lib/learning-panel.ts`, `GET /api/admin/learning`, `POST /api/admin/learning/decide`):
+  per profile — surfaces with skills/memory pills, loop settings, red issues list, pending cards with diff and
+  Approve / Reject, agent-written skills, memory files. Sidebar Admin → Learning.
+- **To verify after deploy**: `hermes tools --summary` (+ `-p crm`), a Telegram correction → `grep "Background review
+  complete" logs/agent.log`, `/memory` shows the note (default) or `/memory pending` (crm), `/skills pending` and
+  `/admin/learning` both list 9e58e6a1, `python scripts/learning_digest.py --dry-run`, `hermes curator status`.
+  Cost: the review fork is ~30K input tokens per event on Haiku; the nudge intervals bound how often it fires.
+- Not built: `curator.consolidate` (nothing to consolidate yet), `/learn` from the app, backfilling the 09-24 →
+  10-13 gap (those conversations were never reviewed), agent-to-agent sharing of memory (per profile by design).
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
