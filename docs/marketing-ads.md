@@ -1,8 +1,11 @@
 # Marketing in SalesBrain — paid ads integration plan
 
-Status: **round 1 shipped on `feat/marketing` (2026-10-13)**: the Marketing nav group, `/marketing` (overview frame +
-empty state), `/marketing/connectors` (Google Ads / LinkedIn Ads cards, live env check), `lib/marketing.ts`, and the
-connector API contract. Rounds 2–4 below are the plan. Owner: Amir. No migration applied yet.
+Status (2026-10-13, `feat/marketing`): **round 1 + the connectors + a live read are built.** Marketing nav group,
+`/marketing` (live spend / impressions / clicks / CTR / CPC per campaign, spend sparkline, read straight from the
+platforms with a 10-min cache), `/marketing/connectors` (Google Ads = service account verified with one call;
+LinkedIn Ads = OAuth connect/reconnect/disconnect), `lib/marketing.ts` (client vocabulary), `lib/ads/{google,linkedin,
+cache}.ts` (server). Nothing is stored yet: the tables, the daily sync, lead capture and the closed loop (§1, §2, §4,
+§6) are the next rounds. No migration applied. Owner: Amir.
 
 ## 0. What "international standard" means for a CRM here
 
@@ -74,27 +77,40 @@ the coarse label it is today; the touchpoint is the detail.
 - **Outbound** (LinkedIn connect/first message, email) writes `source='outbound'` touchpoints from
   `mark_approval_result`, so the funnel compares paid vs outbound on one page. One line in the kernel.
 
-## 3. Connectors (app, round 2)
+## 3. Connectors (app — BUILT, env-driven)
 
-**Google Ads.** Reuse the existing Google OAuth client; add scope `https://www.googleapis.com/auth/adwords`
-(separate `oauth_tokens.provider='google_ads'` row so the Gmail connection is untouched). Needs a developer token
-(apply in the MCC → API Center; Basic access is enough for our volume, test-account token works on day one against a
-test account only) and `login-customer-id` = the MCC id. Pull = one GAQL query per account per day:
+**Google Ads — service account, not per-user OAuth** (decided 2026-10-13: Amir has a Cloud project + service account,
+and a company ad account has no reason to depend on one person's Google login). `lib/ads/google.ts` signs an RS256
+JWT with the key in `GOOGLE_ADS_SERVICE_ACCOUNT_JSON` for the `adwords` scope and calls REST `googleAds:searchStream`
+with `developer-token` (+ `login-customer-id` when `GOOGLE_ADS_LOGIN_CUSTOMER_ID` is set). Env:
+`GOOGLE_ADS_SERVICE_ACCOUNT_JSON` (key file as one-line JSON or base64), `GOOGLE_ADS_DEVELOPER_TOKEN`,
+`GOOGLE_ADS_CUSTOMER_ID` (the ad account), optional `GOOGLE_ADS_LOGIN_CUSTOMER_ID`, `GOOGLE_ADS_API_VERSION` (default
+`v21`; bump when Google retires it). Operator steps: enable the Google Ads API in the project, create a JSON key for
+the service account, invite the service account email as a (read-only) user in Google Ads → Admin → Access and
+security, get the developer token from a MANAGER account's API Center (a test token only reads test accounts; Basic
+access is needed for the live account). "Verify access" on the connectors page runs `SELECT customer.id,
+customer.descriptive_name, customer.currency_code FROM customer` and shows what it sees. Metrics query (per day, per
+campaign, status != REMOVED):
 `SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, segments.date,
 metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM campaign WHERE segments.date
 BETWEEN …` via `customers/{id}/googleAds:searchStream` (REST, no SDK, same raw-fetch style as `lib/google-oauth.ts`).
 Accounts are listed with `customers:listAccessibleCustomers` at connect time; the user picks which to attach.
 
-**LinkedIn Ads.** New LinkedIn developer app on the Zeami company page, **Advertising API** product (review takes
-days to weeks — apply now). 3-legged OAuth, scopes `r_ads`, `r_ads_reporting` (+ `r_organization_social` for
-page-level), callback `/api/marketing/connectors/linkedin_ads/callback`. Tokens expire in 60 days; request
-programmatic refresh tokens (365 d) and refresh on read, same as `getValidAccessToken`. Pull = `adAnalytics?q=
+**LinkedIn Ads — 3-legged OAuth** (`lib/ads/linkedin.ts`). Env: `LINKEDIN_ADS_CLIENT_ID`, `LINKEDIN_ADS_CLIENT_SECRET`,
+`LINKEDIN_ADS_ACCOUNT_ID` (the company ad account; digits or urn), optional `LINKEDIN_API_VERSION` (default `202509`).
+The app needs the **Advertising API** product approved (review takes days to weeks) and the redirect URL
+`<app url>/api/marketing/connectors/linkedin_ads/callback` registered. Scopes `r_ads`, `r_ads_reporting`. One teammate
+with Viewer+ access connects; the token row (`oauth_tokens.provider='linkedin_ads'`) is used org-wide (newest wins).
+Access tokens last 60 days; refresh works only if the app has programmatic refresh tokens, otherwise the page says
+"reconnect". Pull = `adAnalytics?q=
 analytics&pivot=CAMPAIGN&timeGranularity=DAILY&dateRange=…&accounts=List(urn:li:sponsoredAccount:N)&fields=
 impressions,clicks,costInLocalCurrency,externalWebsiteConversions,oneClickLeads` with the versioned headers
 (`LinkedIn-Version: YYYYMM`, `X-Restli-Protocol-Version: 2.0.0`); campaigns via `adCampaigns?q=search`.
 
-Both connectors: `connect` route → consent screen → `callback` writes `oauth_tokens` + lets the user pick accounts →
-`ad_accounts`. The Connectors page already shows the env check; it gains the account picker and a "Pull now".
+Live read today: `GET /api/marketing/overview?days=` calls both libraries (10-min per-process cache, each provider
+carries its own `ok`/`error`, yesterday is the last day because platforms close a day late). Round 2 keeps the same
+response shape but serves it from `ad_metrics_daily`, and `ad_accounts` replaces the two env ids when we have more
+than one account per platform.
 
 ## 4. Sync — the Hermes cron, the kernel, the tools
 
@@ -136,7 +152,8 @@ CRM; the privacy notice on zeami.io must name advertising measurement.
 | Round | Scope | Repos | Migrations |
 |---|---|---|---|
 | 1 ✅ | Nav group, `/marketing`, `/marketing/connectors`, connector API contract, this plan | app | — |
-| 2 | Tables 055–057, Google Ads + LinkedIn Ads OAuth + account picker, `ads_sync` cron, kernel commands + 3 tools, public form captures UTM/click ids, Lead Gen Forms | core, hermes, app | 055 ad tables, 056 touchpoints, 057 policy + outbox |
+| 1b ✅ | Google Ads service-account reader, LinkedIn Ads OAuth + reader, live overview (no storage) | app | — |
+| 2 | Tables 055–057, `ads_sync` cron (stores what 1b reads live), multi-account picker, kernel commands + 3 tools, public form captures UTM/click ids, Lead Gen Forms | core, hermes, app | 055 ad tables, 056 touchpoints, 057 policy + outbox |
 | 3 | Reporting: tiles with real numbers, funnel, campaign table, campaign page, source chip on `/sales-leads`, costs line, ads line in the attention digest | app, core | — |
 | 4 | Offline conversion upload (Google + LinkedIn), unattributed-leads review, ICP ↔ campaign link in the ICP panel | core, hermes, app | — |
 

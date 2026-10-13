@@ -1,34 +1,40 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { AD_PROVIDERS, PROVIDER_META, type ConnectorStatus } from '@/lib/marketing';
+import type { ConnectorStatus } from '@/lib/marketing';
+import { googleAdsEnvMissing, serviceAccount } from '@/lib/ads/google';
+import { linkedInAdsEnvMissing } from '@/lib/ads/linkedin';
 
 /**
- * Which ad platforms the current user has connected, and whether the server is
- * configured to start each connect flow. Ad credentials live in `oauth_tokens`
- * next to the Gmail connection, keyed by provider 'google_ads' / 'linkedin_ads'.
+ * Connector state for the org. Google Ads is a service account configured in
+ * env (connected = env complete); LinkedIn Ads is connected when any teammate's
+ * token is stored (the ad account is the company's, so one token serves all).
  */
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { rows } = await pool.query(
-    `SELECT provider, account_email, created_at
-       FROM oauth_tokens
-      WHERE user_id = $1 AND provider = ANY($2::text[])`,
-    [session.userId, AD_PROVIDERS],
+    `SELECT account_email, created_at FROM oauth_tokens WHERE provider = 'linkedin_ads' ORDER BY updated_at DESC NULLS LAST, created_at DESC LIMIT 1`,
   );
-  const byProvider = new Map(rows.map((r) => [r.provider as string, r]));
+  const li = rows[0];
+  const gMissing = googleAdsEnvMissing();
 
-  const connectors: ConnectorStatus[] = AD_PROVIDERS.map((p) => {
-    const row = byProvider.get(p);
-    return {
-      provider: p,
-      connected: !!row,
-      account_email: row?.account_email ?? null,
-      connected_at: row?.created_at ? new Date(row.created_at).toISOString() : null,
-      missing_env: PROVIDER_META[p].env.filter((k) => !process.env[k]),
-    };
-  });
+  const connectors: ConnectorStatus[] = [
+    {
+      provider: 'google_ads', auth: 'service_account',
+      connected: gMissing.length === 0,
+      account_label: serviceAccount()?.client_email ?? null,
+      connected_at: null,
+      missing_env: gMissing,
+    },
+    {
+      provider: 'linkedin_ads', auth: 'oauth',
+      connected: !!li,
+      account_label: li?.account_email ?? null,
+      connected_at: li?.created_at ? new Date(li.created_at).toISOString() : null,
+      missing_env: linkedInAdsEnvMissing(),
+    },
+  ];
   return NextResponse.json({ connectors });
 }

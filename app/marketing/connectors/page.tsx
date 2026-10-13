@@ -7,11 +7,17 @@
  * env check, so the page never says "ready" when the server is not).
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import { AD_PROVIDERS, PROVIDER_META, type ConnectorStatus } from '@/lib/marketing';
 
 export default function AdConnectorsPage() {
+  return <Suspense fallback={null}><Connectors /></Suspense>;
+}
+
+function Connectors() {
+  const params = useSearchParams();
   const [connectors, setConnectors] = useState<ConnectorStatus[] | null>(null);
   const [notice, setNotice] = useState<{ provider: string; text: string; error: boolean } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -23,22 +29,29 @@ export default function AdConnectorsPage() {
       .catch(() => setConnectors([]));
   }, []);
   useEffect(() => { load(); }, [load]);
+  // Landing back from the LinkedIn consent screen.
+  useEffect(() => {
+    const ok = params.get('connected'); const err = params.get('error');
+    if (ok) setNotice({ provider: ok, error: false, text: 'Connected. The Marketing page now reads this account.' });
+    else if (err) setNotice({ provider: 'linkedin_ads', error: true, text: `Connect failed: ${err}` });
+  }, [params]);
 
   const connect = async (provider: string) => {
     setBusy(provider); setNotice(null);
+    const meta = PROVIDER_META[provider as keyof typeof PROVIDER_META];
+    if (meta.auth === 'oauth') { window.location.href = `/api/marketing/connectors/${provider}/connect`; return; }
     try {
-      const res = await fetch(`/api/marketing/connectors/${provider}/connect`, { redirect: 'manual' });
-      if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) {
-        window.location.href = `/api/marketing/connectors/${provider}/connect`;
-        return;
-      }
+      // Service account: the route verifies access with one API call.
+      const res = await fetch(`/api/marketing/connectors/${provider}/connect`);
       const body = await res.json().catch(() => ({}));
-      const missing: string[] = body.missing_env ?? [];
-      setNotice({
-        provider,
-        error: true,
-        text: missing.length ? `${body.error}. Missing: ${missing.join(', ')}` : (body.error ?? `HTTP ${res.status}`),
-      });
+      if (res.ok && body.verified) {
+        const v = body.verified as { customer_id: string; name: string | null; currency: string | null };
+        setNotice({ provider, error: false, text: `Verified: ${v.name ?? 'account'} ${v.customer_id}${v.currency ? ` · ${v.currency}` : ''}` });
+        load();
+      } else {
+        const missing: string[] = body.missing_env ?? [];
+        setNotice({ provider, error: true, text: missing.length ? `${body.error}. Missing: ${missing.join(', ')}` : (body.error ?? `HTTP ${res.status}`) });
+      }
     } finally { setBusy(null); }
   };
 
@@ -80,7 +93,7 @@ export default function AdConnectorsPage() {
 
                 {st?.connected && (
                   <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                    Connected as <span style={{ color: 'var(--text)' }}>{st.account_email ?? 'unknown account'}</span>
+                    {meta.auth === 'service_account' ? 'Service account ' : 'Connected by '}<span style={{ color: 'var(--text)' }}>{st.account_label ?? 'unknown account'}</span>
                     {st.connected_at && <> · since {new Date(st.connected_at).toLocaleDateString()}</>}
                   </p>
                 )}
@@ -88,19 +101,19 @@ export default function AdConnectorsPage() {
                 {!loading && !st?.connected && st && st.missing_env.length > 0 && (
                   <div className="rounded-lg p-2.5 text-xs" style={{ background: 'color-mix(in srgb, var(--yellow) 12%, transparent)', color: 'var(--text)' }}>
                     <div className="font-medium">Server not configured</div>
-                    <div className="mt-0.5" style={{ color: 'var(--text-muted)' }}>Set on the server: <code>{st.missing_env.join(', ')}</code></div>
+                    <div className="mt-0.5" style={{ color: 'var(--text-muted)' }}>Set in <code>.env.local</code> (dev) / GitHub secrets (prod): <code>{st.missing_env.join(', ')}</code></div>
                   </div>
                 )}
 
                 <details className="text-xs">
-                  <summary className="cursor-pointer" style={{ color: 'var(--text-muted)' }}>What connecting asks for, and what has to exist first</summary>
+                  <summary className="cursor-pointer" style={{ color: 'var(--text-muted)' }}>{meta.auth === 'oauth' ? 'What connecting asks for, and what has to exist first' : 'How the service account gets access'}</summary>
                   <div className="mt-2 space-y-2" style={{ color: 'var(--text-muted)' }}>
                     <div>
-                      <div className="z-eyebrow mb-1">Scopes requested</div>
+                      <div className="z-eyebrow mb-1">{meta.auth === 'oauth' ? 'Scopes requested' : 'API scope used'}</div>
                       <ul className="list-disc pl-4 space-y-0.5">{meta.scopes.map((s) => <li key={s}><code>{s}</code></li>)}</ul>
                     </div>
                     <div>
-                      <div className="z-eyebrow mb-1">Before the first connect</div>
+                      <div className="z-eyebrow mb-1">Setup outside this app</div>
                       <ul className="list-disc pl-4 space-y-0.5">{meta.prerequisites.map((p) => <li key={p}>{p}</li>)}</ul>
                     </div>
                     <a href={meta.docs} target="_blank" rel="noreferrer" className="underline" style={{ color: 'var(--accent)' }}>Platform API docs ↗</a>
@@ -112,12 +125,18 @@ export default function AdConnectorsPage() {
                 )}
 
                 <div className="flex gap-2 mt-auto">
-                  {st?.connected ? (
-                    <button onClick={() => disconnect(id)} disabled={busy === id} className="px-3 py-1.5 rounded-lg text-sm" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
-                      Disconnect
+                  {meta.auth === 'service_account' ? (
+                    <button onClick={() => connect(id)} disabled={loading || busy === id || !ready} className="px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-50" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+                      title={ready ? 'Make one read call to confirm the service account can see the ad account' : 'Set the env vars first'}>
+                      {busy === id ? 'Checking…' : 'Verify access'}
                     </button>
+                  ) : st?.connected ? (
+                    <>
+                      <button onClick={() => connect(id)} disabled={busy === id} className="px-3 py-1.5 rounded-lg text-sm font-medium" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>Reconnect</button>
+                      <button onClick={() => disconnect(id)} disabled={busy === id} className="px-3 py-1.5 rounded-lg text-sm" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Disconnect</button>
+                    </>
                   ) : (
-                    <button onClick={() => connect(id)} disabled={loading || busy === id} className="px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-50" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
+                    <button onClick={() => connect(id)} disabled={loading || busy === id || !ready} className="px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-50" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
                       {busy === id ? 'Starting…' : `Connect ${meta.label}`}
                     </button>
                   )}

@@ -1003,6 +1003,17 @@ zeami.io form, daily restated metrics, offline conversions back to the platforms
   `GET /api/marketing/connectors` (reads `oauth_tokens` rows `provider in ('google_ads','linkedin_ads')`),
   `GET …/[provider]/connect` (501 + `missing_env[]` until round 2 adds the redirect/callback), `POST …/[provider]/disconnect`.
   Sidebar active state is now longest-prefix, so a parent item is not lit on its child route.
+- **Round 1b (same day)**: the connectors work. Google Ads = **service account** (Amir has a Cloud project + service
+  account; env `GOOGLE_ADS_SERVICE_ACCOUNT_JSON` / `_DEVELOPER_TOKEN` / `_CUSTOMER_ID` / optional `_LOGIN_CUSTOMER_ID`;
+  RS256 JWT → `googleAds:searchStream` GAQL, `lib/ads/google.ts`; "Verify access" = one `FROM customer` query).
+  LinkedIn Ads = OAuth (`LINKEDIN_ADS_CLIENT_ID` / `_CLIENT_SECRET` / `_ACCOUNT_ID`; scopes `r_ads r_ads_reporting`;
+  callback `/api/marketing/connectors/linkedin_ads/callback`; token in `oauth_tokens` provider `linkedin_ads`, newest row
+  used org-wide; `adAnalytics` pivot CAMPAIGN daily, `lib/ads/linkedin.ts`). `GET /api/marketing/overview?days=` reads
+  both LIVE (10-min cache, per-provider `ok`/`error`) and `/marketing` shows spend / impressions / clicks / CTR / CPC per
+  campaign + spend sparkline; Leads / Cost per lead / Pipeline stay "—" until touchpoints exist (platform conversions are
+  shown greyed "as reported"). API versions pinned by env (`GOOGLE_ADS_API_VERSION` v21, `LINKEDIN_API_VERSION` 202509)
+  — bump when a platform retires one. `deploy.yml` writes the seven new secrets. **Unverified against live accounts**:
+  both request/response shapes were written from the API docs; the first "Verify access" / Connect tells.
 - **Rounds 2–4 (planned, not built)**: core migrations 055 (`ad_accounts`, `ad_campaigns`, `ad_metrics_daily`),
   056 (`lead_touchpoints`), 057 (`agents.ads_sync` policy + `ad_conversion_outbox`); OAuth flows (Google: existing client
   + `adwords` scope + developer token + MCC id; LinkedIn: new app, Advertising API approval, `r_ads_reporting`);
