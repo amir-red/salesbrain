@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Sidebar from '@/components/Sidebar';
 import { dueLabel, formatDate } from '@/lib/time';
+import { LinkedInFollowups } from '@/components/followups/LinkedInFollowups';
 
 interface Followup {
   id: string;
@@ -34,7 +35,7 @@ function TypeBadge({ type }: { type: string }) {
   return (
     <span
       className="text-[10px] px-1.5 py-0.5 rounded"
-      style={{ background: `${colors[type] || 'var(--text-muted)'}20`, color: colors[type] || 'var(--text-muted)' }}
+      style={{ background: `color-mix(in srgb, ${colors[type] || 'var(--text-muted)'} 14%, transparent)`, color: colors[type] || 'var(--text-muted)' }}
     >
       {type}
     </span>
@@ -47,6 +48,8 @@ export default function FollowupsPage() {
   const [tab, setTab] = useState<Tab>('pending');
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [liCounts, setLiCounts] = useState({ pending: 0, sent: 0 });
+  const onLiCounts = useCallback((pending: number, sent: number) => setLiCounts({ pending, sent }), []);
 
   // New followup form state
   const [formDealId, setFormDealId] = useState('');
@@ -136,7 +139,7 @@ export default function FollowupsPage() {
           <div>
             <h1 className="text-lg font-bold">Followups</h1>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              {pending.length} pending, {sent.length} sent
+              {liCounts.pending} LinkedIn follow-ups due · {pending.length} deal follow-ups pending · {sent.length + liCounts.sent} sent
             </p>
           </div>
           <button
@@ -234,7 +237,7 @@ export default function FollowupsPage() {
                 borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent',
               }}
             >
-              {t} ({t === 'pending' ? pending.length : sent.length})
+              {t} ({t === 'pending' ? pending.length + liCounts.pending : sent.length + liCounts.sent})
             </button>
           ))}
         </div>
@@ -243,7 +246,9 @@ export default function FollowupsPage() {
         <div className="p-4">
           {loading && <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading...</p>}
 
-          {!loading && displayed.length === 0 && (
+          <LinkedInFollowups tab={tab} onCounts={onLiCounts} />
+
+          {!loading && displayed.length === 0 && (tab === 'pending' ? liCounts.pending : liCounts.sent) === 0 && (
             <div className="text-center py-12">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="1.5" className="mx-auto mb-3">
                 <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
@@ -254,6 +259,9 @@ export default function FollowupsPage() {
             </div>
           )}
 
+          {tab === 'pending' && displayed.length > 0 && liCounts.pending > 0 && (
+            <h3 className="text-xs font-medium uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Deal follow-ups</h3>
+          )}
           {tab === 'pending' ? (
             Array.from(grouped.entries()).map(([label, items]) => (
               <div key={label} className="mb-6">

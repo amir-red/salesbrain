@@ -962,6 +962,25 @@ said only "N new connections accepted", no names, no next step; the loop closed 
 - Not built: a per-list toggle to skip cards for people the owner excluded (today: 👎 on the card), a reminder
   when a card sits unanswered, and the same loop for email-only leads.
 
+### 5.ah.5 `/followups` = the LinkedIn follow-up board (2026-10-13, 0.42.3, app + one kernel line)
+
+Amir: "delete all of the previous ones and add a follow-up from LinkedIn automatically." The 113 stale deal reminders /
+SLA alerts (Apr–Sep) were deleted (backup `~/.cache/salesbrain/backups/followups-2026-10-13144118.json`); the deal
+follow-up form/table stay for manual use.
+- **Kernel**: `mark_approval_result` now arms `prospects.next_followup_at` on EVERY sent message (was: only when
+  `agents.followup.enabled`). The flag still gates the outreach routine's auto-drafting (`outreach_queue.py` reads it
+  before `followup_queue`), so with it off the page is the only driver. Backfilled for the 18 unanswered NRW leads.
+- **App**: `GET /api/followups/linkedin` (direct SQL, one client; admin = all owners, else own) = P5_SENT, not
+  converted, timer set or a pending `kind='followup'` draft; carries last sent message, thread id, owner, touch N of
+  max. `components/followups/LinkedInFollowups.tsx` groups by due label ("Awaiting approval" first) with **Draft
+  follow-up** → `POST /api/prospects/[id]/followup {action:'draft'}` (model, same language as the last message, ≤60
+  words, one new useful thing; feature `followup_draft`) → editable → **Queue for approval** (`{action:'propose'}` →
+  `crm_outreach_propose kind='followup' linkedin_thread_id` as the lead's OWNER via `lib/act-as`; the card goes to the
+  owner's Telegram / `/agents`, the send gate consumes it) and **Skip** (`{action:'skip'}` clears the timer). A reply
+  clears the timer (`record_reply`), so answered people drop off by themselves.
+- Not built: email follow-ups on the board (`followup_queue` covers them; the page is LinkedIn-only), a reminder when
+  a card sits unapproved, enabling the agent to draft by itself (`agents.followup.enabled`).
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
