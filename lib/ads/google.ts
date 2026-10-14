@@ -5,7 +5,7 @@
  * signs an RS256 JWT for the `adwords` scope → short-lived access token. The
  * service account email must be a user on the ad account (Admin → Access).
  * API: REST `googleAds:searchStream` with a GAQL query. Version pinned in
- * GOOGLE_ADS_API_VERSION (default v21 — Google retires each version ~12 months
+ * GOOGLE_ADS_API_VERSION (default v23 — Google retires each version ~12 months
  * after release; bump when the API answers 404 for the version).
  */
 import { createSign } from 'crypto';
@@ -66,27 +66,51 @@ async function accessToken(): Promise<string> {
 
 const digits = (s: string) => s.replace(/\D/g, '');
 
+// Whether the manager id in GOOGLE_ADS_LOGIN_CUSTOMER_ID is the right door. When the
+// service account was invited on the AD ACCOUNT itself (not on the manager), Google
+// answers 403 with the header set and 200 without it — so a 403 with the header
+// triggers one retry without it, and the answer is remembered for the process.
+let loginHeaderWorks: boolean | null = null;
+
 async function searchStream<T = Record<string, unknown>>(query: string): Promise<T[]> {
-  const version = process.env.GOOGLE_ADS_API_VERSION || 'v21';
+  const version = process.env.GOOGLE_ADS_API_VERSION || 'v23';
   const customer = digits(process.env.GOOGLE_ADS_CUSTOMER_ID || '');
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${await accessToken()}`,
-    'developer-token': process.env.GOOGLE_ADS_DEVELOPER_TOKEN || '',
-    'Content-Type': 'application/json',
+  const login = process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID ? digits(process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID) : '';
+  const token = await accessToken();
+
+  const call = async (withLogin: boolean) => {
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+      'developer-token': process.env.GOOGLE_ADS_DEVELOPER_TOKEN || '',
+      'Content-Type': 'application/json',
+    };
+    if (withLogin && login) headers['login-customer-id'] = login;
+    return fetch(`https://googleads.googleapis.com/${version}/customers/${customer}/googleAds:searchStream`, {
+      method: 'POST', headers, body: JSON.stringify({ query }),
+    });
   };
-  const login = process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID;
-  if (login) headers['login-customer-id'] = digits(login);
-  const res = await fetch(`https://googleads.googleapis.com/${version}/customers/${customer}/googleAds:searchStream`, {
-    method: 'POST', headers, body: JSON.stringify({ query }),
-  });
+
+  let useLogin = !!login && loginHeaderWorks !== false;
+  let res = await call(useLogin);
+  if (res.status === 403 && useLogin) {
+    const retry = await call(false);
+    if (retry.ok) { loginHeaderWorks = false; res = retry; useLogin = false; }
+  } else if (res.ok && useLogin) {
+    loginHeaderWorks = true;
+  }
+
   if (!res.ok) {
     const text = await res.text();
     let msg = text.slice(0, 400);
-    try {
-      const j = JSON.parse(text);
-      const e = Array.isArray(j) ? j[0]?.error : j.error;
-      msg = e?.details?.[0]?.errors?.[0]?.message || e?.message || msg;
-    } catch { /* keep raw */ }
+    if (res.status === 404 && text.startsWith('<')) {
+      msg = `API version ${version} is not served — set GOOGLE_ADS_API_VERSION to a current one`;
+    } else {
+      try {
+        const j = JSON.parse(text);
+        const e = Array.isArray(j) ? j[0]?.error : j.error;
+        msg = e?.details?.[0]?.errors?.[0]?.message || e?.message || msg;
+      } catch { /* keep raw */ }
+    }
     throw new Error(`Google Ads API ${res.status}: ${msg}`);
   }
   const batches = (await res.json()) as Array<{ results?: T[] }>;
