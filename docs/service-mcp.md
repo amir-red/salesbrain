@@ -355,7 +355,7 @@ employee's data.
 | | `crm_followups_due` | read | Who needs a follow-up, per teammate or all |
 | **Inbox & deals** | `crm_list_sales_leads` | read | The sales-leads inbox (new / contacted / replied / …) |
 | | `crm_get_sales_lead` | read | One inbox row in full |
-| | `crm_update_sales_lead` | write | Set its status / append a note |
+| | `crm_update_sales_lead` | write | Work the row: status, track-record line, priority, ★, responsible/front, next contact, where met |
 | | `crm_lead_note` | write | Dated note (or meeting / call) on a lead's dossier |
 | | `crm_convert_lead` | write | Inbox row → G1 deal |
 | | `crm_prospect_convert` | write | Prospect → G1 deal |
@@ -580,8 +580,13 @@ dossier; `kind` meeting / call / email / linkedin also logs an outbound interact
 (several → `candidates[]`). Appended to the lead's /sales-leads row when it has one. Sends nothing.
 
 **`crm_list_sales_leads`** · read / **`crm_get_sales_lead`** · read / **`crm_update_sales_lead`** · write /
-**`crm_convert_lead`** · write — the team's inbox (`/sales-leads`): list by status, read one, set status
-(new | contacted | replied | archived) or append a note, convert to a G1 deal owned by this employee.
+**`crm_convert_lead`** · write — the team's lead dashboard (`/sales-leads`): list by status or by the dashboard views
+`working` (open leads ranked by priority, must-talk first) and `due` (ping-by date reached or quiet 14+ days); read one
+(the row plus its dated `track_record`); work it — `status` (new | contacted | replied | archived), a track-record `note`
+(`note_kind` note | met | sent | reply | call | meeting, the last five are CONTACT events that move the "last contact"
+ticker; `channel`, `occurred_at` YYYY-MM-DD backdates), `priority` 1 (top) … 10 (0 clears), `must_talk`, `responsible`
+(back office, drives the lead) / `front` (the face in calls) by teammate name, `next_contact_at`, `met_at` — any
+combination; convert to a G1 deal owned by this employee.
 
 **`crm_prospect_convert`** · write — `{prospect_id*, deal_name?, value?}` promotes one of this employee's prospects to
 a G1 deal (idempotent).
@@ -867,6 +872,14 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 ---
 
 ## 12. Changelog
+
+### 2026-10-14 — the lead dashboard
+
+`/sales-leads` is now the team's daily list (core 056): **`crm_list_sales_leads`** gains the views `working` and `due`
+and returns priority, must_talk, responsible / front, last and next contact and `days_since_contact`;
+**`crm_get_sales_lead`** returns the dated `track_record`; **`crm_update_sales_lead`** takes priority, must_talk,
+responsible / front (by name), next_contact_at, met_at and typed track-record lines (`note_kind`, `channel`,
+`occurred_at`). "Set Barlog to P1, we spoke on the phone today, ping again Friday" is one call. Tool count unchanged.
 
 ### 2026-10-14 — the assistant batch
 

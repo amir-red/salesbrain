@@ -406,7 +406,9 @@ export const SERVICE_TOOLS: ToolDef[] = [
     name: 'crm_list_sales_leads',
     description:
       "The team's inbound / sales-leads inbox (org-wide): zeami.io demo requests, Calendly bookings, every lead " +
-      "we messaged or who replied, and hand-added cards. status: new (default) | contacted | replied | converted | archived | all.",
+      "we messaged or who replied, and hand-added cards. status: new (default) | contacted | replied | converted | archived | all, " +
+      "or the dashboard views working (open leads ranked by priority) and due (ping-by date reached or quiet 14+ days). " +
+      "Rows carry priority, must_talk, responsible/front, last/next contact and days_since_contact.",
     inputSchema: obj({ status: { type: 'string', default: 'new' }, limit: { type: 'integer', default: 20 } }),
     needsOwner: true,
   },
@@ -419,10 +421,26 @@ export const SERVICE_TOOLS: ToolDef[] = [
   {
     name: 'crm_update_sales_lead',
     description:
-      "Triage a sales-leads row: set status new | contacted | replied | archived and/or append a dated note. " +
+      "Work a sales-leads row the way the dashboard does: status new | contacted | replied | archived; a dated " +
+      "track-record line (note_kind 'note', or a contact event met | sent | reply | call | meeting that moves the " +
+      "'last contact' ticker; occurred_at YYYY-MM-DD backdates it); priority 1 (top) … 10 (0 clears); must_talk; " +
+      "responsible / front teammate by name; next_contact_at YYYY-MM-DD; met_at (where we met). Any combination. " +
       "Converting is crm_convert_lead.",
     inputSchema: obj(
-      { lead_id: { type: 'string' }, status: { type: 'string', enum: ['new', 'contacted', 'replied', 'archived'] }, note: { type: 'string' } },
+      {
+        lead_id: { type: 'string' },
+        status: { type: 'string', enum: ['new', 'contacted', 'replied', 'archived'] },
+        note: { type: 'string' },
+        note_kind: { type: 'string', enum: ['note', 'met', 'sent', 'reply', 'call', 'meeting'], default: 'note' },
+        channel: { type: 'string', enum: ['linkedin', 'email', 'phone', 'in_person', 'telegram', 'whatsapp'] },
+        occurred_at: { type: 'string' },
+        priority: { type: 'integer' },
+        must_talk: { type: 'boolean' },
+        responsible: { type: 'string' },
+        front: { type: 'string' },
+        next_contact_at: { type: 'string' },
+        met_at: { type: 'string' },
+      },
       ['lead_id'],
     ),
     needsOwner: true,

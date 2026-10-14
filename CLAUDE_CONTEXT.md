@@ -1125,6 +1125,44 @@ tools. Service MCP: those six + `crm_list_sales_leads`, `crm_get_sales_lead`, `c
 exposed as passthroughs — 49 tools. Live check 2026-10-14: pipeline 51 active deals, Fedler → "not contacted yet",
 "Barlog" → two candidates (Frank/Mateo, Peter/Matthias), Matthias 18 follow-ups due.
 
+### 5.ai.4 /sales-leads = the lead dashboard (2026-10-14, feat/sales-leads-v2, core/hermes 0.47.0, migration 056)
+
+Mateo + Amir call 2026-10-13 ("Sales / Fakuma follow-up"): the page was "a lot of text, not grippy". Design taken from
+Mateo's PEI Napa CRM html (`~/Downloads/Telegram Desktop/PEI_Napa_CRM_for_Amir/`): one line per lead, an editable
+priority (1 = top) and a ★ must-talk that SORT the list, a "N days since we last talked" ticker (amber ≥14 d, red ≥30 d)
+and a "ping again on" date, who is responsible (**back office drives the lead, front office is the face in calls** —
+Mateo's rule; Hannes = back office on Mateo's account), where we met, a short dossier so nobody opens LinkedIn mid-call,
+and a dated **track record** per lead that people and the agent both read and append to. Dropped from Mateo's design on
+his say-so: the "read" / "info requested" checkboxes.
+- **Core 056**: `sales_leads` + `priority`, `must_talk`, `responsible_user_id`, `front_user_id`, `last_contact_at`,
+  `next_contact_at`, `met_at`, `title`, `linkedin_url`, `notes` (free textarea), `dossier` JSONB (talking_points,
+  relevance, firm_summary, chronology, interesting, sources, tier). NEW `sales_lead_events` (kind met | sent | reply |
+  call | meeting = CONTACT kinds that move `last_contact_at` forward; note | status | priority | assign | import =
+  bookkeeping; channel, actor, ref). The migration backfills: the dated paragraphs 054 appended to `description` →
+  events; sends/replies from `outreach_approvals` / `reply_events` the mirror never saw; `responsible` = the prospect's
+  owner; the ticker. Verified in a rolled-back transaction before merge: 51 events, 26 tickers, 40 owners.
+- **Kernel** `commands/sales_leads.py`: `add_event` is the one writer; `upsert_sales_lead` / `append_if_mirrored` write
+  events instead of description paragraphs (the callers' `line` contract is unchanged — the "YYYY-MM-DD: " prefix becomes
+  the event date). `deals.update_sales_lead` takes every dashboard field (teammates resolved by name via
+  `kpis.resolve_owner`; each change that matters is also a `status` / `priority` / `assign` event); `list_sales_leads`
+  gains views `working` (open, ranked) and `due` (ping-by reached or quiet 14+ days); `get_sales_lead` returns
+  `track_record`. `lookup.record_note` kinds meeting / call / email / linkedin are contact events now.
+- **Ring + service MCP**: `crm_update_sales_lead` / `crm_list_sales_leads` schemas extended, tool counts unchanged.
+- **App**: `GET /api/sales-leads?view=working|due|must|new|…&sort=priority|contact|newest&q=&mine=1` (one client, three
+  sequential queries, returns `users` for the pickers); `GET/PATCH /api/sales-leads/[id]` — PATCH routes everything but
+  the free `notes` through `crm_update_sales_lead` so UI and agent edits are audited and land on the track record the same
+  way. `lib/sales-leads.ts` (contract + ticker/ping-by helpers), `components/sales-leads/{LeadRow,LeadDetail}.tsx`,
+  `app/sales-leads/page.tsx` rewritten (summary strip, sticky search + view chips + Mine + sort, inline priority / ★ /
+  LinkedIn, expand → talking points, who they are, why relevant, firm, track record + add-a-line, notes autosave, right
+  rail with back/front office, ping-by + quick +1/3/7/14 d, where met, status / convert / archive).
+- **Mateo's Napa contacts**: `scripts/import-napa-leads.mjs <PEI_Napa_Contacts_and_Notes.json> [--apply] [--all]`
+  (dry run default; engaged subset = 125 of 453: 45 ranked, 43 starred, 9 replied, 28 contacted; `--all` = 447 as
+  unranked new). Owner + front default `mateo@chipchip.social` (the real Mateo user), `source='event:pei-napa-2026'`,
+  dossier from the research, track record from his notes / messages / replies, `met_at='PEI Napa 2026'`. Run by the
+  integration session AFTER 056, then decide with Mateo on `--all`.
+- Not built: Hannes's LinkedIn (he connects it on /profile), the agent's morning digest listing `due` leads, a per-row
+  "draft follow-up" button (the /followups board does that for P5 prospects), re-ordering by drag.
+
 ### 5.aj Marketing — paid ads inside the CRM (2026-10-13, feat/marketing, round 1 app-only)
 
 Amir: "we are starting ads in Google Ads and LinkedIn Ads — add a marketing menu, connectors, pull our performance

@@ -787,3 +787,32 @@ CREATE TABLE IF NOT EXISTS external_employees (
 );
 CREATE INDEX IF NOT EXISTS idx_external_employees_user
   ON external_employees(salesbrain_user_id);
+
+-- core migration 056 (2026-10-14): /sales-leads becomes the team's lead
+-- dashboard. Priority / must-talk / responsible (back office) / front office /
+-- last+next contact / where met / dossier on sales_leads, and the dated track
+-- record in sales_lead_events. Source of truth: salesbrain-core/migrations/056.
+ALTER TABLE sales_leads
+  ADD COLUMN IF NOT EXISTS priority SMALLINT CHECK (priority BETWEEN 1 AND 10),
+  ADD COLUMN IF NOT EXISTS must_talk BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS responsible_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS front_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS last_contact_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS next_contact_at DATE,
+  ADD COLUMN IF NOT EXISTS met_at TEXT,
+  ADD COLUMN IF NOT EXISTS title TEXT,
+  ADD COLUMN IF NOT EXISTS linkedin_url TEXT,
+  ADD COLUMN IF NOT EXISTS notes TEXT,
+  ADD COLUMN IF NOT EXISTS dossier JSONB;
+CREATE TABLE IF NOT EXISTS sales_lead_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  lead_id UUID NOT NULL REFERENCES sales_leads(id) ON DELETE CASCADE,
+  occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  kind TEXT NOT NULL CHECK (kind IN ('met', 'sent', 'reply', 'call', 'meeting', 'note', 'status', 'priority', 'assign', 'import')),
+  channel TEXT,
+  actor_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  text TEXT NOT NULL,
+  ref JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_sales_lead_events_lead ON sales_lead_events (lead_id, occurred_at DESC);
