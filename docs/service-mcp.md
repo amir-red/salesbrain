@@ -110,7 +110,7 @@ Four JSON-RPC methods:
 | Method | Purpose |
 |---|---|
 | `initialize` | Handshake — returns server info + protocol version. |
-| `tools/list` | The catalog (38 tools) with JSON-Schema for each. |
+| `tools/list` | The catalog (39 tools) with JSON-Schema for each. |
 | `tools/call` | Invoke one tool. This is where the work happens. |
 | `ping` | Health check. |
 
@@ -348,6 +348,7 @@ employee's data.
 | | `crm_prospect_add` | write | Add one lead by hand (business card, event note, referral). Never duplicates |
 | | `list_leads` | read | The lead list, filterable by ICP, stage and fit |
 | **Visibility** | `crm_outreach_kpis` | read | Stand-up numbers for any teammate by name (requests, messages, replies, research) |
+| | `marketing_overview` | read | Google Ads + LinkedIn Ads spend, clicks, CTR, CPC per campaign, live |
 | | `get_run_status` | read | Poll a queued or finished run. The poll loop |
 | | `crm_agent_activity` | read | Recent runs and why a tick was skipped |
 | | `crm_agent_status` | read | Agent switches, caps, `sourcing_paused`, paused accounts |
@@ -500,6 +501,14 @@ stage, research summary, reachability.
   (researched, emails_found, profiles_found, employers_found, searches, leads_found), `calls` (calls_booked,
   converted), `linkedin` (connected_accounts, last_synced_at). Aggregates only — it never names a lead, which is
   why any employee may ask about any teammate.
+
+**`marketing_overview`** · read — Paid-ads performance for the last N closed days, read live from Google Ads and
+LinkedIn Ads (10-minute cache). Org-wide, no employee data.
+- `days` — closed days to cover, 1–365 (default 7) · `include_daily` — also return per-day rows
+- Returns `totals[]` per provider (`spend`, `impressions`, `clicks`, `ctr`, `cpc`, `platform_conversions`,
+  `platform_leads`, `spend_last_day`, `spend_day_before`, `currency`, and `ok` / `error` — "not configured" or "not
+  connected" when a provider is not wired yet), `campaigns[]` with the same fields per campaign, and `daily[]` on
+  request. Platforms close a day late: `until` is yesterday.
 
 **`get_run_status`** · read — Track a queued or finished run: `status`, `done`, counts, the skip `reason`
 verbatim, `error`, `lead_count`, plus (while pending) `queued_runs` and `next_tick_window`, and always
@@ -821,6 +830,11 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 ---
 
 ## 12. Changelog
+
+### 2026-10-14 — marketing numbers
+
+**`marketing_overview`** `{days?, include_daily?}` returns Google Ads + LinkedIn Ads spend, impressions, clicks, CTR
+and CPC per campaign and per provider, live. 39 tools.
 
 ### 2026-10-14 — stand-up KPIs for any teammate, by name
 

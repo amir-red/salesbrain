@@ -1064,6 +1064,11 @@ zeami.io form, daily restated metrics, offline conversions back to the platforms
   shown greyed "as reported"). API versions pinned by env (`GOOGLE_ADS_API_VERSION` v21, `LINKEDIN_API_VERSION` 202509)
   — bump when a platform retires one. `deploy.yml` writes the seven new secrets. **Unverified against live accounts**:
   both request/response shapes were written from the API docs; the first "Verify access" / Connect tells.
+- **Round 1c (2026-10-14, feat/mcp-marketing, app-only)**: the overview loader moved to `lib/ads/overview.ts`
+  (`adsOverview(days)` + `providerTotals`), the route is a thin wrapper, and the service MCP gained **`marketing_overview`**
+  (39 tools) — per-provider totals (spend, impressions, clicks, CTR, CPC, platform conversions / Lead Gen leads, spend on
+  the last closed day and the day before), every campaign, optional daily rows — so the Zeami Omni stand-up bot can
+  answer "ad spend yesterday / today + inquiries" (inquiries stay "as reported" until touchpoints exist).
 - **Rounds 2–4 (planned, not built)**: core migrations 055 (`ad_accounts`, `ad_campaigns`, `ad_metrics_daily`),
   056 (`lead_touchpoints`), 057 (`agents.ads_sync` policy + `ad_conversion_outbox`); OAuth flows (Google: existing client
   + `adwords` scope + developer token + MCC id; LinkedIn: new app, Advertising API approval, `r_ads_reporting`);
