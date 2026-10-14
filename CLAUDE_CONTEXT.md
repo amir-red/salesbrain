@@ -1077,7 +1077,7 @@ zeami.io form, daily restated metrics, offline conversions back to the platforms
   used org-wide; `adAnalytics` pivot CAMPAIGN daily, `lib/ads/linkedin.ts`). `GET /api/marketing/overview?days=` reads
   both LIVE (10-min cache, per-provider `ok`/`error`) and `/marketing` shows spend / impressions / clicks / CTR / CPC per
   campaign + spend sparkline; Leads / Cost per lead / Pipeline stay "—" until touchpoints exist (platform conversions are
-  shown greyed "as reported"). API versions pinned by env (`GOOGLE_ADS_API_VERSION` v21, `LINKEDIN_API_VERSION` 202509)
+  shown greyed "as reported"). API versions pinned by env (`GOOGLE_ADS_API_VERSION` v21, `LINKEDIN_API_VERSION`, default 202609 — 202509 was already retired on 2026-10-14; LinkedIn keeps ~12 months active)
   — bump when a platform retires one. `deploy.yml` writes the seven new secrets. **Unverified against live accounts**:
   both request/response shapes were written from the API docs; the first "Verify access" / Connect tells.
 - **Round 1c (2026-10-14, feat/mcp-marketing, app-only)**: the overview loader moved to `lib/ads/overview.ts`

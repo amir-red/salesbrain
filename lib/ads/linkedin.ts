@@ -6,7 +6,7 @@
  * because the ad account (LINKEDIN_ADS_ACCOUNT_ID) is the company's, not the
  * person's. Access tokens last 60 days; refresh tokens exist only when the app
  * has programmatic refresh enabled — otherwise the card asks to reconnect.
- * API: versioned REST (`LinkedIn-Version`, default 202509; LinkedIn drops a
+ * API: versioned REST (`LinkedIn-Version`, default 202609; LinkedIn drops a
  * version ~12 months after release — bump when it answers 426).
  */
 import pool from '@/lib/db';
@@ -73,7 +73,7 @@ async function li<T>(path: string, token: string): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     headers: {
       Authorization: `Bearer ${token}`,
-      'LinkedIn-Version': process.env.LINKEDIN_API_VERSION || '202509',
+      'LinkedIn-Version': process.env.LINKEDIN_API_VERSION || '202609',
       'X-Restli-Protocol-Version': '2.0.0',
     },
   });
