@@ -1,76 +1,110 @@
 'use client';
 
 import { contactAge, firstName, nextContactLabel, PRIORITY_LEVELS, priorityLevel, STATUS_COLOR, tierLabel, type Lead } from '@/lib/sales-leads';
+import { Chevron, LinkedIn, Star } from './icons';
 
 /**
- * One line per lead (Mateo's Napa CRM row): rank · status dot · name, title at
- * company · badges (P1, ★, ticker, ping-by, owner, ICP, cards) · inline
- * priority + star + LinkedIn · chevron. Everything else lives in LeadDetail.
+ * One aligned line per lead. Columns: rank · person · status · last / next
+ * contact · who works it · controls. Everything else lives in LeadDetail.
  */
+export const ROW_GRID = 'md:grid-cols-[2.5rem_minmax(0,1fr)_7.5rem_8.5rem_9.5rem_12.5rem]';
+
 export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy }: {
   lead: Lead; rank: number; open: boolean; onToggle: () => void;
   onPatch: (patch: Record<string, unknown>) => void; busy: boolean;
 }) {
   const age = contactAge(lead);
   const next = nextContactLabel(lead.next_contact_at);
-  const ageColor = age.tone === 'alert' ? 'var(--red)' : age.tone === 'warn' ? 'var(--orange)' : age.tone === 'never' ? 'var(--text-muted)' : 'var(--green)';
-  const tier = tierLabel(lead.dossier?.tier);
   const prio = priorityLevel(lead.priority);
-  const badge = (text: string, color: string, title?: string) => (
-    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded whitespace-nowrap" title={title}
-      style={{ background: `color-mix(in srgb, ${color} 14%, transparent)`, color }}>{text}</span>
-  );
+  const tier = tierLabel(lead.dossier?.tier);
+  const ageColor = age.tone === 'alert' ? 'var(--red)' : age.tone === 'warn' ? 'var(--orange)' : age.tone === 'never' ? 'var(--text-muted)' : 'var(--text)';
+  const company = lead.company && lead.company !== 'Unknown' ? lead.company : null;
+  const sub = [lead.title, company].filter(Boolean).join(' · ');
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none" onClick={onToggle}
-      style={{ opacity: busy ? 0.6 : 1 }}>
-      <span className="w-7 text-right text-xs font-bold tabular-nums flex-shrink-0" style={{ color: 'var(--accent)' }}>{rank}.</span>
-      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: STATUS_COLOR[lead.status] }} title={lead.status} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-sm font-semibold truncate max-w-[22ch]">{lead.full_name}</span>
-          {prio ? badge(prio.label, prio.color, 'priority') : null}
-          {lead.must_talk ? badge('★ must talk', 'var(--orange)') : null}
-          {tier ? badge(tier, tier.startsWith('High') ? 'var(--green)' : tier.startsWith('Medium') ? 'var(--yellow)' : 'var(--text-muted)', 'research fit tier') : null}
-          {lead.status !== 'new' && badge(lead.status, STATUS_COLOR[lead.status])}
-          {badge(age.label, ageColor, lead.last_contact_at ? `last contact ${new Date(lead.last_contact_at).toLocaleDateString()}` : 'no contact event on record')}
-          {next ? badge(next.label, next.overdue ? 'var(--red)' : 'var(--cat-teal)', `next contact ${lead.next_contact_at}`) : null}
-          {lead.cards_pending > 0 ? badge(`${lead.cards_pending} card${lead.cards_pending > 1 ? 's' : ''} awaiting 👍`, 'var(--cat-violet)', 'approval cards on Telegram / /agents') : null}
-          {lead.icp_name ? badge(lead.icp_name, 'var(--cat-blue)', 'ICP list') : null}
-          {lead.met_at ? badge(`met: ${lead.met_at}`, 'var(--cat-pink)') : null}
+    <div role="button" tabIndex={0} onClick={onToggle} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
+      className={`grid grid-cols-[2.5rem_minmax(0,1fr)_auto] ${ROW_GRID} items-center gap-x-3 px-4 py-2.5 cursor-pointer outline-none focus-visible:ring-2`}
+      style={{ opacity: busy ? 0.55 : 1, transition: 'background 150ms', background: open ? 'var(--accent-glow)' : undefined }}>
+
+      {/* rank + priority mark */}
+      <div className="flex items-center gap-2">
+        <span className="w-1 self-stretch rounded-full" style={{ background: prio ? prio.color : 'transparent', minHeight: 28 }} />
+        <span className="text-xs tabular-nums" style={{ color: 'var(--text-muted)' }}>{rank}</span>
+      </div>
+
+      {/* person */}
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-sm font-semibold truncate">{lead.full_name}</span>
+          {lead.must_talk && <Star filled width={13} height={13} style={{ color: 'var(--orange)', flexShrink: 0 }} />}
+          {lead.cards_pending > 0 && (
+            <span className="text-[10px] px-1.5 rounded-full whitespace-nowrap" title="approval cards waiting on Telegram / /agents"
+              style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>{lead.cards_pending} to approve</span>
+          )}
         </div>
         <div className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>
-          {lead.title ? `${lead.title} · ` : ''}{lead.company}
-          {lead.last_event && lead.status !== 'new' ? <span> · <span style={{ color: 'var(--text)' }}>{lead.last_event.text}</span></span> : null}
+          {sub || <span style={{ opacity: 0.6 }}>no title on file</span>}
+          {lead.met_at && <span> · met at {lead.met_at}</span>}
+          {lead.icp_name && !lead.met_at && <span> · {lead.icp_name}</span>}
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-        {(lead.responsible_name || lead.front_name) && (
-          <span className="text-[10px] px-1.5 py-1 rounded-full whitespace-nowrap" title={`back office (drives the lead): ${lead.responsible_name ?? '—'} · front office (face in calls): ${lead.front_name ?? '—'}`}
-            style={{ background: 'var(--bg-input)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
-            {firstName(lead.responsible_name) || '—'}{lead.front_name && lead.front_name !== lead.responsible_name ? ` → ${firstName(lead.front_name)}` : ''}
-          </span>
-        )}
-        <select value={lead.priority ?? 0} title="Priority" onChange={(e) => onPatch({ priority: Number(e.target.value) })}
-          className="text-xs rounded py-1 pl-1.5 pr-5"
-          style={{ background: 'var(--bg-input)', border: `1px solid ${prio ? prio.color : 'var(--border)'}`, color: prio ? prio.color : 'var(--text-muted)' }}>
-          <option value={0}>priority…</option>
-          {PRIORITY_LEVELS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
-        </select>
-        <button type="button" title="Must talk" onClick={() => onPatch({ must_talk: !lead.must_talk })}
-          className="text-xs px-2 py-1 rounded font-semibold"
-          style={lead.must_talk
-            ? { background: 'var(--orange)', color: 'var(--accent-fg)' }
-            : { background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-          {lead.must_talk ? '★' : '☆'}
+      {/* status + fit */}
+      <div className="hidden md:block min-w-0">
+        <span className="inline-flex items-center gap-1.5 text-xs font-medium capitalize" style={{ color: STATUS_COLOR[lead.status] }}>
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: STATUS_COLOR[lead.status] }} />{lead.status}
+        </span>
+        {tier && <div className="text-[11px] truncate" style={{ color: 'var(--text-muted)' }}>{tier}</div>}
+      </div>
+
+      {/* last / next contact */}
+      <div className="hidden md:block min-w-0 leading-tight">
+        <div className="text-sm font-semibold tabular-nums" style={{ color: ageColor }} title={lead.last_contact_at ? `last contact ${new Date(lead.last_contact_at).toLocaleDateString()}` : 'no contact on record'}>
+          {age.short}
+        </div>
+        <div className="text-[11px] truncate" style={{ color: next?.overdue ? 'var(--red)' : next ? 'var(--cat-teal)' : 'var(--text-muted)' }}>
+          {next ? next.label : age.tone === 'never' ? 'never talked' : 'since contact'}
+        </div>
+      </div>
+
+      {/* who works it */}
+      <div className="hidden md:block min-w-0 leading-tight" title={`back office (drives the lead): ${lead.responsible_name ?? '—'}\nfront office (face in calls): ${lead.front_name ?? '—'}`}>
+        {lead.responsible_name || lead.front_name ? (<>
+          <div className="text-xs truncate">
+            {firstName(lead.responsible_name) || '—'}
+            {lead.front_name && lead.front_name !== lead.responsible_name && <span style={{ color: 'var(--text-muted)' }}> → {firstName(lead.front_name)}</span>}
+          </div>
+          <div className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>back office{lead.front_name && lead.front_name !== lead.responsible_name ? ' → front' : ''}</div>
+        </>) : <span className="text-xs" style={{ color: 'var(--text-muted)', opacity: 0.6 }}>unassigned</span>}
+      </div>
+
+      {/* controls */}
+      <div className="flex items-center justify-end gap-1" onClick={stop} onKeyDown={stop}>
+        <span className="relative hidden md:inline-flex items-center" style={{ color: prio ? prio.color : 'var(--text-muted)' }}>
+          <select value={lead.priority ?? 0} aria-label="Priority" onChange={(e) => onPatch({ priority: Number(e.target.value) })}
+            className="text-xs font-medium rounded-full py-1 pl-2.5 pr-6 appearance-none cursor-pointer"
+            style={prio
+              ? { background: `color-mix(in srgb, ${prio.color} 12%, transparent)`, color: prio.color, border: '1px solid transparent' }
+              : { background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+            <option value={0}>Priority</option>
+            {PRIORITY_LEVELS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+          </select>
+          <Chevron width={12} height={12} className="absolute right-2 pointer-events-none" style={{ transform: 'rotate(90deg)' }} />
+        </span>
+        <button type="button" aria-label={lead.must_talk ? 'Unstar' : 'Must talk'} title="Must talk"
+          onClick={() => onPatch({ must_talk: !lead.must_talk })}
+          className="w-8 h-8 rounded-full inline-flex items-center justify-center"
+          style={{ color: lead.must_talk ? 'var(--orange)' : 'var(--text-muted)' }}>
+          <Star filled={lead.must_talk} />
         </button>
-        {lead.linkedin_url && (
-          <a href={lead.linkedin_url} target="_blank" rel="noopener noreferrer" title="LinkedIn"
-            className="text-xs px-2 py-1 rounded font-semibold"
-            style={{ background: 'color-mix(in srgb, var(--cat-blue) 12%, transparent)', color: 'var(--cat-blue)' }}>in</a>
-        )}
-        <span className="text-xs w-4 text-center" style={{ color: 'var(--text-muted)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} onClick={onToggle}>▶</span>
+        {lead.linkedin_url ? (
+          <a href={lead.linkedin_url} target="_blank" rel="noopener noreferrer" title="Open LinkedIn" aria-label="LinkedIn"
+            className="w-8 h-8 rounded-full inline-flex items-center justify-center" style={{ color: 'var(--cat-blue)' }}><LinkedIn /></a>
+        ) : <span className="w-8 h-8" />}
+        <span className="w-6 h-8 inline-flex items-center justify-center" style={{ color: 'var(--text-muted)' }}>
+          <Chevron style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 150ms' }} />
+        </span>
       </div>
     </div>
   );

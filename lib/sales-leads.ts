@@ -100,11 +100,12 @@ export interface TeamUser { id: string; name: string; email: string }
 export const QUIET_WARN_DAYS = 14;
 export const QUIET_ALERT_DAYS = 30;
 
-export function contactAge(lead: Pick<Lead, 'days_since_contact' | 'last_contact_at'>): { label: string; tone: 'ok' | 'warn' | 'alert' | 'never' } {
-  if (!lead.last_contact_at) return { label: 'never talked', tone: 'never' };
+export function contactAge(lead: Pick<Lead, 'days_since_contact' | 'last_contact_at'>): { label: string; short: string; tone: 'ok' | 'warn' | 'alert' | 'never' } {
+  if (!lead.last_contact_at) return { label: 'never talked', short: '—', tone: 'never' };
   const d = lead.days_since_contact ?? 0;
   const label = d <= 0 ? 'today' : d === 1 ? '1 day ago' : `${d} days ago`;
-  return { label, tone: d >= QUIET_ALERT_DAYS ? 'alert' : d >= QUIET_WARN_DAYS ? 'warn' : 'ok' };
+  const short = d <= 0 ? 'today' : `${d} d`;
+  return { label, short, tone: d >= QUIET_ALERT_DAYS ? 'alert' : d >= QUIET_WARN_DAYS ? 'warn' : 'ok' };
 }
 
 /** "ping again on" relative to today: overdue / today / in N days. */
@@ -159,8 +160,4 @@ export const STATUS_COLOR: Record<LeadStatus, string> = {
   replied: 'var(--cat-teal)',
   converted: 'var(--green)',
   archived: 'var(--text-muted)',
-};
-
-export const EVENT_ICON: Record<EventKind, string> = {
-  met: '🤝', sent: '📤', reply: '📥', call: '📞', meeting: '🗓', note: '📝', status: '◆', priority: '★', assign: '👤', import: '⬇',
 };
