@@ -1018,6 +1018,30 @@ to its own Notion database and called it the CRM. The audit log showed only read
 - Not built: an "Add lead" form in the app (the ICP leads table has no manual entry either), a second phone column
   (goes in `notes`).
 
+### 5.ai.2 Stand-up KPIs by teammate name — `crm_outreach_kpis` (2026-10-14, feat/kpis, core/hermes 0.44.0, no migration)
+
+Zeami Omni's daily rundown asks "Amir: connection requests sent + accounts researched?" and Amir runs Matthias's
+account. Nothing on the service MCP took a name or returned numbers. Amir's rule: **the MCP resolves the person** —
+"KPIs of Matthias" must work whoever asks, with no employee-id gymnastics on the bot side.
+- **Kernel** `commands/kpis.py`: `resolve_owner(conn, query, actor)` — name / email / LinkedIn handle, ILIKE; real users
+  rank above `…@<app>.service.salesbrain` stubs (a partner app's provisioned twin must never shadow the teammate), exact
+  name beats substring; one hit → owner, several → `candidates[]` (never a guess), none → error; `None`/"me" = the actor.
+  `outreach_kpis(actor, owner?, period)` counts over `[start, end)` (`period_bounds`: today · yesterday · week Mon→now ·
+  last_week · month · 7d · 30d) from the existing ledgers: `linkedin_invitations` (sent / accepted in period; pending,
+  accepted, not_accepted as current state), `outreach_approvals` (sent_at in period by kind + channel, awaiting_decision,
+  skipped), `reply_events`, `prospects` (new, contacted, replied, P5 awaiting reply, follow-ups due, converted),
+  `prospect_enrichment` (researched / emails / profiles / employers found), `agent_runs` (Leads Finder searches, found),
+  `sales_leads` (calls booked, converted — matched on `raw_payload.owner` name, the only link that table has),
+  `linkedin_accounts`. **Aggregates only, open to every user** — nothing names a lead (same reasoning as org-wide
+  /pipeline). Audit `outreach_kpis`.
+- **Ring** `crm_outreach_kpis {owner?, period?}` (read, family crm_agents, 132 tools); **service MCP** passthrough
+  (38 tools; `docs/service-mcp.md` "Run visibility" + changelog).
+- Live check 2026-10-14 as Mateo's plain user: "Matthias" → week = 3 requests sent, 10 accepted, 3 follow-ups, 3
+  replies, 7 awaiting decision, 74 pending; "Mateo" → the real Mateo user (exact name) not the three stubs.
+- Known soft spots: `leads.contacted` reads `prospects.last_contacted_at`, which the follow-up lane does not bump
+  (showed 0 against 3 follow-ups) — `messages_sent` is the reliable send count; `calls` only sees Calendly/sales-leads
+  bookings. Not built: a KPI panel in the app (`/admin/users` shows agents, not these numbers), plan-vs-actual.
+
 ### 5.aj Marketing — paid ads inside the CRM (2026-10-13, feat/marketing, round 1 app-only)
 
 Amir: "we are starting ads in Google Ads and LinkedIn Ads — add a marketing menu, connectors, pull our performance

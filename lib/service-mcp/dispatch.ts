@@ -344,6 +344,25 @@ export const SERVICE_TOOLS: ToolDef[] = [
     needsOwner: true,
   },
   {
+    name: 'crm_outreach_kpis',
+    description:
+      "Outreach KPIs for one teammate over one period — the stand-up numbers: connection requests sent / " +
+      "accepted / pending, first messages and follow-ups sent, replies, new leads, leads researched / enriched, " +
+      "contacted, calls booked, follow-ups due. `owner` is a NAME, email or LinkedIn handle (e.g. 'Matthias'); " +
+      "SalesBrain resolves it to the teammate — omit it for the calling employee. An ambiguous name returns " +
+      "`candidates` instead of numbers: ask the user which one. Aggregates only, never lead names.",
+    inputSchema: obj({
+      owner: { type: 'string', description: "Teammate name / email / LinkedIn handle; default = this employee" },
+      period: {
+        type: 'string',
+        enum: ['today', 'yesterday', 'week', 'last_week', 'month', '7d', '30d'],
+        default: 'today',
+        description: 'week = Monday → now; 7d / 30d = rolling',
+      },
+    }),
+    needsOwner: true,
+  },
+  {
     name: 'crm_agent_status',
     description:
       "Are the background agents live for this employee: each agent's enabled flag, caps and schedule, its " +
@@ -776,7 +795,7 @@ const PASSTHROUGH = new Set([
   'crm_agent_request_run', 'crm_agent_set_user_state', 'crm_enrich_prospect', 'crm_outreach_propose',
   'crm_outreach_pending', 'crm_outreach_decide', 'crm_record_reply', 'crm_linkedin_status',
   'crm_linkedin_find_person', 'crm_linkedin_link_prospect', 'crm_prospect_add',
-  'crm_linkedin_revoke', 'crm_agent_activity', 'crm_agent_status', 'crm_linkedin_quota',
+  'crm_linkedin_revoke', 'crm_agent_activity', 'crm_agent_status', 'crm_linkedin_quota', 'crm_outreach_kpis',
   'crm_graph_status', 'crm_graph_edges', 'crm_graph_sync',
   'crm_graph_reach', 'crm_who_can_reach',
   'crm_path_find', 'crm_propose_intro',
