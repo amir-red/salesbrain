@@ -136,6 +136,17 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    href: '/admin/learning',
+    label: 'Learning',
+    admin: true,
+    icon: (
+      // Open book with a spark — what the agents learned and staged for review
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2 4h6a4 4 0 0 1 4 4v12a3 3 0 0 0-3-3H2z" /><path d="M22 4h-6a4 4 0 0 0-4 4v12a3 3 0 0 1 3-3h7z" />
+      </svg>
+    ),
+  },
+  {
     href: '/admin/users',
     label: 'Users',
     admin: true,
@@ -263,7 +274,7 @@ const GROUPS: { label: string; hrefs: string[] }[] = [
   { label: 'Relationships', hrefs: ['/relationships', '/network', '/clients'] },
   { label: 'Funding', hrefs: ['/grants', '/credits'] },
   { label: 'Insights', hrefs: ['/reports', '/lessons', '/pricing'] },
-  { label: 'Admin', hrefs: ['/admin/costs', '/admin/users'] },
+  { label: 'Admin', hrefs: ['/admin/costs', '/admin/users', '/admin/learning'] },
 ];
 const BY_HREF = new Map(NAV_ITEMS.map((i) => [i.href, i]));
 const PROFILE = BY_HREF.get('/profile')!;

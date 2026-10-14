@@ -992,8 +992,75 @@ follow-up form/table stay for manual use.
 - Not built: email follow-ups on the board (`followup_queue` covers them; the page is LinkedIn-only), a reminder when
   a card sits unapproved, enabling the agent to draft by itself (`agents.followup.enabled`).
 
-### 5.ai.1 Add a lead by hand — `crm_prospect_add` (2026-10-13, feat/add-lead, core/hermes, no migration)
+### 5.aj Self-improvement on every surface: per-person memory + Hermes skills (2026-10-13/14, feat/self-improvement, core 055)
 
+Amir: "the self-improvement skill is really important, use it everywhere … memory tailored for each person AND
+shareable across members — not one Hermes as a provider for all." Plan (v1 + v2): `~/.claude/plans/hermes-self-improvement.md`.
+**What Hermes ships** (v2026.9.21): the `memory` tool (MEMORY.md + USER.md, ONE FILE PER PROFILE, USER.md single-user),
+`skill_manage` (procedural memory), a post-turn **background review** fork (`agent/turn_finalizer.py`; memory half fires
+only when the built-in `memory` tool is in the toolset and its prompt is hard-wired to that tool; skill half on
+`skills.creation_nudge_interval`; never for cron), `skills.write_approval` (non-CLI writes STAGED to
+`$HERMES_HOME/pending/skills/<id>.json`, per profile), the curator, `/learn`, `/refine`. Memory-provider tools are
+dispatched WITHOUT the tool_request middleware (`tool_executor._resolve_sequential_dispatch`) → a provider tool never
+knows who is talking; `crm_*` tools do. MEMORY.md is loaded once per cached agent → stale across gateway sessions.
+- **Found live (2026-10-13)**: built-in memory off since 08-31 (no memory tool anywhere, review never ran); web chat
+  (`api_server=[crm_core]`) and the team bot (`crm` profile `telegram=[crm_core, web]`) had no `skills`; `crm_core` is a
+  dead name since 0.34.0; the crm profile had **no `skills.external_dirs`** → the team bot never loaded a `salesbrain-*`
+  skill; one background-review skill write (`pending/skills/9e58e6a1.json`) had waited unreviewed since 2026-09-24. Our
+  RelationshipMemory provider keys on the DEAL'S CONTACT, not the operator — nobody had personal memory.
+- **Decision**: Hermes built-in memory stays OFF on both profiles (per-profile file, single-user USER.md, stale cache,
+  review cannot target a person). **Per-person memory = core `agent_memories`** (055): `owner_user_id`, `scope`
+  personal|team, `kind` preference|fact|rule|procedure, `content` ≤300, `status` active|proposed|superseded|archived,
+  `source` conversation|review|promotion|app, `supersedes_id`, `shared_from_id`; partial unique on active text per
+  owner (personal) / globally (team); policy row `agents.memory` (personal_chars 1500, team_chars 1000,
+  review_every_turns 8, review_max_candidates 3). Rows are superseded, never deleted.
+  `policy/memory.py` (pure): `refuse_shape` (passwords, API keys/tokens, AWS keys, private keys, IBAN, card numbers,
+  pay/salary with amounts — the sibling repo saw a password and a salary land in MEMORY.md), `normalize`, `validate`,
+  `render` (rules first, newest first, "… and N older notes not shown"). `commands/memory.py`: `remember` (personal →
+  active; team → proposed unless admin), `forget` (supersede), `share` (personal → team proposal, admin → active),
+  `decide` (admin), `review_candidates`, `prefetch_block(user_id)`, `recall`, `list_memories`, `team_overview`,
+  `settings`. **Attended-turn rule**: writes need a human actor from the session or an app click; the SERVICE actor is
+  refused — routines, digests and the learn pass can never write memory. Visibility: personal = owner (admin may list,
+  read-only); team active = everyone.
+- **Ring**: family **`crm_memory`** (`tools/memory.py`, 137 tools / 10 families): `crm_memory_save` (attended =
+  `_actor_user_id` came from the session, read before `resolve_actor` pops it; passes `hermes_session_id`),
+  `crm_memory_recall`, `crm_memory_forget`, `crm_memory_share`, `crm_memory_decide` (admin). All `mcp=None`; not on the
+  service MCP. **Provider** (`memory_provider.py`): `prefetch` now resolves the OPERATOR (`identity.actor_for_session`:
+  agent_sessions → telegram_user_links) and injects "Your notes / Team notes" ABOVE the deal dossier (user-message side,
+  cache-safe); `sync_turn` runs **`memory_review.review_operator`** every `review_every_turns` turns per session: one
+  Haiku call (`converse(feature='memory_review', owner_user_id)` → `llm_usage`) extracting ≤3 notes about the person we
+  talk to (never prospects — distill.py does those) → `review_candidates` (personal → active with source review, team →
+  proposed). Unmapped sessions never review. `learning.py::loop_status` reports a surface's memory as `crm_memory`
+  present; `pyyaml` is a declared ring dependency.
+- **deploy-server.sh**: `memory.memory_enabled false` / `user_profile_enabled false` / `nudge_interval 0` on both
+  profiles (verify block REFUSES a deploy with built-in memory on or a chat surface missing `skills` + `crm_memory`);
+  `skills.creation_nudge_interval 10`; skill review routed to Haiku 4.5 (`auxiliary.background_review`,
+  `max_input_tokens 48000` via `--force`); `display.memory_notifications verbose`. **`ensure_toolsets`** MERGES `skills`
+  + all ten crm_* families into `platform_toolsets.telegram` / `api_server` (default) and `telegram` (crm), drops
+  `crm_core` and Hermes' `memory`, keeps everything else; cron gets `crm_memory` (recall only — writes refused). The crm
+  profile gets `skills.external_dirs` + the shared `skills.create_dir /root/.hermes/skills-agent`. New `--no-agent` job
+  **`learning-digest`** (09:15) DMs the operator while Hermes-staged writes wait.
+- **Staged-skill review**: ring `learning.py` (+ `rpc._internal`: `learning_pending`, `learning_decide`,
+  `memory_list`, `memory_team_overview` — app-only) lists Hermes-staged writes across profiles from the files, diffs via
+  Hermes' `skill_pending_diff`, flags a patch to a git-deployed skill (`targets_repo_skill`: applies on approve, root
+  ignores `a-w`, overwritten by the next deploy → port to `assets/skills/`); approve replays through
+  `hermes_cli.write_approval_commands.handle_pending_subcommand` under `set_hermes_home_override`.
+- **App**: `/profile → Memory` (`components/profile/MemoryPanel.tsx`: add a note, your notes with Forget / Share with
+  team, proposals, team notes, forgotten; `GET/POST /api/memory`, `POST /api/memory/[id] {forget|share}`);
+  `/admin/learning` (`Team memory` section: proposals → Approve for everyone / Archive, per-user counts, active team
+  notes; `GET/POST /api/admin/memory`) + per profile: surfaces with skills / crm_memory pills, loop settings, issues,
+  Hermes-staged skill cards with diff + Approve / Reject, agent-written skills, MEMORY.md/USER.md (empty by design).
+  Sidebar Admin → Learning. `lib/memory-panel.ts`, `lib/learning-panel.ts`.
+- **SOULs** (default + crm): "Learn" section — corrections / preferences / rules / facts about the person →
+  `crm_memory_save` at once, say what you saved; "forget that" / "share with the team"; procedures → `skill_manage`
+  (staged); never rewrite git-deployed skills; never secrets or pay data.
+- **To verify after deploy** (integration session; migration 055 first): `hermes tools --summary` (+ `-p crm`) shows
+  `skills` + `crm_memory`; Telegram as Amir "remember I prefer batch calls" → row active, next turn's prefetch carries
+  it, a teammate's turn does not; "share that with the team" → proposal → approve on /admin/learning → teammate sees
+  it; 8 turns → one `memory_review` row in `llm_usage`, ≤3 candidates on /profile → Memory; a cron run writes no memory;
+  `grep "Background review complete" logs/agent.log` after a skill-worthy turn; `/admin/learning` lists 9e58e6a1.
+- Not built: `curator.consolidate`, `/learn` from the app, team-proposal count in the learning digest, backfilling
+  conversations before the deploy, `crm_memory_*` on the service MCP (same kernel, add when the sibling app asks).
 Mateo's Zeami Omni bot said "Captured and added to the CRM" for two KIMW business cards (Marius Fedler, Jan-Ole Maras)
 — nothing landed: the service MCP (token "Zeami AppnMCP") had 36 tools and none could create a person, so the bot wrote
 to its own Notion database and called it the CRM. The audit log showed only reads + `register_user`.
