@@ -1167,6 +1167,14 @@ his say-so: the "read" / "info requested" checkboxes.
   tiers A/B/C render as High/Medium/Lower fit, and the row summary line skips import/status/priority/assign events.
   The kernel migration runner (`store.migrations`) re-applies the whole stream and now trips on 051's
   `prospect_enrichment_kind_check`; apply new files one at a time with psycopg until that is fixed.
+- **Redesign (same evening, app-only, 7b5a489)** — Amir: "you completely duplicated the inspiration ui design". The page now
+  follows `docs/brand/zeami-brand-basics.md` instead of Mateo's HTML: `LeadRow` is one aligned grid line (`ROW_GRID`:
+  rank + priority bar · lead · status dot + fit · last/next contact · "Hannes → Mateo" · priority pill-select / star /
+  LinkedIn / chevron) under a column-header row; line SVG icons in `components/sales-leads/icons.tsx` (`EventIcon` for
+  the track record — the emoji `EVENT_ICON` map is gone); toolbar = Working / Due / Must talk segment + a "By status…"
+  select + Mine + search + sort; the six count tiles became a compact metric strip in the header; skeleton, empty and
+  error states; `LeadDetail` is a calm briefing card (eyebrow headings, icon timeline) with the working rail on the right.
+  Not screenshot-verified by Claude (the local login form carried saved production credentials, so it was not submitted).
 - Not built: Hannes's LinkedIn (he connects it on /profile), the agent's morning digest listing `due` leads, a per-row
   "draft follow-up" button (the /followups board does that for P5 prospects), re-ordering by drag.
 
