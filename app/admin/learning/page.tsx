@@ -8,13 +8,15 @@ import {
   fmtAge, loopHealth, originLabel, profileLabel, SURFACE_LABELS,
 } from '@/lib/learning-panel';
 import type { Decision, LearningReport, PendingWrite, ProfileLearning, Subsystem } from '@/lib/learning-panel';
+import type { Memory, TeamOverview } from '@/lib/memory-panel';
 
 /**
  * /admin/learning — what the agents learned and want to keep. Hermes stages
  * every agent-written skill (and, on the team bot, every memory note) for a
  * human; this is the review surface, plus the loop's health per profile and
  * surface, the memory files, and the skills the agents wrote themselves.
- * One kernel call per load (`learning_pending`, app-only); refreshed by hand.
+ * Plus the team-memory queue: per-person notes proposed to everyone (core
+ * `agent_memories`), approved here. Two kernel calls per load; refreshed by hand.
  */
 export default function LearningAdminPage() {
   const [data, setData] = useState<LearningReport | null>(null);
@@ -23,11 +25,15 @@ export default function LearningAdminPage() {
   const [forbidden, setForbidden] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [team, setTeam] = useState<TeamOverview | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
+      const tm = await fetch('/api/admin/memory');
+      const tj = await tm.json().catch(() => ({}));
+      if (tm.ok && !tj.error) setTeam(tj as TeamOverview);
       const res = await fetch('/api/admin/learning');
       if (res.status === 403) { setForbidden(true); return; }
       const json = await res.json().catch(() => ({}));
@@ -57,7 +63,21 @@ export default function LearningAdminPage() {
     } finally { setBusy(null); }
   }, [load]);
 
-  const total = data?.pending_total ?? 0;
+  const decideTeam = useCallback(async (id: string, approve: boolean) => {
+    setBusy(`team/${id}`);
+    setNotice(null);
+    try {
+      const res = await fetch('/api/admin/memory', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, approve }) });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.error) throw new Error(json.error || json.message || `Decision failed (${res.status})`);
+      setNotice(json.message || (approve ? 'approved' : 'archived'));
+      await load();
+    } catch (e) {
+      setNotice(`Error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally { setBusy(null); }
+  }, [load]);
+
+  const total = (data?.pending_total ?? 0) + (team?.proposed.length ?? 0);
   const skillsPending = data?.profiles.reduce((n, p) => n + p.pending_skills.length, 0) ?? 0;
   const memoryPending = data?.profiles.reduce((n, p) => n + p.pending_memory.length, 0) ?? 0;
   const agentSkills = data?.profiles.reduce((n, p) => n + p.agent_skills.length, 0) ?? 0;
@@ -84,7 +104,7 @@ export default function LearningAdminPage() {
 
           {data && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <StatTile label="Awaiting review" value={String(total)} sub={`${skillsPending} skill · ${memoryPending} memory`}
+              <StatTile label="Awaiting review" value={String(total)} sub={`${skillsPending} skill · ${memoryPending} profile memory · ${team?.proposed.length ?? 0} team note`}
                         color={total ? 'var(--yellow)' : undefined} />
               <StatTile label="Agent-written skills" value={String(agentSkills)} sub="in skills-agent" />
               <StatTile label="Profiles" value={String(data.profiles.length)} sub={unhealthy ? `${unhealthy} not fully wired` : 'loop wired everywhere'}
@@ -93,6 +113,8 @@ export default function LearningAdminPage() {
                         sub={data.profiles[0]?.status.review_model || 'background review runs on the chat model'} />
             </div>
           )}
+
+          {team && <TeamMemorySection team={team} busy={busy} decide={decideTeam} />}
 
           {data?.profiles.map((p) => (
             <ProfileSection key={p.profile} p={p} busy={busy} decide={decide} />
@@ -107,6 +129,45 @@ export default function LearningAdminPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function TeamMemorySection({ team, busy, decide }: { team: TeamOverview; busy: string | null; decide: (id: string, approve: boolean) => Promise<void> }) {
+  const [showActive, setShowActive] = useState(false);
+  return (
+    <SectionCard
+      title="Team memory"
+      subtitle="Per-person notes someone proposed to everyone. Approve only what every teammate should carry in context."
+      right={<span className="text-[11px]" style={{ color: team.proposed.length ? 'var(--yellow)' : 'var(--text-muted)' }}>{team.proposed.length} proposed · {team.active.length} active</span>}
+    >
+      <div className="space-y-3">
+        {team.proposed.length === 0 && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No proposals waiting.</p>}
+        {team.proposed.map((m: Memory) => (
+          <div key={m.id} className="rounded-lg p-3 flex flex-wrap items-center justify-between gap-2" style={{ border: '1px solid var(--border)', background: 'var(--bg-input)' }}>
+            <div className="text-xs min-w-0">
+              <span className="rounded-full px-2 py-0.5 mr-2 text-[10px] uppercase tracking-wide" style={{ background: 'color-mix(in srgb, var(--accent) 14%, transparent)', color: 'var(--accent)' }}>{m.kind}</span>
+              <span className="font-semibold">{m.content}</span>
+              <span className="ml-2" style={{ color: 'var(--text-muted)' }}>by {m.owner_name || m.owner_email} · {m.source === 'review' ? 'learned from a conversation' : m.source === 'promotion' ? 'shared from a personal note' : m.source} · {new Date(m.created_at).toLocaleDateString()}</span>
+            </div>
+            <div className="flex gap-2">
+              <button disabled={busy === `team/${m.id}`} onClick={() => decide(m.id, true)} className="rounded-full px-3 py-1 text-xs font-semibold" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>Approve for everyone</button>
+              <button disabled={busy === `team/${m.id}`} onClick={() => decide(m.id, false)} className="rounded-full px-3 py-1 text-xs" style={{ border: '1px solid var(--border)' }}>Archive</button>
+            </div>
+          </div>
+        ))}
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          {team.per_user.filter((u) => u.personal_active > 0 || u.learned_by_review > 0).map((u) => (
+            <span key={u.user_id}>{u.name || u.email}: {u.personal_active} note{u.personal_active === 1 ? '' : 's'}{u.learned_by_review ? ` (${u.learned_by_review} learned)` : ''}</span>
+          ))}
+        </div>
+        <button className="text-xs underline" onClick={() => setShowActive((v) => !v)}>{showActive ? 'hide' : 'show'} active team notes ({team.active.length})</button>
+        {showActive && (
+          <ul className="text-[11px] space-y-0.5 list-disc pl-4">
+            {team.active.map((m: Memory) => <li key={m.id}>[{m.kind}] {m.content} <span style={{ color: 'var(--text-muted)' }}>· {m.owner_name}</span></li>)}
+          </ul>
+        )}
+      </div>
+    </SectionCard>
   );
 }
 

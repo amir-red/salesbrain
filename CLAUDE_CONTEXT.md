@@ -992,131 +992,75 @@ follow-up form/table stay for manual use.
 - Not built: email follow-ups on the board (`followup_queue` covers them; the page is LinkedIn-only), a reminder when
   a card sits unapproved, enabling the agent to draft by itself (`agents.followup.enabled`).
 
-### 5.aj Hermes self-improvement loop on every surface (2026-10-13, feat/self-improvement, app + hermes)
+### 5.aj Self-improvement on every surface: per-person memory + Hermes skills (2026-10-13/14, feat/self-improvement, core 055)
 
-Amir: "the self-improvement skill is really important and we need to use it everywhere … integrate the skills and
-memory toolsets everywhere." Plan: `~/.claude/plans/hermes-self-improvement.md`. **What Hermes ships** (v2026.9.21):
-the `memory` tool (MEMORY.md + USER.md per profile), `skill_manage` (procedural memory, nudged by the system prompt),
-a **post-turn background review** fork that saves a memory / patches a skill after a conversation
-(`agent/turn_finalizer.py`; gated by `memory.nudge_interval` and `skills.creation_nudge_interval` + `skill_manage` in
-the toolset; **never for cron**, `cron/scheduler.py skip_background_review=True`), `skills.write_approval` /
-`memory.write_approval` (non-CLI writes are STAGED to `$HERMES_HOME/pending/{skills,memory}/<id>.json`, one queue PER
-PROFILE, reviewed with `/skills pending|diff|approve|reject`, `/memory pending|approve|reject`), the curator (weekly
-prune of agent-created skills), `/learn <source>`, `/refine`.
-- **Found live**: `memory.memory_enabled=false` + `nudge_interval=0` since 2026-08-31 → the memory tool was gone from
-  every surface and the review never ran; web chat (`api_server=[crm_core]`) and the team bot
-  (`crm` profile `telegram=[crm_core, web]`) had no `skills` either; `crm_core` is a dead name since 0.34.0 (resolves to
-  nothing — the crm_* families were only reaching the bots because plugin toolsets are on by default); the crm profile
-  had **no `skills.external_dirs`** → the team bot never loaded a `salesbrain-*` skill; one background-review skill
-  write (`pending/skills/9e58e6a1.json`, "salesbrain-admin-diagnostics") had waited unreviewed since 2026-09-24.
-- **deploy-server.sh**: built-in memory ON next to the `salesbrain-memory` provider (Hermes: an external provider is
-  additive), `memory.nudge_interval 10`, `skills.creation_nudge_interval 10`, background review routed to Haiku 4.5
-  on Bedrock with `max_input_tokens 48000`, `display.memory_notifications verbose`. **`ensure_toolsets`** MERGES
-  `skills` + `memory` + the nine crm_* families into `platform_toolsets.telegram` / `api_server` (default profile)
-  and `telegram` (crm profile), drops `crm_core`, keeps everything else (the hand-set lists survive); cron gets
-  `memory`. Decision: the default profile (Amir's own agent) writes memory directly (`memory.write_approval false`);
-  the **crm profile stages both** (`memory.write_approval true` — one teammate's correction must not silently become
-  everyone's context); skills are staged on every profile. The crm profile also gets `skills.external_dirs` and the
-  shared `skills.create_dir /root/.hermes/skills-agent`. The verify block REFUSES a deploy that leaves memory off or a
-  chat surface without both toolsets. New `--no-agent` job **`learning-digest`** (09:15): one line to the operator's
-  chat while anything waits (`assets/scripts/learning_digest.py`).
-- **Ring** `src/salesbrain_hermes/learning.py` (+ `rpc._internal`: `learning_pending`, `learning_decide`, app-only,
-  admin): lists staged writes across profiles from the files (no Hermes import needed), skill diffs via Hermes'
-  `skill_pending_diff` when importable, flags a patch that targets a git-deployed skill (`targets_repo_skill` — it
-  applies on approve, root ignores `a-w`, and the next deploy overwrites it: port it to `assets/skills/`), reads
-  MEMORY.md / USER.md, lists agent-authored skills, loop status per surface. Approve replays through Hermes' own
-  applier (`hermes_cli.write_approval_commands.handle_pending_subcommand`) under `set_hermes_home_override` so profile
-  B's queue applies against profile B's config; reject is a file delete. `pyyaml` is now a declared ring dependency.
-- **SOULs** (default + crm): a "Learn" section — save a correction / preference / fact with `memory` at once, record a
-  repeatable procedure with `skill_manage`, say what you staged, never rewrite the git-deployed `salesbrain-*` skills.
-- **App** `/admin/learning` (`lib/learning-panel.ts`, `GET /api/admin/learning`, `POST /api/admin/learning/decide`):
-  per profile — surfaces with skills/memory pills, loop settings, red issues list, pending cards with diff and
-  Approve / Reject, agent-written skills, memory files. Sidebar Admin → Learning.
-- **To verify after deploy**: `hermes tools --summary` (+ `-p crm`), a Telegram correction → `grep "Background review
-  complete" logs/agent.log`, `/memory` shows the note (default) or `/memory pending` (crm), `/skills pending` and
-  `/admin/learning` both list 9e58e6a1, `python scripts/learning_digest.py --dry-run`, `hermes curator status`.
-  Cost: the review fork is ~30K input tokens per event on Haiku; the nudge intervals bound how often it fires.
-- Not built: `curator.consolidate` (nothing to consolidate yet), `/learn` from the app, backfilling the 09-24 →
-  10-13 gap (those conversations were never reviewed), agent-to-agent sharing of memory (per profile by design).
-### 5.ai.1 Add a lead by hand — `crm_prospect_add` (2026-10-13, feat/add-lead, core/hermes, no migration)
-
-Mateo's Zeami Omni bot said "Captured and added to the CRM" for two KIMW business cards (Marius Fedler, Jan-Ole Maras)
-— nothing landed: the service MCP (token "Zeami AppnMCP") had 36 tools and none could create a person, so the bot wrote
-to its own Notion database and called it the CRM. The audit log showed only reads + `register_user`.
-- **Kernel** `commands/prospecting.py::add_lead(actor, full_name, company?, title?, email?, phone?, linkedin_url?,
-  website?, location?, address?, notes?, icp_id?, source_detail?)` — guards first (name, `@` in email, member id is not a
-  slug), then the dedup ladder on the owner's leads (slug → email → name at company; returns `matched_by`, never a
-  duplicate), else `upsert_candidate(source_type='manual')` so there is still ONE landing path; then COALESCE-fills
-  `contacts.phone/title/email/linkedin_url` and `accounts.website/domain/hq_location` (domain with qualify()'s unique
-  guard), `ensure_prospect_person` for the handles, and `notes` → `people.record_fact(source='manual')` — a dossier fact,
-  not `contacts.notes` (which nothing reads). ICP: explicit, else the owner's single active one, else unscored P0_IMPORTED
-  (the response's `note` says which). Audit `lead_added`.
-- **Ring** `crm_prospect_add` (`mcp="write"`, family `crm_prospecting`, 131 tools); **service MCP** passthrough
-  (37 tools, `docs/service-mcp.md` "Sourcing & enrichment" + changelog). Not on the public MCP withheld list — it sends
-  nothing.
-- **0.43.1 (same evening)**: a hand-added lead is also mirrored into **`/sales-leads` as `new`** (`sales_leads.py`
-  gained the `new` rung and an "Added by hand to <owner>'s leads" head; response carries `sales_lead_id`) — Amir: "we
-  should have them in the sales-leads". The bot's first four calls (Fedler, Maras, Volkenrath, Barlog) ran as
-  **EMP-0092 = Osman** although Mateo sent the Telegram message — the service MCP's owner is whatever
-  `X-On-Behalf-Of` the app sends, so the Zeami side must map the Telegram sender to the employee id itself; the four
-  rows were re-owned to Mateo by hand, my two stand-ins deleted, all four mirrored. There is deliberately no
-  "reassign owner" tool on the service surface (an app acts only as its own employee).
-- Not built: an "Add lead" form in the app (the ICP leads table has no manual entry either), a second phone column
-  (goes in `notes`).
-
-### 5.ai.2 Stand-up KPIs by teammate name — `crm_outreach_kpis` (2026-10-14, feat/kpis, core/hermes 0.44.0, no migration)
-
-Zeami Omni's daily rundown asks "Amir: connection requests sent + accounts researched?" and Amir runs Matthias's
-account. Nothing on the service MCP took a name or returned numbers. Amir's rule: **the MCP resolves the person** —
-"KPIs of Matthias" must work whoever asks, with no employee-id gymnastics on the bot side.
-- **Kernel** `commands/kpis.py`: `resolve_owner(conn, query, actor)` — name / email / LinkedIn handle, ILIKE; real users
-  rank above `…@<app>.service.salesbrain` stubs (a partner app's provisioned twin must never shadow the teammate), exact
-  name beats substring; one hit → owner, several → `candidates[]` (never a guess), none → error; `None`/"me" = the actor.
-  `outreach_kpis(actor, owner?, period)` counts over `[start, end)` (`period_bounds`: today · yesterday · week Mon→now ·
-  last_week · month · 7d · 30d) from the existing ledgers: `linkedin_invitations` (sent / accepted in period; pending,
-  accepted, not_accepted as current state), `outreach_approvals` (sent_at in period by kind + channel, awaiting_decision,
-  skipped), `reply_events`, `prospects` (new, contacted, replied, P5 awaiting reply, follow-ups due, converted),
-  `prospect_enrichment` (researched / emails / profiles / employers found), `agent_runs` (Leads Finder searches, found),
-  `sales_leads` (calls booked, converted — matched on `raw_payload.owner` name, the only link that table has),
-  `linkedin_accounts`. **Aggregates only, open to every user** — nothing names a lead (same reasoning as org-wide
-  /pipeline). Audit `outreach_kpis`.
-- **Ring** `crm_outreach_kpis {owner?, period?}` (read, family crm_agents, 132 tools); **service MCP** passthrough
-  (38 tools; `docs/service-mcp.md` "Run visibility" + changelog).
-- Live check 2026-10-14 as Mateo's plain user: "Matthias" → week = 3 requests sent, 10 accepted, 3 follow-ups, 3
-  replies, 7 awaiting decision, 74 pending; "Mateo" → the real Mateo user (exact name) not the three stubs.
-- Known soft spots: `leads.contacted` reads `prospects.last_contacted_at`, which the follow-up lane does not bump
-  (showed 0 against 3 follow-ups) — `messages_sent` is the reliable send count; `calls` only sees Calendly/sales-leads
-  bookings. Not built: a KPI panel in the app (`/admin/users` shows agents, not these numbers), plan-vs-actual.
-
-### 5.aj Marketing — paid ads inside the CRM (2026-10-13, feat/marketing, round 1 app-only)
-
-Amir: "we are starting ads in Google Ads and LinkedIn Ads — add a marketing menu, connectors, pull our performance
-data." Plan of record: `docs/marketing-ads.md` (two systems of record, closed loop via `gclid`/`li_fat_id` + UTMs on the
-zeami.io form, daily restated metrics, offline conversions back to the platforms in round 4).
-- **Round 1 (shipped)**: Sidebar group **Marketing** (`/marketing` overview frame with the six committed KPIs and an
-  honest empty state; `/marketing/connectors` with one card per provider — status, scopes, prerequisites, live server
-  env check). `lib/marketing.ts` = `AdProvider`, `PROVIDER_META`, `ConnectorStatus`. API:
-  `GET /api/marketing/connectors` (reads `oauth_tokens` rows `provider in ('google_ads','linkedin_ads')`),
-  `GET …/[provider]/connect` (501 + `missing_env[]` until round 2 adds the redirect/callback), `POST …/[provider]/disconnect`.
-  Sidebar active state is now longest-prefix, so a parent item is not lit on its child route.
-- **Round 1b (same day)**: the connectors work. Google Ads = **service account** (Amir has a Cloud project + service
-  account; env `GOOGLE_ADS_SERVICE_ACCOUNT_JSON` / `_DEVELOPER_TOKEN` / `_CUSTOMER_ID` / optional `_LOGIN_CUSTOMER_ID`;
-  RS256 JWT → `googleAds:searchStream` GAQL, `lib/ads/google.ts`; "Verify access" = one `FROM customer` query).
-  LinkedIn Ads = OAuth (`LINKEDIN_ADS_CLIENT_ID` / `_CLIENT_SECRET` / `_ACCOUNT_ID`; scopes `r_ads r_ads_reporting`;
-  callback `/api/marketing/connectors/linkedin_ads/callback`; token in `oauth_tokens` provider `linkedin_ads`, newest row
-  used org-wide; `adAnalytics` pivot CAMPAIGN daily, `lib/ads/linkedin.ts`). `GET /api/marketing/overview?days=` reads
-  both LIVE (10-min cache, per-provider `ok`/`error`) and `/marketing` shows spend / impressions / clicks / CTR / CPC per
-  campaign + spend sparkline; Leads / Cost per lead / Pipeline stay "—" until touchpoints exist (platform conversions are
-  shown greyed "as reported"). API versions pinned by env (`GOOGLE_ADS_API_VERSION` v21, `LINKEDIN_API_VERSION` 202509)
-  — bump when a platform retires one. `deploy.yml` writes the seven new secrets. **Unverified against live accounts**:
-  both request/response shapes were written from the API docs; the first "Verify access" / Connect tells.
-- **Rounds 2–4 (planned, not built)**: core migrations 055 (`ad_accounts`, `ad_campaigns`, `ad_metrics_daily`),
-  056 (`lead_touchpoints`), 057 (`agents.ads_sync` policy + `ad_conversion_outbox`); OAuth flows (Google: existing client
-  + `adwords` scope + developer token + MCC id; LinkedIn: new app, Advertising API approval, `r_ads_reporting`);
-  `ads_sync` Hermes `--no-agent` cron at 05:30 with 3-day lookback; `commands/ads.py` + `policy/ads.py` +
-  `crm_ads_summary/_campaigns/_sync_now` (family `crm_marketing`); public sales-leads form takes UTM + click ids;
-  LinkedIn Lead Gen Forms → `/sales-leads`; reporting; offline conversion upload. Outside-code lead times to start now:
-  LinkedIn Advertising API approval, Google developer token, zeami.io form change.
+Amir: "the self-improvement skill is really important, use it everywhere … memory tailored for each person AND
+shareable across members — not one Hermes as a provider for all." Plan (v1 + v2): `~/.claude/plans/hermes-self-improvement.md`.
+**What Hermes ships** (v2026.9.21): the `memory` tool (MEMORY.md + USER.md, ONE FILE PER PROFILE, USER.md single-user),
+`skill_manage` (procedural memory), a post-turn **background review** fork (`agent/turn_finalizer.py`; memory half fires
+only when the built-in `memory` tool is in the toolset and its prompt is hard-wired to that tool; skill half on
+`skills.creation_nudge_interval`; never for cron), `skills.write_approval` (non-CLI writes STAGED to
+`$HERMES_HOME/pending/skills/<id>.json`, per profile), the curator, `/learn`, `/refine`. Memory-provider tools are
+dispatched WITHOUT the tool_request middleware (`tool_executor._resolve_sequential_dispatch`) → a provider tool never
+knows who is talking; `crm_*` tools do. MEMORY.md is loaded once per cached agent → stale across gateway sessions.
+- **Found live (2026-10-13)**: built-in memory off since 08-31 (no memory tool anywhere, review never ran); web chat
+  (`api_server=[crm_core]`) and the team bot (`crm` profile `telegram=[crm_core, web]`) had no `skills`; `crm_core` is a
+  dead name since 0.34.0; the crm profile had **no `skills.external_dirs`** → the team bot never loaded a `salesbrain-*`
+  skill; one background-review skill write (`pending/skills/9e58e6a1.json`) had waited unreviewed since 2026-09-24. Our
+  RelationshipMemory provider keys on the DEAL'S CONTACT, not the operator — nobody had personal memory.
+- **Decision**: Hermes built-in memory stays OFF on both profiles (per-profile file, single-user USER.md, stale cache,
+  review cannot target a person). **Per-person memory = core `agent_memories`** (055): `owner_user_id`, `scope`
+  personal|team, `kind` preference|fact|rule|procedure, `content` ≤300, `status` active|proposed|superseded|archived,
+  `source` conversation|review|promotion|app, `supersedes_id`, `shared_from_id`; partial unique on active text per
+  owner (personal) / globally (team); policy row `agents.memory` (personal_chars 1500, team_chars 1000,
+  review_every_turns 8, review_max_candidates 3). Rows are superseded, never deleted.
+  `policy/memory.py` (pure): `refuse_shape` (passwords, API keys/tokens, AWS keys, private keys, IBAN, card numbers,
+  pay/salary with amounts — the sibling repo saw a password and a salary land in MEMORY.md), `normalize`, `validate`,
+  `render` (rules first, newest first, "… and N older notes not shown"). `commands/memory.py`: `remember` (personal →
+  active; team → proposed unless admin), `forget` (supersede), `share` (personal → team proposal, admin → active),
+  `decide` (admin), `review_candidates`, `prefetch_block(user_id)`, `recall`, `list_memories`, `team_overview`,
+  `settings`. **Attended-turn rule**: writes need a human actor from the session or an app click; the SERVICE actor is
+  refused — routines, digests and the learn pass can never write memory. Visibility: personal = owner (admin may list,
+  read-only); team active = everyone.
+- **Ring**: family **`crm_memory`** (`tools/memory.py`, 137 tools / 10 families): `crm_memory_save` (attended =
+  `_actor_user_id` came from the session, read before `resolve_actor` pops it; passes `hermes_session_id`),
+  `crm_memory_recall`, `crm_memory_forget`, `crm_memory_share`, `crm_memory_decide` (admin). All `mcp=None`; not on the
+  service MCP. **Provider** (`memory_provider.py`): `prefetch` now resolves the OPERATOR (`identity.actor_for_session`:
+  agent_sessions → telegram_user_links) and injects "Your notes / Team notes" ABOVE the deal dossier (user-message side,
+  cache-safe); `sync_turn` runs **`memory_review.review_operator`** every `review_every_turns` turns per session: one
+  Haiku call (`converse(feature='memory_review', owner_user_id)` → `llm_usage`) extracting ≤3 notes about the person we
+  talk to (never prospects — distill.py does those) → `review_candidates` (personal → active with source review, team →
+  proposed). Unmapped sessions never review. `learning.py::loop_status` reports a surface's memory as `crm_memory`
+  present; `pyyaml` is a declared ring dependency.
+- **deploy-server.sh**: `memory.memory_enabled false` / `user_profile_enabled false` / `nudge_interval 0` on both
+  profiles (verify block REFUSES a deploy with built-in memory on or a chat surface missing `skills` + `crm_memory`);
+  `skills.creation_nudge_interval 10`; skill review routed to Haiku 4.5 (`auxiliary.background_review`,
+  `max_input_tokens 48000` via `--force`); `display.memory_notifications verbose`. **`ensure_toolsets`** MERGES `skills`
+  + all ten crm_* families into `platform_toolsets.telegram` / `api_server` (default) and `telegram` (crm), drops
+  `crm_core` and Hermes' `memory`, keeps everything else; cron gets `crm_memory` (recall only — writes refused). The crm
+  profile gets `skills.external_dirs` + the shared `skills.create_dir /root/.hermes/skills-agent`. New `--no-agent` job
+  **`learning-digest`** (09:15) DMs the operator while Hermes-staged writes wait.
+- **Staged-skill review**: ring `learning.py` (+ `rpc._internal`: `learning_pending`, `learning_decide`,
+  `memory_list`, `memory_team_overview` — app-only) lists Hermes-staged writes across profiles from the files, diffs via
+  Hermes' `skill_pending_diff`, flags a patch to a git-deployed skill (`targets_repo_skill`: applies on approve, root
+  ignores `a-w`, overwritten by the next deploy → port to `assets/skills/`); approve replays through
+  `hermes_cli.write_approval_commands.handle_pending_subcommand` under `set_hermes_home_override`.
+- **App**: `/profile → Memory` (`components/profile/MemoryPanel.tsx`: add a note, your notes with Forget / Share with
+  team, proposals, team notes, forgotten; `GET/POST /api/memory`, `POST /api/memory/[id] {forget|share}`);
+  `/admin/learning` (`Team memory` section: proposals → Approve for everyone / Archive, per-user counts, active team
+  notes; `GET/POST /api/admin/memory`) + per profile: surfaces with skills / crm_memory pills, loop settings, issues,
+  Hermes-staged skill cards with diff + Approve / Reject, agent-written skills, MEMORY.md/USER.md (empty by design).
+  Sidebar Admin → Learning. `lib/memory-panel.ts`, `lib/learning-panel.ts`.
+- **SOULs** (default + crm): "Learn" section — corrections / preferences / rules / facts about the person →
+  `crm_memory_save` at once, say what you saved; "forget that" / "share with the team"; procedures → `skill_manage`
+  (staged); never rewrite git-deployed skills; never secrets or pay data.
+- **To verify after deploy** (integration session; migration 055 first): `hermes tools --summary` (+ `-p crm`) shows
+  `skills` + `crm_memory`; Telegram as Amir "remember I prefer batch calls" → row active, next turn's prefetch carries
+  it, a teammate's turn does not; "share that with the team" → proposal → approve on /admin/learning → teammate sees
+  it; 8 turns → one `memory_review` row in `llm_usage`, ≤3 candidates on /profile → Memory; a cron run writes no memory;
+  `grep "Background review complete" logs/agent.log` after a skill-worthy turn; `/admin/learning` lists 9e58e6a1.
+- Not built: `curator.consolidate`, `/learn` from the app, team-proposal count in the learning digest, backfilling
+  conversations before the deploy, `crm_memory_*` on the service MCP (same kernel, add when the sibling app asks).
 
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 

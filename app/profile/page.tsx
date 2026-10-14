@@ -4,15 +4,17 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import TelegramPanel from '@/components/profile/TelegramPanel';
+import MemoryPanel from '@/components/profile/MemoryPanel';
 import LinkedInPanel from '@/components/profile/LinkedInPanel';
 import ImportsPanel from '@/components/profile/ImportsPanel';
 import McpPanel from '@/components/profile/McpPanel';
 import ServiceTokenPanel from '@/components/profile/ServiceTokenPanel';
 
-type Tab = 'account' | 'telegram' | 'linkedin' | 'imports' | 'mcp' | 'service';
+type Tab = 'account' | 'memory' | 'telegram' | 'linkedin' | 'imports' | 'mcp' | 'service';
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: 'account', label: 'Account', hint: 'Who you are signed in as' },
+  { id: 'memory', label: 'Memory', hint: 'What the agents remember about you' },
   { id: 'telegram', label: 'Telegram', hint: 'Chat with the assistant' },
   { id: 'linkedin', label: 'LinkedIn', hint: 'Inbox triage and follow-ups' },
   { id: 'imports', label: 'Imports', hint: 'Google, contacts, messages' },
@@ -133,6 +135,7 @@ function Profile() {
           </div>
         )}
 
+        {tab === 'memory' && <MemoryPanel />}
         {tab === 'telegram' && <TelegramPanel />}
         {tab === 'linkedin' && <LinkedInPanel />}
         {tab === 'imports' && <ImportsPanel />}

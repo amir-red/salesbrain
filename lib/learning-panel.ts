@@ -81,17 +81,18 @@ export function originLabel(origin: string | null | undefined): string {
   return origin || 'unknown';
 }
 
-/** Every surface where the loop is wired = both toolsets present AND memory on. */
+/** Every surface where the loop is wired = `skills` + `crm_memory` present, built-in memory off. */
 export function loopHealth(st: LoopStatus): { ok: boolean; problems: string[] } {
   const problems: string[] = [];
-  if (!st.memory_enabled) problems.push('built-in memory is off (memory.memory_enabled)');
-  if (!(st.memory_nudge_interval > 0)) problems.push('memory review never runs (memory.nudge_interval = 0)');
+  // Hermes' built-in memory must stay OFF: it is one file per bot profile. Per-person memory is the
+  // crm_memory family (core agent_memories), which `surfaces[*].memory` reports.
+  if (st.memory_enabled) problems.push('Hermes built-in memory is ON (memory.memory_enabled) — it shadows per-person memory');
   if (!st.review_enabled) problems.push('background review disabled (auxiliary.background_review.enabled)');
   if (!st.skills_write_approval) problems.push('skill writes are NOT gated (skills.write_approval off)');
   for (const key of ['telegram', 'api_server'] as const) {
     const s = st.surfaces[key];
     const missing = (['skills', 'memory'] as const).filter((t) => !s[t]);
-    if (s.configured && missing.length) problems.push(`${SURFACE_LABELS[key]} lacks ${missing.join(' + ')}`);
+    if (s.configured && missing.length) problems.push(`${SURFACE_LABELS[key]} lacks ${missing.map((t) => (t === 'memory' ? 'crm_memory' : t)).join(' + ')}`);
   }
   return { ok: problems.length === 0, problems };
 }
