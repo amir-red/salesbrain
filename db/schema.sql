@@ -816,3 +816,15 @@ CREATE TABLE IF NOT EXISTS sales_lead_events (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_sales_lead_events_lead ON sales_lead_events (lead_id, occurred_at DESC);
+
+-- Lead roles (core 058): back office / front office as responsibilities. The policy row says which role hears
+-- about which activity and who picks up unowned leads; see salesbrain_core/policy/lead_roles.py.
+INSERT INTO policy_rules (key, value, description) VALUES
+  ('sales_leads.roles',
+   '{"quiet_days": 14, "digest_max": 12, "booking_lookahead_days": 1, "default_responsible": null, "default_front": null,
+     "notify": {"due": ["responsible"], "reply": ["responsible"], "landed": ["responsible", "front"],
+                "booked": ["front", "responsible"], "converted": ["responsible", "front"]}}',
+   'Lead roles: who hears about which /sales-leads activity; default_* = email of the teammate who picks up unowned leads.')
+ON CONFLICT (key) DO NOTHING;
+CREATE INDEX IF NOT EXISTS sales_leads_responsible_idx ON sales_leads (responsible_user_id, status);
+CREATE INDEX IF NOT EXISTS sales_leads_front_idx ON sales_leads (front_user_id, status);

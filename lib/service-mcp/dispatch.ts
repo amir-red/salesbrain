@@ -393,8 +393,9 @@ export const SERVICE_TOOLS: ToolDef[] = [
     name: 'crm_followups_due',
     description:
       "Who needs a follow-up: leads whose cadence timer is due (or within N days) with their last message and " +
-      "whether a follow-up draft already awaits approval, plus deal follow-ups overdue. owner = a teammate's " +
-      "name / email, 'me', or 'all'.",
+      "whether a follow-up draft already awaits approval, deal follow-ups overdue, AND sales_leads — /sales-leads rows whose " +
+      "ping-by date is reached or that went quiet 14+ days where the owner is back OR front office (each row names both). " +
+      "owner = a teammate's name / email, 'me', or 'all'. 'What is due for me today?' = owner 'me'.",
     inputSchema: obj({
       owner: { type: 'string', default: 'all' },
       within_days: { type: 'integer', default: 0 },
@@ -408,13 +409,21 @@ export const SERVICE_TOOLS: ToolDef[] = [
       "The team's inbound / sales-leads inbox (org-wide): zeami.io demo requests, Calendly bookings, every lead " +
       "we messaged or who replied, and hand-added cards. status: new (default) | contacted | replied | converted | archived | all, " +
       "or the dashboard views working (open leads ranked by priority) and due (ping-by date reached or quiet 14+ days). " +
-      "Rows carry priority, must_talk, responsible/front, last/next contact and days_since_contact.",
-    inputSchema: obj({ status: { type: 'string', default: 'new' }, limit: { type: 'integer', default: 20 } }),
+      "Rows carry priority, must_talk, responsible/front, last/next contact and days_since_contact. " +
+      "ROLES: responsible = BACK OFFICE (drives the lead: research, drafts, follow-ups, ping-by date), front = FRONT OFFICE " +
+      "(the face: calls, demos, meetings; empty = back office does both). 'my leads' / 'Hannes's leads' = owner 'me' / a " +
+      "teammate's name, role any | responsible | front.",
+    inputSchema: obj({
+      status: { type: 'string', default: 'new' },
+      owner: { type: 'string', description: "teammate name / email, 'me', or omit for everyone" },
+      role: { type: 'string', enum: ['any', 'responsible', 'front'], default: 'any' },
+      limit: { type: 'integer', default: 20 },
+    }),
     needsOwner: true,
   },
   {
     name: 'crm_get_sales_lead',
-    description: "One sales-leads row in full: message history, source, demo booking, whether converted.",
+    description: "One sales-leads row in full: message history, source, demo booking, whether converted, the dated track record, and `roles` (back office / front office with their duties).",
     inputSchema: obj({ lead_id: { type: 'string' } }, ['lead_id']),
     needsOwner: true,
   },
@@ -424,8 +433,9 @@ export const SERVICE_TOOLS: ToolDef[] = [
       "Work a sales-leads row the way the dashboard does: status new | contacted | replied | archived; a dated " +
       "track-record line (note_kind 'note', or a contact event met | sent | reply | call | meeting that moves the " +
       "'last contact' ticker; occurred_at YYYY-MM-DD backdates it); priority 1 very high · 2 high · 3 medium · 4 low · 5 very low (0 clears); must_talk; " +
-      "responsible / front teammate by name; next_contact_at YYYY-MM-DD; met_at (where we met). Any combination. " +
-      "Converting is crm_convert_lead.",
+      "responsible (BACK OFFICE: drives the lead — gets the due digest and reply notices) / front (FRONT OFFICE: calls, demos; " +
+      "gets booking notices, becomes the deal lead) teammate by name — a newly assigned person is DM'd; next_contact_at " +
+      "YYYY-MM-DD; met_at (where we met). Any combination. Converting is crm_convert_lead.",
     inputSchema: obj(
       {
         lead_id: { type: 'string' },
@@ -448,8 +458,9 @@ export const SERVICE_TOOLS: ToolDef[] = [
   {
     name: 'crm_convert_lead',
     description:
-      "Turn a sales-leads row into a G1 sales deal owned by this employee. Idempotent (returns the existing deal if " +
-      "already converted).",
+      "Turn a sales lead into a G1 sales deal. The deal's creator is the lead's BACK OFFICE and its project lead the FRONT " +
+      "OFFICE (you, where a seat is empty), so both see it; the booked demo, website, where-met, their message and our notes go " +
+      "into the deal notes; the track record gets the line and both roles are told. Idempotent.",
     inputSchema: obj({ lead_id: { type: 'string' } }, ['lead_id']),
     needsOwner: true,
   },

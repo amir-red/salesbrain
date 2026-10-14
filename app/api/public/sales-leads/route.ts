@@ -22,6 +22,7 @@ import { z } from 'zod';
 import pool from '@/lib/db';
 import { requireApiKey, jsonWithCors, corsOptions } from '@/lib/public-api';
 import { notifySalesLead } from '@/lib/sales-lead-notify';
+import { leadLanded } from '@/lib/sales-lead-roles';
 
 const BodySchema = z.object({
   full_name: z.string().trim().min(1).max(200),
@@ -93,6 +94,9 @@ export async function POST(req: NextRequest) {
   // If a marketing campaign ever needs the pre-Calendly dual-email flow
   // (prospect + team both notified at lead capture), import `sendDemoEmails`
   // from lib/demo-emails.ts and call it here — it remains available.
+
+  // Roles (058): fill the default back / front office, track-record line, DM the roles.
+  leadLanded(rows[0].id as string, 'landed');
 
   // Telegram heads-up to the board group (fire-and-forget, never throws).
   const preferredSlot = [preferred_demo_date, preferred_demo_time?.slice(0, 5), preferred_demo_timezone]

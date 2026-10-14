@@ -40,6 +40,7 @@ import {
   sendTeamCancellationNotification,
 } from '@/lib/demo-emails';
 import { notifySalesLead } from '@/lib/sales-lead-notify';
+import { leadLanded } from '@/lib/sales-lead-roles';
 
 /**
  * Format a Calendly `start_time` (ISO 8601 UTC) as a human-readable slot
@@ -225,6 +226,10 @@ async function handleCreated(body: Record<string, unknown>): Promise<void> {
     fullNameForEmail = e.name;
     companyForEmail = e.company || 'Unknown';
   }
+
+  // Roles (058): the front office hears about the demo, the back office too; a cold-start lead
+  // also gets its default seats. Fire-and-forget, after the row is persisted.
+  leadLanded(leadId, 'booked');
 
   // Team notification with click-to-join card.
   const bookedSlotLabel = formatBookedSlot(e.start_time, timezone) || undefined;

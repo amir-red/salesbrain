@@ -161,3 +161,28 @@ export const STATUS_COLOR: Record<LeadStatus, string> = {
   converted: 'var(--green)',
   archived: 'var(--text-muted)',
 };
+
+/** Lead roles (core 058, policy/lead_roles.py) — the seats on every lead and what each one owns. */
+export type LeadRole = 'responsible' | 'front';
+export type RoleFilter = '' | 'any' | LeadRole;   // '' = everyone's leads
+export const ROLES: Record<LeadRole, { label: string; short: string; duties: string; hears: string }> = {
+  responsible: {
+    label: 'Back office', short: 'back',
+    duties: 'Drives the lead: research and the dossier, drafts, follow-ups, the ping-by date, priority, the track record.',
+    hears: 'Morning digest of due leads, reply notices, new leads.',
+  },
+  front: {
+    label: 'Front office', short: 'front',
+    duties: 'The face: calls, demos and meetings. Becomes the deal\'s project lead when the lead converts. Empty = the back office does both.',
+    hears: 'Booking notices and the day\'s demos.',
+  },
+};
+export function effectiveFront(lead: Pick<Lead, 'responsible_user_id' | 'front_user_id'>): string | null {
+  return lead.front_user_id ?? lead.responsible_user_id;
+}
+export function myRole(lead: Pick<Lead, 'responsible_user_id' | 'front_user_id'>, userId: string | null): LeadRole | null {
+  if (!userId) return null;
+  if (lead.responsible_user_id === userId) return 'responsible';
+  if (lead.front_user_id === userId) return 'front';
+  return null;
+}

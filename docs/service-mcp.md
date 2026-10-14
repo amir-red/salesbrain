@@ -873,6 +873,19 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 
 ## 12. Changelog
 
+### 2026-10-14 — lead roles: back office and front office are responsibilities
+
+Every sales lead has two seats (core 058): **responsible = back office** drives the lead (research, drafts,
+follow-ups, the ping-by date, the track record) and gets the morning due digest and reply notices;
+**front = front office** is the face (calls, demos, meetings), gets booking notices and becomes the deal's project
+lead on convert. Empty front = the back office does both. **`crm_list_sales_leads`** takes `owner` (name / email /
+'me') and `role` (any | responsible | front) — "my leads", "Hannes's leads"; **`crm_followups_due`** returns a
+`sales_leads` list (ping-by reached or quiet 14+ days, owner matched in either seat); **`crm_get_sales_lead`**
+returns `roles`; **`crm_update_sales_lead responsible=… front=…`** DMs the newly assigned person;
+**`crm_convert_lead`** makes the back office the deal's creator and the front office its lead;
+**`crm_outreach_kpis`** counts sales-lead bookings / conversions by seat and the person's logged calls, meetings
+and notes (`sales_lead_activity`). Tool count unchanged.
+
 ### 2026-10-14 — the lead dashboard
 
 `/sales-leads` is now the team's daily list (core 056): **`crm_list_sales_leads`** gains the views `working` and `due`

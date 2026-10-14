@@ -5,18 +5,20 @@ import Sidebar from '@/components/Sidebar';
 import LeadRow, { ROW_GRID } from '@/components/sales-leads/LeadRow';
 import LeadDetail from '@/components/sales-leads/LeadDetail';
 import { Search } from '@/components/sales-leads/icons';
-import type { Lead, LeadCounts, LeadSort, LeadStatus, LeadView, TeamUser } from '@/lib/sales-leads';
+import { ROLES, type Lead, type LeadCounts, type LeadSort, type LeadStatus, type LeadView, type RoleFilter, type TeamUser } from '@/lib/sales-leads';
 
 /**
  * /sales-leads — the team's lead dashboard. One aligned line per lead, ranked
  * by the priority people set; expand for the briefing, the track record and
  * the controls. Three working views (Working / Due / Must talk) plus a status
  * filter; search narrows by name, company, title or where met; "Mine" keeps
- * the leads I work as back or front office.
+ * the leads I work — in either seat, as back office (I drive them) or as
+ * front office (I take the calls). Back / front office are responsibilities
+ * (core 058): the digest, replies, bookings and convert all follow them.
  */
 const WORK_VIEWS: { key: LeadView; label: string; hint: string }[] = [
   { key: 'working', label: 'Working', hint: 'Open leads, best first' },
-  { key: 'due', label: 'Due', hint: 'Ping-by date reached, or quiet for 14+ days' },
+  { key: 'due', label: 'Due', hint: 'Ping-by date reached, or quiet for 14+ days (starred, high-priority or already-contacted leads)' },
   { key: 'must', label: 'Must talk', hint: 'Starred' },
 ];
 const STATUS_VIEWS: { key: LeadStatus | 'all'; label: string }[] = [
@@ -31,7 +33,8 @@ export default function SalesLeadsPage() {
   const [view, setView] = useState<LeadView>('working');
   const [sort, setSort] = useState<LeadSort>('priority');
   const [q, setQ] = useState('');
-  const [mine, setMine] = useState(false);
+  const [role, setRole] = useState<RoleFilter>('');   // '' everyone · any = mine · responsible / front = mine in that seat
+  const [viewerId, setViewerId] = useState<string | null>(null);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,19 +47,28 @@ export default function SalesLeadsPage() {
     try {
       const params = new URLSearchParams({ view, sort });
       if (q.trim()) params.set('q', q.trim());
-      if (mine) params.set('mine', '1');
+      if (role) { params.set('mine', '1'); if (role !== 'any') params.set('role', role); }
       const res = await fetch(`/api/sales-leads?${params}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load');
       setLeads(data.leads || []);
       setCounts(data.counts || null);
       setUsers(data.users || []);
+      setViewerId(data.viewer_id || null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load');
     } finally {
       setLoading(false);
     }
-  }, [view, sort, q, mine]);
+  }, [view, sort, q, role]);
+
+  // Deep links from the digest / chat: /sales-leads?view=due&mine=1[&role=responsible]
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const v = sp.get('view') as LeadView | null;
+    if (v && (WORK_VIEWS.some((w) => w.key === v) || STATUS_VIEWS.some((w) => w.key === v))) setView(v);
+    if (sp.get('mine') === '1') setRole(sp.get('role') === 'responsible' ? 'responsible' : sp.get('role') === 'front' ? 'front' : 'any');
+  }, []);
 
   useEffect(() => { const t = setTimeout(() => load(), q ? 250 : 0); return () => clearTimeout(t); }, [load, q]);
 
@@ -117,8 +129,21 @@ export default function SalesLeadsPage() {
               <div className="z-eyebrow mb-1">Pipeline</div>
               <h1 className="text-2xl font-semibold tracking-tight">Sales leads</h1>
               <p className="text-sm mt-1 max-w-2xl" style={{ color: 'var(--text-muted)' }}>
-                Everyone we are working, best first. The counter is days since we last talked; back office drives the lead, front office takes the call.
+                Everyone we are working, best first. The counter is days since we last talked.
               </p>
+              <details className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+                <summary className="cursor-pointer select-none" style={{ color: 'var(--accent)' }}>Who does what</summary>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2 max-w-2xl">
+                  {(Object.keys(ROLES) as (keyof typeof ROLES)[]).map((k) => (
+                    <div key={k} className="rounded-xl px-3 py-2" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                      <div className="font-medium" style={{ color: 'var(--text)' }}>{ROLES[k].label}</div>
+                      <div>{ROLES[k].duties}</div>
+                      <div className="mt-1" style={{ opacity: 0.8 }}>Hears: {ROLES[k].hears}</div>
+                    </div>
+                  ))}
+                  <div className="sm:col-span-2">The LinkedIn or email account owner still approves every message sent from their own account.</div>
+                </div>
+              </details>
             </div>
             <div className="flex">
               {METRICS.map((m, i) => (
@@ -146,8 +171,14 @@ export default function SalesLeadsPage() {
               <option value="">By status…</option>
               {STATUS_VIEWS.map((s) => <option key={s.key} value={s.key}>{s.label}{counts ? ` (${counts[s.key]})` : ''}</option>)}
             </select>
-            <button type="button" onClick={() => setMine(!mine)} title="Leads where I am back or front office"
-              className="text-sm rounded-full px-3.5 py-1.5" style={{ background: mine ? 'var(--accent)' : 'transparent', color: mine ? 'var(--accent-fg)' : 'var(--text-muted)', border: `1px solid ${mine ? 'var(--accent)' : 'var(--border)'}` }}>Mine</button>
+            <select value={role} onChange={(e) => setRole(e.target.value as RoleFilter)} aria-label="Whose leads"
+              title="Mine = leads where I sit in either seat; back office = I drive them; front office = I take the calls"
+              className="text-sm rounded-full px-3 py-1.5" style={{ background: role ? 'var(--accent)' : 'transparent', color: role ? 'var(--accent-fg)' : 'var(--text-muted)', border: `1px solid ${role ? 'var(--accent)' : 'var(--border)'}` }}>
+              <option value="">Everyone</option>
+              <option value="any">Mine</option>
+              <option value="responsible">Mine · back office</option>
+              <option value="front">Mine · front office</option>
+            </select>
             <div className="flex-1" />
             <label className="relative">
               <Search width={15} height={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-muted)' }} />
@@ -192,13 +223,14 @@ export default function SalesLeadsPage() {
                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
                   {view === 'due' ? 'Set a “ping again on” date on a lead and it will show up here when it is time.'
                     : view === 'must' ? 'Star the people you must talk to with the star on each row.'
+                    : role ? 'Nothing in that seat. Assign yourself as back or front office on a lead and it shows up here.'
                     : q ? 'Try a shorter search, or switch to Everything.' : 'Demo requests, event contacts and replies to outreach land here.'}
                 </p>
               </div>
             ) : (
               leads.map((l, i) => (
                 <div key={l.id} style={{ borderTop: i ? '1px solid var(--border)' : undefined }}>
-                  <LeadRow lead={l} rank={i + 1} open={open.has(l.id)} onToggle={() => toggle(l.id)} busy={busyId === l.id} onPatch={(p) => { patch(l.id, p); }} />
+                  <LeadRow lead={l} rank={i + 1} open={open.has(l.id)} viewerId={viewerId} onToggle={() => toggle(l.id)} busy={busyId === l.id} onPatch={(p) => { patch(l.id, p); }} />
                   {open.has(l.id) && (
                     <LeadDetail lead={l} users={users} busy={busyId === l.id} onPatch={(p) => patch(l.id, p)} onConvert={() => convert(l.id)} />
                   )}

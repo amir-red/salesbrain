@@ -1178,6 +1178,44 @@ his say-so: the "read" / "info requested" checkboxes.
 - Not built: Hannes's LinkedIn (he connects it on /profile), the agent's morning digest listing `due` leads, a per-row
   "draft follow-up" button (the /followups board does that for P5 prospects), re-ordering by drag.
 
+### 5.ai.5 Lead roles — back office / front office wired into every activity (2026-10-14, feat/lead-roles, core 058)
+
+Amir, after "how do back office and front office work?": "it should also reflect the responsibilities and should be
+wired to all activities." Before: the two seats were labels on the row (sorting, the Mine filter). Now one policy
+module says who owns what and every activity follows it. **Back office** (`responsible`) drives the lead — research
+and the dossier, drafts, follow-ups, the ping-by date, priority, the track record; hears the morning due digest,
+reply notices, new leads. **Front office** (`front`) is the face — calls, demos, meetings; hears booking notices,
+becomes the deal's project lead on convert. Empty front = the back office does both. The LinkedIn / email **account
+owner** is deliberately a third thing: approving a send from their account stays theirs.
+- **Core**: `policy/lead_roles.py` (pure: `ROLES` duties, `DEFAULT_NOTIFY` activity → roles, `recipients`,
+  `due_reason`, `digest_text`); migration **058** (policy row `sales_leads.roles` — `notify` map, `quiet_days` 14,
+  `digest_max`, `default_responsible` / `default_front` emails for leads that land with nobody; two indexes).
+  `commands/sales_leads.py`: `apply_role_defaults` (called on every mirror + landing), `notify_events(lead, activity,
+  text, exclude)` → `notify_user` events (ring delivers owner's-DM-or-nothing), `due_leads` + **`due_sql`** (THE due predicate — ping-by reached, or quiet 14+ d only for starred / P1–P2 / already-contacted leads; shared by the list view, followups_due, the digest and the KPIs; the app route mirrors it), `upcoming_bookings`, `roles_digest(actor)` (service/admin), `lead_landed`.
+  `deals.list_sales_leads(owner, role)`; `get_sales_lead` → `roles`; `convert_lead_to_deal` → deal `user_id` = back
+  office, `lead_id` = front office (both see it under creator-or-lead), full notes (booked demo, website, met at,
+  message, our notes — the app route's own SQL copy is gone), a `status` event and a DM to both seats;
+  `update_sales_lead` DMs a newly assigned person. `lookup.followups_due` → `sales_leads[]`; `lead_lookup` journey
+  carries `sales_lead{responsible, front, …}`; `replies.record_reply` also tells the back office (excluding the account
+  owner, who already got it); `kpis.outreach_kpis` counts bookings / conversions by seat, `working_as_back_office`,
+  `working_as_front_office`, `due_now`, and `sales_lead_activity` (calls, meetings, notes the person logged) — the
+  Napa rows finally count for someone.
+- **Ring**: `assets/scripts/sales_leads_due.py` = Hermes cron **`sales-leads-due`** (07:45 Mon–Fri, `--no-agent`): one
+  DM per back office with their due leads (reason per lead) and per front office with the day's demos;
+  `fallback=False`; the operator line names due leads with NO back office. App-only RPC `sales_lead_landed` (public
+  routes). Tool text for list / get / update / convert / followups_due; skill `salesbrain-sales-pipeline` §"/sales-leads:
+  back office and front office are responsibilities" ("my leads" = `owner='me'`; several people = one call; never
+  guess the seats).
+- **App**: `lib/sales-leads.ts` `ROLES` (duties + what each hears), `myRole`; `/sales-leads` "Everyone / Mine / Mine ·
+  back office / Mine · front office" select (`?mine=1&role=`), deep links `?view=due&mine=1` from the digest, a "Who
+  does what" legend, a "you · back/front" pill on the row, unassigned in orange; `POST /api/sales-leads/[id]/convert`
+  is a thin `crm_convert_lead` call; `lib/sales-lead-roles.ts::leadLanded` fires from the zeami.io form and the
+  Calendly webhook (SERVICE actor, fire-and-forget). Service MCP: `crm_list_sales_leads {owner, role}`, texts;
+  `docs/service-mcp.md` changelog. Tool counts unchanged.
+- Not built: a per-team default front office in the UI (SQL on the policy row for now), reassigning in bulk, a
+  reminder when a due lead stays untouched for N more days, the digest for email-only cadence prospects (that is the
+  outreach routine's job).
+
 ### 5.aj Marketing — paid ads inside the CRM (2026-10-13, feat/marketing, round 1 app-only)
 
 Amir: "we are starting ads in Google Ads and LinkedIn Ads — add a marketing menu, connectors, pull our performance

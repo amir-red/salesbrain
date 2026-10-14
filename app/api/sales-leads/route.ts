@@ -1,6 +1,6 @@
 /**
  * GET /api/sales-leads?view=working|due|must|new|contacted|replied|converted|archived|all
- *                     &sort=priority|contact|newest &q=<name/company> &mine=1
+ *                     &sort=priority|contact|newest &q=<name/company> &mine=1[&role=responsible|front]
  *   → { leads, counts, users }
  *
  * The team's lead dashboard (org-wide: any signed-in user sees every lead).
@@ -26,7 +26,9 @@ const SORTS: Record<LeadSort, string> = {
 };
 
 const OPEN = "l.status NOT IN ('converted', 'archived')";
-const DUE = `${OPEN} AND (l.next_contact_at <= current_date OR (l.next_contact_at IS NULL AND COALESCE(l.last_contact_at, l.created_at) < now() - interval '${QUIET_WARN_DAYS} days'))`;
+// Mirrors the kernel's ONE due predicate (commands/sales_leads.py::due_sql — change both): ping-by date reached, or
+// quiet for 14+ days but only for leads that are starred, high priority, or were contacted at least once.
+const DUE = `${OPEN} AND (l.next_contact_at <= current_date OR (l.next_contact_at IS NULL AND (l.must_talk OR l.priority <= 2 OR l.last_contact_at IS NOT NULL) AND COALESCE(l.last_contact_at, l.created_at) < now() - interval '${QUIET_WARN_DAYS} days'))`;
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -39,6 +41,9 @@ export async function GET(req: NextRequest) {
   if (!SORTS[sort]) return NextResponse.json({ error: `Invalid sort: ${sort}` }, { status: 400 });
   const q = (url.searchParams.get('q') || '').trim();
   const mine = url.searchParams.get('mine') === '1';
+  // role=responsible → leads I drive (back office); role=front → leads I take the calls for; else either seat.
+  const role = url.searchParams.get('role') === 'responsible' ? 'responsible'
+    : url.searchParams.get('role') === 'front' ? 'front' : 'any';
 
   const where: string[] = [];
   const vals: unknown[] = [];
@@ -47,7 +52,12 @@ export async function GET(req: NextRequest) {
   else if (view === 'must') where.push(`${OPEN} AND l.must_talk`);
   else if (view === 'contacted') where.push("l.status IN ('contacted', 'replied')");
   else if (view !== 'all') { vals.push(view); where.push(`l.status = $${vals.length}`); }
-  if (mine) { vals.push(session.userId); where.push(`(l.responsible_user_id = $${vals.length} OR l.front_user_id = $${vals.length})`); }
+  if (mine) {
+    vals.push(session.userId);
+    where.push(role === 'responsible' ? `l.responsible_user_id = $${vals.length}`
+      : role === 'front' ? `l.front_user_id = $${vals.length}`
+      : `(l.responsible_user_id = $${vals.length} OR l.front_user_id = $${vals.length})`);
+  }
   if (q) { vals.push(`%${q}%`); where.push(`(l.full_name ILIKE $${vals.length} OR l.company ILIKE $${vals.length} OR l.title ILIKE $${vals.length} OR l.met_at ILIKE $${vals.length})`); }
   const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
@@ -104,7 +114,7 @@ export async function GET(req: NextRequest) {
         ORDER BY name`,
     );
 
-    return NextResponse.json({ leads, counts, users, view, sort });
+    return NextResponse.json({ viewer_id: session.userId, leads, counts, users, view, sort });
   } finally {
     client.release();
   }

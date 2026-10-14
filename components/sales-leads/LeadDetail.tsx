@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { addDays, CHANNELS, MANUAL_EVENT_KINDS, type EventKind, type Lead, type LeadEvent, type TeamUser } from '@/lib/sales-leads';
+import { addDays, CHANNELS, MANUAL_EVENT_KINDS, ROLES, type EventKind, type Lead, type LeadEvent, type TeamUser } from '@/lib/sales-leads';
 import { EventIcon, External, Mail } from './icons';
 
 /**
@@ -170,7 +170,7 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, busy }: {
                 <option value="">Nobody yet</option>
                 {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
-              <span className="block text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>Drives the lead: research, drafts, follow-ups.</span>
+              <span className="block text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>{ROLES.responsible.duties} Hears: {ROLES.responsible.hears}</span>
             </label>
             <label className="block">
               <span className="z-eyebrow">Front office</span>
@@ -178,7 +178,7 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, busy }: {
                 <option value="">Same as back office</option>
                 {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
-              <span className="block text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>The face in calls and meetings.</span>
+              <span className="block text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>{ROLES.front.duties} Hears: {ROLES.front.hears}</span>
             </label>
           </div>
 

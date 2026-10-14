@@ -1,6 +1,6 @@
 'use client';
 
-import { contactAge, firstName, nextContactLabel, PRIORITY_LEVELS, priorityLevel, STATUS_COLOR, tierLabel, type Lead } from '@/lib/sales-leads';
+import { contactAge, firstName, myRole, nextContactLabel, PRIORITY_LEVELS, priorityLevel, ROLES, STATUS_COLOR, tierLabel, type Lead } from '@/lib/sales-leads';
 import { Chevron, LinkedIn, Star } from './icons';
 
 /**
@@ -9,10 +9,11 @@ import { Chevron, LinkedIn, Star } from './icons';
  */
 export const ROW_GRID = 'md:grid-cols-[2.5rem_minmax(0,1fr)_7.5rem_8.5rem_9.5rem_12.5rem]';
 
-export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy }: {
+export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy, viewerId = null }: {
   lead: Lead; rank: number; open: boolean; onToggle: () => void;
-  onPatch: (patch: Record<string, unknown>) => void; busy: boolean;
+  onPatch: (patch: Record<string, unknown>) => void; busy: boolean; viewerId?: string | null;
 }) {
+  const mine = myRole(lead, viewerId);
   const age = contactAge(lead);
   const next = nextContactLabel(lead.next_contact_at);
   const prio = priorityLevel(lead.priority);
@@ -69,14 +70,15 @@ export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy }: {
       </div>
 
       {/* who works it */}
-      <div className="hidden md:block min-w-0 leading-tight" title={`back office (drives the lead): ${lead.responsible_name ?? '—'}\nfront office (face in calls): ${lead.front_name ?? '—'}`}>
+      <div className="hidden md:block min-w-0 leading-tight" title={`${ROLES.responsible.label} (${ROLES.responsible.duties}): ${lead.responsible_name ?? '—'}\n${ROLES.front.label} (${ROLES.front.duties}): ${lead.front_name ?? 'same as back office'}`}>
         {lead.responsible_name || lead.front_name ? (<>
           <div className="text-xs truncate">
             {firstName(lead.responsible_name) || '—'}
             {lead.front_name && lead.front_name !== lead.responsible_name && <span style={{ color: 'var(--text-muted)' }}> → {firstName(lead.front_name)}</span>}
+            {mine && <span className="ml-1.5 text-[10px] px-1.5 rounded-full align-middle" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>you · {ROLES[mine].short}</span>}
           </div>
           <div className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>back office{lead.front_name && lead.front_name !== lead.responsible_name ? ' → front' : ''}</div>
-        </>) : <span className="text-xs" style={{ color: 'var(--text-muted)', opacity: 0.6 }}>unassigned</span>}
+        </>) : <span className="text-xs" style={{ color: 'var(--orange)' }}>unassigned</span>}
       </div>
 
       {/* controls */}
