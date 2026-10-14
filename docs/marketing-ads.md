@@ -97,7 +97,7 @@ BETWEEN …` via `customers/{id}/googleAds:searchStream` (REST, no SDK, same raw
 Accounts are listed with `customers:listAccessibleCustomers` at connect time; the user picks which to attach.
 
 **LinkedIn Ads — 3-legged OAuth** (`lib/ads/linkedin.ts`). Env: `LINKEDIN_ADS_CLIENT_ID`, `LINKEDIN_ADS_CLIENT_SECRET`,
-`LINKEDIN_ADS_ACCOUNT_ID` (the company ad account; digits or urn), optional `LINKEDIN_API_VERSION` (default `202509`).
+`LINKEDIN_ADS_ACCOUNT_ID` (the company ad account; digits or urn), optional `LINKEDIN_API_VERSION` (default `202609`; LinkedIn retires versions after ~12 months, 202509 was already dead on 2026-10-14).
 The app needs the **Advertising API** product approved (review takes days to weeks) and the redirect URL
 `<app url>/api/marketing/connectors/linkedin_ads/callback` registered. Scopes `r_ads`, `r_ads_reporting`. One teammate
 with Viewer+ access connects; the token row (`oauth_tokens.provider='linkedin_ads'`) is used org-wide (newest wins).
