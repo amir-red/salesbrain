@@ -18,6 +18,7 @@
  */
 
 import pool from '../db';
+import { adsOverview, providerTotals } from '../ads/overview';
 import { kernelCall } from '../mcp/kernel-rpc';
 import { registerEmployee } from './identity';
 import { linkedinConnectStart, linkedinUnboundAccounts, linkedinLinkAccount } from './linkedin';
@@ -340,6 +341,20 @@ export const SERVICE_TOOLS: ToolDef[] = [
       agent: { type: 'string', enum: ['leads_finder', 'outreach', 'enricher', 'graph_sync'] },
       icp_id: { type: 'string' },
       limit: { type: 'integer', description: 'default 30' },
+    }),
+    needsOwner: true,
+  },
+  {
+    name: 'marketing_overview',
+    description:
+      "Paid-ads performance (Google Ads + LinkedIn Ads) for the last N closed days, read live from the platforms " +
+      "(10-min cache). `totals` per provider: spend, impressions, clicks, CTR, CPC, platform-reported conversions / " +
+      "Lead Gen leads, spend on the last closed day and the day before (\"yesterday / today\" for a stand-up — " +
+      "platforms close a day late). `campaigns` lists every campaign. A provider that is not configured or not " +
+      "connected says so in `error` without hiding the other. Org-wide; no employee data.",
+    inputSchema: obj({
+      days: { type: 'integer', description: 'Closed days to cover, 1–365 (default 7)', default: 7 },
+      include_daily: { type: 'boolean', description: 'Also return the per-day rows', default: false },
     }),
     needsOwner: true,
   },
@@ -917,6 +932,21 @@ export async function dispatchServiceTool(
       // owner_user_id is stripped too: an app holds only its own employee's agents.
       const { employee_id: _drop, owner_user_id: _own, ...rest } = args;
       return { status: 'success', data: await kernelCall(toolName, rest, owner) };
+    }
+    if (toolName === 'marketing_overview') {
+      const o = await adsOverview(typeof args.days === 'number' ? args.days : 7);
+      const daily = args.include_daily === true;
+      return {
+        status: 'success',
+        data: {
+          days: o.days, since: o.since, until: o.until,
+          totals: providerTotals(o),
+          campaigns: o.providers.flatMap((p) => p.campaigns),
+          ...(daily ? { daily: o.providers.flatMap((p) => p.days) } : {}),
+          note: 'Spend is platform-reported in the account currency; conversions/leads are as reported by the ' +
+                'platform, not CRM leads.',
+        },
+      };
     }
     if (toolName === 'list_leads') {
       return { status: 'success', data: await listLeads(owner, args) };

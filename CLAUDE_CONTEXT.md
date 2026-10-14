@@ -1061,6 +1061,88 @@ knows who is talking; `crm_*` tools do. MEMORY.md is loaded once per cached agen
   `grep "Background review complete" logs/agent.log` after a skill-worthy turn; `/admin/learning` lists 9e58e6a1.
 - Not built: `curator.consolidate`, `/learn` from the app, team-proposal count in the learning digest, backfilling
   conversations before the deploy, `crm_memory_*` on the service MCP (same kernel, add when the sibling app asks).
+Mateo's Zeami Omni bot said "Captured and added to the CRM" for two KIMW business cards (Marius Fedler, Jan-Ole Maras)
+— nothing landed: the service MCP (token "Zeami AppnMCP") had 36 tools and none could create a person, so the bot wrote
+to its own Notion database and called it the CRM. The audit log showed only reads + `register_user`.
+- **Kernel** `commands/prospecting.py::add_lead(actor, full_name, company?, title?, email?, phone?, linkedin_url?,
+  website?, location?, address?, notes?, icp_id?, source_detail?)` — guards first (name, `@` in email, member id is not a
+  slug), then the dedup ladder on the owner's leads (slug → email → name at company; returns `matched_by`, never a
+  duplicate), else `upsert_candidate(source_type='manual')` so there is still ONE landing path; then COALESCE-fills
+  `contacts.phone/title/email/linkedin_url` and `accounts.website/domain/hq_location` (domain with qualify()'s unique
+  guard), `ensure_prospect_person` for the handles, and `notes` → `people.record_fact(source='manual')` — a dossier fact,
+  not `contacts.notes` (which nothing reads). ICP: explicit, else the owner's single active one, else unscored P0_IMPORTED
+  (the response's `note` says which). Audit `lead_added`.
+- **Ring** `crm_prospect_add` (`mcp="write"`, family `crm_prospecting`, 131 tools); **service MCP** passthrough
+  (37 tools, `docs/service-mcp.md` "Sourcing & enrichment" + changelog). Not on the public MCP withheld list — it sends
+  nothing.
+- **0.43.1 (same evening)**: a hand-added lead is also mirrored into **`/sales-leads` as `new`** (`sales_leads.py`
+  gained the `new` rung and an "Added by hand to <owner>'s leads" head; response carries `sales_lead_id`) — Amir: "we
+  should have them in the sales-leads". The bot's first four calls (Fedler, Maras, Volkenrath, Barlog) ran as
+  **EMP-0092 = Osman** although Mateo sent the Telegram message — the service MCP's owner is whatever
+  `X-On-Behalf-Of` the app sends, so the Zeami side must map the Telegram sender to the employee id itself; the four
+  rows were re-owned to Mateo by hand, my two stand-ins deleted, all four mirrored. There is deliberately no
+  "reassign owner" tool on the service surface (an app acts only as its own employee).
+- Not built: an "Add lead" form in the app (the ICP leads table has no manual entry either), a second phone column
+  (goes in `notes`).
+
+### 5.ai.2 Stand-up KPIs by teammate name — `crm_outreach_kpis` (2026-10-14, feat/kpis, core/hermes 0.44.0, no migration)
+
+Zeami Omni's daily rundown asks "Amir: connection requests sent + accounts researched?" and Amir runs Matthias's
+account. Nothing on the service MCP took a name or returned numbers. Amir's rule: **the MCP resolves the person** —
+"KPIs of Matthias" must work whoever asks, with no employee-id gymnastics on the bot side.
+- **Kernel** `commands/kpis.py`: `resolve_owner(conn, query, actor)` — name / email / LinkedIn handle, ILIKE; real users
+  rank above `…@<app>.service.salesbrain` stubs (a partner app's provisioned twin must never shadow the teammate), exact
+  name beats substring; one hit → owner, several → `candidates[]` (never a guess), none → error; `None`/"me" = the actor.
+  `outreach_kpis(actor, owner?, period)` counts over `[start, end)` (`period_bounds`: today · yesterday · week Mon→now ·
+  last_week · month · 7d · 30d) from the existing ledgers: `linkedin_invitations` (sent / accepted in period; pending,
+  accepted, not_accepted as current state), `outreach_approvals` (sent_at in period by kind + channel, awaiting_decision,
+  skipped), `reply_events`, `prospects` (new, contacted, replied, P5 awaiting reply, follow-ups due, converted),
+  `prospect_enrichment` (researched / emails / profiles / employers found), `agent_runs` (Leads Finder searches, found),
+  `sales_leads` (calls booked, converted — matched on `raw_payload.owner` name, the only link that table has),
+  `linkedin_accounts`. **Aggregates only, open to every user** — nothing names a lead (same reasoning as org-wide
+  /pipeline). Audit `outreach_kpis`.
+- **Ring** `crm_outreach_kpis {owner?, period?}` (read, family crm_agents, 132 tools); **service MCP** passthrough
+  (38 tools; `docs/service-mcp.md` "Run visibility" + changelog).
+- Live check 2026-10-14 as Mateo's plain user: "Matthias" → week = 3 requests sent, 10 accepted, 3 follow-ups, 3
+  replies, 7 awaiting decision, 74 pending; "Mateo" → the real Mateo user (exact name) not the three stubs.
+- Known soft spots: `leads.contacted` reads `prospects.last_contacted_at`, which the follow-up lane does not bump
+  (showed 0 against 3 follow-ups) — `messages_sent` is the reliable send count; `calls` only sees Calendly/sales-leads
+  bookings. Not built: a KPI panel in the app (`/admin/users` shows agents, not these numbers), plan-vs-actual.
+
+### 5.aj Marketing — paid ads inside the CRM (2026-10-13, feat/marketing, round 1 app-only)
+
+Amir: "we are starting ads in Google Ads and LinkedIn Ads — add a marketing menu, connectors, pull our performance
+data." Plan of record: `docs/marketing-ads.md` (two systems of record, closed loop via `gclid`/`li_fat_id` + UTMs on the
+zeami.io form, daily restated metrics, offline conversions back to the platforms in round 4).
+- **Round 1 (shipped)**: Sidebar group **Marketing** (`/marketing` overview frame with the six committed KPIs and an
+  honest empty state; `/marketing/connectors` with one card per provider — status, scopes, prerequisites, live server
+  env check). `lib/marketing.ts` = `AdProvider`, `PROVIDER_META`, `ConnectorStatus`. API:
+  `GET /api/marketing/connectors` (reads `oauth_tokens` rows `provider in ('google_ads','linkedin_ads')`),
+  `GET …/[provider]/connect` (501 + `missing_env[]` until round 2 adds the redirect/callback), `POST …/[provider]/disconnect`.
+  Sidebar active state is now longest-prefix, so a parent item is not lit on its child route.
+- **Round 1b (same day)**: the connectors work. Google Ads = **service account** (Amir has a Cloud project + service
+  account; env `GOOGLE_ADS_SERVICE_ACCOUNT_JSON` / `_DEVELOPER_TOKEN` / `_CUSTOMER_ID` / optional `_LOGIN_CUSTOMER_ID`;
+  RS256 JWT → `googleAds:searchStream` GAQL, `lib/ads/google.ts`; "Verify access" = one `FROM customer` query).
+  LinkedIn Ads = OAuth (`LINKEDIN_ADS_CLIENT_ID` / `_CLIENT_SECRET` / `_ACCOUNT_ID`; scopes `r_ads r_ads_reporting`;
+  callback `/api/marketing/connectors/linkedin_ads/callback`; token in `oauth_tokens` provider `linkedin_ads`, newest row
+  used org-wide; `adAnalytics` pivot CAMPAIGN daily, `lib/ads/linkedin.ts`). `GET /api/marketing/overview?days=` reads
+  both LIVE (10-min cache, per-provider `ok`/`error`) and `/marketing` shows spend / impressions / clicks / CTR / CPC per
+  campaign + spend sparkline; Leads / Cost per lead / Pipeline stay "—" until touchpoints exist (platform conversions are
+  shown greyed "as reported"). API versions pinned by env (`GOOGLE_ADS_API_VERSION` v21, `LINKEDIN_API_VERSION` 202509)
+  — bump when a platform retires one. `deploy.yml` writes the seven new secrets. **Unverified against live accounts**:
+  both request/response shapes were written from the API docs; the first "Verify access" / Connect tells.
+- **Round 1c (2026-10-14, feat/mcp-marketing, app-only)**: the overview loader moved to `lib/ads/overview.ts`
+  (`adsOverview(days)` + `providerTotals`), the route is a thin wrapper, and the service MCP gained **`marketing_overview`**
+  (39 tools) — per-provider totals (spend, impressions, clicks, CTR, CPC, platform conversions / Lead Gen leads, spend on
+  the last closed day and the day before), every campaign, optional daily rows — so the Zeami Omni stand-up bot can
+  answer "ad spend yesterday / today + inquiries" (inquiries stay "as reported" until touchpoints exist).
+- **Rounds 2–4 (planned, not built)**: core migrations 055 (`ad_accounts`, `ad_campaigns`, `ad_metrics_daily`),
+  056 (`lead_touchpoints`), 057 (`agents.ads_sync` policy + `ad_conversion_outbox`); OAuth flows (Google: existing client
+  + `adwords` scope + developer token + MCC id; LinkedIn: new app, Advertising API approval, `r_ads_reporting`);
+  `ads_sync` Hermes `--no-agent` cron at 05:30 with 3-day lookback; `commands/ads.py` + `policy/ads.py` +
+  `crm_ads_summary/_campaigns/_sync_now` (family `crm_marketing`); public sales-leads form takes UTM + click ids;
+  LinkedIn Lead Gen Forms → `/sales-leads`; reporting; offline conversion upload. Outside-code lead times to start now:
+  LinkedIn Advertising API approval, Google developer token, zeami.io form change.
 
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
