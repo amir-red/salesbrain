@@ -1042,6 +1042,22 @@ account. Nothing on the service MCP took a name or returned numbers. Amir's rule
   (showed 0 against 3 follow-ups) — `messages_sent` is the reliable send count; `calls` only sees Calendly/sales-leads
   bookings. Not built: a KPI panel in the app (`/admin/users` shows agents, not these numbers), plan-vs-actual.
 
+### 5.ai.3 The assistant batch — ten service-MCP tools (2026-10-14, feat/mcp-tools, core/hermes 0.45.0, no migration)
+
+Amir: "develop them" (the list proposed after `crm_outreach_kpis`). Kernel: `kpis.py` +`pipeline_summary` (org-wide like
+/pipeline: by gate, created/moved/won/lost/signed in period, board pending with vote counts, deal follow-ups overdue) and
+`team_kpis` (outreach_kpis for every user with a LinkedIn account or 30-day activity); NEW `commands/lookup.py` —
+`lead_lookup` (org-wide, journey + `_next_step` ladder: deal → cards awaiting → replied → follow-up due → sent → request
+pending → 1st-degree unmessaged → nothing to reach → draft), `record_note` (dated `person_facts` row via
+`ensure_prospect_person`; kinds meeting/call/email/linkedin also `record_interaction` outbound; `query` must resolve to
+ONE lead; appended to the sales-leads row only if one exists — `sales_leads.append_if_mirrored`, never creates),
+`followups_due` (cadence timer + `draft_pending` + deal `followups`; owner name / me / all); `deals.update_sales_lead`
+(status new/contacted/replied/archived + dated note; converted is final). Ring: `crm_pipeline_summary`, `crm_team_kpis`
+(agents), `crm_lead_lookup`, `crm_lead_note`, `crm_followups_due` (prospecting), `crm_update_sales_lead` (deals) — 138
+tools. Service MCP: those six + `crm_list_sales_leads`, `crm_get_sales_lead`, `crm_convert_lead`, `crm_prospect_convert`
+exposed as passthroughs — 49 tools. Live check 2026-10-14: pipeline 51 active deals, Fedler → "not contacted yet",
+"Barlog" → two candidates (Frank/Mateo, Peter/Matthias), Matthias 18 follow-ups due.
+
 ### 5.aj Marketing — paid ads inside the CRM (2026-10-13, feat/marketing, round 1 app-only)
 
 Amir: "we are starting ads in Google Ads and LinkedIn Ads — add a marketing menu, connectors, pull our performance
