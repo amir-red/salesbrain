@@ -110,7 +110,7 @@ Four JSON-RPC methods:
 | Method | Purpose |
 |---|---|
 | `initialize` | Handshake — returns server info + protocol version. |
-| `tools/list` | The catalog (37 tools) with JSON-Schema for each. |
+| `tools/list` | The catalog (38 tools) with JSON-Schema for each. |
 | `tools/call` | Invoke one tool. This is where the work happens. |
 | `ping` | Health check. |
 
@@ -347,7 +347,8 @@ employee's data.
 | | `crm_linkedin_link_prospect` | write | Attach the profile your user picked to a lead |
 | | `crm_prospect_add` | write | Add one lead by hand (business card, event note, referral). Never duplicates |
 | | `list_leads` | read | The lead list, filterable by ICP, stage and fit |
-| **Visibility** | `get_run_status` | read | Poll a queued or finished run. The poll loop |
+| **Visibility** | `crm_outreach_kpis` | read | Stand-up numbers for any teammate by name (requests, messages, replies, research) |
+| | `get_run_status` | read | Poll a queued or finished run. The poll loop |
 | | `crm_agent_activity` | read | Recent runs and why a tick was skipped |
 | | `crm_agent_status` | read | Agent switches, caps, `sourcing_paused`, paused accounts |
 | | `crm_linkedin_quota` | read | Today's LinkedIn budget and when it resets |
@@ -486,6 +487,19 @@ stage, research summary, reachability.
 - `icp_id` — filter to one ICP · `stage` / `min_score` / `limit` — filter + cap (≤300)
 
 ### Run visibility
+
+**`crm_outreach_kpis`** · read — The numbers a daily stand-up asks for, for ONE teammate over ONE period.
+- `owner` — a name, email or LinkedIn handle (`"Matthias"`). SalesBrain resolves it to the teammate itself; omit it
+  (or `"me"`) for the calling employee. Exactly one match → numbers; several → `{ error, candidates[] }` — ask the
+  user which; none → `error`.
+- `period` — `today` (default) · `yesterday` · `week` (Monday → now) · `last_week` · `month` · `7d` · `30d`
+- Returns `owner {id,name,email}`, the window, and groups: `connection_requests` (sent, accepted, failed in the
+  period; `pending_now`, `accepted_total`, `not_accepted_total` as current state), `messages_sent` (first_messages,
+  followups, intro_asks, via_linkedin, via_email, people), `approvals` (awaiting_decision, skipped), `replies`,
+  `leads` (new_leads, contacted, replied, awaiting_reply_now, followups_due_now, converted_to_deals), `research`
+  (researched, emails_found, profiles_found, employers_found, searches, leads_found), `calls` (calls_booked,
+  converted), `linkedin` (connected_accounts, last_synced_at). Aggregates only — it never names a lead, which is
+  why any employee may ask about any teammate.
 
 **`get_run_status`** · read — Track a queued or finished run: `status`, `done`, counts, the skip `reason`
 verbatim, `error`, `lead_count`, plus (while pending) `queued_runs` and `next_tick_window`, and always
@@ -807,6 +821,12 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 ---
 
 ## 12. Changelog
+
+### 2026-10-14 — stand-up KPIs for any teammate, by name
+
+**`crm_outreach_kpis`** `{owner?, period?}` answers "how many connection requests did Matthias send this week?"
+without your system knowing who Matthias is: SalesBrain resolves the name (or email / LinkedIn handle) and returns
+aggregate counts for that teammate. 38 tools.
 
 ### 2026-10-13 — leads can be added by hand
 
