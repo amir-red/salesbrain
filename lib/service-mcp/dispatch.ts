@@ -18,7 +18,7 @@
  */
 
 import pool from '../db';
-import { adsOverview, providerTotals } from '../ads/overview';
+import { adsOverview, dayTotals, providerTotals } from '../ads/overview';
 import { kernelCall } from '../mcp/kernel-rpc';
 import { registerEmployee } from './identity';
 import { linkedinConnectStart, linkedinUnboundAccounts, linkedinLinkAccount } from './linkedin';
@@ -449,10 +449,14 @@ export const SERVICE_TOOLS: ToolDef[] = [
       "(10-min cache). `totals` per provider: spend, impressions, clicks, CTR, CPC, platform-reported conversions / " +
       "Lead Gen leads, spend on the last closed day and the day before (\"yesterday / today\" for a stand-up — " +
       "platforms close a day late). `campaigns` lists every campaign. A provider that is not configured or not " +
-      "connected says so in `error` without hiding the other. Org-wide; no employee data.",
+      "connected says so in `error` without hiding the other. `by_day` has one row per provider per day with " +
+      "spend, impressions, clicks, CTR, CPM, CPC already computed — for \"13 October: LinkedIn spent X, Y " +
+      "impressions, Z clicks, CTR, CPM, CPC\" read that row. Pass `day` (YYYY-MM-DD) for exactly one day. " +
+      "Org-wide; no employee data.",
     inputSchema: obj({
       days: { type: 'integer', description: 'Closed days to cover, 1–365 (default 7)', default: 7 },
-      include_daily: { type: 'boolean', description: 'Also return the per-day rows', default: false },
+      day: { type: 'string', description: 'One specific day, YYYY-MM-DD (then days defaults to 1)' },
+      include_campaigns: { type: 'boolean', description: 'Also list every campaign', default: false },
     }),
     needsOwner: true,
   },
@@ -1034,15 +1038,15 @@ export async function dispatchServiceTool(
       return { status: 'success', data: await kernelCall(toolName, rest, owner) };
     }
     if (toolName === 'marketing_overview') {
-      const o = await adsOverview(typeof args.days === 'number' ? args.days : 7);
-      const daily = args.include_daily === true;
+      const day = typeof args.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(args.day) ? args.day : undefined;
+      const o = await adsOverview(typeof args.days === 'number' ? args.days : (day ? 1 : 7), day);
       return {
         status: 'success',
         data: {
           days: o.days, since: o.since, until: o.until,
           totals: providerTotals(o),
-          campaigns: o.providers.flatMap((p) => p.campaigns),
-          ...(daily ? { daily: o.providers.flatMap((p) => p.days) } : {}),
+          by_day: dayTotals(o),
+          ...(args.include_campaigns === true ? { campaigns: o.providers.flatMap((p) => p.campaigns) } : {}),
           note: 'Spend is platform-reported in the account currency; conversions/leads are as reported by the ' +
                 'platform, not CRM leads.',
         },

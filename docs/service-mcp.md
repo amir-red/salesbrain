@@ -514,11 +514,12 @@ stage, research summary, reachability.
 
 **`marketing_overview`** · read — Paid-ads performance for the last N closed days, read live from Google Ads and
 LinkedIn Ads (10-minute cache). Org-wide, no employee data.
-- `days` — closed days to cover, 1–365 (default 7) · `include_daily` — also return per-day rows
+- `days` — closed days to cover, 1–365 (default 7) · `day` — one specific day, `YYYY-MM-DD` · `include_campaigns` — also list every campaign
 - Returns `totals[]` per provider (`spend`, `impressions`, `clicks`, `ctr`, `cpc`, `platform_conversions`,
   `platform_leads`, `spend_last_day`, `spend_day_before`, `currency`, and `ok` / `error` — "not configured" or "not
-  connected" when a provider is not wired yet), `campaigns[]` with the same fields per campaign, and `daily[]` on
-  request. Platforms close a day late: `until` is yesterday.
+  connected" when a provider is not wired yet), and **`by_day[]`** — one row per provider per day with `spend`,
+  `impressions`, `clicks`, `ctr`, `cpm`, `cpc` computed, newest first: the daily ads report as-is. Platforms close a
+  day late: `until` defaults to yesterday.
 
 **`crm_team_kpis`** · read — `{period?, limit?}` → `teammates[]`, each the `crm_outreach_kpis` shape, for every user
 with a connected LinkedIn account or outreach activity in the last 30 days.
