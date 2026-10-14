@@ -110,7 +110,7 @@ Four JSON-RPC methods:
 | Method | Purpose |
 |---|---|
 | `initialize` | Handshake — returns server info + protocol version. |
-| `tools/list` | The catalog (39 tools) with JSON-Schema for each. |
+| `tools/list` | The catalog (49 tools) with JSON-Schema for each. |
 | `tools/call` | Invoke one tool. This is where the work happens. |
 | `ping` | Health check. |
 
@@ -349,6 +349,16 @@ employee's data.
 | | `list_leads` | read | The lead list, filterable by ICP, stage and fit |
 | **Visibility** | `crm_outreach_kpis` | read | Stand-up numbers for any teammate by name (requests, messages, replies, research) |
 | | `marketing_overview` | read | Google Ads + LinkedIn Ads spend, clicks, CTR, CPC per campaign, live |
+| | `crm_team_kpis` | read | `crm_outreach_kpis` for every active teammate in one call |
+| | `crm_pipeline_summary` | read | Deals by gate, moved / won / lost in the period, board pending |
+| | `crm_lead_lookup` | read | "Where are we with X?" — a lead's journey + next step, org-wide |
+| | `crm_followups_due` | read | Who needs a follow-up, per teammate or all |
+| **Inbox & deals** | `crm_list_sales_leads` | read | The sales-leads inbox (new / contacted / replied / …) |
+| | `crm_get_sales_lead` | read | One inbox row in full |
+| | `crm_update_sales_lead` | write | Set its status / append a note |
+| | `crm_lead_note` | write | Dated note (or meeting / call) on a lead's dossier |
+| | `crm_convert_lead` | write | Inbox row → G1 deal |
+| | `crm_prospect_convert` | write | Prospect → G1 deal |
 | | `get_run_status` | read | Poll a queued or finished run. The poll loop |
 | | `crm_agent_activity` | read | Recent runs and why a tick was skipped |
 | | `crm_agent_status` | read | Agent switches, caps, `sourcing_paused`, paused accounts |
@@ -510,6 +520,21 @@ LinkedIn Ads (10-minute cache). Org-wide, no employee data.
   connected" when a provider is not wired yet), `campaigns[]` with the same fields per campaign, and `daily[]` on
   request. Platforms close a day late: `until` is yesterday.
 
+**`crm_team_kpis`** · read — `{period?, limit?}` → `teammates[]`, each the `crm_outreach_kpis` shape, for every user
+with a connected LinkedIn account or outreach activity in the last 30 days.
+
+**`crm_pipeline_summary`** · read — `{period?}` (default `week`) → `active {deals, value}`, `in_period {created,
+moved_gate, won, won_value, lost, contracts_signed}`, `by_gate[]` (type, gate, deals, value), `moved[]` (deal, from→to),
+`won_deals[]`, `lost_deals[]`, `board_pending[]` (deal, gate, votes so far), `deal_followups_due_now`. Org-wide.
+
+**`crm_lead_lookup`** · read — `{query*, limit?}` → `leads[]` matching name / email / company / slug, org-wide,
+each with `stage`, `owner_name`, `icp`, `icp_score`, `invitation_status`, `last_sent {channel, sent_at, snippet}`,
+`last_reply`, `next_followup_at`, `touch_count`, `cards_awaiting_decision`, `deal_name` / `deal_gate`, `sales_lead_id`
+and a plain-language `next_step`. Nothing matched → `people_without_lead[]` from the graph.
+
+**`crm_followups_due`** · read — `{owner?: name | email | 'me' | 'all', within_days?, limit?}` → `leads[]` whose
+follow-up timer is due (`draft_pending` = a card already waits for approval) and `deal_followups[]` overdue.
+
 **`get_run_status`** · read — Track a queued or finished run: `status`, `done`, counts, the skip `reason`
 verbatim, `error`, `lead_count`, plus (while pending) `queued_runs` and `next_tick_window`, and always
 `readiness`. **This is the poll loop.**
@@ -548,6 +573,17 @@ SalesBrain administrator can only be lifted by one. `crm_agent_status` lists the
 `remaining`, `resume_at`, tier, pause state.
 
 ### Outreach
+
+**`crm_lead_note`** · write — `{note*, prospect_id? | person_id? | query?, kind?, when?}`. A dated fact on the lead's
+dossier; `kind` meeting / call / email / linkedin also logs an outbound interaction. `query` must match exactly one lead
+(several → `candidates[]`). Appended to the lead's /sales-leads row when it has one. Sends nothing.
+
+**`crm_list_sales_leads`** · read / **`crm_get_sales_lead`** · read / **`crm_update_sales_lead`** · write /
+**`crm_convert_lead`** · write — the team's inbox (`/sales-leads`): list by status, read one, set status
+(new | contacted | replied | archived) or append a note, convert to a G1 deal owned by this employee.
+
+**`crm_prospect_convert`** · write — `{prospect_id*, deal_name?, value?}` promotes one of this employee's prospects to
+a G1 deal (idempotent).
 
 **`crm_outreach_propose`** · write — File a draft for the employee to approve. Sends nothing. One
 pending draft per person per kind.
@@ -830,6 +866,14 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 ---
 
 ## 12. Changelog
+
+### 2026-10-14 — the assistant batch
+
+Ten tools so a chat assistant can run a stand-up and act on what it hears: **`crm_team_kpis`**, **`crm_pipeline_summary`**,
+**`crm_lead_lookup`** ("where are we with Fedler?"), **`crm_followups_due`**, **`crm_lead_note`** (meeting / call notes
+onto the dossier), the inbox (**`crm_list_sales_leads`**, **`crm_get_sales_lead`**, **`crm_update_sales_lead`**,
+**`crm_convert_lead`**) and **`crm_prospect_convert`**. 49 tools. Lookups are org-wide and name the owner; writes are
+notes, triage and conversion — still nothing that sends.
 
 ### 2026-10-14 — marketing numbers
 

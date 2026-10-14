@@ -345,6 +345,104 @@ export const SERVICE_TOOLS: ToolDef[] = [
     needsOwner: true,
   },
   {
+    name: 'crm_pipeline_summary',
+    description:
+      "The deal side of a stand-up, org-wide: active deals by type and gate with value; in the period — created, " +
+      "moved gate (from→to), won (+value), lost, contracts signed; board decisions still pending; deal follow-ups " +
+      "overdue. Deal names only. period: today | yesterday | week | last_week | month | 7d | 30d.",
+    inputSchema: obj({ period: { type: 'string', default: 'week' } }),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_team_kpis',
+    description:
+      "crm_outreach_kpis for every teammate doing outreach, in ONE call — the whole stand-up table. Aggregates only.",
+    inputSchema: obj({ period: { type: 'string', default: 'today' }, limit: { type: 'integer', default: 12 } }),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_lead_lookup',
+    description:
+      "Where are we with <person / company>? Finds leads by name, email, company or LinkedIn slug — org-wide, the " +
+      "owner's name is part of the answer — and returns each one's journey: stage, owner, ICP + fit, LinkedIn " +
+      "connection state, last message sent (snippet), last reply, follow-up timer, cards awaiting approval, " +
+      "converted deal, and a plain `next_step`. Nothing matched → graph people with that name (add with crm_prospect_add).",
+    inputSchema: obj({ query: { type: 'string' }, limit: { type: 'integer', default: 5 } }, ['query']),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_lead_note',
+    description:
+      "Record what happened with a lead: a dated note on their dossier. kind = meeting / call / email / linkedin " +
+      "also logs an outbound interaction. Target by prospect_id, person_id, or a `query` that matches exactly one " +
+      "lead (several → `candidates`, pick and call again). Appended to the /sales-leads row when one exists. Sends nothing.",
+    inputSchema: obj(
+      {
+        note: { type: 'string' },
+        prospect_id: { type: 'string' },
+        person_id: { type: 'string' },
+        query: { type: 'string', description: 'Name / company to resolve the lead by' },
+        kind: { type: 'string', enum: ['note', 'meeting', 'call', 'email', 'linkedin'], default: 'note' },
+        when: { type: 'string', description: 'YYYY-MM-DD if not today' },
+      },
+      ['note'],
+    ),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_followups_due',
+    description:
+      "Who needs a follow-up: leads whose cadence timer is due (or within N days) with their last message and " +
+      "whether a follow-up draft already awaits approval, plus deal follow-ups overdue. owner = a teammate's " +
+      "name / email, 'me', or 'all'.",
+    inputSchema: obj({
+      owner: { type: 'string', default: 'all' },
+      within_days: { type: 'integer', default: 0 },
+      limit: { type: 'integer', default: 50 },
+    }),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_list_sales_leads',
+    description:
+      "The team's inbound / sales-leads inbox (org-wide): zeami.io demo requests, Calendly bookings, every lead " +
+      "we messaged or who replied, and hand-added cards. status: new (default) | contacted | replied | converted | archived | all.",
+    inputSchema: obj({ status: { type: 'string', default: 'new' }, limit: { type: 'integer', default: 20 } }),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_get_sales_lead',
+    description: "One sales-leads row in full: message history, source, demo booking, whether converted.",
+    inputSchema: obj({ lead_id: { type: 'string' } }, ['lead_id']),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_update_sales_lead',
+    description:
+      "Triage a sales-leads row: set status new | contacted | replied | archived and/or append a dated note. " +
+      "Converting is crm_convert_lead.",
+    inputSchema: obj(
+      { lead_id: { type: 'string' }, status: { type: 'string', enum: ['new', 'contacted', 'replied', 'archived'] }, note: { type: 'string' } },
+      ['lead_id'],
+    ),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_convert_lead',
+    description:
+      "Turn a sales-leads row into a G1 sales deal owned by this employee. Idempotent (returns the existing deal if " +
+      "already converted).",
+    inputSchema: obj({ lead_id: { type: 'string' } }, ['lead_id']),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_prospect_convert',
+    description:
+      "Promote one of this employee's prospects to a G1 sales deal (name + value optional). Idempotent.",
+    inputSchema: obj({ prospect_id: { type: 'string' }, deal_name: { type: 'string' }, value: { type: 'number' } }, ['prospect_id']),
+    needsOwner: true,
+  },
+  {
     name: 'marketing_overview',
     description:
       "Paid-ads performance (Google Ads + LinkedIn Ads) for the last N closed days, read live from the platforms " +
@@ -812,6 +910,8 @@ const PASSTHROUGH = new Set([
   'crm_linkedin_find_person', 'crm_linkedin_link_prospect', 'crm_prospect_add',
   'crm_linkedin_revoke', 'crm_agent_activity', 'crm_agent_status', 'crm_linkedin_quota', 'crm_outreach_kpis',
   'crm_graph_status', 'crm_graph_edges', 'crm_graph_sync',
+  'crm_pipeline_summary', 'crm_team_kpis', 'crm_lead_lookup', 'crm_lead_note', 'crm_followups_due',
+  'crm_list_sales_leads', 'crm_get_sales_lead', 'crm_update_sales_lead', 'crm_convert_lead', 'crm_prospect_convert',
   'crm_graph_reach', 'crm_who_can_reach',
   'crm_path_find', 'crm_propose_intro',
 ]);
