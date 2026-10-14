@@ -3,7 +3,7 @@
  *
  *   GET    /api/sales-leads/:id  — the row + its track record (newest first)
  *   PATCH  /api/sales-leads/:id  — any of: status (new|contacted|replied|archived; converting
- *                                  is /convert), priority (1–10, 0 clears), must_talk,
+ *                                  is /convert), priority (1 very high … 5 very low, 0 clears), must_talk,
  *                                  responsible_user_id / front_user_id ('' clears),
  *                                  next_contact_at (YYYY-MM-DD, '' clears), met_at,
  *                                  note (+ note_kind, channel, occurred_at) → a track-record
@@ -23,7 +23,7 @@ import { CHANNELS } from '@/lib/sales-leads';
 const Ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const PatchSchema = z.object({
   status: z.enum(['new', 'contacted', 'replied', 'archived']).optional(),
-  priority: z.number().int().min(0).max(10).optional(),
+  priority: z.number().int().min(0).max(5).optional(),   // 1 very high … 5 very low, 0 clears
   must_talk: z.boolean().optional(),
   responsible_user_id: z.string().optional(),   // uuid or '' to clear
   front_user_id: z.string().optional(),

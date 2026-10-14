@@ -127,6 +127,27 @@ export function addDays(ymd: string | null, days: number): string {
   return `${base.getFullYear()}-${p(base.getMonth() + 1)}-${p(base.getDate())}`;
 }
 
+export const PRIORITY_LEVELS: { value: number; label: string; short: string; color: string }[] = [
+  { value: 1, label: 'Very high', short: 'Very high', color: 'var(--red)' },
+  { value: 2, label: 'High', short: 'High', color: 'var(--orange)' },
+  { value: 3, label: 'Medium', short: 'Medium', color: 'var(--yellow)' },
+  { value: 4, label: 'Low', short: 'Low', color: 'var(--cat-teal)' },
+  { value: 5, label: 'Very low', short: 'Very low', color: 'var(--text-muted)' },
+];
+export function priorityLevel(p: number | null | undefined) {
+  return p ? PRIORITY_LEVELS.find((l) => l.value === p) ?? PRIORITY_LEVELS[4] : null;
+}
+
+/** Napa research tiers came as A/B/C or High/Medium/Lower; show one vocabulary. */
+export function tierLabel(t: string | null | undefined): string | null {
+  if (!t) return null;
+  return ({ A: 'High fit', B: 'Medium fit', C: 'Lower fit', High: 'High fit', Medium: 'Medium fit', Lower: 'Lower fit' } as Record<string, string>)[t] ?? t;
+}
+
+export function firstName(name: string | null | undefined): string {
+  return (name || '').split(/\s+/)[0] || '';
+}
+
 export function initials(name: string | null | undefined): string {
   if (!name) return '?';
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((s) => s[0]!.toUpperCase()).join('');

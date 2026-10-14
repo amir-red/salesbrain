@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
               l.booking_status, l.booked_at, l.meet_link,
               l.preferred_demo_date, l.preferred_demo_time, l.preferred_demo_timezone,
               (SELECT jsonb_build_object('kind', e.kind, 'text', left(e.text, 240), 'occurred_at', e.occurred_at)
-                 FROM sales_lead_events e WHERE e.lead_id = l.id
+                 FROM sales_lead_events e WHERE e.lead_id = l.id AND e.kind IN ('met', 'sent', 'reply', 'call', 'meeting', 'note')
                 ORDER BY e.occurred_at DESC, e.created_at DESC LIMIT 1) AS last_event
          FROM sales_leads l
          LEFT JOIN deals d ON d.id = l.converted_deal_id

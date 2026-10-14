@@ -1160,6 +1160,13 @@ his say-so: the "read" / "info requested" checkboxes.
   unranked new). Owner + front default `mateo@chipchip.social` (the real Mateo user), `source='event:pei-napa-2026'`,
   dossier from the research, track record from his notes / messages / replies, `met_at='PEI Napa 2026'`. Run by the
   integration session AFTER 056, then decide with Mateo on `--all`.
+- **Live 2026-10-14 (0.47.0 → 0.47.1)**: 056 applied, 125 engaged Napa contacts imported (Hannes = back office, Mateo =
+  front office, `source='event:pei-napa-2026'`), app on Production. 0.47.1 (core 057, same day, Amir): priority is FIVE
+  labelled levels — 1 Very high · 2 High · 3 Medium · 4 Low · 5 Very low (`PRIORITY_LEVELS` in `lib/sales-leads.ts`,
+  `PRIORITY_LABELS` in `commands/deals.py`), the owner pill shows first names ("Hannes → Mateo", not "HG/M"), research
+  tiers A/B/C render as High/Medium/Lower fit, and the row summary line skips import/status/priority/assign events.
+  The kernel migration runner (`store.migrations`) re-applies the whole stream and now trips on 051's
+  `prospect_enrichment_kind_check`; apply new files one at a time with psycopg until that is fixed.
 - Not built: Hannes's LinkedIn (he connects it on /profile), the agent's morning digest listing `due` leads, a per-row
   "draft follow-up" button (the /followups board does that for P5 prospects), re-ordering by drag.
 

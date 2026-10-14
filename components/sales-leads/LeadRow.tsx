@@ -1,6 +1,6 @@
 'use client';
 
-import { contactAge, initials, nextContactLabel, STATUS_COLOR, type Lead } from '@/lib/sales-leads';
+import { contactAge, firstName, nextContactLabel, PRIORITY_LEVELS, priorityLevel, STATUS_COLOR, tierLabel, type Lead } from '@/lib/sales-leads';
 
 /**
  * One line per lead (Mateo's Napa CRM row): rank · status dot · name, title at
@@ -14,7 +14,8 @@ export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy }: {
   const age = contactAge(lead);
   const next = nextContactLabel(lead.next_contact_at);
   const ageColor = age.tone === 'alert' ? 'var(--red)' : age.tone === 'warn' ? 'var(--orange)' : age.tone === 'never' ? 'var(--text-muted)' : 'var(--green)';
-  const tier = lead.dossier?.tier;
+  const tier = tierLabel(lead.dossier?.tier);
+  const prio = priorityLevel(lead.priority);
   const badge = (text: string, color: string, title?: string) => (
     <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded whitespace-nowrap" title={title}
       style={{ background: `color-mix(in srgb, ${color} 14%, transparent)`, color }}>{text}</span>
@@ -28,9 +29,9 @@ export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy }: {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-sm font-semibold truncate max-w-[22ch]">{lead.full_name}</span>
-          {lead.priority ? badge(`P${lead.priority}`, 'var(--accent)', 'priority') : null}
+          {prio ? badge(prio.label, prio.color, 'priority') : null}
           {lead.must_talk ? badge('★ must talk', 'var(--orange)') : null}
-          {tier ? badge(tier, tier === 'High' ? 'var(--green)' : tier === 'Medium' ? 'var(--yellow)' : 'var(--text-muted)', 'fit tier') : null}
+          {tier ? badge(tier, tier.startsWith('High') ? 'var(--green)' : tier.startsWith('Medium') ? 'var(--yellow)' : 'var(--text-muted)', 'research fit tier') : null}
           {lead.status !== 'new' && badge(lead.status, STATUS_COLOR[lead.status])}
           {badge(age.label, ageColor, lead.last_contact_at ? `last contact ${new Date(lead.last_contact_at).toLocaleDateString()}` : 'no contact event on record')}
           {next ? badge(next.label, next.overdue ? 'var(--red)' : 'var(--cat-teal)', `next contact ${lead.next_contact_at}`) : null}
@@ -46,18 +47,17 @@ export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy }: {
 
       <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
         {(lead.responsible_name || lead.front_name) && (
-          <span className="text-[10px] font-bold px-1.5 py-1 rounded-full" title={`back office: ${lead.responsible_name ?? '—'} · front office: ${lead.front_name ?? '—'}`}
+          <span className="text-[10px] px-1.5 py-1 rounded-full whitespace-nowrap" title={`back office (drives the lead): ${lead.responsible_name ?? '—'} · front office (face in calls): ${lead.front_name ?? '—'}`}
             style={{ background: 'var(--bg-input)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
-            {initials(lead.responsible_name)}{lead.front_name && lead.front_name !== lead.responsible_name ? `/${initials(lead.front_name)}` : ''}
+            {firstName(lead.responsible_name) || '—'}{lead.front_name && lead.front_name !== lead.responsible_name ? ` → ${firstName(lead.front_name)}` : ''}
           </span>
         )}
-        <input type="number" inputMode="numeric" min={1} max={10} placeholder="#" defaultValue={lead.priority ?? ''}
-          key={`${lead.id}-${lead.priority ?? 0}`}
-          title="Priority 1–10 (1 = top; empty clears)"
-          className="w-11 text-center text-xs rounded py-1"
-          style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }}
-          onBlur={(e) => { const n = parseInt(e.target.value, 10); const p = isNaN(n) ? 0 : Math.min(10, Math.max(0, n)); if (p !== (lead.priority ?? 0)) onPatch({ priority: p }); }}
-          onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
+        <select value={lead.priority ?? 0} title="Priority" onChange={(e) => onPatch({ priority: Number(e.target.value) })}
+          className="text-xs rounded py-1 pl-1.5 pr-5"
+          style={{ background: 'var(--bg-input)', border: `1px solid ${prio ? prio.color : 'var(--border)'}`, color: prio ? prio.color : 'var(--text-muted)' }}>
+          <option value={0}>priority…</option>
+          {PRIORITY_LEVELS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+        </select>
         <button type="button" title="Must talk" onClick={() => onPatch({ must_talk: !lead.must_talk })}
           className="text-xs px-2 py-1 rounded font-semibold"
           style={lead.must_talk

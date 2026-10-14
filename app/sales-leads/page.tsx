@@ -111,7 +111,7 @@ export default function SalesLeadsPage() {
             <div>
               <h1 className="text-lg font-bold">Sales leads</h1>
               <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                Everyone we are working: demo requests, event contacts, replies to our outreach. Priority 1 is the top of the list; the ticker is days since we last talked.
+                Everyone we are working: demo requests, event contacts, replies to our outreach. Priority sorts the list (Very high first); the ticker is days since we last talked; back office drives the lead, front office is the face in calls.
               </p>
             </div>
             {counts && (
