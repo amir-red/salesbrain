@@ -175,7 +175,7 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, busy }: {
             <label className="block">
               <span className="z-eyebrow">Front office</span>
               <select value={lead.front_user_id ?? ''} onChange={(e) => onPatch({ front_user_id: e.target.value })} className="mt-1 w-full text-xs px-2 py-1.5" style={field}>
-                <option value="">Same as back office</option>
+                <option value="">Same as back office{lead.responsible_name ? ` (${lead.responsible_name})` : ''}</option>
                 {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
               <span className="block text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>{ROLES.front.duties} Hears: {ROLES.front.hears}</span>

@@ -1185,8 +1185,10 @@ wired to all activities." Before: the two seats were labels on the row (sorting,
 module says who owns what and every activity follows it. **Back office** (`responsible`) drives the lead — research
 and the dossier, drafts, follow-ups, the ping-by date, priority, the track record; hears the morning due digest,
 reply notices, new leads. **Front office** (`front`) is the face — calls, demos, meetings; hears booking notices,
-becomes the deal's project lead on convert. Empty front = the back office does both. The LinkedIn / email **account
-owner** is deliberately a third thing: approving a send from their account stays theirs.
+becomes the deal's project lead on convert. Empty front = the back office does both. **Amir's rule: an unassigned lead belongs to its OWNER in both seats** —
+`apply_role_defaults` runs on every landing (prospect owner → `raw_payload.owner` name → team default email); 058
+backfills existing rows; form / Calendly leads with no owner stay unassigned and the digest flags them. The LinkedIn
+/ email **account owner** is deliberately a third thing: approving a send from their account stays theirs.
 - **Core**: `policy/lead_roles.py` (pure: `ROLES` duties, `DEFAULT_NOTIFY` activity → roles, `recipients`,
   `due_reason`, `digest_text`); migration **058** (policy row `sales_leads.roles` — `notify` map, `quiet_days` 14,
   `digest_max`, `default_responsible` / `default_front` emails for leads that land with nobody; two indexes).
