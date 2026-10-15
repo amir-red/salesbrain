@@ -11,6 +11,9 @@ import { getSession } from '@/lib/auth';
  * crm_graph_edges) for the agent and the partner API.
  *
  * ?edges=N returns the N strongest first-hop connections; ?source= filters them.
+ * ?scope=team (the page default since 2026-10-15) lists every teammate's ring
+ * with the holder's name; ?scope=mine is the signed-in user's only. Totals and
+ * the by-source split follow the scope; sync state and reach stay personal.
  */
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -19,6 +22,9 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const limit = Math.min(Math.max(Number(url.searchParams.get('edges') ?? 50) || 50, 1), 500);
   const source = url.searchParams.get('source');
+  const team = (url.searchParams.get('scope') ?? 'team') !== 'mine';
+  // $1 is still the user id everywhere; the team scope just stops filtering on it.
+  const ownerClause = team ? '($1::uuid IS NOT NULL)' : 'owner_user_id = $1';
 
   const [bySource, totals, contacts, state, edges, reach, colleagues, teammates] = await Promise.all([
     pool.query(
@@ -26,13 +32,13 @@ export async function GET(req: NextRequest) {
               count(DISTINCT dst_person_id)::int AS people,
               round(avg(strength), 3)::float8 AS avg_strength,
               max(last_signal_at) AS newest
-         FROM person_edges WHERE owner_user_id = $1
+         FROM person_edges WHERE ${ownerClause}
         GROUP BY source ORDER BY 2 DESC`,
       [session.userId],
     ),
     pool.query(
       `SELECT count(*)::int AS edges, count(DISTINCT dst_person_id)::int AS people
-         FROM person_edges WHERE owner_user_id = $1`,
+         FROM person_edges WHERE ${ownerClause}`,
       [session.userId],
     ),
     pool.query(
@@ -50,9 +56,11 @@ export async function GET(req: NextRequest) {
     pool.query(
       `SELECT e.source, e.strength::float8 AS strength, e.direction,
               e.last_signal_at, e.evidence,
-              p.id AS person_id, p.full_name, p.organization, p.primary_email
+              p.id AS person_id, p.full_name, p.organization, p.primary_email,
+              u.name AS owner_name
          FROM person_edges e JOIN people p ON p.id = e.dst_person_id
-        WHERE e.owner_user_id = $1 AND e.src_person_id IS NULL
+         LEFT JOIN users u ON u.id = e.owner_user_id
+        WHERE ${team ? '($1::uuid IS NOT NULL)' : 'e.owner_user_id = $1'} AND e.src_person_id IS NULL
           AND ($2::text IS NULL OR e.source = $2)
         ORDER BY e.strength DESC, e.last_signal_at DESC NULLS LAST
         LIMIT $3`,
@@ -94,6 +102,7 @@ export async function GET(req: NextRequest) {
   ]);
 
   return NextResponse.json({
+    scope: team ? 'team' : 'mine',
     totals: totals.rows[0] ?? { edges: 0, people: 0 },
     by_source: bySource.rows,
     contacts: contacts.rows[0] ?? { contacts: 0, bridged: 0, dated: 0 },

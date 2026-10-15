@@ -21,6 +21,7 @@ interface GraphEdge {
   full_name: string;
   organization: string | null;
   primary_email: string | null;
+  owner_name?: string | null;
 }
 
 interface Reach {
@@ -31,6 +32,7 @@ interface Reach {
 }
 
 interface GraphPayload {
+  scope?: 'team' | 'mine';
   reach?: Reach;
   totals: { edges: number; people: number };
   by_source: { source: string; edges: number; people: number; avg_strength: number; newest: string | null }[];
@@ -76,18 +78,19 @@ function evidenceText(e: GraphEdge): string {
 export default function GraphPanel() {
   const [data, setData] = useState<GraphPayload | null>(null);
   const [source, setSource] = useState<string | null>(null);
+  const [scope, setScope] = useState<'team' | 'mine'>('team');
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
   async function load() {
     try {
-      const res = await fetch(`/api/graph?edges=100${source ? `&source=${source}` : ''}`);
+      const res = await fetch(`/api/graph?edges=200&scope=${scope}${source ? `&source=${source}` : ''}`);
       if (res.ok) setData(await res.json());
     } catch { /* the strip is decoration; a failed load must not break /network */ }
   }
 
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [source]);
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [source, scope]);
 
   async function sync() {
     setBusy(true);
@@ -124,6 +127,21 @@ export default function GraphPanel() {
         >
           {open ? '▾' : '▸'} Relationship graph
         </button>
+        <span className="inline-flex overflow-hidden rounded border" style={{ borderColor: 'var(--border)' }}>
+          {(['team', 'mine'] as const).map((k) => (
+            <button
+              key={k}
+              onClick={() => setScope(k)}
+              className="px-2 py-0.5"
+              style={{
+                background: scope === k ? 'var(--accent)' : 'var(--bg-input)',
+                color: scope === k ? 'var(--accent-fg)' : 'var(--text-muted)',
+              }}
+            >
+              {k === 'team' ? 'Team' : 'Mine'}
+            </button>
+          ))}
+        </span>
         <span style={{ color: 'var(--text-muted)' }}>
           {totals.people.toLocaleString()} people · {totals.edges.toLocaleString()} connections
           {by_source.length > 0 && ` · ${by_source.length} sources`}
@@ -218,7 +236,7 @@ export default function GraphPanel() {
               <table className="w-full text-xs">
                 <tbody>
                   {data.edges.map((e) => (
-                    <tr key={`${e.person_id}-${e.source}`} style={{ borderTop: '1px solid var(--border)' }}>
+                    <tr key={`${e.person_id}-${e.source}-${e.owner_name ?? ''}`} style={{ borderTop: '1px solid var(--border)' }}>
                       <td className="w-12 px-3 py-1.5 font-mono" style={{ color: 'var(--accent)' }}>
                         {e.strength.toFixed(2)}
                       </td>
@@ -228,6 +246,11 @@ export default function GraphPanel() {
                           <span style={{ color: 'var(--text-muted)' }}> · {e.organization}</span>
                         )}
                       </td>
+                      {scope === 'team' && (
+                        <td className="px-2 py-1.5" style={{ color: 'var(--text-muted)' }}>
+                          {e.owner_name || '—'}
+                        </td>
+                      )}
                       <td className="px-2 py-1.5" style={{ color: 'var(--text-muted)' }}>
                         {evidenceText(e)}
                       </td>

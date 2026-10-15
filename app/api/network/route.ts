@@ -16,29 +16,23 @@ export const dynamic = 'force-dynamic';
  * GET /api/network
  * Returns the full network graph payload for the current user.
  *
- * Visibility (matches /api/contacts):
- * - Regular users: their own contacts (owner_user_id = userId) + legacy NULL-owner.
- * - Admins: all contacts.
- * Accounts are org-wide (no per-user scoping at the account level).
+ * Visibility: TEAM-WIDE (Amir, 2026-10-15: "the networks should be shared across
+ * the team") — every signed-in user sees every contact, prospect link, deal and
+ * message count, with the holder's name on each contact node. Same rule as
+ * /pipeline. Per-user privacy on `contacts` still applies to /api/contacts
+ * and the agent; this page is the shared map.
  */
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const isAdmin = session.role === 'admin';
+  const isAdmin = true; // team-wide by decision — kept as a flag so the scoping branches below stay readable
 
-  // 1. Contacts (per-user scoped)
-  const contactsSql = isAdmin
-    ? `SELECT id, account_id, full_name, first_name, last_name, email, title, seniority,
-              persona_type, phone, linkedin_url, notes, source, owner_user_id,
-              communication_profile, created_at, updated_at
-       FROM contacts ORDER BY updated_at DESC`
-    : `SELECT id, account_id, full_name, first_name, last_name, email, title, seniority,
-              persona_type, phone, linkedin_url, notes, source, owner_user_id,
-              communication_profile, created_at, updated_at
-       FROM contacts
-       WHERE owner_user_id = $1 OR owner_user_id IS NULL
-       ORDER BY updated_at DESC`;
-  const contactsValues = isAdmin ? [] : [session.userId];
+  // 1. Contacts (team-wide), with the holder's name
+  const contactsSql = `SELECT c.id, c.account_id, c.full_name, c.first_name, c.last_name, c.email, c.title, c.seniority,
+              c.persona_type, c.phone, c.linkedin_url, c.notes, c.source, c.owner_user_id,
+              u.name AS owner_name, c.communication_profile, c.created_at, c.updated_at
+       FROM contacts c LEFT JOIN users u ON u.id = c.owner_user_id ORDER BY c.updated_at DESC`;
+  const contactsValues: unknown[] = [];
   const { rows: contactRows } = await pool.query(contactsSql, contactsValues);
   const contacts = contactRows as ContactRow[];
 

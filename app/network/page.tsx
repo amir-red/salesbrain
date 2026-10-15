@@ -7,9 +7,11 @@ import NetworkFilters, { EMPTY_FILTERS, type NetworkFilterState } from '@/compon
 import NetworkDetailPanel from '@/components/NetworkDetailPanel';
 import NetworkInsights from '@/components/NetworkInsights';
 import GraphPanel from '@/components/network/GraphPanel';
+import NetworkList from '@/components/network/NetworkList';
 import type { GraphNode, GraphEdge } from '@/lib/network-graph';
 
-// Cytoscape is a heavy library — load it only on this page
+// Cytoscape is a heavy library — load it only on this page, and only once
+// someone asks for the canvas (the list is the default view).
 const NetworkGraph = dynamic(() => import('@/components/NetworkGraph'), { ssr: false });
 
 type LayoutKey = 'industry' | 'company' | 'location' | 'lead_stage' | 'relationship';
@@ -35,6 +37,7 @@ export default function NetworkPage() {
   const [filters, setFilters] = useState<NetworkFilterState>(EMPTY_FILTERS);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [insightsOpen, setInsightsOpen] = useState(false);
+  const [showGraph, setShowGraph] = useState(false);
   // AI-highlighted contact UUIDs (set by Claude tool calls in the chat panel).
   // When non-empty, the graph dims everything that isn't in this set or
   // structurally connected to it.
@@ -137,6 +140,7 @@ export default function NetworkPage() {
             style={{ background: 'var(--bg-card)', borderColor: 'var(--border)', color: 'var(--text)' }}
           />
 
+          {showGraph && (
           <select
             value={layout}
             onChange={(e) => setLayout(e.target.value as LayoutKey)}
@@ -149,12 +153,13 @@ export default function NetworkPage() {
             <option value="lead_stage">Lead stage (4)</option>
             <option value="relationship">Relationship strength (5)</option>
           </select>
+          )}
 
           <div className="flex-1" />
 
           {data && (
             <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              {data.meta.contact_count} contacts · {data.meta.account_count} accounts
+              {data.meta.contact_count} contacts · {data.meta.account_count} accounts · whole team
             </span>
           )}
 
@@ -178,6 +183,15 @@ export default function NetworkPage() {
               Reset view
             </button>
           )}
+
+          <button
+            onClick={() => setShowGraph((v) => !v)}
+            className="px-3 py-1.5 rounded text-sm border"
+            style={{ borderColor: 'var(--border)', color: 'var(--text)' }}
+            title={showGraph ? 'Back to the list' : 'Draw the force-directed graph (slow with many contacts)'}
+          >
+            {showGraph ? 'Show list' : 'Show graph'}
+          </button>
 
           <button
             onClick={() => setInsightsOpen(true)}
@@ -216,7 +230,16 @@ export default function NetworkPage() {
               </div>
             </div>
           )}
-          {!loading && data && data.nodes.length > 0 && (
+          {!loading && data && data.nodes.length > 0 && !showGraph && (
+            <NetworkList
+              nodes={data.nodes}
+              hiddenNodeIds={hiddenNodeIds}
+              searchTerm={search}
+              selectedNodeId={selectedNodeId}
+              onNodeSelect={setSelectedNodeId}
+            />
+          )}
+          {!loading && data && data.nodes.length > 0 && showGraph && (
             <NetworkGraph
               nodes={data.nodes}
               edges={data.edges}

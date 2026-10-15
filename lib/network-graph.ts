@@ -39,6 +39,7 @@ export interface ContactRow {
   notes: string | null;
   source: string | null;
   owner_user_id: string | null;
+  owner_name?: string | null;
   communication_profile: unknown;
   created_at: string;
   updated_at: string;
@@ -183,6 +184,7 @@ export function buildGraphFromData(input: BuildGraphInput): BuildGraphOutput {
         linkedin_url: c.linkedin_url,
         notes: c.notes,
         source: c.source,
+        owner: c.owner_name ?? null,
         last_contacted_at: linkedProspect?.last_contacted_at ?? null,
         msg_count: msgCount,
         company: account?.name ?? null,

@@ -1230,6 +1230,17 @@ him through the RPC (`SALESBRAIN_RPC_REQUEST` with `actor_user_id`; note the box
 His 615 `contacts` rows (NRW / Fakuma imports) carry no LinkedIn slug and bridge nothing. Search by name: `/network`
 (graph panel), `crm_lead_lookup` (leads, org-wide), or `crm_graph_edges` / `crm_person_lookup` on the ring.
 
+### 5.ai.5 `/network` is a list, graph on demand, team-wide (2026-10-15, feat/network-list, app-only)
+
+Amir: "not to draw the graph — it's taking too much time; a button to show the graph; make it a list; the networks should
+be shared across the team." `components/network/NetworkList.tsx` is the default view (sortable: name / title / company /
+industry / location / held by / reach / last contact; search, filters and AI highlights apply through the same
+`computeHidden`; 200 rows + Show more); **Show graph** mounts the cytoscape canvas (`NetworkGraph`, still dynamic-imported,
+so the bundle is not even fetched until asked). `GET /api/network` is now **team-wide for every user** (was: own contacts
+unless admin) and carries `owner_name` → node `metadata.owner` (`lib/network-graph.ts`); `GET /api/graph?scope=team|mine`
+(default team) lists every owner's ring with `owner_name`, and `GraphPanel` has a Team / Mine toggle + holder column. Reach
+and sync state in the panel stay personal. `/api/contacts` and the agent keep per-user privacy; this page is the shared map.
+
 ### 5.aj Marketing — paid ads inside the CRM (2026-10-13, feat/marketing, round 1 app-only)
 
 Amir: "we are starting ads in Google Ads and LinkedIn Ads — add a marketing menu, connectors, pull our performance
