@@ -432,7 +432,7 @@ export const SERVICE_TOOLS: ToolDef[] = [
     description:
       "Work a sales-leads row the way the dashboard does: status new | contacted | replied | archived; a dated " +
       "track-record line (note_kind 'note', or a contact event met | sent | reply | call | meeting that moves the " +
-      "'last contact' ticker; occurred_at YYYY-MM-DD backdates it); priority 1 very high · 2 high · 3 medium · 4 low · 5 very low (0 clears); must_talk; " +
+      "'last contact' ticker; occurred_at YYYY-MM-DD backdates it); priority 1 (top) … 10 (0 clears), rank = order inside the priority (0 clears); must_talk; " +
       "responsible (BACK OFFICE: drives the lead — gets the due digest and reply notices) / front (FRONT OFFICE: calls, demos; " +
       "gets booking notices, becomes the deal lead) teammate by name — a newly assigned person is DM'd; next_contact_at " +
       "YYYY-MM-DD; met_at (where we met). Any combination. Converting is crm_convert_lead.",

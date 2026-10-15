@@ -1253,6 +1253,29 @@ zeami.io form, daily restated metrics, offline conversions back to the platforms
   LinkedIn Lead Gen Forms → `/sales-leads`; reporting; offline conversion upload. Outside-code lead times to start now:
   LinkedIn Advertising API approval, Google developer token, zeami.io form change.
 
+### 5.ak /sales-leads priority 1–10 + order, and Mateo's Fakuma 2026 master list (2026-10-15, feat/lead-priority, core/hermes 0.49.0, migration 059)
+
+Amir: "put the priority from 1-10 and add a reordering column — some leads will have the same priority so I will
+put numbers", plus Mateo's 70-company Fakuma master list (PDF of a Telegram message) to import, enrich and find
+LinkedIn + emails for. **This reverses 057** (five labelled levels, decided the day before).
+- **059**: `sales_leads.priority` CHECK 1..10 again (1 = top; labels are the number, `P3`), NEW `sales_leads.rank`
+  INT = the order INSIDE a priority (NULL = unordered, sorts last). Every order (`list_sales_leads` working/due,
+  `due_leads`, the page's priority/contact sorts) is `priority, rank, must_talk`. `update_sales_lead` takes
+  `rank` (0 clears), writes an `order → N` event of kind `priority`; `crm_update_sales_lead` and the service MCP
+  text say 1–10 + rank. Page: the priority pill is a 1–10 select, a small number box next to it is the order
+  (commit on blur / Enter); the `#` column stays the list position.
+- **Mateo's list**: `salesbrain-hermes/scripts/data/mateo_fakuma_2026.json` (54 of 70 entries — #55–69 were
+  missing from the PDF export, #70 is a corporate tail) + `scripts/import_mateo_fakuma.py` (run on the box:
+  `import` → ICP "Fakuma 2026 — polymer distributors & PE platforms (Mateo)" under mateo@chipchip.social,
+  `upsert_candidate` per named person (`source_type='event_list'`, `priority_rank` = list number), a PLACEHOLDER
+  prospect "<Company> — decision maker (to identify)" for the 22 companies named without a person, every row
+  mirrored to `/sales-leads` with `source='event:fakuma-2026'`, priority = the list's priority group (1–4), rank =
+  position inside the group, `met_at='Fakuma 2026'` for the "Met Onsite" ones, dossier = owner/structure + pitch;
+  `enrich` → `find_profile` (web → LinkedIn search → verified) per named person and company-first leader discovery
+  for placeholders (discovered leaders replace the placeholder, inherit its priority/rank), company research;
+  `emails` → FullEnrich, capped; `sync` → copies found profiles/emails/research onto the mirror rows). Mateo has no
+  LinkedIn connected, so the LinkedIn rungs run on Amir's Unipile account (`--account`), the web rung is keyless.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

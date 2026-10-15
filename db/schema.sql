@@ -793,7 +793,8 @@ CREATE INDEX IF NOT EXISTS idx_external_employees_user
 -- last+next contact / where met / dossier on sales_leads, and the dated track
 -- record in sales_lead_events. Source of truth: salesbrain-core/migrations/056.
 ALTER TABLE sales_leads
-  ADD COLUMN IF NOT EXISTS priority SMALLINT CHECK (priority BETWEEN 1 AND 5),  -- 1 very high … 5 very low (core 057)
+  ADD COLUMN IF NOT EXISTS priority SMALLINT CHECK (priority BETWEEN 1 AND 10),  -- 1 = top … 10 (core 059; 057 briefly made it 1–5)
+  ADD COLUMN IF NOT EXISTS rank INT CHECK (rank IS NULL OR rank >= 1),            -- order inside the priority (core 059)
   ADD COLUMN IF NOT EXISTS must_talk BOOLEAN NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS responsible_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS front_user_id UUID REFERENCES users(id) ON DELETE SET NULL,

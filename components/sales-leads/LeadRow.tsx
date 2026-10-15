@@ -1,13 +1,14 @@
 'use client';
 
 import { contactAge, firstName, myRole, nextContactLabel, PRIORITY_LEVELS, priorityLevel, ROLES, STATUS_COLOR, tierLabel, type Lead } from '@/lib/sales-leads';
+import { useEffect, useState } from 'react';
 import { Chevron, LinkedIn, Star } from './icons';
 
 /**
  * One aligned line per lead. Columns: rank · person · status · last / next
  * contact · who works it · controls. Everything else lives in LeadDetail.
  */
-export const ROW_GRID = 'md:grid-cols-[2.5rem_minmax(0,1fr)_7.5rem_8.5rem_9.5rem_12.5rem]';
+export const ROW_GRID = 'md:grid-cols-[2.5rem_minmax(0,1fr)_7.5rem_8.5rem_9.5rem_15.5rem]';
 
 export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy, viewerId = null }: {
   lead: Lead; rank: number; open: boolean; onToggle: () => void;
@@ -22,6 +23,14 @@ export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy, vie
   const company = lead.company && lead.company !== 'Unknown' ? lead.company : null;
   const sub = [lead.title, company].filter(Boolean).join(' · ');
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+  // The order inside a priority is typed, not picked: commit on blur / Enter.
+  const [rankText, setRankText] = useState(lead.rank == null ? '' : String(lead.rank));
+  useEffect(() => { setRankText(lead.rank == null ? '' : String(lead.rank)); }, [lead.rank]);
+  const commitRank = () => {
+    const n = rankText.trim() === '' ? 0 : Math.max(0, Math.floor(Number(rankText)));
+    if (Number.isNaN(n)) { setRankText(lead.rank == null ? '' : String(lead.rank)); return; }
+    if ((n || null) !== lead.rank) onPatch({ rank: n });
+  };
 
   return (
     <div role="button" tabIndex={0} onClick={onToggle} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
@@ -31,7 +40,7 @@ export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy, vie
       {/* rank + priority mark */}
       <div className="flex items-center gap-2">
         <span className="w-1 self-stretch rounded-full" style={{ background: prio ? prio.color : 'transparent', minHeight: 28 }} />
-        <span className="text-xs tabular-nums" style={{ color: 'var(--text-muted)' }}>{rank}</span>
+        <span className="text-xs tabular-nums" style={{ color: 'var(--text-muted)' }} title={prio ? `priority ${prio.short}${lead.rank != null ? ` · order ${lead.rank}` : ''}` : 'no priority'}>{rank}</span>
       </div>
 
       {/* person */}
@@ -94,6 +103,11 @@ export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy, vie
           </select>
           <Chevron width={12} height={12} className="absolute right-2 pointer-events-none" style={{ transform: 'rotate(90deg)' }} />
         </span>
+        <input type="number" min={0} inputMode="numeric" aria-label="Order inside the priority" title="Order inside the priority (1 = first). Leads with the same priority are worked in this order."
+          value={rankText} placeholder="#" onChange={(e) => setRankText(e.target.value)} onBlur={commitRank}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
+          className="hidden md:block w-12 text-xs tabular-nums rounded-full py-1 px-2 text-center"
+          style={{ background: 'transparent', border: '1px solid var(--border)', color: lead.rank != null ? 'var(--text)' : 'var(--text-muted)' }} />
         <button type="button" aria-label={lead.must_talk ? 'Unstar' : 'Must talk'} title="Must talk"
           onClick={() => onPatch({ must_talk: !lead.must_talk })}
           className="w-8 h-8 rounded-full inline-flex items-center justify-center"

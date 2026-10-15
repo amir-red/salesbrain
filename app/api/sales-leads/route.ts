@@ -20,8 +20,8 @@ import { QUIET_WARN_DAYS, type LeadCounts, type LeadSort, type LeadView } from '
 
 const VIEWS = new Set<LeadView>(['working', 'due', 'must', 'new', 'contacted', 'replied', 'converted', 'archived', 'all']);
 const SORTS: Record<LeadSort, string> = {
-  priority: 'l.priority NULLS LAST, l.must_talk DESC, l.next_contact_at NULLS LAST, l.last_contact_at DESC NULLS LAST, l.created_at DESC',
-  contact: 'COALESCE(l.last_contact_at, l.created_at) ASC, l.priority NULLS LAST',
+  priority: 'l.priority NULLS LAST, l.rank NULLS LAST, l.must_talk DESC, l.next_contact_at NULLS LAST, l.last_contact_at DESC NULLS LAST, l.created_at DESC',
+  contact: 'COALESCE(l.last_contact_at, l.created_at) ASC, l.priority NULLS LAST, l.rank NULLS LAST',
   newest: 'l.created_at DESC',
 };
 
@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
   try {
     const { rows: leads } = await client.query(
       `SELECT l.id, l.full_name, l.title, l.company, l.email, l.website, l.linkedin_url, l.description, l.notes, l.dossier,
-              l.source, l.status, l.priority, l.must_talk, l.met_at,
+              l.source, l.status, l.priority, l.rank, l.must_talk, l.met_at,
               l.responsible_user_id, r.name AS responsible_name, l.front_user_id, f.name AS front_name,
               l.last_contact_at, to_char(l.next_contact_at, 'YYYY-MM-DD') AS next_contact_at,
               EXTRACT(day FROM now() - COALESCE(l.last_contact_at, l.created_at))::int AS days_since_contact,

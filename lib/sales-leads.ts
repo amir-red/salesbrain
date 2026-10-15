@@ -63,6 +63,7 @@ export interface Lead {
   source: string;
   status: LeadStatus;
   priority: number | null;
+  rank: number | null;                 // order inside the priority (059); null = unordered
   must_talk: boolean;
   met_at: string | null;
   responsible_user_id: string | null;
@@ -128,15 +129,12 @@ export function addDays(ymd: string | null, days: number): string {
   return `${base.getFullYear()}-${p(base.getMonth() + 1)}-${p(base.getDate())}`;
 }
 
-export const PRIORITY_LEVELS: { value: number; label: string; short: string; color: string }[] = [
-  { value: 1, label: 'Very high', short: 'Very high', color: 'var(--red)' },
-  { value: 2, label: 'High', short: 'High', color: 'var(--orange)' },
-  { value: 3, label: 'Medium', short: 'Medium', color: 'var(--yellow)' },
-  { value: 4, label: 'Low', short: 'Low', color: 'var(--cat-teal)' },
-  { value: 5, label: 'Very low', short: 'Very low', color: 'var(--text-muted)' },
-];
+/** 1 = top … 10 (core 059). Colour fades with the number; the label is the number itself. */
+const PRIORITY_COLORS = ['var(--red)', 'var(--red)', 'var(--orange)', 'var(--orange)', 'var(--yellow)', 'var(--yellow)', 'var(--cat-teal)', 'var(--cat-teal)', 'var(--text-muted)', 'var(--text-muted)'];
+export const PRIORITY_LEVELS: { value: number; label: string; short: string; color: string }[] =
+  PRIORITY_COLORS.map((color, i) => ({ value: i + 1, label: `P${i + 1}${i === 0 ? ' · top' : i === 9 ? ' · lowest' : ''}`, short: `P${i + 1}`, color }));
 export function priorityLevel(p: number | null | undefined) {
-  return p ? PRIORITY_LEVELS.find((l) => l.value === p) ?? PRIORITY_LEVELS[4] : null;
+  return p ? PRIORITY_LEVELS.find((l) => l.value === p) ?? PRIORITY_LEVELS[9] : null;
 }
 
 /** Napa research tiers came as A/B/C or High/Medium/Lower; show one vocabulary. */
