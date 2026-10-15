@@ -531,7 +531,10 @@ moved_gate, won, won_value, lost, contracts_signed}`, `by_gate[]` (type, gate, d
 **`crm_lead_lookup`** · read — `{query*, limit?}` → `leads[]` matching name / email / company / slug, org-wide,
 each with `stage`, `owner_name`, `icp`, `icp_score`, `invitation_status`, `last_sent {channel, sent_at, snippet}`,
 `last_reply`, `next_followup_at`, `touch_count`, `cards_awaiting_decision`, `deal_name` / `deal_gate`, `sales_lead_id`
-and a plain-language `next_step`. Nothing matched → `people_without_lead[]` from the graph.
+and a plain-language `next_step`. **`people_without_lead[]`** = people in the relationship graph (a teammate's
+LinkedIn connection or conversation) matching the name, employer or LinkedIn headline who are not leads, each with
+`organization`, `connected_via[]` (teammates connected to them) and `last_thread {owner, state, last_message_at}` —
+"do we know anyone at AIXTRON?" is answered here even when no lead exists.
 
 **`crm_followups_due`** · read — `{owner?: name | email | 'me' | 'all', within_days?, limit?}` → `leads[]` whose
 follow-up timer is due (`draft_pending` = a card already waits for approval) and `deal_followups[]` overdue.

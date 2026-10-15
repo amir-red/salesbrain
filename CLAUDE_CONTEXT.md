@@ -1241,6 +1241,21 @@ unless admin) and carries `owner_name` → node `metadata.owner` (`lib/network-g
 (default team) lists every owner's ring with `owner_name`, and `GraphPanel` has a Team / Mine toggle + holder column. Reach
 and sync state in the panel stay personal. `/api/contacts` and the agent keep per-user privacy; this page is the shared map.
 
+### 5.ai.6 One person, one node — alias resolution, headline → employer, graph-aware lookup (2026-10-16, feat/one-node, core 0.49.2)
+
+Amir: "did we contact anyone from Aixtron?" → "no", while Matthias had a 2026-09-17 thread with AIXTRON's VP Michael
+Heuken. Three defects, plan `~/.claude/plans/did-we-contact-anyone-purring-sunbeam.md`: (1) `identity.ensure_people_bulk`
+resolved only on a row's key handle, so a human first met in a thread (member id) and later mirrored as a connection
+(slug + member id) became two `people` rows — the alias insert hit `ON CONFLICT DO NOTHING`; now every handle (key +
+`extra_handles` + email) is looked up (`hit()`), an alias match attaches the key handle to that row, and `organization`
+is filled on existing rows when blank. (2) `edges_from_threads` never wrote `linkedin_threads.person_id` back — now it
+does (`threads_linked`). (3) Nobody parsed the headline: `policy/graph.company_from_headline` ("VP bei AIXTRON" → AIXTRON;
+bei / at / @ / chez; "Role | Company" only when the first part reads like a role; no separator → None) feeds
+`organization` from both the thread sync and the relations mirror. `store/merge_people.py` (dry-run default, `--apply`,
+FK-catalogue driven, pairs proven by `linkedin_relations.provider_id` + `public_identifier`) folded the existing splits.
+`lead_lookup` now also searches the graph (name / organization / thread headline) and returns `people_without_lead[]` with
+`connected_via[]` and `last_thread`; `record_note` accepts a query that resolves to exactly one graph person.
+
 ### 5.aj Marketing — paid ads inside the CRM (2026-10-13, feat/marketing, round 1 app-only)
 
 Amir: "we are starting ads in Google Ads and LinkedIn Ads — add a marketing menu, connectors, pull our performance
