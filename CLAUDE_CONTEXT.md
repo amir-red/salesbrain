@@ -1218,6 +1218,18 @@ backfills existing rows; form / Calendly leads with no owner stay unassigned and
   reminder when a due lead stays untouched for N more days, the digest for email-only cadence prospects (that is the
   outreach routine's job).
 
+### 5.ai.4 Matthias's graph sync had failed since 2026-10-05 — error "0" (fixed 0.49.1, 2026-10-15)
+
+`graph.upsert_edges` read the `RETURNING (xmax = 0) AS inserted` row as `r[0]`; under the dict_row connection
+`graph_core.sync_owner` hands it, that is `KeyError(0)`, whose `str()` is `"0"` — the one-character error every
+`graph_sync` run logged for him (`phase: mirror_pending`, 0 edges, twice a day for ten days). Owners mirrored before
+0.32.3 never hit the code path with new rows, which is why only Matthias stalled. Now read by name. Ran once by hand as
+him through the RPC (`SALESBRAIN_RPC_REQUEST` with `actor_user_id`; note the box `.env` still carries a dead
+`SALESBRAIN_ACTOR_EMAIL=amir@test.com` fallback): **mirror complete — 76 LinkedIn relations + 36 thread edges**. Unipile's
+`users/relations` returned one page of 76 for his account, so that is the whole 1st degree Unipile exposes, not a cap.
+His 615 `contacts` rows (NRW / Fakuma imports) carry no LinkedIn slug and bridge nothing. Search by name: `/network`
+(graph panel), `crm_lead_lookup` (leads, org-wide), or `crm_graph_edges` / `crm_person_lookup` on the ring.
+
 ### 5.aj Marketing — paid ads inside the CRM (2026-10-13, feat/marketing, round 1 app-only)
 
 Amir: "we are starting ads in Google Ads and LinkedIn Ads — add a marketing menu, connectors, pull our performance
