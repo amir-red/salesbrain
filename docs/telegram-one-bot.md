@@ -11,6 +11,7 @@ manages their account there. Power is decided by the person's ROLE, not by which
 | Web search, skills, vision, voice | yes | yes | yes |
 | Server (shell, files, code, scheduler, browser, past-conversation search) | no | yes, while `agents.telegram.admin_shell` is on | no |
 | Administrator controls from chat (`crm_admin`: jobs, master switch, policy, users, invites, learning review) | no (refused) | yes | yes (they are product tools, not server tools) |
+| Connect Google / LinkedIn, import a contacts CSV, export to Excel, list / revoke MCP tokens (`crm_connect`) | yes, their own | yes | yes |
 | Slash commands | `/new /status /retry /undo /title /stop /help /whoami` | all | all |
 
 Enforcement lives in three places, none of them the prompt:
@@ -68,3 +69,14 @@ restart the gateway.
 - An EMPTY `allow_admin_from` switches slash gating off (everyone an admin). The deploy stops instead.
 - `session_search` searches every past conversation of the profile, other people's included. It is admin-only.
 - A `pre_tool_call` callback that raises is skipped by Hermes, so the hook catches its own errors and blocks.
+
+## Connect and files from the chat (Phase 4)
+
+- "Connect my Google" → the bot gives a one-time link (15 min, opened once, bound to the person and this chat). They approve on
+  Google's page; the app says so in the chat and imports their contacts in the background. LinkedIn is the same with Unipile's hosted
+  login. Nothing is connected by anyone but the person: the link is a credential and the bot is told not to pass it on.
+- A CSV sent to the chat → "import this": read from the document cache only, recent, under 10 MB, handed to the app through the signed bridge.
+- "Export my leads / prospects / an ICP" → an Excel attachment (plus a 15-minute link). Shows only what the person may see.
+- MCP tokens can be listed and revoked from chat; creating one is done on Profile → MCP because its secret must not pass through a chat.
+- Needs `BRIDGE_SECRET` in /root/.hermes/.env (the deploy checks the name and length, never the value) and in the app's GitHub secrets.
+

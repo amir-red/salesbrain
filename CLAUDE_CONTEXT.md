@@ -1569,6 +1569,48 @@ and cron never get it; each tool is `mcp=None` and refuses a non-admin ITSELF, b
 - **Left for later**: Phase 4 (Google / LinkedIn connect links, CSV import, exports from chat; migrations 066+), inline approve
   buttons for team-memory proposals (the tool exists), a user-level "my jobs" view for non-admins.
 
+### 5.ao Phase 4 — connect accounts and move files from the chat (2026-10-16, feat/telegram-one-bot, core 066)
+
+Amir: "import my Google" must work through Telegram, and the other UI-only features too. Six `crm_connect` tools, Telegram-only
+toolset (161 tools), each acts as the asking person and `mcp=None`:
+`crm_connections_status`, `crm_connect_start` (google | linkedin), `crm_google_sync`, `crm_import_contacts`, `crm_export`,
+`crm_mcp_tokens` (list / revoke only).
+- **Connect links** (core 066 `connect_tokens`: hash only, 15 min, opened once, finished once, bound to the person AND the Telegram
+  chat). `commands/connect.py::connect_start` (attended only; a newer link supersedes the older) and `connections_status`
+  (Google account + last refresh, LinkedIn account / Sales Navigator / paused-for-agents, Telegram, contacts imported by source,
+  links waiting). The bot returns `https://salescrm.chipchip.social/connect/<token>`; opening it needs NO login (the token is the
+  identity for that one step): `app/connect/[token]/route.ts` consumes it and redirects to Google's consent screen or to a Unipile
+  hosted-auth link (password typed on THEIR page). Returns: `/api/integrations/google/callback` (now serves both the browser and the
+  Telegram flow; for Telegram `state.t` must name a still-open token) and `/api/connect/linkedin/claim?s=` (same claim safeguards as
+  the browser: fresh, unbound, never two candidates). The app then says "✅ connected" IN THE CHAT through `lib/tg-notify.ts`
+  (the app's token is the shared CRM bot) and, for Google, imports the contacts in the background and reports the count.
+  `/connect/done` is the plain public landing page.
+- **OAuth state is signed now** (`lib/signed-state.ts`, HMAC with a key derived from SESSION_SECRET, expiring). The Google `state` was
+  the bare user id compared with the session's, forgeable by anyone who knew an id; the old value is rejected (tested).
+- **The bridge** (`lib/bridge.ts`, `lib/bridge-tools.ts`, `POST /api/internal/bridge`; ring client `bridge.py`): how the Python ring
+  reaches app-only features. HMAC over `timestamp.body` with `BRIDGE_SECRET` (GitHub secret + /root/.hermes/.env + crm .env, >=32
+  chars, never printed), 5-minute freshness, each signature accepted once, and not from the internet. **Found by testing:** Next adds
+  X-Forwarded-For/-Host/-Proto to EVERY request even a direct one, so "no forwarded headers" cannot mean "not proxied"; the check is the
+  FIRST forwarded address being loopback (Caddy replaces it with the visitor's). Tools: `google_sync` (background, result reported to
+  the chat), `import_contacts`, `export`, `mcp_tokens` (list / revoke). Python signature verified against the TypeScript verifier in
+  a test; 18 signing / bridge checks in `scripts/test-signing.mts` (`node --experimental-strip-types --no-warnings`).
+- **Refactors that make this possible** (behaviour unchanged, routes now thin): `lib/google-sync.ts::runGoogleSync`,
+  `lib/imports/contacts.ts::importContactsText`, `lib/linkedin-claim.ts::claimLinkedInForUser`, `lib/google-connect.ts::storeGoogleTokens`.
+- **Files in**: a CSV sent to the chat is imported only if its path resolves INSIDE a Hermes document cache (no traversal, a symlink out
+  is refused), is a recent (6 h) .csv/.txt under 10 MB; read on the ring, handed to the app as base64. **Files out**: `crm_export` writes
+  the xlsx under `<root>/cache/documents/salesbrain-exports/` (Hermes only delivers media from a document cache; cleaned after 1 h) and
+  returns the line `MEDIA:<path>` for the reply, plus the 15-minute download link. Live check through the real client and a running app:
+  252 sales leads as a 1.5 MB two-sheet workbook in 7.7 s, MCP token list, every error path correct.
+- **Deliberately not built**: creating an MCP token from chat (its secret would pass through the model provider and the transcript;
+  stays on Profile → MCP), `marketing_overview` and service-token minting (admin, high-value; say the word), and a real Google consent
+  click was not exercised (needs a person); everything up to and after it was.
+- Verified on a real database without touching it: the new table lived in a scratch schema, a second app instance saw only that, tokens
+  were minted by the real kernel code and every route was walked (open, replay, signed + bogus code, forged state, legacy state, replay
+  of a finished flow, garbage tokens, the LinkedIn path without Unipile env). Scratch schema dropped, the 4 test audit rows removed.
+- **After publish, check once by hand**: apply 063-066; from Telegram say "connect my Google" and click through (consent → chat confirms
+  → contacts import message); "connect my LinkedIn" (the first live use of the hosted-link return to `/api/connect/linkedin/claim`);
+  send a Connections.csv and say "import this"; "export my due leads".
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
@@ -1615,6 +1657,7 @@ TELEGRAM_BOARD_CHAT_ID=...
 HERMES_API_URL=http://127.0.0.1:8642
 HERMES_API_KEY=...
 HERMES_VENV_PYTHON=/usr/local/lib/hermes-agent/venv/bin/python   # kernelCall subprocess interpreter
+BRIDGE_SECRET=...              # >=32 chars; the ring signs calls to /api/internal/bridge with it (same value in /root/.hermes/.env + profiles/crm/.env + GitHub secret)
 GEMINI_API_KEY=...             # DEFAULT model (Gemini) for the app AND every Hermes profile .env; GitHub secret + /root/.hermes/.env
 AWS_BEARER_TOKEN_BEDROCK=...   # shared with Hermes; the FALLBACK model (Claude on Bedrock)
 
