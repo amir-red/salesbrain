@@ -1611,6 +1611,21 @@ toolset (161 tools), each acts as the asking person and `mcp=None`:
   → contacts import message); "connect my LinkedIn" (the first live use of the hosted-link return to `/api/connect/linkedin/claim`);
   send a Connections.csv and say "import this"; "export my due leads".
 
+### 5.ap LIVE 2026-10-16 (lockstep 0.50.0, migrations 063-066 applied) — what to check next
+
+Published in one batch: Gemini default + Bedrock fallback, the one-bot Phases 1-5 (all but the supervised `ONE_BOT=1` cutover), notification log,
+connect tokens. Verified after the deploy: the ring answers as `gemini-3.1-pro-preview`; every deploy safety check passed; admin tools work through
+the real kernel RPC as an admin and refuse a non-admin; `outreach.gate` cannot be edited from chat; the cron path runs on Gemini (the weekly learn
+routine went from `Unable to locate credentials` to ok, streak 0 — the other three credential failures should clear at their next ticks, confirm
+with `crm_jobs_status`); the public site serves `/connect/done`, refuses `/api/internal/bridge` from the internet (403, the loopback rule works
+behind Caddy), redirects a forged Google state to login, and keeps normal API auth (401).
+- **Still to do by a person**: a real Google consent click and a real LinkedIn hosted-login return (the code on both sides of those clicks is
+  tested; the clicks are not); then the supervised cutover `ONE_BOT=1 bash scripts/deploy-server.sh` and revoking the old bot's token in BotFather
+  (`docs/telegram-one-bot.md`). Until then both bots run, strangers get silence on both, and every admin tool works on both.
+- **Side findings, not ours**: Hermes logs a warning that the linked SQLite 3.50.4 is vulnerable to the WAL-reset corruption bug (upstream; the
+  interpreter's SQLite should be updated). `pmi-sync` still fails with `CERTIFICATE_VERIFY_FAILED` against the PM tool (their certificate).
+  The profiles `gilfoyle` and `tesfa` have no Gemini key (not SalesBrain's). Duplicate user accounts exist (two named Mateo Klemmayer, two Beck).
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
