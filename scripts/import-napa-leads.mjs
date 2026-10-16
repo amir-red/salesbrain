@@ -4,7 +4,7 @@
  * /sales-leads, with his priorities, notes and correspondence as the track record.
  *
  *   node scripts/import-napa-leads.mjs <PEI_Napa_Contacts_and_Notes.json> [--apply] [--all]
- *        [--owner mateo@chipchip.social] [--front mateo@chipchip.social]
+ *        [--owner mateo@zeami.io] [--front mateo@zeami.io]
  *
  * Dry run by default (prints what it would do). Needs DATABASE_URL and core
  * migration 056 applied. Idempotent: a contact already imported (raw_payload
@@ -28,7 +28,7 @@ if (!process.env.DATABASE_URL) { console.error('DATABASE_URL is not set'); proce
 
 const APPLY = flag('apply');
 const ALL = flag('all');
-const OWNER = opt('owner', 'mateo@chipchip.social');
+const OWNER = opt('owner', 'mateo@zeami.io');
 const FRONT = opt('front', OWNER);
 const MET_AT = 'PEI Napa 2026';
 const SOURCE = 'event:pei-napa-2026';

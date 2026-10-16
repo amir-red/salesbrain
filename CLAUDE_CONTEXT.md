@@ -1419,6 +1419,21 @@ LinkedIn + emails for. **This reverses 057** (five labelled levels, decided the 
   `emails` → FullEnrich, capped; `sync` → copies found profiles/emails/research onto the mirror rows). Mateo has no
   LinkedIn connected, so the LinkedIn rungs run on Amir's Unipile account (`--account`), the web rung is keyless.
 
+### 5.al Mateo = one account, mateo@zeami.io (2026-10-16, data only)
+
+Amir: "the default email for Mateo should be mateo@zeami.io … merge everything." Mateo had four `users` rows: his login
+(mateo@chipchip.social, April) and three made by the Zeami app's `register_user` — key "Zeami" (Sep, 22 empty ICPs),
+"Zeami AppnMCP" EMP-0077 (mateo@zeami.io, the id the bot actually uses, 264 calls) and EMP-0001 (alumni address).
+Done: Frank Barlog, a lead on both his login and the EMP-0077 account, folded into the Fakuma lead (phone, 2 dossier
+facts, 10 track-record lines kept); `store/merge_users.py` folded the EMP-0077 and "Zeami" accounts into the login
+(id `f8473946-d6be-455b-9c7d-c564c3ac79b3`); that row's email is now **mateo@zeami.io**, name "Mateo Klemmayer", same
+password; both app mappings point at it. 68 imported sales leads had `raw_payload.owner` = "Mateo" → renamed
+(`apply_role_defaults` matches the name, oldest user first). Backup: `~/.cache/salesbrain/backups/mateo-merge-20261016161429/`.
+**Left alone on purpose: EMP-0001** (`267c648d…`, empty). The app registered it as Mateo, then 45 min later
+re-registered it as "Amir Redwan, amir@zeami.io" and has used it since — it looks like Amir's employee id in the Zeami
+app. Mapping it to Mateo would file Amir's bot activity under Mateo; waiting on Amir. Which id the bot SENDS is decided
+in the Zeami app, not here.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
