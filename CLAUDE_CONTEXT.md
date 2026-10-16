@@ -1271,6 +1271,21 @@ to set it, click the current step to go back one; step 1 shows the quality selec
 and every hand-written track-record line the viewer wrote (or any, for an admin) shows an `edit` on hover → inline text +
 date, `PATCH /api/sales-leads/[id]/events/[eventId]`. List API returns `viewer_is_admin`. Service MCP 50 tools.
 
+### 5.ai.8 Edit capabilities on the service MCP (2026-10-16, feat/mcp-edits, core/hermes 0.49.4, no migration)
+
+Amir: "add all the edit capabilities in our MCP tools — sales leads, edit name, whatever we want to edit." Audit: the kernel
+already took the card + journey fields on `update_sales_lead`, but the **service-MCP schema listed none of them** (clients
+build calls from the schema, so the bot could not even see "edit the name"); `rank` was missing too. Now fixed, plus:
+`commands/prospecting.py::update_prospect` / ring `crm_prospect_update` (name, title, company, email, phone, LinkedIn,
+location, `priority_rank`; company = RE-POINT to the named account, never rename the org-wide row; a profile already on
+another lead of the owner → `duplicate_of`; the old member id is cleared; the lead's `/sales-leads` row is mirrored with one
+"edited …" line; owner scope as `prospect_get`); `edit_sales_lead_event(delete=true)`; and service-MCP exposure of
+`crm_get_deal`, `crm_list_my_deals`, `crm_search_deals`, `crm_update_deal`, `crm_add_note`, `crm_mark_deal_lost`,
+`crm_schedule_followup`, `crm_prospect_get`, `crm_prospect_archive`, `crm_icp_set_first_message` (entries generated from the
+ring's own schemas). **`crm_update_deal` refuses a `gate` key on this surface** (the kernel does not enforce the G3 / G7
+board check — the agent's prompt does — so a partner app must not move gates); `crm_advance_gate` is not exposed. Not built:
+website / industry edits (org-wide account data), stage edits (system-owned), a delete for leads, an edit UI for prospects.
+
 ### 5.aj Marketing — paid ads inside the CRM (2026-10-13, feat/marketing, round 1 app-only)
 
 Amir: "we are starting ads in Google Ads and LinkedIn Ads — add a marketing menu, connectors, pull our performance

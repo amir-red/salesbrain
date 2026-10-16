@@ -110,7 +110,7 @@ Four JSON-RPC methods:
 | Method | Purpose |
 |---|---|
 | `initialize` | Handshake — returns server info + protocol version. |
-| `tools/list` | The catalog (50 tools) with JSON-Schema for each. |
+| `tools/list` | The catalog (61 tools) with JSON-Schema for each. |
 | `tools/call` | Invoke one tool. This is where the work happens. |
 | `ping` | Health check. |
 
@@ -358,6 +358,11 @@ employee's data.
 | | `crm_update_sales_lead` | write | Work the row: status, track-record line, priority, ★, responsible/front, next contact, where met |
 | | `crm_lead_note` | write | Dated note (or meeting / call) on a lead's dossier |
 | | `crm_convert_lead` | write | Inbox row → G1 deal |
+| **Edits** | `crm_prospect_update` | write | Correct a lead: name, title, company, email, phone, LinkedIn, location, order |
+| | `crm_prospect_get` / `crm_prospect_archive` | read / write | Read one lead in full / park or disqualify it |
+| | `crm_icp_set_first_message` | write | The message a list sends once a connection request is accepted |
+| | `crm_get_deal` · `crm_list_my_deals` · `crm_search_deals` | read | Find and read deals |
+| | `crm_update_deal` · `crm_add_note` · `crm_mark_deal_lost` · `crm_schedule_followup` | write | Edit a deal's fields, add a note, mark lost, schedule a follow-up. **Gate moves are refused here** |
 | | `crm_prospect_convert` | write | Prospect → G1 deal |
 | | `get_run_status` | read | Poll a queued or finished run. The poll loop |
 | | `crm_agent_activity` | read | Recent runs and why a tick was skipped |
@@ -595,6 +600,21 @@ combination; convert to a G1 deal owned by this employee.
 kinds only; your own unless admin). `crm_update_sales_lead` also takes `full_name / title / company / email /
 linkedin_url` (card corrections, logged) and the journey: `journey_stage` 0–5 (warm introduction → LinkedIn → other
 channel → call set → qualified), `intro_quality` 1–5, `journey_outcome` qualified | lost (lost also archives).
+
+**`crm_prospect_update`** · write — `{prospect_id*, full_name?, title?, company?, email?, phone?, linkedin_url?, location?,
+priority_rank?}` corrects a lead; any combination, the rest untouched. `company` re-points the lead to the account of that
+name (found or created) and never renames the shared account. A `linkedin_url` already on another lead of the same owner is
+refused with `duplicate_of`. Stage, score and sends are system-owned. The lead's `/sales-leads` row follows and gets one
+"edited …" line. Returns `{updated, changed[], sales_lead_id}`.
+
+**Editing a sales lead and its track record** — `crm_update_sales_lead` takes the card (`full_name`, `title`, `company`,
+`email`, `linkedin_url`), `rank`, and the journey (`journey_stage` 0–5, `intro_quality` 1–5, `journey_outcome`);
+`crm_edit_sales_lead_event {event_id*, text?, occurred_at?, delete?}` corrects or removes a hand-written line (own lines
+unless admin).
+
+**Deals** — `crm_update_deal {deal_id*, updates*}` edits columns and `fields`; a `gate` key is refused on this surface (the
+board process, G3 / G7, runs in SalesBrain). `crm_add_note`, `crm_mark_deal_lost`, `crm_schedule_followup` as in the app; a
+follow-up of type `email` is a draft that still needs approval to send. Deal visibility is creator-or-lead.
 
 **`crm_prospect_convert`** · write — `{prospect_id*, deal_name?, value?}` promotes one of this employee's prospects to
 a G1 deal (idempotent).
@@ -880,6 +900,13 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 ---
 
 ## 12. Changelog
+
+### 2026-10-16 — edit everything
+
+The sales-lead schema now lists every field the kernel accepts (it had been missing the card and the journey, so a client
+could not see them). New: **`crm_prospect_update`**, track-record `delete`, and the deal / prospect / ICP edit tools
+(`crm_update_deal`, `crm_add_note`, `crm_mark_deal_lost`, `crm_schedule_followup`, `crm_get_deal`, `crm_list_my_deals`,
+`crm_search_deals`, `crm_prospect_get`, `crm_prospect_archive`, `crm_icp_set_first_message`). 61 tools. Gate moves stay in the app.
 
 ### 2026-10-14 — lead roles: back office and front office are responsibilities
 

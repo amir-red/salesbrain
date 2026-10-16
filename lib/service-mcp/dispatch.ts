@@ -435,7 +435,9 @@ export const SERVICE_TOOLS: ToolDef[] = [
       "'last contact' ticker; occurred_at YYYY-MM-DD backdates it); priority 1 (top) … 10 (0 clears), rank = order inside the priority (0 clears); must_talk; " +
       "responsible (BACK OFFICE: drives the lead — gets the due digest and reply notices) / front (FRONT OFFICE: calls, demos; " +
       "gets booking notices, becomes the deal lead) teammate by name — a newly assigned person is DM'd; next_contact_at " +
-      "YYYY-MM-DD; met_at (where we met). Any combination. Converting is crm_convert_lead.",
+      "YYYY-MM-DD; met_at (where we met); and the card itself — full_name / title / company / email / linkedin_url " +
+      "(corrections are logged) and the journey: journey_stage 0–5, intro_quality 1–5, journey_outcome qualified | lost. " +
+      "Any combination. Converting is crm_convert_lead.",
     inputSchema: obj(
       {
         lead_id: { type: 'string' },
@@ -450,6 +452,15 @@ export const SERVICE_TOOLS: ToolDef[] = [
         front: { type: 'string' },
         next_contact_at: { type: 'string' },
         met_at: { type: 'string' },
+        rank: { type: 'integer', description: 'order inside the priority, 1 = first; 0 clears' },
+        full_name: { type: 'string', description: 'correct the name on the card' },
+        title: { type: 'string' },
+        company: { type: 'string' },
+        email: { type: 'string' },
+        linkedin_url: { type: 'string' },
+        journey_stage: { type: 'integer', description: '0 not started · 1 warm introduction · 2 connected on LinkedIn · 3 other channel · 4 call or meeting set · 5 qualified' },
+        intro_quality: { type: 'integer', description: '1–5 how good the introduction was; 0 clears' },
+        journey_outcome: { type: 'string', enum: ['qualified', 'lost', ''], description: "closes step 5; 'lost' also archives" },
       },
       ['lead_id'],
     ),
@@ -460,7 +471,7 @@ export const SERVICE_TOOLS: ToolDef[] = [
     description:
       "Correct one line of a lead's track record — text and/or date (YYYY-MM-DD). Hand-written lines only " +
       "(note / met / sent / reply / call / meeting), and only the employee's own unless they are an admin.",
-    inputSchema: obj({ event_id: { type: 'string' }, text: { type: 'string' }, occurred_at: { type: 'string' } }, ['event_id']),
+    inputSchema: obj({ event_id: { type: 'string' }, text: { type: 'string' }, occurred_at: { type: 'string' }, delete: { type: 'boolean', description: 'remove a mistaken line' } }, ['event_id']),
     needsOwner: true,
   },
   {
@@ -477,6 +488,241 @@ export const SERVICE_TOOLS: ToolDef[] = [
     description:
       "Promote one of this employee's prospects to a G1 sales deal (name + value optional). Idempotent.",
     inputSchema: obj({ prospect_id: { type: 'string' }, deal_name: { type: 'string' }, value: { type: 'number' } }, ['prospect_id']),
+    needsOwner: true,
+  },
+  {
+    name: "crm_prospect_update",
+    description: "Correct a lead: name, title, company, email, phone, LinkedIn profile, where the person is based, and your own order (priority_rank). Any combination. Company re-points the lead to the account of that name (found or created) and never renames the shared account. A LinkedIn profile already on another of your leads is refused with duplicate_of. Stage, score and sends are not editable here. The lead's /sales-leads row is kept in step and gets one 'edited …' line.",
+    inputSchema: obj({
+      "prospect_id": {
+        "type": "string",
+        "description": "UUID of the prospect (from crm_prospect_queue)"
+      },
+      "full_name": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      },
+      "company": {
+        "type": "string",
+        "description": "'' clears"
+      },
+      "email": {
+        "type": "string",
+        "description": "'' clears"
+      },
+      "phone": {
+        "type": "string"
+      },
+      "linkedin_url": {
+        "type": "string",
+        "description": "profile URL or vanity slug"
+      },
+      "location": {
+        "type": "string",
+        "description": "where the person is based"
+      },
+      "priority_rank": {
+        "type": "integer",
+        "description": "your own order, 1 = first; 0 clears"
+      }
+    }, ["prospect_id"]),
+    needsOwner: true,
+  },
+  {
+    name: "crm_prospect_get",
+    description: "Full detail for one prospect: contact, company, fit score and reasoning, research.",
+    inputSchema: obj({
+      "prospect_id": {
+        "type": "string",
+        "description": "UUID of the prospect (from crm_prospect_queue)"
+      }
+    }, ["prospect_id"]),
+    needsOwner: true,
+  },
+  {
+    name: "crm_prospect_archive",
+    description: "Stop working a prospect. Use disqualified=true when they are a bad fit (a judgement worth keeping), false when merely parked.",
+    inputSchema: obj({
+      "prospect_id": {
+        "type": "string",
+        "description": "UUID of the prospect (from crm_prospect_queue)"
+      },
+      "reason": {
+        "type": "string"
+      },
+      "disqualified": {
+        "type": "boolean",
+        "default": false
+      }
+    }, ["prospect_id", "reason"]),
+    needsOwner: true,
+  },
+  {
+    name: "crm_icp_set_first_message",
+    description: "Set (or clear with empty text) the first message a list sends once a connection request is accepted: the hourly sync files ONE approval card per acceptance from it — 👍 sends, 👎 skips, nothing goes out by itself. Placeholders {first_name} {full_name} {company}.",
+    inputSchema: obj({
+      "icp_id": {
+        "type": "string",
+        "description": "UUID from crm_icp_list"
+      },
+      "text": {
+        "type": "string",
+        "description": "The message, verbatim; empty clears it"
+      }
+    }, ["icp_id"]),
+    needsOwner: true,
+  },
+  {
+    name: "crm_get_deal",
+    description: "Fetch one deal's full context: columns, fields, gate meta, SLA, missing fields.",
+    inputSchema: obj({
+      "deal_id": {
+        "type": "string",
+        "description": "UUID of the deal"
+      }
+    }, ["deal_id"]),
+    needsOwner: true,
+  },
+  {
+    name: "crm_list_my_deals",
+    description: "List deals visible to the acting user. Filters: deal_type, gate, status.",
+    inputSchema: obj({
+      "deal_type": {
+        "type": "string",
+        "enum": [
+          "sales",
+          "grant"
+        ]
+      },
+      "gate": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 10
+      },
+      "status": {
+        "type": "string",
+        "enum": [
+          "active",
+          "lost"
+        ],
+        "default": "active"
+      },
+      "limit": {
+        "type": "integer",
+        "default": 25
+      }
+    }, []),
+    needsOwner: true,
+  },
+  {
+    name: "crm_search_deals",
+    description: "Find deals by name or company (case-insensitive substring). Use this to resolve 'the Acme deal' / 'the Kifiya one' when you don't have the id. RBAC-scoped to deals you can see.",
+    inputSchema: obj({
+      "query": {
+        "type": "string",
+        "description": "Name/company text to match"
+      },
+      "limit": {
+        "type": "integer",
+        "default": 25
+      }
+    }, ["query"]),
+    needsOwner: true,
+  },
+  {
+    name: "crm_update_deal",
+    description: "Update a deal: direct columns (name, company, contact_*, gate, score, risk, verdict, notes, value, currency, owner, lead_id), a `fields` object (merged into JSONB), and/or flags. Advancing a grant past G1 is HARD-BLOCKED until all money fields are set (grant_amount_min/max, our_contribution, our_contribution_type, cofunding_split) — you may fill them in the same call. Gate changes write gate events, supersede stale board decisions, and fire board/won notifications. On this surface a gate change is refused: gate moves go through the board process in SalesBrain.",
+    inputSchema: obj({
+      "deal_id": {
+        "type": "string",
+        "description": "UUID of the deal"
+      },
+      "updates": {
+        "type": "object",
+        "description": "Keys: direct columns and/or fields/missing/flags"
+      }
+    }, ["deal_id", "updates"]),
+    needsOwner: true,
+  },
+  {
+    name: "crm_add_note",
+    description: "Append a timestamped note to the deal (--- HERMES <ts> --- convention).",
+    inputSchema: obj({
+      "deal_id": {
+        "type": "string",
+        "description": "UUID of the deal"
+      },
+      "note": {
+        "type": "string"
+      }
+    }, ["deal_id", "note"]),
+    needsOwner: true,
+  },
+  {
+    name: "crm_mark_deal_lost",
+    description: "Mark a deal lost and record the structured lesson (reason = diagnosis, lesson = prescription). Idempotent.",
+    inputSchema: obj({
+      "deal_id": {
+        "type": "string",
+        "description": "UUID of the deal"
+      },
+      "reason": {
+        "type": "string"
+      },
+      "root_cause": {
+        "type": "string",
+        "enum": [
+          "price",
+          "timeline",
+          "fit",
+          "decision_maker",
+          "capability",
+          "competition",
+          "budget",
+          "eligibility",
+          "other"
+        ]
+      },
+      "lesson": {
+        "type": "string"
+      },
+      "competitor": {
+        "type": "string"
+      }
+    }, ["deal_id", "reason", "root_cause", "lesson"]),
+    needsOwner: true,
+  },
+  {
+    name: "crm_schedule_followup",
+    description: "Schedule a follow-up (email draft, reminder, or SLA alert) due in N days.",
+    inputSchema: obj({
+      "deal_id": {
+        "type": "string",
+        "description": "UUID of the deal"
+      },
+      "type_": {
+        "type": "string",
+        "enum": [
+          "email",
+          "reminder",
+          "sla_alert"
+        ]
+      },
+      "body": {
+        "type": "string"
+      },
+      "due_in_days": {
+        "type": "number"
+      },
+      "subject": {
+        "type": "string"
+      },
+      "to_email": {
+        "type": "string"
+      }
+    }, ["deal_id", "type_", "body", "due_in_days"]),
     needsOwner: true,
   },
   {
@@ -953,6 +1199,8 @@ const PASSTHROUGH = new Set([
   'crm_graph_status', 'crm_graph_edges', 'crm_graph_sync',
   'crm_pipeline_summary', 'crm_team_kpis', 'crm_lead_lookup', 'crm_lead_note', 'crm_followups_due',
   'crm_list_sales_leads', 'crm_get_sales_lead', 'crm_update_sales_lead', 'crm_edit_sales_lead_event', 'crm_convert_lead', 'crm_prospect_convert',
+  'crm_prospect_update', 'crm_prospect_get', 'crm_prospect_archive', 'crm_icp_set_first_message',
+  'crm_get_deal', 'crm_list_my_deals', 'crm_search_deals', 'crm_update_deal', 'crm_add_note', 'crm_mark_deal_lost', 'crm_schedule_followup',
   'crm_graph_reach', 'crm_who_can_reach',
   'crm_path_find', 'crm_propose_intro',
 ]);
@@ -1069,6 +1317,13 @@ export async function dispatchServiceTool(
       };
     }
 
+    if (toolName === 'crm_update_deal') {
+      const upd = (args.updates && typeof args.updates === 'object') ? args.updates as Record<string, unknown> : {};
+      if ('gate' in upd) {
+        return { status: 'error', error: 'Gate moves are not available on this surface — the board process runs in SalesBrain. ' +
+          'Update the other fields, or move the gate in the app.' };
+      }
+    }
     if (PASSTHROUGH.has(toolName)) {
       // owner_user_id is stripped too: an app holds only its own employee's agents.
       const { employee_id: _drop, owner_user_id: _own, ...rest } = args;
