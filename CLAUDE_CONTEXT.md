@@ -1502,6 +1502,35 @@ and admin tools come later), "unless they send the code, don't respond", and "ma
 - Next in the plan: Phase 2 cutover to the single bot (needs Amir's tokens), Phase 3 admin tools, Phase 4 Google / LinkedIn /
   imports / exports from chat (migrations 065+).
 
+### 5.am Phase 2 — the one-bot build: role policy, unified persona, slash gating, handover (2026-10-16, feat/telegram-one-bot, core 065)
+
+Runbook: `salesbrain/docs/telegram-one-bot.md`. Code + checks are done and tested on the box; the cutover itself
+is `ONE_BOT=1 bash scripts/deploy-server.sh` with Amir present.
+- **`role_policy.py`** (`pre_tool_call`, Telegram only, fails closed): `crm_*` + a short harmless list (web search/extract,
+  skills, vision, voice, todo, clarify) for everyone; EVERYTHING else (shell, files, code, scheduler `cronjob_manage`,
+  browser, `delegate_task`, `session_search`, `memory`, …) only for an administrator, only in a private chat, only while
+  policy `agents.telegram.admin_shell` is on (core 065, default on). It is an ALLOWlist because the composite gains tools
+  every release. Proved through Hermes' real `handle_function_call` on the box with real identities: Amir private → ran;
+  Amir in a group → "private chat only"; a linked teammate → "not an administrator"; web_search → allowed. In the agent
+  loop the hook applies to inline tools too (`_dispatch_authorized_once`), and workers inherit the session context
+  (`propagate_context_to_thread`). Known soft spot: a call with no platform in context is "not governed" (cron, CLI, web
+  chat have their own toolsets); children of `delegate_task` are server-class, so only an admin DM can spawn them.
+- **Unified persona** (`assets/profiles/default/SOUL.md`): one agent for the whole team, role-aware, with the Tool truth,
+  Learn and Automatic-messages sections; the caged `crm` persona is retired with the second bot.
+- **Slash commands** gated through `platforms.telegram.extra.allow_admin_from` (admin ids from the DATABASE at each deploy:
+  role admin + active link; an EMPTY list would switch gating off, so the deploy stops) and `user_allowed_commands`
+  (`new status retry undo title stop`; `/help` and `/whoami` always). Verified with Hermes' own `policy_for_source`: Amir
+  can run /skills and /cron, a teammate cannot but can run /new /status /help.
+- **Trap found: `allow_from: ['*']`** sat in the live config. Hermes consults it only when NO env allowlist has entries, so
+  "make TELEGRAM_ALLOWED_USERS bootstrap-only" would have admitted every Telegram user. The deploy clears it and REFUSES a
+  deploy where `*`, `GATEWAY_ALLOW_ALL_USERS` or `TELEGRAM_ALLOW_ALL_USERS` is present.
+- **`ONE_BOT=1` handover**: the CRM bot's token is already on the box (`SALESBRAIN_BOARD_BOT_TOKEN`), so it is COPIED into the
+  default profile's `TELEGRAM_BOT_TOKEN` (no secret travels), the union of both allowlists is kept, the crm adapter is
+  retired (no 409), rollback copies `*.pre-onebot` (0600) are left. Tested on a scratch copy. Cost: teammates' Hermes chat
+  history restarts (notes and all CRM data survive). Then Amir revokes the OLD bot's token in BotFather.
+- Not built yet: Phase 3 admin tools (`crm_jobs_status`, `crm_job_control`, kill switch, policy editor, costs, learning
+  review from chat) and Phase 4 (Google / LinkedIn / imports / exports from chat; migrations 066+).
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
