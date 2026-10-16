@@ -5,7 +5,7 @@ import Sidebar from '@/components/Sidebar';
 import LeadRow, { ROW_GRID } from '@/components/sales-leads/LeadRow';
 import LeadDetail from '@/components/sales-leads/LeadDetail';
 import { Search } from '@/components/sales-leads/icons';
-import { ROLES, type Lead, type LeadCounts, type LeadSort, type LeadStatus, type LeadView, type RoleFilter, type TeamUser } from '@/lib/sales-leads';
+import { type Lead, type LeadCounts, type LeadSort, type LeadStatus, type LeadView, type RoleFilter, type TeamUser } from '@/lib/sales-leads';
 import ExportButton from '@/components/ExportButton';
 
 /**
@@ -134,19 +134,6 @@ export default function SalesLeadsPage() {
               <p className="text-sm mt-1 max-w-2xl" style={{ color: 'var(--text-muted)' }}>
                 Everyone we are working, best first. The counter is days since we last talked.
               </p>
-              <details className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
-                <summary className="cursor-pointer select-none" style={{ color: 'var(--accent)' }}>Who does what</summary>
-                <div className="mt-2 grid gap-2 sm:grid-cols-2 max-w-2xl">
-                  {(Object.keys(ROLES) as (keyof typeof ROLES)[]).map((k) => (
-                    <div key={k} className="rounded-xl px-3 py-2" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-                      <div className="font-medium" style={{ color: 'var(--text)' }}>{ROLES[k].label}</div>
-                      <div>{ROLES[k].duties}</div>
-                      <div className="mt-1" style={{ opacity: 0.8 }}>Hears: {ROLES[k].hears}</div>
-                    </div>
-                  ))}
-                  <div className="sm:col-span-2">The LinkedIn or email account owner still approves every message sent from their own account.</div>
-                </div>
-              </details>
             </div>
             <div className="flex">
               {METRICS.map((m, i) => (
@@ -209,7 +196,7 @@ export default function SalesLeadsPage() {
 
           <div className="z-card overflow-hidden mt-2">
             <div className={`hidden md:grid ${ROW_GRID} gap-x-3 px-4 py-2 z-eyebrow`} style={{ borderBottom: '1px solid var(--border)' }}>
-              <span>#</span><span>Lead</span><span>Status</span><span>Last contact</span><span>Works it</span>
+              <span>#</span><span title="Order inside the priority (1 = first)">Order</span><span>Lead</span><span>Status</span><span>Last contact</span><span>Works it</span><span>Priority</span>
               <span className="text-right">{loading ? '' : `${leads.length} shown`}</span>
             </div>
             {loading ? (

@@ -8,7 +8,7 @@ import { Chevron, LinkedIn, Star } from './icons';
  * One aligned line per lead. Columns: rank · person · status · last / next
  * contact · who works it · controls. Everything else lives in LeadDetail.
  */
-export const ROW_GRID = 'md:grid-cols-[2.5rem_minmax(0,1fr)_7.5rem_8.5rem_9.5rem_15.5rem]';
+export const ROW_GRID = 'md:grid-cols-[2.5rem_3.5rem_minmax(0,1fr)_7.5rem_8.5rem_9.5rem_7.5rem_6.5rem]';
 
 export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy, viewerId = null }: {
   lead: Lead; rank: number; open: boolean; onToggle: () => void;
@@ -44,6 +44,15 @@ export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy, vie
       <div className="flex items-center gap-2">
         <span className="w-1 self-stretch rounded-full" style={{ background: prio ? prio.color : 'transparent', minHeight: 28 }} />
         <span className="text-xs tabular-nums" style={{ color: 'var(--text-muted)' }} title={prio ? `priority ${prio.short}${lead.rank != null ? ` · order ${lead.rank}` : ''}` : 'no priority'}>{rank}</span>
+      </div>
+
+      {/* order inside the priority — right next to the position */}
+      <div className="hidden md:block" onClick={stop} onKeyDown={stop}>
+        <input type="number" min={0} inputMode="numeric" aria-label="Order inside the priority" title="Order inside the priority (1 = first). Leads with the same priority are worked in this order."
+          value={rankText} placeholder="#" onChange={(e) => setRankText(e.target.value)} onBlur={commitRank}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
+          className="hidden md:block w-14 text-xs tabular-nums rounded-full py-1 px-2 text-center"
+          style={{ background: 'transparent', border: '1px solid var(--border)', color: lead.rank != null ? 'var(--text)' : 'var(--text-muted)' }} />
       </div>
 
       {/* person */}
@@ -96,9 +105,9 @@ export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy, vie
         </>) : <span className="text-xs" style={{ color: 'var(--orange)' }}>unassigned</span>}
       </div>
 
-      {/* controls */}
-      <div className="flex items-center justify-end gap-1" onClick={stop} onKeyDown={stop}>
-        <span className="relative hidden md:inline-flex items-center" style={{ color: prio ? prio.color : 'var(--text-muted)' }}>
+      {/* priority */}
+      <div className="hidden md:flex items-center" onClick={stop} onKeyDown={stop}>
+        <span className="relative inline-flex items-center" style={{ color: prio ? prio.color : 'var(--text-muted)' }}>
           <select value={lead.priority ?? 0} aria-label="Priority" onChange={(e) => onPatch({ priority: Number(e.target.value) })}
             className="text-xs font-medium rounded-full py-1 pl-2.5 pr-6 appearance-none cursor-pointer"
             style={prio
@@ -109,12 +118,11 @@ export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy, vie
           </select>
           <Chevron width={12} height={12} className="absolute right-2 pointer-events-none" style={{ transform: 'rotate(90deg)' }} />
         </span>
-        <input type="number" min={0} inputMode="numeric" aria-label="Order inside the priority" title="Order inside the priority (1 = first). Leads with the same priority are worked in this order."
-          value={rankText} placeholder="#" onChange={(e) => setRankText(e.target.value)} onBlur={commitRank}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
-          className="hidden md:block w-12 text-xs tabular-nums rounded-full py-1 px-2 text-center"
-          style={{ background: 'transparent', border: '1px solid var(--border)', color: lead.rank != null ? 'var(--text)' : 'var(--text-muted)' }} />
-        <button type="button" aria-label={lead.must_talk ? 'Unstar' : 'Must talk'} title="Must talk"
+      </div>
+
+      {/* must talk · LinkedIn · open */}
+      <div className="flex items-center justify-end gap-1" onClick={stop} onKeyDown={stop}>
+        <button type="button" aria-label={lead.must_talk ? 'Unstar' : 'Must talk'} title={lead.must_talk ? 'Must talk — click to unstar' : 'Mark as must talk: shows in the Must talk view and ranks first among equals'}
           onClick={() => onPatch({ must_talk: !lead.must_talk })}
           className="w-8 h-8 rounded-full inline-flex items-center justify-center"
           style={{ color: lead.must_talk ? 'var(--orange)' : 'var(--text-muted)' }}>
