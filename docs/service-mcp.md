@@ -610,7 +610,9 @@ refused with `duplicate_of`. Stage, score and sends are system-owned. The lead's
 **Editing a sales lead and its track record** — `crm_update_sales_lead` takes the card (`full_name`, `title`, `company`,
 `email`, `linkedin_url`), `rank`, and the journey (`journey_stage` 0–5, `intro_quality` 1–5, `journey_outcome`);
 `crm_edit_sales_lead_event {event_id*, text?, occurred_at?, delete?}` corrects or removes a hand-written line (own lines
-unless admin).
+unless admin). `crm_get_sales_lead` returns each track-record line with its `id` and an `editable` flag, so a client knows which
+lines it may change. Add a line with `crm_update_sales_lead {lead_id, note, note_kind?, channel?, occurred_at?}` or
+`crm_lead_note`.
 
 **Deals** — `crm_update_deal {deal_id*, updates*}` edits columns and `fields`; a `gate` key is refused on this surface (the
 board process, G3 / G7, runs in SalesBrain). `crm_add_note`, `crm_mark_deal_lost`, `crm_schedule_followup` as in the app; a

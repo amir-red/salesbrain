@@ -423,7 +423,10 @@ export const SERVICE_TOOLS: ToolDef[] = [
   },
   {
     name: 'crm_get_sales_lead',
-    description: "One sales-leads row in full: message history, source, demo booking, whether converted, the dated track record, and `roles` (back office / front office with their duties).",
+    description:
+      "One sales-leads row in full: source, demo booking, whether converted, `roles` (back office / front office), " +
+      "and the dated track record — each line with its `id` and `editable` (true = crm_edit_sales_lead_event will " +
+      "accept it from you: hand-written, and yours unless you are an admin). Use the id to correct or delete a line.",
     inputSchema: obj({ lead_id: { type: 'string' } }, ['lead_id']),
     needsOwner: true,
   },
