@@ -76,6 +76,7 @@ export interface Lead {
   rank: number | null;                 // order inside the priority (059); null = unordered
   must_talk: boolean;
   next_step: string | null;            // the next envisioned step, free text (061)
+  phone: string | null;                // 062
   // LinkedIn signals from the lead's prospect + newest request (null for a lead with no prospect behind it)
   li_public_id: string | null;
   li_degree: string | null;
@@ -217,6 +218,12 @@ export function myRole(lead: Pick<Lead, 'responsible_user_id' | 'front_user_id'>
  * Amir (2026-10-16): no "in" to the contact → connect on LinkedIn first; connected → reach out.
  * An "in" = a LinkedIn connection, a warm introduction, or a channel we already hold (email / phone).
  */
+/** A teammate's LinkedIn account that is linked to this lead (connection or request). */
+export interface LinkedInLink {
+  owner_user_id: string; owner: string | null; account: string | null;
+  status: 'connected' | 'pending'; since: string | null;
+}
+
 export type LinkedInState =
   | 'connected' | 'awaiting_approval' | 'pending' | 'no_answer' | 'not_accepted' | 'failed' | 'not_invited' | 'no_profile';
 

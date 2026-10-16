@@ -440,7 +440,7 @@ export const SERVICE_TOOLS: ToolDef[] = [
       "responsible (BACK OFFICE: drives the lead — gets the due digest and reply notices) / front (FRONT OFFICE: calls, demos; " +
       "gets booking notices, becomes the deal lead) teammate by name — a newly assigned person is DM'd; next_contact_at " +
       "YYYY-MM-DD; met_at (where we met); and the card itself — full_name / title / company / email / linkedin_url " +
-      "(corrections are logged), next_step (the next envisioned step: no way in yet = connect on LinkedIn first, connected = reach out; crm_get_sales_lead returns linkedin + suggested_next_step) and the journey: journey_stage 0–5, intro_quality 1–5, journey_outcome qualified | lost. " +
+      "(corrections are logged), phone, website, next_step (the next envisioned step: no way in yet = connect on LinkedIn first, connected = reach out; crm_get_sales_lead returns linkedin + suggested_next_step) and the journey: journey_stage 0–5, intro_quality 1–5, journey_outcome qualified | lost. " +
       "Any combination. Converting is crm_convert_lead.",
     inputSchema: obj(
       {
@@ -455,6 +455,8 @@ export const SERVICE_TOOLS: ToolDef[] = [
         responsible: { type: 'string' },
         front: { type: 'string' },
         next_contact_at: { type: 'string' },
+        phone: { type: 'string', description: "the lead's phone number; '' clears" },
+        website: { type: 'string', description: "the lead's website; '' clears" },
         next_step: { type: 'string', description: "the next envisioned step, free text, e.g. 'Connect on LinkedIn', 'Reach out: first message', 'Book the call'; '' clears" },
         met_at: { type: 'string' },
         rank: { type: 'integer', description: 'order inside the priority, 1 = first; 0 clears' },

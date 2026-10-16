@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
   const client = await pool.connect();
   try {
     const { rows: leads } = await client.query(
-      `SELECT l.id, l.full_name, l.title, l.company, l.email, l.website, l.linkedin_url, l.description, l.notes, l.dossier, l.journey_stage, l.intro_quality, l.journey_outcome, l.next_step,
+      `SELECT l.id, l.full_name, l.title, l.company, l.email, l.website, l.linkedin_url, l.description, l.notes, l.dossier, l.journey_stage, l.intro_quality, l.journey_outcome, l.next_step, l.phone,
               l.source, l.status, l.priority, l.rank, l.must_talk, l.met_at,
               l.responsible_user_id, r.name AS responsible_name, l.front_user_id, f.name AS front_name,
               l.last_contact_at, to_char(l.next_contact_at, 'YYYY-MM-DD') AS next_contact_at,

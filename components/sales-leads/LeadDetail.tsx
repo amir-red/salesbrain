@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { addDays, CHANNELS, JOURNEY_STAGES, linkedInLabel, linkedInState, MANUAL_EVENT_KINDS, NEXT_STEP_PRESETS, ROLES, suggestNextStep, type EventKind, type Lead, type LeadEvent, type TeamUser } from '@/lib/sales-leads';
-import { EventIcon, External, Mail } from './icons';
+import { addDays, CHANNELS, JOURNEY_STAGES, linkedInLabel, type LinkedInLink, linkedInState, MANUAL_EVENT_KINDS, NEXT_STEP_PRESETS, ROLES, suggestNextStep, type EventKind, type Lead, type LeadEvent, type TeamUser } from '@/lib/sales-leads';
+import { EventIcon, External, LinkedIn, Mail, Phone } from './icons';
 
 /**
  * The expanded card, in the order Mateo reads it before a call: talking points
@@ -32,6 +32,7 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
   const [card, setCard] = useState({ full_name: lead.full_name, title: lead.title ?? '', company: lead.company === 'Unknown' ? '' : lead.company });
   const [editingEvent, setEditingEvent] = useState<{ id: string; text: string; when: string } | null>(null);
   const [evSaving, setEvSaving] = useState(false);
+  const [links, setLinks] = useState<LinkedInLink[] | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [connectMsg, setConnectMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [stepDraft, setStepDraft] = useState(lead.next_step ?? '');
@@ -43,6 +44,7 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load');
       setEvents(data.events || []);
+      setLinks(data.linkedin_links || []);
       setEvErr(null);
     } catch (err) { setEvErr(err instanceof Error ? err.message : String(err)); }
   };
@@ -53,6 +55,14 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
   const field = { background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: '0.5rem' } as const;
   const liState = linkedInState(lead);
   const liInfo = linkedInLabel(liState, lead);
+  // The back / front office seats (front falls back to the back office); teammates linked but not in a seat.
+  const seats = ((): { id: string; name: string; role: string }[] => {
+    const out: { id: string; name: string; role: string }[] = [];
+    if (lead.responsible_user_id) out.push({ id: lead.responsible_user_id, name: lead.responsible_name ?? 'Back office', role: lead.front_user_id && lead.front_user_id !== lead.responsible_user_id ? 'back office' : 'back + front office' });
+    if (lead.front_user_id && lead.front_user_id !== lead.responsible_user_id) out.push({ id: lead.front_user_id, name: lead.front_name ?? 'Front office', role: 'front office' });
+    return out;
+  })();
+  const others = (links ?? []).filter((l) => !seats.some((x) => x.id === l.owner_user_id));
   const suggestion = suggestNextStep(lead);
   const canConnect = !!lead.prospect_id && (liState === 'not_invited' || liState === 'not_accepted' || liState === 'no_answer' || liState === 'failed');
   async function connect() {
@@ -291,9 +301,69 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
 
         {/* ── Right: working this lead ───────────────────────────────── */}
         <aside className="rounded-2xl p-4 space-y-4 self-start" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-          <div className="space-y-1 text-xs">
-            {lead.email && <a href={`mailto:${lead.email}`} className="flex items-center gap-1.5 hover:underline"><Mail width={13} height={13} style={{ color: 'var(--text-muted)' }} />{lead.email}</a>}
-            {website && <a href={website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 hover:underline"><External width={13} height={13} style={{ color: 'var(--text-muted)' }} />{website.replace(/^https?:\/\//, '')}</a>}
+          <div>
+            <span className="z-eyebrow">Contact</span>
+            <div className="mt-1.5 space-y-1.5 text-xs">
+              <ContactRow label="Website" value={lead.website} field="website" placeholder="add website" icon={<External width={13} height={13} />}
+                href={website} display={website ? website.replace(/^https?:\/\//, '').replace(/\/$/, '') : null} onSave={(v) => onPatch({ website: v })} />
+              <ContactRow label="Email" value={lead.email} field="email" placeholder="add email" icon={<Mail width={13} height={13} />}
+                href={lead.email ? `mailto:${lead.email}` : null} display={lead.email || null} onSave={(v) => onPatch({ email: v })} />
+              <ContactRow label="Phone" value={lead.phone} field="phone" placeholder="add phone" icon={<Phone width={13} height={13} />}
+                href={lead.phone ? `tel:${lead.phone.replace(/[^+\d]/g, '')}` : null} display={lead.phone || null} onSave={(v) => onPatch({ phone: v })} />
+              <ContactRow label="LinkedIn" value={lead.linkedin_url} field="linkedin_url" placeholder="add profile URL" icon={<LinkedIn width={13} height={13} />}
+                href={lead.linkedin_url} display={lead.linkedin_url ? lead.linkedin_url.replace(/^https?:\/\/(www\.)?linkedin\.com\//, '').replace(/\/$/, '') : null} onSave={(v) => onPatch({ linkedin_url: v })} />
+            </div>
+
+            {/* who on the team is linked to this person — the lead's own back / front office may not be, a teammate may be */}
+            <div className="mt-2 rounded-xl px-3 py-2 space-y-1 text-[11px]" style={{ background: 'var(--bg-input)' }}>
+              <div className="z-eyebrow">Connected on LinkedIn</div>
+              {links === null ? <div style={{ color: 'var(--text-muted)' }}>checking…</div> : (<>
+                {seats.map((seat) => {
+                  const hit = links.find((l) => l.owner_user_id === seat.id);
+                  const tone = hit?.status === 'connected' ? 'var(--green)' : hit ? 'var(--yellow)' : 'var(--text-muted)';
+                  return (
+                    <div key={seat.role} className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: tone }} />
+                      <span><span className="font-medium">{seat.name}</span> <span style={{ color: 'var(--text-muted)' }}>({seat.role})</span></span>
+                      <span className="ml-auto" style={{ color: hit ? tone : 'var(--text-muted)' }}>
+                        {hit ? `${hit.status === 'connected' ? 'connected' : 'request pending'}${hit.since ? ` · ${new Date(hit.since).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : ''}` : 'not connected'}
+                      </span>
+                    </div>
+                  );
+                })}
+                {others.map((l) => (
+                  <div key={l.owner_user_id} className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: l.status === 'connected' ? 'var(--green)' : 'var(--yellow)' }} />
+                    <span className="font-medium">{l.owner}</span>
+                    <span className="ml-auto" style={{ color: l.status === 'connected' ? 'var(--green)' : 'var(--yellow)' }}>
+                      {l.status === 'connected' ? 'connected' : 'request pending'}{l.since ? ` · ${new Date(l.since).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : ''}
+                    </span>
+                  </div>
+                ))}
+                {links.length === 0 && lead.journey_stage >= 2 && <div style={{ color: 'var(--text-muted)' }}>Marked as connected by hand.</div>}
+                {links.length === 0 && lead.journey_stage < 2 && !seats.length && <div style={{ color: 'var(--text-muted)' }}>Nobody on the team is connected yet.</div>}
+                {others.length > 0 && !links.some((l) => seats.some((x) => x.id === l.owner_user_id) && l.status === 'connected') && (
+                  <div style={{ color: 'var(--text-muted)' }}>Not through {seats.map((x) => x.name).join(' or ') || 'the lead owner'} — {others[0].owner} can reach them, or introduce.</div>
+                )}
+              </>)}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {canConnect && (
+                  <button type="button" onClick={connect} disabled={connecting || busy} className="text-[11px] px-3 py-1 rounded-full font-medium disabled:opacity-50"
+                    style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }} title="Files the request for the lead owner's approval; nothing is sent until they approve">{connecting ? 'Filing…' : 'Connect on LinkedIn'}</button>
+                )}
+                {liState !== 'connected' && lead.journey_stage < 2 && (
+                  <button type="button" onClick={() => onPatch({ journey_stage: 2 })} disabled={busy} className="text-[11px] px-2.5 py-1 disabled:opacity-50" style={ghost}
+                    title="We are already connected on LinkedIn — set the journey to step 2">Mark as connected</button>
+                )}
+              </div>
+              {connectMsg && <p style={{ color: connectMsg.ok ? 'var(--green)' : 'var(--red)' }}>{connectMsg.text}</p>}
+              {liState === 'not_invited' && !lead.prospect_id && (
+                <p style={{ color: 'var(--text-muted)' }}>This lead is not on a prospect list, so the request cannot be filed from here. Connect on LinkedIn, then mark it connected.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-1 text-xs pt-3" style={{ borderTop: '1px solid var(--border)' }}>
             {lead.booking_status === 'scheduled' && lead.meet_link && <a href={lead.meet_link} target="_blank" rel="noopener noreferrer" className="font-medium" style={{ color: 'var(--green)' }}>Join the booked demo →</a>}
             {lead.converted_deal_id && <div>Deal: <Link href={`/deals/${lead.converted_deal_id}`} className="hover:underline" style={{ color: 'var(--accent)' }}>{lead.converted_deal_name || 'open'} (G{lead.converted_deal_gate ?? '?'})</Link></div>}
             {lead.prospect_id && <Link href={`/prospects/${lead.prospect_id}`} className="block hover:underline" style={{ color: 'var(--accent)' }}>Lead journey →</Link>}
@@ -318,29 +388,6 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
           </div>
 
           <div className="space-y-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
-            <div>
-              <span className="z-eyebrow">LinkedIn</span>
-              <div className="mt-1 flex items-center gap-2 text-xs">
-                <span className="w-2 h-2 rounded-full flex-shrink-0"
-                  style={{ background: liInfo.tone === 'good' ? 'var(--green)' : liInfo.tone === 'wait' ? 'var(--yellow)' : liInfo.tone === 'bad' ? 'var(--red)' : 'var(--text-muted)' }} />
-                <span className="font-medium">{liInfo.label}</span>
-                {lead.linkedin_url && <a href={lead.linkedin_url} target="_blank" rel="noopener noreferrer" className="ml-auto underline" style={{ color: 'var(--text-muted)' }}>open</a>}
-              </div>
-              <div className="mt-1.5 flex flex-wrap gap-1.5">
-                {canConnect && (
-                  <button type="button" onClick={connect} disabled={connecting || busy} className="text-[11px] px-3 py-1 rounded-full font-medium disabled:opacity-50"
-                    style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>{connecting ? 'Filing…' : 'Connect on LinkedIn'}</button>
-                )}
-                {liState !== 'connected' && lead.journey_stage < 2 && (
-                  <button type="button" onClick={() => onPatch({ journey_stage: 2 })} disabled={busy} className="text-[11px] px-2.5 py-1 disabled:opacity-50" style={ghost}
-                    title="We are already connected on LinkedIn — set the journey to step 2">Mark as connected</button>
-                )}
-              </div>
-              {connectMsg && <p className="text-[11px] mt-1.5" style={{ color: connectMsg.ok ? 'var(--green)' : 'var(--red)' }}>{connectMsg.text}</p>}
-              {liState === 'not_invited' && !lead.prospect_id && (
-                <p className="text-[11px] mt-1.5" style={{ color: 'var(--text-muted)' }}>This lead is not on a prospect list, so the request cannot be filed from here. Connect on LinkedIn, then mark it connected.</p>
-              )}
-            </div>
             <div>
               <span className="z-eyebrow">Ping again on</span>
               <div className="mt-1 flex gap-1.5 items-center flex-wrap">
@@ -385,6 +432,36 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
           </div>
         </aside>
       </div>
+    </div>
+  );
+}
+
+
+/** One contact line: label, value (link when set, a quiet placeholder when not), click to edit, Enter / blur saves. */
+function ContactRow({ label, value, display, href, placeholder, icon, onSave }: {
+  label: string; value: string | null; field: string; display: string | null; href: string | null;
+  placeholder: string; icon: React.ReactNode; onSave: (v: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? '');
+  useEffect(() => setDraft(value ?? ''), [value]);
+  const commit = () => { setEditing(false); if (draft.trim() !== (value ?? '')) onSave(draft.trim()); };
+  return (
+    <div className="flex items-center gap-2 min-h-[1.5rem]">
+      <span className="w-14 flex-shrink-0 z-eyebrow flex items-center gap-1" title={label}>{label}</span>
+      {editing ? (
+        <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={commit} placeholder={placeholder}
+          onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setDraft(value ?? ''); setEditing(false); } }}
+          className="flex-1 min-w-0 text-xs px-2 py-1" style={{ background: 'var(--bg-card)', border: '1px solid var(--accent)', color: 'var(--text)', borderRadius: '0.5rem' }} />
+      ) : (<>
+        {display && href ? (
+          <a href={href} target={href.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="flex-1 min-w-0 truncate hover:underline flex items-center gap-1.5">
+            <span style={{ color: 'var(--text-muted)' }}>{icon}</span><span className="truncate">{display}</span>
+          </a>
+        ) : <span className="flex-1 min-w-0 truncate" style={{ color: 'var(--text-muted)', opacity: 0.7 }}>— </span>}
+        <button type="button" onClick={() => setEditing(true)} className="text-[11px] underline flex-shrink-0" style={{ color: 'var(--text-muted)' }}
+          aria-label={`Edit ${label}`}>{display ? 'edit' : placeholder}</button>
+      </>)}
     </div>
   );
 }

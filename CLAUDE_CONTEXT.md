@@ -1345,6 +1345,22 @@ other way in → "Ask for a warm introduction"; no profile → "Find their Linke
 - Not built: a "not connected" filter on the toolbar (the obvious connect-first queue), batch-connect from the list (the ICP page
   already queues N requests per list), a next-step line in the Telegram reply notices.
 
+### 5.ai.11 Contact section + who is connected on LinkedIn (2026-10-16, feat/lead-contact, core/hermes 0.49.7, migration 062)
+
+Amir, on the lead card: "top of the right section = contact details — website, email, phone, LinkedIn, whether we have them or not —
+and on LinkedIn show who is connected: Mateo may not be, Matthias is." **062**: `sales_leads.phone` (backfilled from
+`raw_payload.phone` / `contacts.phone`). `update_sales_lead` takes `phone` and `website` (card fields, logged as one "edited …" note;
+`email` '' now stores '' — the column is NOT NULL, clearing used to error). `sales_leads.linkedin_links(conn, lead_id)` = every
+ACTIVE LinkedIn account with this person as a 1st-degree relation or an open / accepted request (matched on slug or member id, from the
+lead's URL and its prospect) → `get_sales_lead.linkedin.connections` and the app's `GET /api/sales-leads/[id]` (`lib/sales-lead-links.ts`
+is the SQL port — change both). Live check: 32 of 236 open leads are linked to a teammate, all through Matthias (30 connected, 2
+pending); several have a different back office. **App**: the rail opens with **Contact** (four always-visible rows, click to edit,
+Enter saves), then a "Connected on LinkedIn" panel: one line per seat (back office / front office, front falls back to back) with
+connected / request pending / not connected, plus teammates outside the seats and a hint when only they can reach the person;
+Connect on LinkedIn (files the request for the OWNER's approval) and Mark as connected live there now. Export gains Phone; service MCP
+schema lists `phone` / `website`. Not built: the next-step suggestion still looks only at the lead OWNER's account (a teammate's
+connection is shown, not yet used as "an in"), phone edits do not write back to `contacts.phone`.
+
 ### 5.aj Marketing — paid ads inside the CRM (2026-10-13, feat/marketing, round 1 app-only)
 
 Amir: "we are starting ads in Google Ads and LinkedIn Ads — add a marketing menu, connectors, pull our performance

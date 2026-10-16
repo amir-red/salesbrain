@@ -921,6 +921,13 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 
 ## 12. Changelog
 
+### 2026-10-16 — contact details and who is connected on a sales lead
+
+**`crm_update_sales_lead`** takes `phone` and `website` next to `email` and `linkedin_url` ('' clears; the card always shows all four).
+**`crm_get_sales_lead`** returns `linkedin.connections` — every teammate whose LinkedIn account is connected to, or has a request
+out to, this person (`owner`, `status` connected | pending, `since`). The lead's back or front office may not be connected while
+a colleague is: read this before saying "we are not connected". Tool count unchanged.
+
 ### 2026-10-16 — per-person memory on this surface
 
 **`crm_memory_recall`**, **`crm_memory_save`**, **`crm_memory_forget`**, **`crm_memory_share`**: the employee's own

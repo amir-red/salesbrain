@@ -832,3 +832,5 @@ CREATE INDEX IF NOT EXISTS sales_leads_front_idx ON sales_leads (front_user_id, 
 
 -- Next envisioned step (core 061): free text under "ping again on"; suggested by policy/next_step.py.
 ALTER TABLE sales_leads ADD COLUMN IF NOT EXISTS next_step TEXT CHECK (next_step IS NULL OR char_length(next_step) <= 200);
+-- Phone on the card (core 062): website / email / phone / LinkedIn are always shown and editable.
+ALTER TABLE sales_leads ADD COLUMN IF NOT EXISTS phone TEXT CHECK (phone IS NULL OR char_length(phone) <= 60);

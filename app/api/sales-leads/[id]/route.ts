@@ -18,6 +18,7 @@ import { z } from 'zod';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
+import { linkedinLinks } from '@/lib/sales-lead-links';
 import { CHANNELS } from '@/lib/sales-leads';
 
 const Ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -40,6 +41,8 @@ const PatchSchema = z.object({
   company: z.string().max(200).optional(),
   email: z.string().max(200).optional(),
   linkedin_url: z.string().max(300).optional(),
+  phone: z.string().max(60).optional(),
+  website: z.string().max(300).optional(),
   next_step: z.string().max(200).optional(),     // '' clears
   journey_stage: z.number().int().min(0).max(5).optional(),
   intro_quality: z.number().int().min(0).max(5).optional(),
@@ -66,7 +69,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       `SELECT e.id, e.occurred_at, e.kind, e.channel, e.text, e.ref, e.actor_user_id, u.name AS actor_name
          FROM sales_lead_events e LEFT JOIN users u ON u.id = e.actor_user_id
         WHERE e.lead_id = $1 ORDER BY e.occurred_at DESC, e.created_at DESC LIMIT 200`, [id]);
-    return NextResponse.json({ lead: rows[0], events });
+    return NextResponse.json({ lead: rows[0], events, linkedin_links: await linkedinLinks(client, id) });
   } finally {
     client.release();
   }
@@ -107,7 +110,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (b.must_talk !== undefined) args.must_talk = b.must_talk;
   if (b.next_contact_at !== undefined) args.next_contact_at = b.next_contact_at;
   if (b.met_at !== undefined) args.met_at = b.met_at;
-  for (const k of ['full_name', 'title', 'company', 'email', 'linkedin_url', 'next_step', 'journey_stage', 'intro_quality', 'journey_outcome'] as const) {
+  for (const k of ['full_name', 'title', 'company', 'email', 'phone', 'website', 'linkedin_url', 'next_step', 'journey_stage', 'intro_quality', 'journey_outcome'] as const) {
     if (b[k] !== undefined) args[k] = b[k];
   }
   if (b.note !== undefined && b.note.trim()) {
