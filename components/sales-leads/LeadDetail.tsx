@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { addDays, CHANNELS, JOURNEY_STAGES, MANUAL_EVENT_KINDS, ROLES, type EventKind, type Lead, type LeadEvent, type TeamUser } from '@/lib/sales-leads';
+import { addDays, CHANNELS, JOURNEY_STAGES, linkedInLabel, linkedInState, MANUAL_EVENT_KINDS, NEXT_STEP_PRESETS, ROLES, suggestNextStep, type EventKind, type Lead, type LeadEvent, type TeamUser } from '@/lib/sales-leads';
 import { EventIcon, External, Mail } from './icons';
 
 /**
@@ -11,10 +11,10 @@ import { EventIcon, External, Mail } from './icons';
  * The right rail is "working this lead": back / front office, ping-by date,
  * where met, status actions.
  */
-export default function LeadDetail({ lead, users, onPatch, onConvert, busy, viewerId, viewerIsAdmin }: {
+export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh, busy, viewerId, viewerIsAdmin }: {
   lead: Lead; users: TeamUser[];
   onPatch: (patch: Record<string, unknown>) => Promise<boolean>;
-  onConvert: () => void; busy: boolean;
+  onConvert: () => void; onRefresh?: () => void; busy: boolean;
   viewerId?: string | null; viewerIsAdmin?: boolean;
 }) {
   const [events, setEvents] = useState<LeadEvent[] | null>(null);
@@ -32,6 +32,10 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, busy, view
   const [card, setCard] = useState({ full_name: lead.full_name, title: lead.title ?? '', company: lead.company === 'Unknown' ? '' : lead.company });
   const [editingEvent, setEditingEvent] = useState<{ id: string; text: string; when: string } | null>(null);
   const [evSaving, setEvSaving] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [connectMsg, setConnectMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [stepDraft, setStepDraft] = useState(lead.next_step ?? '');
+  useEffect(() => setStepDraft(lead.next_step ?? ''), [lead.id, lead.next_step]);
 
   const loadEvents = async () => {
     try {
@@ -47,6 +51,24 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, busy, view
   const d = lead.dossier;
   const Eyebrow = ({ children }: { children: React.ReactNode }) => <h4 className="z-eyebrow mt-5 mb-2 first:mt-0">{children}</h4>;
   const field = { background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: '0.5rem' } as const;
+  const liState = linkedInState(lead);
+  const liInfo = linkedInLabel(liState, lead);
+  const suggestion = suggestNextStep(lead);
+  const canConnect = !!lead.prospect_id && (liState === 'not_invited' || liState === 'not_accepted' || liState === 'no_answer' || liState === 'failed');
+  async function connect() {
+    if (!lead.prospect_id) return;
+    setConnecting(true); setConnectMsg(null);
+    try {
+      const res = await fetch(`/api/prospects/${lead.prospect_id}/connect`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const out = await res.json();
+      if (!res.ok || out.error) throw new Error(out.error || 'Could not file the request');
+      setConnectMsg({ ok: true, text: `Request filed for ${out.acted_as?.name ?? 'the owner'}'s approval (Telegram or /agents). Nothing is sent until they approve.` });
+      onRefresh?.();
+    } catch (err) {
+      setConnectMsg({ ok: false, text: err instanceof Error ? err.message : String(err) });
+    } finally { setConnecting(false); }
+  }
+  const saveStep = (v: string) => { if (v.trim() !== (lead.next_step ?? '')) onPatch({ next_step: v.trim() }); };
   const ghost = { background: 'transparent', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: '9999px' } as const;
 
   async function saveCard() {
@@ -297,6 +319,29 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, busy, view
 
           <div className="space-y-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
             <div>
+              <span className="z-eyebrow">LinkedIn</span>
+              <div className="mt-1 flex items-center gap-2 text-xs">
+                <span className="w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ background: liInfo.tone === 'good' ? 'var(--green)' : liInfo.tone === 'wait' ? 'var(--yellow)' : liInfo.tone === 'bad' ? 'var(--red)' : 'var(--text-muted)' }} />
+                <span className="font-medium">{liInfo.label}</span>
+                {lead.linkedin_url && <a href={lead.linkedin_url} target="_blank" rel="noopener noreferrer" className="ml-auto underline" style={{ color: 'var(--text-muted)' }}>open</a>}
+              </div>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {canConnect && (
+                  <button type="button" onClick={connect} disabled={connecting || busy} className="text-[11px] px-3 py-1 rounded-full font-medium disabled:opacity-50"
+                    style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>{connecting ? 'Filing…' : 'Connect on LinkedIn'}</button>
+                )}
+                {liState !== 'connected' && lead.journey_stage < 2 && (
+                  <button type="button" onClick={() => onPatch({ journey_stage: 2 })} disabled={busy} className="text-[11px] px-2.5 py-1 disabled:opacity-50" style={ghost}
+                    title="We are already connected on LinkedIn — set the journey to step 2">Mark as connected</button>
+                )}
+              </div>
+              {connectMsg && <p className="text-[11px] mt-1.5" style={{ color: connectMsg.ok ? 'var(--green)' : 'var(--red)' }}>{connectMsg.text}</p>}
+              {liState === 'not_invited' && !lead.prospect_id && (
+                <p className="text-[11px] mt-1.5" style={{ color: 'var(--text-muted)' }}>This lead is not on a prospect list, so the request cannot be filed from here. Connect on LinkedIn, then mark it connected.</p>
+              )}
+            </div>
+            <div>
               <span className="z-eyebrow">Ping again on</span>
               <div className="mt-1 flex gap-1.5 items-center flex-wrap">
                 <input type="date" value={lead.next_contact_at ?? ''} onChange={(e) => onPatch({ next_contact_at: e.target.value })} className="text-xs px-2 py-1.5" style={field} />
@@ -305,6 +350,21 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, busy, view
                 ))}
                 {lead.next_contact_at && <button type="button" onClick={() => onPatch({ next_contact_at: '' })} className="text-[11px] underline" style={{ color: 'var(--text-muted)' }}>clear</button>}
               </div>
+            </div>
+            <div>
+              <span className="z-eyebrow">Next step</span>
+              <input value={stepDraft} onChange={(e) => setStepDraft(e.target.value)} list={`steps-${lead.id}`} maxLength={200}
+                placeholder="What we plan to do next…" className="mt-1 w-full text-xs px-2 py-1.5" style={field}
+                onBlur={(e) => saveStep(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
+              <datalist id={`steps-${lead.id}`}>{NEXT_STEP_PRESETS.map((p) => <option key={p} value={p} />)}</datalist>
+              {suggestion && suggestion.label !== (lead.next_step ?? '') && (
+                <div className="mt-1.5 flex items-start gap-2 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                  <span className="flex-1">Suggested: <span className="font-medium" style={{ color: 'var(--text)' }}>{suggestion.label}</span> — {suggestion.why}.</span>
+                  <button type="button" onClick={() => { setStepDraft(suggestion.label); onPatch({ next_step: suggestion.label }); }} disabled={busy}
+                    className="px-2.5 py-0.5 flex-shrink-0 disabled:opacity-50" style={ghost}>Use</button>
+                </div>
+              )}
+              {lead.next_step && <button type="button" onClick={() => { setStepDraft(''); onPatch({ next_step: '' }); }} className="text-[11px] underline mt-1" style={{ color: 'var(--text-muted)' }}>clear</button>}
             </div>
             <label className="block">
               <span className="z-eyebrow">Where we met</span>

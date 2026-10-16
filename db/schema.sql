@@ -829,3 +829,6 @@ INSERT INTO policy_rules (key, value, description) VALUES
 ON CONFLICT (key) DO NOTHING;
 CREATE INDEX IF NOT EXISTS sales_leads_responsible_idx ON sales_leads (responsible_user_id, status);
 CREATE INDEX IF NOT EXISTS sales_leads_front_idx ON sales_leads (front_user_id, status);
+
+-- Next envisioned step (core 061): free text under "ping again on"; suggested by policy/next_step.py.
+ALTER TABLE sales_leads ADD COLUMN IF NOT EXISTS next_step TEXT CHECK (next_step IS NULL OR char_length(next_step) <= 200);

@@ -40,6 +40,7 @@ const PatchSchema = z.object({
   company: z.string().max(200).optional(),
   email: z.string().max(200).optional(),
   linkedin_url: z.string().max(300).optional(),
+  next_step: z.string().max(200).optional(),     // '' clears
   journey_stage: z.number().int().min(0).max(5).optional(),
   intro_quality: z.number().int().min(0).max(5).optional(),
   journey_outcome: z.enum(['qualified', 'lost', '']).optional(),
@@ -106,7 +107,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (b.must_talk !== undefined) args.must_talk = b.must_talk;
   if (b.next_contact_at !== undefined) args.next_contact_at = b.next_contact_at;
   if (b.met_at !== undefined) args.met_at = b.met_at;
-  for (const k of ['full_name', 'title', 'company', 'email', 'linkedin_url', 'journey_stage', 'intro_quality', 'journey_outcome'] as const) {
+  for (const k of ['full_name', 'title', 'company', 'email', 'linkedin_url', 'next_step', 'journey_stage', 'intro_quality', 'journey_outcome'] as const) {
     if (b[k] !== undefined) args[k] = b[k];
   }
   if (b.note !== undefined && b.note.trim()) {

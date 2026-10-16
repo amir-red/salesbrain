@@ -930,6 +930,15 @@ SalesBrain notes (corrections, preferences, rules, facts — e.g. "our value pro
 every correction the user gives. `scope: "team"` files a proposal a SalesBrain admin approves on /admin/learning;
 approved team notes come back in everyone's recall. Secrets and pay data are refused. 68 tools.
 
+### 2026-10-16 — next step + LinkedIn state on a sales lead
+
+**`crm_update_sales_lead`** takes `next_step` (free text, '' clears) — the next envisioned step, shown under "ping again on".
+**`crm_get_sales_lead`** returns `linkedin` (`state` connected | awaiting_approval | pending | no_answer | not_accepted | failed |
+not_invited | no_profile, `since`), the stored `next_step` and a `suggested_next_step` ({code, label, why}). The rule: no way in
+yet (no connection, no warm introduction, no email) → **connect on LinkedIn first**; connected → **reach out**. A sent or
+accepted connection request moves the stored step and the journey by itself unless a person wrote a plan. `crm_list_sales_leads`
+rows carry `next_step`; the Excel export has a "Next step" column. Tool count unchanged.
+
 ### 2026-10-16 — Excel exports
 
 **`export_sales_leads`**, **`export_prospects`**, **`export_icp`** return a 15-minute signed download link for an .xlsx
