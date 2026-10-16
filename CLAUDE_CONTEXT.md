@@ -1286,6 +1286,24 @@ ring's own schemas). **`crm_update_deal` refuses a `gate` key on this surface** 
 board check — the agent's prompt does — so a partner app must not move gates); `crm_advance_gate` is not exposed. Not built:
 website / industry edits (org-wide account data), stage edits (system-owned), a delete for leads, an edit UI for prospects.
 
+### 5.ai.9 Excel exports — sales leads, prospects, a full ICP (2026-10-16, feat/excel-export, app-only)
+
+Amir: "export options for sales leads, full ICP and prospects in Excel — in the UI and in the tools." `lib/export/build.ts`
+(server only, SheetJS + ONE checked-out pg client, sequential): `salesLeads` = sheets *Sales leads* (27 cols incl. journey,
+roles, ping date, dossier) + *Track record*; `prospects` = *Prospects* (29 cols: fit + why, LinkedIn request state, messages
+sent, replies, research, owner, source); `icp` = *ICP* (definition + flattened criteria + counts) · *Leads* · *Funnel* ·
+*Activity*. **Visibility = the screen's rule, re-enforced in the builder**: sales leads org-wide; prospects mine + unowned
+(admin all); ICP via `visibleIcp` (owner or admin). `OPEN` / `DUE` / `SORTS` moved to `lib/sales-leads-sql.ts` so the list
+route and the export share ONE due predicate. **UI**: `components/ExportButton.tsx` (fetch → blob, errors shown inline) on
+/sales-leads (current view / search / Mine / sort), /prospecting (stage + Mine), /icp/[id]; `GET /api/export/{sales-leads|
+prospects|icp}` (cookie). **Tools**: `export_sales_leads` / `export_prospects` / `export_icp` on BOTH MCP surfaces (public
+`/api/mcp` as app-owned tools in `APP_ONLY`; service MCP 64 tools) — a tool cannot return a file, so each builds the workbook
+once as the caller (validation + row counts) and returns `download_url` = `/api/export/download?t=<token>`: HMAC-SHA256
+(`SESSION_SECRET`) over {user, kind, args, expiry}, **15 minutes**, stateless (nothing stored; rebuilt when opened; role
+re-read from the DB), whitelisted in `middleware.ts`. Anyone holding the link can download until it expires. Verified live:
+236 sales leads / 974 track-record lines, 617-lead ICP in 4 sheets, a plain user refused another owner's ICP, tampered and
+expired tokens rejected. Not built: CSV, a scheduled / emailed export, column picker, exporting deals or the network list.
+
 ### 5.aj Marketing — paid ads inside the CRM (2026-10-13, feat/marketing, round 1 app-only)
 
 Amir: "we are starting ads in Google Ads and LinkedIn Ads — add a marketing menu, connectors, pull our performance

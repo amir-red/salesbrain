@@ -5,6 +5,7 @@ import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';
 import { PROSPECT_STAGES } from '@/lib/prospecting';
 import { relativeTime } from '@/lib/time';
+import ExportButton from '@/components/ExportButton';
 
 interface Prospect {
   id: string;
@@ -110,6 +111,9 @@ export default function ProspectingPage() {
           </div>
           <div className="flex items-center gap-3">
             <Link href="/icp" className="text-xs underline" style={{ color: 'var(--text-muted)' }}>ICP profiles →</Link>
+            <ExportButton
+              href={`/api/export/prospects?${new URLSearchParams({ ...(stageFilter ? { stage: stageFilter } : {}), ...(mineOnly ? { mine: '1' } : {}) })}`}
+              title="Download these prospects (current stage and Mine filter) as Excel" />
             <button
               onClick={() => setShowNew(!showNew)}
               className="px-3 py-1.5 rounded-lg text-sm font-medium"

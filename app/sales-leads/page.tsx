@@ -6,6 +6,7 @@ import LeadRow, { ROW_GRID } from '@/components/sales-leads/LeadRow';
 import LeadDetail from '@/components/sales-leads/LeadDetail';
 import { Search } from '@/components/sales-leads/icons';
 import { ROLES, type Lead, type LeadCounts, type LeadSort, type LeadStatus, type LeadView, type RoleFilter, type TeamUser } from '@/lib/sales-leads';
+import ExportButton from '@/components/ExportButton';
 
 /**
  * /sales-leads — the team's lead dashboard. One aligned line per lead, ranked
@@ -193,6 +194,9 @@ export default function SalesLeadsPage() {
               <option value="contact">Longest since contact</option>
               <option value="newest">Newest</option>
             </select>
+            <ExportButton
+              href={`/api/export/sales-leads?${new URLSearchParams({ view, sort, ...(q ? { q } : {}), ...(role ? { mine: '1', ...(role !== 'any' ? { role } : {}) } : {}) })}`}
+              title="Download what this list shows (current view, search and Mine filter) as Excel, with every track-record line" />
           </div>
 
           {/* ── List ─────────────────────────────────────────────── */}

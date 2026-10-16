@@ -25,6 +25,8 @@ import { fetchRingCatalog, type RingToolDef } from './kernel-rpc';
 
 export type ToolAccess = 'read' | 'write' | 'admin';
 
+import { EXPORT_TOOL_DEFS } from '@/lib/export/tools';
+
 export interface McpToolDef {
   name: string;
   description: string;
@@ -383,6 +385,8 @@ const SIDE_EFFECT_TOOLS: McpToolDef[] = [
   },
 ];
 
+const EXPORT_MCP_TOOLS: McpToolDef[] = EXPORT_TOOL_DEFS.map((t) => ({ ...t, _meta: { access: 'read' as ToolAccess } }));
+
 /**
  * The hand-written tools. Historically this WAS the MCP catalogue, which is
  * how it drifted to 23 tools while the ring registered 70 — see
@@ -390,7 +394,7 @@ const SIDE_EFFECT_TOOLS: McpToolDef[] = [
  * catalogue comes from the ring (`getMcpTools`), and these survive only to
  * keep in-flight clients working and to host the few tools the app owns.
  */
-export const LEGACY_TOOLS: McpToolDef[] = [...READ_TOOLS, ...WRITE_TOOLS, ...SIDE_EFFECT_TOOLS];
+export const LEGACY_TOOLS: McpToolDef[] = [...READ_TOOLS, ...WRITE_TOOLS, ...SIDE_EFFECT_TOOLS, ...EXPORT_MCP_TOOLS];
 
 const LEGACY_BY_NAME: Map<string, McpToolDef> = new Map(
   LEGACY_TOOLS.map((t) => [t.name, t] as const),
@@ -400,7 +404,7 @@ const LEGACY_BY_NAME: Map<string, McpToolDef> = new Map(
  * Tools the app owns outright — no kernel equivalent exists, so these stay
  * hand-written and advertised alongside the ring's catalogue.
  */
-const APP_ONLY = new Set(['get_memories', 'remember', 'forget']);
+const APP_ONLY = new Set(['get_memories', 'remember', 'forget', 'export_sales_leads', 'export_prospects', 'export_icp']);
 
 /**
  * Legacy names whose behaviour now lives in the kernel. Still dispatchable so

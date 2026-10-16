@@ -16,20 +16,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { QUIET_WARN_DAYS, type LeadCounts, type LeadSort, type LeadView } from '@/lib/sales-leads';
+import { type LeadCounts, type LeadSort, type LeadView } from '@/lib/sales-leads';
+import { DUE, OPEN, SORTS } from '@/lib/sales-leads-sql';
 
 const VIEWS = new Set<LeadView>(['working', 'due', 'must', 'new', 'contacted', 'replied', 'converted', 'archived', 'all']);
-const SORTS: Record<LeadSort, string> = {
-  priority: 'l.priority NULLS LAST, l.rank NULLS LAST, l.must_talk DESC, l.next_contact_at NULLS LAST, l.last_contact_at DESC NULLS LAST, l.created_at DESC',
-  contact: 'COALESCE(l.last_contact_at, l.created_at) ASC, l.priority NULLS LAST, l.rank NULLS LAST',
-  newest: 'l.created_at DESC',
-};
-
-const OPEN = "l.status NOT IN ('converted', 'archived')";
-// Mirrors the kernel's ONE due predicate (commands/sales_leads.py::due_sql — change both): ping-by date reached, or
-// quiet for 14+ days but only for leads that are starred, high priority, or were contacted at least once.
-const DUE = `${OPEN} AND (l.next_contact_at <= current_date OR (l.next_contact_at IS NULL AND (l.must_talk OR l.priority <= 2 OR l.last_contact_at IS NOT NULL) AND COALESCE(l.last_contact_at, l.created_at) < now() - interval '${QUIET_WARN_DAYS} days'))`;
-
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

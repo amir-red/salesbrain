@@ -18,6 +18,7 @@
  */
 
 import pool from '../db';
+import { EXPORT_TOOL_DEFS, EXPORT_TOOL_KIND, exportTool } from '../export/tools';
 import { adsOverview, dayTotals, providerTotals } from '../ads/overview';
 import { kernelCall } from '../mcp/kernel-rpc';
 import { registerEmployee } from './identity';
@@ -729,6 +730,24 @@ export const SERVICE_TOOLS: ToolDef[] = [
     needsOwner: true,
   },
   {
+    name: 'export_sales_leads',
+    description: EXPORT_TOOL_DEFS[0].description,
+    inputSchema: EXPORT_TOOL_DEFS[0].inputSchema as ToolDef['inputSchema'],
+    needsOwner: true,
+  },
+  {
+    name: 'export_prospects',
+    description: EXPORT_TOOL_DEFS[1].description,
+    inputSchema: EXPORT_TOOL_DEFS[1].inputSchema as ToolDef['inputSchema'],
+    needsOwner: true,
+  },
+  {
+    name: 'export_icp',
+    description: EXPORT_TOOL_DEFS[2].description,
+    inputSchema: EXPORT_TOOL_DEFS[2].inputSchema as ToolDef['inputSchema'],
+    needsOwner: true,
+  },
+  {
     name: 'marketing_overview',
     description:
       "Paid-ads performance (Google Ads + LinkedIn Ads) for the last N closed days, read live from the platforms " +
@@ -1320,6 +1339,10 @@ export async function dispatchServiceTool(
       };
     }
 
+    if (toolName in EXPORT_TOOL_KIND) {
+      const { rows } = await pool.query('SELECT role FROM users WHERE id = $1', [owner]);
+      return { status: 'success', data: await exportTool(toolName, args, { userId: owner, role: String(rows[0]?.role || 'user') }) };
+    }
     if (toolName === 'crm_update_deal') {
       const upd = (args.updates && typeof args.updates === 'object') ? args.updates as Record<string, unknown> : {};
       if ('gate' in upd) {

@@ -18,6 +18,7 @@
  *      existing executor for them.
  */
 
+import { exportTool } from '@/lib/export/tools';
 import pool from '../db';
 import { getMissingFields, SALES_GATES, GRANT_GATES } from '../gates';
 import { loadRelevantLessons } from '../lessons';
@@ -90,6 +91,9 @@ async function run(
     case 'get_pipeline_overview':   return pipelineOverview(ctx);
     case 'get_relevant_lessons':    return relevantLessons(String(args.deal_id), Number(args.limit) || 3, ctx);
     case 'get_memories':            return getMemories(String(args.scope || 'both'), ctx);
+    case 'export_sales_leads':
+    case 'export_prospects':
+    case 'export_icp':              return exportTool(name, args, { userId: ctx.user_id, role: ctx.user_role });
     case 'list_sales_leads':        return listSalesLeads(args);
     case 'get_sales_lead':          return getSalesLead(String(args.id));
     case 'list_pending_board_decisions': return listPendingBoardDecisions();

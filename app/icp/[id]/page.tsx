@@ -18,6 +18,7 @@ import FunnelBar from '@/components/panel/FunnelBar';
 import type { PanelPayload } from '@/lib/icp-panel';
 import { usePoll } from '@/lib/use-poll';
 import { relativeTime } from '@/lib/time';
+import ExportButton from '@/components/ExportButton';
 
 /**
  * /icp/[id] — the control panel for one ICP: the lead's journey, section by
@@ -101,6 +102,8 @@ export default function IcpPanelPage() {
           </div>
           {data && !editing && (
             <div className="flex flex-wrap gap-2 justify-end shrink-0">
+              <ExportButton href={`/api/export/icp?icp_id=${id}`} label="Export Excel"
+                title="The whole ICP as Excel: definition, every lead with all details, funnel and agent runs" />
               {data.icp.paused_at
                 ? <button onClick={() => setState('running')} disabled={busy === 'state'} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ border: '1px solid var(--accent)', color: 'var(--accent)' }}>Resume</button>
                 : <button onClick={() => setState('paused')} disabled={busy === 'state'} className="px-3 py-1.5 rounded-lg text-xs disabled:opacity-40" style={{ border: '1px solid var(--border)', color: 'var(--text-muted)' }} title="Hold this ICP only — reversible">Pause</button>}

@@ -110,7 +110,7 @@ Four JSON-RPC methods:
 | Method | Purpose |
 |---|---|
 | `initialize` | Handshake — returns server info + protocol version. |
-| `tools/list` | The catalog (61 tools) with JSON-Schema for each. |
+| `tools/list` | The catalog (64 tools) with JSON-Schema for each. |
 | `tools/call` | Invoke one tool. This is where the work happens. |
 | `ping` | Health check. |
 
@@ -358,6 +358,7 @@ employee's data.
 | | `crm_update_sales_lead` | write | Work the row: status, track-record line, priority, ★, responsible/front, next contact, where met |
 | | `crm_lead_note` | write | Dated note (or meeting / call) on a lead's dossier |
 | | `crm_convert_lead` | write | Inbox row → G1 deal |
+| **Exports** | `export_sales_leads` · `export_prospects` · `export_icp` | read | Excel workbooks as a 15-minute download link |
 | **Edits** | `crm_prospect_update` | write | Correct a lead: name, title, company, email, phone, LinkedIn, location, order |
 | | `crm_prospect_get` / `crm_prospect_archive` | read / write | Read one lead in full / park or disqualify it |
 | | `crm_icp_set_first_message` | write | The message a list sends once a connection request is accepted |
@@ -600,6 +601,19 @@ combination; convert to a G1 deal owned by this employee.
 kinds only; your own unless admin). `crm_update_sales_lead` also takes `full_name / title / company / email /
 linkedin_url` (card corrections, logged) and the journey: `journey_stage` 0–5 (warm introduction → LinkedIn → other
 channel → call set → qualified), `intro_quality` 1–5, `journey_outcome` qualified | lost (lost also archives).
+
+**Exports (Excel)** — a tool cannot return a file, so each returns `{download_url, filename, expires_at, rows, sheets[]}`.
+The link opens in any browser with no login, is valid **15 minutes**, and the workbook is built when it is opened (so it
+is current). Anyone holding the link can download it until it expires — do not post it in a shared channel. The tool
+builds the workbook once as the caller before returning, so a bad filter or an invisible ICP fails with its reason.
+- `export_sales_leads {view?, mine?, role?, q?, sort?}` — sheets *Sales leads* (name, title, company, contact, status,
+  priority, order, back / front office, journey, last contact, ping date, notes, talking points …) and *Track record*
+  (every line). `view` as on the page: working (default), due, must, new, contacted, replied, converted, archived, all.
+  Org-wide inbox, like the page.
+- `export_prospects {stage?, icp_id?, reply_status?, q?, mine?}` — the caller's prospects (plus unowned; admin: all) with fit
+  score and why, LinkedIn request state, messages sent, replies, follow-up date, owner, source, research.
+- `export_icp {icp_id*}` — sheets *ICP* (definition, owner, state, counts, every criterion), *Leads* (the list with all
+  details), *Funnel* (per stage: leads, avg fit, with email, with profile), *Activity* (agent runs). Owner or admin.
 
 **`crm_prospect_update`** · write — `{prospect_id*, full_name?, title?, company?, email?, phone?, linkedin_url?, location?,
 priority_rank?}` corrects a lead; any combination, the rest untouched. `company` re-points the lead to the account of that
@@ -902,6 +916,11 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 ---
 
 ## 12. Changelog
+
+### 2026-10-16 — Excel exports
+
+**`export_sales_leads`**, **`export_prospects`**, **`export_icp`** return a 15-minute signed download link for an .xlsx
+(the same exports as the buttons on /sales-leads, /prospecting and /icp/[id]). 64 tools.
 
 ### 2026-10-16 — edit everything
 
