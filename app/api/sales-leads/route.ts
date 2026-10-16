@@ -54,13 +54,18 @@ export async function GET(req: NextRequest) {
   const client = await pool.connect();
   try {
     const { rows: leads } = await client.query(
-      `SELECT l.id, l.full_name, l.title, l.company, l.email, l.website, l.linkedin_url, l.description, l.notes, l.dossier, l.journey_stage, l.intro_quality, l.journey_outcome,
+      `SELECT l.id, l.full_name, l.title, l.company, l.email, l.website, l.linkedin_url, l.description, l.notes, l.dossier, l.journey_stage, l.intro_quality, l.journey_outcome, l.next_step,
               l.source, l.status, l.priority, l.rank, l.must_talk, l.met_at,
               l.responsible_user_id, r.name AS responsible_name, l.front_user_id, f.name AS front_name,
               l.last_contact_at, to_char(l.next_contact_at, 'YYYY-MM-DD') AS next_contact_at,
               EXTRACT(day FROM now() - COALESCE(l.last_contact_at, l.created_at))::int AS days_since_contact,
               l.created_at, l.converted_at, l.converted_deal_id, d.name AS converted_deal_name, d.gate AS converted_deal_gate,
               l.raw_payload->>'prospect_id' AS prospect_id, ip.name AS icp_name,
+              p.linkedin_public_id AS li_public_id, p.network_degree AS li_degree,
+              inv.status AS li_invite_status, inv.sent_at AS li_invite_sent_at, inv.accepted_at AS li_accepted_at,
+              EXISTS (SELECT 1 FROM outreach_approvals oa WHERE oa.prospect_id = p.id AND oa.kind = 'connect'
+                        AND oa.status = 'pending' AND (oa.expires_at IS NULL OR oa.expires_at > now())) AS connect_waiting,
+              COALESCE(ev.sent_count, 0) AS sent_count, ev.last_sent_at, ev.last_reply_at,
               COALESCE((SELECT count(*)::int FROM outreach_approvals oa
                          WHERE oa.prospect_id::text = l.raw_payload->>'prospect_id' AND oa.status = 'pending'
                            AND (oa.expires_at IS NULL OR oa.expires_at > now())), 0) AS cards_pending,
@@ -75,6 +80,12 @@ export async function GET(req: NextRequest) {
          LEFT JOIN users f ON f.id = l.front_user_id
          LEFT JOIN prospects p ON p.id::text = l.raw_payload->>'prospect_id'
          LEFT JOIN icp_profiles ip ON ip.id = p.icp_profile_id
+         LEFT JOIN LATERAL (SELECT i.status, i.sent_at, i.accepted_at FROM linkedin_invitations i
+                             WHERE i.prospect_id = p.id ORDER BY i.sent_at DESC NULLS LAST LIMIT 1) inv ON true
+         LEFT JOIN LATERAL (SELECT count(*) FILTER (WHERE e.kind = 'sent')::int AS sent_count,
+                                   max(e.occurred_at) FILTER (WHERE e.kind = 'sent') AS last_sent_at,
+                                   max(e.occurred_at) FILTER (WHERE e.kind = 'reply') AS last_reply_at
+                              FROM sales_lead_events e WHERE e.lead_id = l.id) ev ON true
          ${clause}
          ORDER BY ${SORTS[sort]}
          LIMIT 300`,

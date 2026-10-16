@@ -68,7 +68,7 @@ interface LeadRow {
   id: string; full_name: string; title: string | null; company: string; email: string; linkedin_url: string | null;
   website: string | null; status: string; priority: number | null; rank: number | null; must_talk: boolean;
   journey_stage: number; intro_quality: number | null; journey_outcome: string | null; met_at: string | null;
-  source: string; created_at: string; last_contact_at: string | null; next_contact: string | null; notes: string | null;
+  source: string; created_at: string; last_contact_at: string | null; next_contact: string | null; next_step: string | null; notes: string | null;
   dossier: { talking_points?: string[]; relevance?: string; firm_summary?: string; sources?: string[] } | null;
   responsible_name: string | null; front_name: string | null; days_since: number | null; last_note: string | null;
 }
@@ -105,7 +105,7 @@ async function salesLeads(args: Record<string, string>, who: Who): Promise<Built
     const { rows: leads } = await client.query<LeadRow>(
       `SELECT l.id, l.full_name, l.title, l.company, l.email, l.linkedin_url, l.website, l.status, l.priority, l.rank,
               l.must_talk, l.journey_stage, l.intro_quality, l.journey_outcome, l.met_at, l.source, l.created_at,
-              l.last_contact_at, to_char(l.next_contact_at, 'YYYY-MM-DD') AS next_contact, l.notes, l.dossier,
+              l.last_contact_at, to_char(l.next_contact_at, 'YYYY-MM-DD') AS next_contact, l.next_step, l.notes, l.dossier,
               r.name AS responsible_name, f.name AS front_name,
               EXTRACT(day FROM now() - COALESCE(l.last_contact_at, l.created_at))::int AS days_since,
               (SELECT e.text FROM sales_lead_events e WHERE e.lead_id = l.id
@@ -148,6 +148,7 @@ async function salesLeads(args: Record<string, string>, who: Who): Promise<Built
       { h: 'Last contact', w: 16, v: (l) => ts(l.last_contact_at) },
       { h: 'Days since contact', w: 11, v: (l) => l.days_since },
       { h: 'Ping again on', w: 13, v: (l) => l.next_contact },
+      { h: 'Next step', w: 34, v: (l) => l.next_step },
       { h: 'Source', w: 22, v: (l) => l.source },
       { h: 'Added', w: 12, v: (l) => day(l.created_at) },
       { h: 'Latest note', w: 60, v: (l) => l.last_note },

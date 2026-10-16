@@ -238,7 +238,7 @@ export default function SalesLeadsPage() {
                 <div key={l.id} style={{ borderTop: i ? '1px solid var(--border)' : undefined }}>
                   <LeadRow lead={l} rank={i + 1} open={open.has(l.id)} viewerId={viewerId} onToggle={() => toggle(l.id)} busy={busyId === l.id} onPatch={(p) => { patch(l.id, p); }} />
                   {open.has(l.id) && (
-                    <LeadDetail lead={l} users={users} viewerId={viewerId} viewerIsAdmin={viewerIsAdmin} busy={busyId === l.id} onPatch={(p) => patch(l.id, p)} onConvert={() => convert(l.id)} />
+                    <LeadDetail lead={l} users={users} viewerId={viewerId} viewerIsAdmin={viewerIsAdmin} busy={busyId === l.id} onPatch={(p) => patch(l.id, p)} onConvert={() => convert(l.id)} onRefresh={() => load(true)} />
                   )}
                 </div>
               ))

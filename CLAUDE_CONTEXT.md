@@ -1304,6 +1304,33 @@ re-read from the DB), whitelisted in `middleware.ts`. Anyone holding the link ca
 236 sales leads / 974 track-record lines, 617-lead ICP in 4 sheets, a plain user refused another owner's ICP, tampered and
 expired tokens rejected. Not built: CSV, a scheduled / emailed export, column picker, exporting deals or the network list.
 
+### 5.ai.10 Next step + LinkedIn connection state on the lead card (2026-10-16, feat/lead-next-step, core/hermes 0.49.6, migration 061)
+
+Amir, on a Fakuma lead's card: "add connected on LinkedIn, and the next envisioned step after the ping date. If we have no
+'in' to the contact we want to connect first; when connected, reach out." **Migration 061**: `sales_leads.next_step` (free
+text ≤200). **Rule** (`policy/next_step.py`, ported to `lib/sales-leads.ts` — change both): an IN = a LinkedIn connection, a warm
+introduction (journey 1), or a channel we hold (email, journey 3). No in → "Connect on LinkedIn"; request filed → "Approve the
+connection request"; sent → "Wait for the connection request to be accepted"; connected → "Reach out: first message", then
+"Follow up"; an unanswered reply → "Answer their reply"; a booked call → "Prepare for the call or meeting"; dead request with no
+other way in → "Ask for a warm introduction"; no profile → "Find their LinkedIn profile". `linkedin_state` = the ledger's
+`lead_state` + hand-set journey ≥ 2 counts as connected + a pending connect approval = `awaiting_approval`.
+- **Kernel**: `sales_leads.lead_signals(conn, ids)` (one query: prospect degree + newest invitation + events + waiting approval
+  → state + suggestion; used by `get_sales_lead`, the due list and the digest), hooks `note_linkedin_connected` (journey → 2,
+  next step → first message) called from `invitations.reconcile_invitations` on every acceptance and from `record_invitation`
+  for an already-connected result, `note_connect_request_sent` (next step → wait); both only touch a lead that already has a
+  /sales-leads row, never overwrite a step a person typed (`SUPERSEDABLE`), never move the journey back, run in a savepoint.
+  `update_sales_lead(next_step)` logs a `status` line; `get_sales_lead` returns `linkedin`, `next_step`, `suggested_next_step`;
+  the morning digest line ends with `→ <next step>`. Ring: `crm_update_sales_lead` / `crm_get_sales_lead` text, skill §"Next step and
+  LinkedIn". Service MCP schema lists `next_step` (clients build calls from the schema).
+- **App**: the rail gets a **LinkedIn** block (status dot + "Connected · accepted 12 Oct" / "Request pending · sent …" /
+  "Not connected", **Connect on LinkedIn** = `POST /api/prospects/[id]/connect`, which FILES an approval card for the lead's
+  owner and sends nothing; **Mark as connected** sets journey 2 for leads with no prospect behind them) and a **Next step** field
+  under "ping again on" (free text + preset list, "Suggested: … — why" with a Use button). The row shows `→ next step` under the
+  title line when set, and its LinkedIn icon is blue connected / amber pending / muted otherwise. List SQL adds two laterals
+  (newest invitation, event counts). Excel export has a "Next step" column.
+- Not built: a "not connected" filter on the toolbar (the obvious connect-first queue), batch-connect from the list (the ICP page
+  already queues N requests per list), a next-step line in the Telegram reply notices.
+
 ### 5.aj Marketing — paid ads inside the CRM (2026-10-13, feat/marketing, round 1 app-only)
 
 Amir: "we are starting ads in Google Ads and LinkedIn Ads — add a marketing menu, connectors, pull our performance

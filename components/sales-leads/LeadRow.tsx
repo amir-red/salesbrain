@@ -1,6 +1,6 @@
 'use client';
 
-import { contactAge, firstName, myRole, nextContactLabel, PRIORITY_LEVELS, priorityLevel, ROLES, STATUS_COLOR, tierLabel, type Lead } from '@/lib/sales-leads';
+import { contactAge, firstName, linkedInLabel, linkedInState, myRole, nextContactLabel, PRIORITY_LEVELS, priorityLevel, ROLES, STATUS_COLOR, tierLabel, type Lead } from '@/lib/sales-leads';
 import { useEffect, useState } from 'react';
 import { Chevron, LinkedIn, Star } from './icons';
 
@@ -15,6 +15,9 @@ export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy, vie
   onPatch: (patch: Record<string, unknown>) => void; busy: boolean; viewerId?: string | null;
 }) {
   const mine = myRole(lead, viewerId);
+  const li = linkedInState(lead);
+  const liInfo = linkedInLabel(li, lead);
+  const liColor = li === 'connected' ? 'var(--cat-blue)' : li === 'pending' || li === 'awaiting_approval' ? 'var(--yellow)' : 'var(--text-muted)';
   const age = contactAge(lead);
   const next = nextContactLabel(lead.next_contact_at);
   const prio = priorityLevel(lead.priority);
@@ -58,6 +61,9 @@ export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy, vie
           {lead.met_at && <span> · met at {lead.met_at}</span>}
           {lead.icp_name && !lead.met_at && <span> · {lead.icp_name}</span>}
         </div>
+        {lead.next_step && (
+          <div className="text-[11px] truncate font-medium" style={{ color: 'var(--accent)' }} title={`Next step: ${lead.next_step}`}>→ {lead.next_step}</div>
+        )}
       </div>
 
       {/* status + fit */}
@@ -115,8 +121,8 @@ export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy, vie
           <Star filled={lead.must_talk} />
         </button>
         {lead.linkedin_url ? (
-          <a href={lead.linkedin_url} target="_blank" rel="noopener noreferrer" title="Open LinkedIn" aria-label="LinkedIn"
-            className="w-8 h-8 rounded-full inline-flex items-center justify-center" style={{ color: 'var(--cat-blue)' }}><LinkedIn /></a>
+          <a href={lead.linkedin_url} target="_blank" rel="noopener noreferrer" title={`Open LinkedIn · ${liInfo.label}`} aria-label={`LinkedIn: ${liInfo.label}`}
+            className="w-8 h-8 rounded-full inline-flex items-center justify-center" style={{ color: liColor }}><LinkedIn /></a>
         ) : <span className="w-8 h-8" />}
         <span className="w-6 h-8 inline-flex items-center justify-center" style={{ color: 'var(--text-muted)' }}>
           <Chevron style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 150ms' }} />

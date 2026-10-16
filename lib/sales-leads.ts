@@ -75,6 +75,17 @@ export interface Lead {
   priority: number | null;
   rank: number | null;                 // order inside the priority (059); null = unordered
   must_talk: boolean;
+  next_step: string | null;            // the next envisioned step, free text (061)
+  // LinkedIn signals from the lead's prospect + newest request (null for a lead with no prospect behind it)
+  li_public_id: string | null;
+  li_degree: string | null;
+  li_invite_status: string | null;
+  li_invite_sent_at: string | null;
+  li_accepted_at: string | null;
+  connect_waiting: boolean;            // a connection request is filed and waits for the owner's 👍
+  sent_count: number;                  // 'sent' lines on the track record
+  last_sent_at: string | null;
+  last_reply_at: string | null;
   journey_stage: number;               // 0 … 5 (060)
   intro_quality: number | null;        // 1 … 5
   journey_outcome: 'qualified' | 'lost' | null;
@@ -196,4 +207,85 @@ export function myRole(lead: Pick<Lead, 'responsible_user_id' | 'front_user_id'>
   if (lead.responsible_user_id === userId) return 'responsible';
   if (lead.front_user_id === userId) return 'front';
   return null;
+}
+
+/**
+ * LinkedIn connection state + the suggested next step — a port of the kernel's
+ * policy/next_step.py (and policy/invitations.lead_state). The list is read with
+ * direct SQL, so both are derived here; if the kernel rule changes, change this with it.
+ *
+ * Amir (2026-10-16): no "in" to the contact → connect on LinkedIn first; connected → reach out.
+ * An "in" = a LinkedIn connection, a warm introduction, or a channel we already hold (email / phone).
+ */
+export type LinkedInState =
+  | 'connected' | 'awaiting_approval' | 'pending' | 'no_answer' | 'not_accepted' | 'failed' | 'not_invited' | 'no_profile';
+
+export const NEXT_STEPS = {
+  answer: 'Answer their reply',
+  call_prep: 'Prepare for the call or meeting',
+  first_message: 'Reach out: first message',
+  follow_up: 'Follow up',
+  approve_request: 'Approve the connection request',
+  wait_accept: 'Wait for the connection request to be accepted',
+  intro: 'Reach out through the introduction',
+  email: 'Reach out by email',
+  other_channel: 'Reach out on the channel we have',
+  ask_intro: 'Ask for a warm introduction',
+  connect: 'Connect on LinkedIn',
+  find_profile: 'Find their LinkedIn profile',
+} as const;
+export type NextStepCode = keyof typeof NEXT_STEPS;
+/** What the picker offers besides free text — the same words the suggestion and the kernel write. */
+export const NEXT_STEP_PRESETS: string[] = [
+  NEXT_STEPS.connect, NEXT_STEPS.first_message, NEXT_STEPS.follow_up, NEXT_STEPS.email,
+  NEXT_STEPS.ask_intro, 'Book the call', NEXT_STEPS.call_prep, 'Send the deck',
+];
+
+type LinkedInFields = Pick<Lead, 'linkedin_url' | 'li_public_id' | 'li_degree' | 'li_invite_status' | 'li_invite_sent_at'
+  | 'connect_waiting' | 'journey_stage'>;
+
+export function linkedInState(l: LinkedInFields, noAnswerDays = 21, now = Date.now()): LinkedInState {
+  if ((l.journey_stage ?? 0) >= 2) return 'connected';                         // hand-set on the journey bar
+  if (l.li_degree === '1' || l.li_invite_status === 'accepted') return 'connected';
+  if (l.li_invite_status === 'pending') {
+    const days = l.li_invite_sent_at ? (now - new Date(l.li_invite_sent_at).getTime()) / 86_400_000 : 0;
+    return days >= noAnswerDays ? 'no_answer' : 'pending';
+  }
+  const closed = l.li_invite_status === 'not_accepted' || l.li_invite_status === 'failed';
+  if (l.connect_waiting) return 'awaiting_approval';
+  if (closed) return l.li_invite_status as LinkedInState;
+  return l.li_public_id || l.linkedin_url ? 'not_invited' : 'no_profile';
+}
+
+export function linkedInLabel(state: LinkedInState, l: Pick<Lead, 'li_invite_sent_at' | 'li_accepted_at' | 'journey_stage'>): { label: string; tone: 'good' | 'wait' | 'bad' | 'none' } {
+  const d = (v: string | null) => (v ? new Date(v).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '');
+  switch (state) {
+    case 'connected': return { label: l.li_accepted_at ? `Connected · accepted ${d(l.li_accepted_at)}` : 'Connected', tone: 'good' };
+    case 'awaiting_approval': return { label: 'Request filed · waits for approval', tone: 'wait' };
+    case 'pending': return { label: l.li_invite_sent_at ? `Request pending · sent ${d(l.li_invite_sent_at)}` : 'Request pending', tone: 'wait' };
+    case 'no_answer': return { label: `No answer · request sent ${d(l.li_invite_sent_at)}`, tone: 'bad' };
+    case 'not_accepted': return { label: 'Request not accepted', tone: 'bad' };
+    case 'failed': return { label: 'Request failed', tone: 'bad' };
+    case 'not_invited': return { label: 'Not connected', tone: 'none' };
+    default: return { label: 'No LinkedIn profile on file', tone: 'none' };
+  }
+}
+
+export function suggestNextStep(l: Pick<Lead, 'status' | 'journey_outcome' | 'journey_stage' | 'email' | 'sent_count'
+  | 'last_sent_at' | 'last_reply_at' | 'booking_status'> & LinkedInFields): { code: NextStepCode; label: string; why: string } | null {
+  if (l.status === 'converted' || l.status === 'archived' || l.journey_outcome) return null;
+  const stage = l.journey_stage ?? 0;
+  const state = linkedInState(l);
+  const pick = (code: NextStepCode, why: string) => ({ code, label: NEXT_STEPS[code], why });
+  if (l.last_reply_at && (!l.last_sent_at || new Date(l.last_reply_at) > new Date(l.last_sent_at))) return pick('answer', 'they replied and we have not answered yet');
+  if (l.booking_status === 'scheduled' || stage >= 4) return pick('call_prep', 'a call or meeting is set');
+  if (state === 'connected') return l.sent_count === 0 ? pick('first_message', 'connected on LinkedIn, nothing sent yet') : pick('follow_up', 'connected and we have written — keep it moving');
+  if (state === 'awaiting_approval') return pick('approve_request', "a connection request is filed and waits for the owner's approval");
+  if (state === 'pending') return pick('wait_accept', 'the connection request is out');
+  if (stage === 1) return pick('intro', 'someone introduced us');
+  if ((l.email || '').trim()) return pick('email', 'we have their email and no LinkedIn connection');
+  if (stage === 3) return pick('other_channel', 'another channel is already open');
+  if (state === 'no_answer' || state === 'not_accepted' || state === 'failed') return pick('ask_intro', 'the connection request did not land and there is no other way in');
+  if (state === 'not_invited') return pick('connect', 'no way in yet — connect first');
+  return pick('find_profile', 'no LinkedIn profile on file, so nothing to connect to');
 }
