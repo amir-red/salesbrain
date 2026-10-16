@@ -13,7 +13,8 @@
 
 import type Anthropic from '@anthropic-ai/sdk';
 import pool from './db';
-import { anthropic, BEDROCK_ENABLED } from './llm';
+import { anthropic, BEDROCK_ENABLED, BEDROCK_MODEL, GEMINI_API_KEY, GEMINI_ENABLED, GEMINI_MODEL } from './llm';
+import { geminiCreate } from './gemini';
 
 export interface UsageTag {
   /** What the call is for, e.g. 'icp_suggest'. Shown on /admin/costs. */
@@ -40,7 +41,12 @@ const UPSERT = `
     cache_write_tokens = llm_usage.cache_write_tokens + EXCLUDED.cache_write_tokens,
     last_at = now()`;
 
-export function recordUsage(model: string, usage: Anthropic.Usage | null | undefined, tag: UsageTag): void {
+export function recordUsage(
+  model: string,
+  usage: Anthropic.Usage | null | undefined,
+  tag: UsageTag,
+  provider: string = BEDROCK_ENABLED ? 'bedrock' : 'anthropic'
+): void {
   if (!usage) return;
   const tokens = [
     usage.input_tokens ?? 0,
@@ -54,7 +60,7 @@ export function recordUsage(model: string, usage: Anthropic.Usage | null | undef
     .query(UPSERT, [
       tag.feature.slice(0, 120),
       model.slice(0, 120),
-      BEDROCK_ENABLED ? 'bedrock' : 'anthropic',
+      provider,
       owner,
       ...tokens,
     ])
@@ -63,12 +69,45 @@ export function recordUsage(model: string, usage: Anthropic.Usage | null | undef
     });
 }
 
-/** `anthropic.messages.create` (non-streaming) that also records its usage. */
+/** Anthropic-only block fields (`thought_signature` is ours, carried for Gemini) must not reach Claude. */
+function forClaude(params: Anthropic.MessageCreateParamsNonStreaming): Anthropic.MessageCreateParamsNonStreaming {
+  const messages = params.messages.map((m) => {
+    if (typeof m.content === 'string') return m;
+    return {
+      ...m,
+      content: m.content.map((b) => {
+        if ((b as { type: string }).type !== 'tool_use') return b;
+        const { thought_signature: _drop, ...rest } = b as unknown as Record<string, unknown>;
+        void _drop;
+        return rest as unknown as typeof b;
+      }),
+    };
+  });
+  // Bedrock has no hosted web search; a call that only wanted it simply runs without.
+  const tools = params.tools?.filter((t) => !String((t as { type?: string }).type ?? '').startsWith('web_search'));
+  return { ...params, model: BEDROCK_MODEL, messages, ...(tools ? { tools } : {}) };
+}
+
+/**
+ * One non-streaming model call that also records its usage. Gemini first (when the key is set),
+ * then the Claude path on ANY Gemini failure: an HTTP error, a timeout, a blocked or empty answer.
+ * The call sites never see which one answered, except through `response.model`.
+ */
 export async function createMessage(
   params: Anthropic.MessageCreateParamsNonStreaming,
   tag: UsageTag
 ): Promise<Anthropic.Message> {
-  const response = await anthropic.messages.create(params);
-  recordUsage(String(params.model), response.usage, tag);
+  if (GEMINI_ENABLED) {
+    try {
+      const response = await geminiCreate(params, { apiKey: GEMINI_API_KEY, model: GEMINI_MODEL });
+      recordUsage(response.model, response.usage, tag, 'gemini');
+      return response;
+    } catch (err) {
+      console.warn(`[llm] gemini failed for ${tag.feature} (${err instanceof Error ? err.message : 'error'}); falling back to Claude`);
+    }
+  }
+  const fallback = GEMINI_ENABLED ? forClaude(params) : params;
+  const response = await anthropic.messages.create(fallback);
+  recordUsage(String(fallback.model), response.usage, tag);
   return response;
 }

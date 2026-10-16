@@ -1489,7 +1489,8 @@ TELEGRAM_BOARD_CHAT_ID=...
 HERMES_API_URL=http://127.0.0.1:8642
 HERMES_API_KEY=...
 HERMES_VENV_PYTHON=/usr/local/lib/hermes-agent/venv/bin/python   # kernelCall subprocess interpreter
-AWS_BEARER_TOKEN_BEDROCK=...   # shared with Hermes; lib/llm.ts uses Bedrock when set
+GEMINI_API_KEY=...             # DEFAULT model (Gemini) for the app AND every Hermes profile .env; GitHub secret + /root/.hermes/.env
+AWS_BEARER_TOKEN_BEDROCK=...   # shared with Hermes; the FALLBACK model (Claude on Bedrock)
 
 # Google OAuth
 GOOGLE_CLIENT_ID=...

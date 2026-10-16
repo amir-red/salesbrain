@@ -1,7 +1,13 @@
 /**
  * Centralized LLM configuration: one client + one model for every Claude call.
  *
- * Two providers, selected automatically by environment:
+ * Gemini is the DEFAULT (Amir, 2026-10-16: "Gemini the default, Bedrock a fallback"):
+ * when GEMINI_API_KEY is set, `createMessage` (lib/llm-usage.ts) calls Gemini through
+ * the adapter in lib/gemini.ts and falls back to the Claude path below on any failure
+ * (HTTP error, timeout, empty answer). `MODEL` is the Gemini id then; the fallback id
+ * is `BEDROCK_MODEL`. Without the key everything behaves as before.
+ *
+ * Two Claude providers, selected automatically by environment:
  *
  * - **Bedrock (bearer token)** — active when AWS_BEARER_TOKEN_BEDROCK is set.
  *   Uses Bedrock's InvokeModel endpoint, which serves the native Anthropic
@@ -29,10 +35,18 @@ const BEDROCK_REGION = process.env.AWS_REGION || 'us-east-1';
 
 export const BEDROCK_ENABLED = Boolean(BEDROCK_TOKEN);
 
-/** Primary model for every Claude call in the app. */
-export const MODEL = BEDROCK_ENABLED
+/** The Claude model: the fallback when Gemini fails, the primary when there is no Gemini key. */
+export const BEDROCK_MODEL = BEDROCK_ENABLED
   ? 'us.anthropic.claude-sonnet-4-6'
   : 'claude-opus-4-6';
+
+export const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
+export const GEMINI_ENABLED = Boolean(GEMINI_API_KEY);
+/** Thinking model: calls here are infrequent and quality matters more than the last second. */
+export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-pro-preview';
+
+/** Primary model for every call in the app. Never hardcode an id at a call site. */
+export const MODEL = GEMINI_ENABLED ? GEMINI_MODEL : BEDROCK_MODEL;
 
 /**
  * Rewrites SDK requests (api.anthropic.com/v1/messages shaped) into Bedrock
@@ -42,7 +56,8 @@ export const MODEL = BEDROCK_ENABLED
 const bedrockFetch: typeof fetch = async (_url, init) => {
   const raw = typeof init?.body === 'string' ? init.body : '';
   const body = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
-  const model = String(body.model || MODEL);
+  let model = String(body.model || BEDROCK_MODEL);
+  if (model.startsWith('gemini')) model = BEDROCK_MODEL; // a Gemini id can never be a Bedrock model
   delete body.model;
   delete body.stream; // InvokeModel plain endpoint is non-streaming
   body.anthropic_version = 'bedrock-2023-05-31';
@@ -75,5 +90,9 @@ export const webSearchTool = {
   max_uses: 5,
 };
 
-/** Spread into `tools`: `[...TOOLS, ...webSearchTools]`. Empty on Bedrock. */
-export const webSearchTools = BEDROCK_ENABLED ? [] : [webSearchTool];
+/**
+ * Spread into `tools`: `[...TOOLS, ...webSearchTools]`. On Gemini it becomes Google Search
+ * grounding (lib/gemini.ts); the Bedrock fallback strips it (Bedrock has no hosted search),
+ * and on Bedrock alone it stays empty.
+ */
+export const webSearchTools = GEMINI_ENABLED || !BEDROCK_ENABLED ? [webSearchTool] : [];
