@@ -74,11 +74,15 @@ export interface TelegramLink {
  * code (shown to the user once in the settings UI). Prior pending tokens
  * for the same user are revoked automatically — only one active at a time.
  */
-export async function generateLinkToken(userId: string): Promise<{ raw: string; row: TelegramLinkToken }> {
+export async function generateLinkToken(
+  userId: string,
+  opts: { ttlMs?: number } = {}
+): Promise<{ raw: string; row: TelegramLinkToken }> {
   const raw = TOKEN_PREFIX + randomBase32(TOKEN_BODY_LEN);
   const hash = hashToken(raw);
   const prefix = raw.slice(0, TOKEN_PREFIX.length + 2);   // e.g. "LINK-A1"
-  const expiresAt = new Date(Date.now() + TOKEN_TTL_MS);
+  // An invite that is emailed lives for days; the code a person copies from the profile page lives 15 minutes.
+  const expiresAt = new Date(Date.now() + (opts.ttlMs ?? TOKEN_TTL_MS));
 
   // Invalidate any existing pending tokens for this user so only one code
   // is valid at a time. Prevents confusion when a user hits "generate" twice.

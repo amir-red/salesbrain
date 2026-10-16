@@ -39,13 +39,13 @@ export async function GET(req: NextRequest) {
     const users = await client.query(
       `SELECT u.id, u.name, u.email, u.role, u.created_at,
               e.app_key, e.employee_id, e.display_name AS ext_name, e.last_seen_at AS ext_last_seen,
-              tl.telegram_username
+              tl.telegram_username, tl.linked_at AS telegram_linked_at
          FROM users u
          LEFT JOIN LATERAL (
            SELECT app_key, employee_id, display_name, last_seen_at FROM external_employees
             WHERE salesbrain_user_id = u.id ORDER BY last_seen_at DESC NULLS LAST LIMIT 1) e ON true
          LEFT JOIN LATERAL (
-           SELECT telegram_username FROM telegram_user_links
+           SELECT telegram_username, linked_at FROM telegram_user_links
             WHERE user_id = u.id AND revoked_at IS NULL ORDER BY linked_at DESC LIMIT 1) tl ON true
         WHERE u.id <> $3
           AND ($1::text IS NULL OR u.name ILIKE $1 OR u.email ILIKE $1
@@ -162,6 +162,8 @@ export async function GET(req: NextRequest) {
         registered_by: u.app_key ?? 'internal', employee_id: u.employee_id ?? null,
         last_seen_at: iso(u.ext_last_seen) ?? latest(mcp?.at ?? null, lastRunAt),
         telegram_username: u.telegram_username ?? null,
+        telegram_linked: u.telegram_linked_at != null,
+        telegram_linked_at: u.telegram_linked_at ?? null,
         quota: quota[u.id] ?? null,
         mcp: { calls_24h: mcpCountBy.get(u.id) ?? 0, last_tool: mcp?.tool ?? null, last_at: mcp?.at ?? null },
         agents, outreach: outreachBy.get(u.id) ?? zero, icps: icpsBy.get(u.id) ?? [],

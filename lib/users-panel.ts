@@ -50,6 +50,9 @@ export interface UserRowData {
   employee_id: string | null;
   last_seen_at: string | null;
   telegram_username: string | null;
+  /** Has an ACTIVE telegram_user_links row. The username is often null even when linked. */
+  telegram_linked: boolean;
+  telegram_linked_at: string | null;
   quota: OwnerQuota | null;
   mcp: { calls_24h: number; last_tool: string | null; last_at: string | null };
   agents: Record<AgentName, AgentCell>;
@@ -71,11 +74,13 @@ export interface UsersFilter {
   agent: 'any' | AgentName;        // client-side from here on
   state: 'any' | 'held' | HoldState;
   linkedin: boolean;
+  /** 'unlinked' = people who never connected Telegram (the invite list). */
+  telegram: 'any' | 'linked' | 'unlinked';
   runningNow: boolean;
   errors24h: boolean;
 }
 export const EMPTY_FILTER: UsersFilter = {
-  q: '', app: 'all', agent: 'any', state: 'any', linkedin: false, runningNow: false, errors24h: false,
+  q: '', app: 'all', agent: 'any', state: 'any', linkedin: false, telegram: 'any', runningNow: false, errors24h: false,
 };
 
 export function holdLabel(h: UserHold | null): string {
@@ -98,6 +103,8 @@ export function applyClientFilters(rows: UserRowData[], f: UsersFilter): UserRow
     const cells = f.agent === 'any' ? AGENTS.map((a) => u.agents[a]) : [u.agents[f.agent]];
     if (f.state !== 'any' && !cells.some((c) => cellMatches(c, f.state))) return false;
     if (f.linkedin && !u.quota?.connected) return false;
+    if (f.telegram === 'linked' && !u.telegram_linked) return false;
+    if (f.telegram === 'unlinked' && u.telegram_linked) return false;
     if (f.runningNow && !cells.some((c) => c.running_now > 0)) return false;
     if (f.errors24h && !cells.some((c) => c.errors_24h > 0)) return false;
     return true;

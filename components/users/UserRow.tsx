@@ -34,6 +34,29 @@ export default function UserRow({ user, agentsMeta, killSwitch, busy, onSetState
       .catch(() => setRuns([]));
   }, [open, runs, user.id]);
 
+  const [inviting, setInviting] = useState(false);
+  const [inviteNote, setInviteNote] = useState<string | null>(null);
+  async function invite(send: boolean) {
+    setInviting(true);
+    setInviteNote(null);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/telegram-invite`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ send }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || 'Invite failed');
+      if (send) {
+        setInviteNote(json.emailed ? `invite emailed to ${user.email}` : `Error: ${json.email_error || 'email not sent'}`);
+      } else {
+        const text = json.link || `/start ${json.code}`;
+        try { await navigator.clipboard.writeText(text); setInviteNote('link copied (valid 7 days, one use)'); }
+        catch { setInviteNote(`copy this: ${text}`); }
+      }
+    } catch (e) {
+      setInviteNote(`Error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally { setInviting(false); }
+  }
+
   const q = user.quota;
   const external = user.registered_by !== 'internal';
   const held = AGENTS.filter((a) => user.agents[a].state !== 'running').length;
@@ -54,6 +77,20 @@ export default function UserRow({ user, agentsMeta, killSwitch, busy, onSetState
           <div className="text-[11px] truncate" style={{ color: 'var(--text-muted)' }}>
             {external ? <span className="font-mono">{user.employee_id}</span> : user.email}
             {user.telegram_username && <> · @{user.telegram_username}</>}
+          </div>
+          <div className="text-[10px] flex items-center gap-2 flex-wrap" style={{ color: 'var(--text-muted)' }}>
+            {user.telegram_linked ? (
+              <span style={{ color: 'var(--green)' }}>● on Telegram{user.telegram_linked_at ? ` since ${new Date(user.telegram_linked_at).toLocaleDateString('en-GB')}` : ''}</span>
+            ) : external ? (
+              <span>not on Telegram (app-provisioned)</span>
+            ) : (
+              <>
+                <span style={{ color: 'var(--orange)' }}>○ not on Telegram</span>
+                <button onClick={() => invite(true)} disabled={inviting} className="underline">{inviting ? '…' : 'email invite'}</button>
+                <button onClick={() => invite(false)} disabled={inviting} className="underline">copy link</button>
+                {inviteNote && <span style={{ color: inviteNote.startsWith('Error') ? 'var(--red)' : 'var(--green)' }}>{inviteNote}</span>}
+              </>
+            )}
           </div>
           <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
             last seen {user.last_seen_at ? relativeTime(user.last_seen_at) : 'never'} · joined {relativeTime(user.created_at)}

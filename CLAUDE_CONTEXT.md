@@ -1443,6 +1443,65 @@ in the Zeami app, not here.
 equal employee ids from different companies share one account; options + a "refuse re-registration with a different
 email" guard were proposed, not built.
 
+### 5.al Gemini default, Bedrock fallback + Telegram onboarding + self-explaining notifications (2026-10-16, feat/telegram-one-bot, core 063/064)
+
+Amir: one Telegram bot for every user (plan `~/.claude/plans/telegram-one-bot.md`; phases 1 and 5 built here, the cutover
+and admin tools come later), "unless they send the code, don't respond", and "make Gemini the default and Bedrock a fallback".
+- **Gemini default** (key in `/root/.hermes/.env` + every SalesBrain profile `.env` + GitHub secret `GEMINI_API_KEY` +
+  `.env.local`; applied over stdin, never printed; backups `*.bak-gemini` on the box to delete after the deploy).
+  Models tested live with a real tool call: main `gemini-3.1-pro-preview` ($2 / $12 per MTok, no free tier, so the key's
+  project has billing), helpers `gemini-2.5-flash` ($0.30 / $2.50). `deploy-server.sh`: `model.provider gemini`,
+  `fallback_providers [{bedrock, us.anthropic.claude-sonnet-4-6}]` (a real YAML list, PROVEN on the box in a scratch
+  HERMES_HOME: broken Gemini model → "Fallback activated: … → us.anthropic.claude-sonnet-4-6 (bedrock)" and the answer
+  came back), `auxiliary.salesbrain_aux` + `background_review` on Gemini 2.5 Flash (aux client verified), every profile card
+  the same; the verify block REFUSES a deploy where the provider is not gemini, the fallback is not a list, the key is
+  missing from the main or crm env, or `unauthorized_dm_behavior` is not `ignore`. Flip back = change `MAIN_PROVIDER`.
+  Preview models can be retired: if 3.1 Pro goes, set `MAIN_MODEL=gemini-2.5-pro`.
+- **The schema trap**: Gemini 400s the WHOLE request on one bad tool declaration, and a fallback would hide that the primary
+  never worked. 144 of 145 tool schemas passed; `crm_update_sales_lead.journey_outcome` had an empty-string enum value (now
+  `clear`; the kernel accepts both). `tests/test_gemini.py::test_every_tool_schema_is_gemini_safe` guards every future tool.
+- **Ring** `llm.py`: outside Hermes (cron scripts, rpc) Gemini REST first, then Bedrock; the same order when the host call
+  fails. 2.5 Flash gets `thinkingBudget 0`; other models get headroom (thinking counts against `maxOutputTokens`); usage
+  records `provider='gemini'`, thinking tokens as output, cached tokens apart. **Core 063** adds Gemini price rows to
+  `costs.rates` (3.1 Pro, 2.5 Pro, 2.5 Flash; cache_read an ESTIMATE; prompts over 200k are under-priced; `-lite` and 3.x flash
+  show as `unpriced_tokens`).
+- **App** `lib/gemini.ts` + `createMessage` (lib/llm-usage.ts): Gemini first, Claude on ANY failure (HTTP, timeout, blocked or
+  empty answer). Facts found by testing, all in the file header: the 3.1 Pro model cannot disable thinking (a 60-token budget
+  returned 10 characters, so +4096 headroom and `thinkingLevel: low`); Gemini 3 REQUIRES the `thoughtSignature` of a function
+  call to come back with it (carried on the tool_use block as `thought_signature`; a Claude-made call replayed after a
+  fallback uses Google's documented `skip_thought_signature_validator`); `web_search` maps to `googleSearch`; the Claude path
+  strips Gemini-only fields and hosted search. `MODEL` is the Gemini id when the key is set, `BEDROCK_MODEL` the fallback;
+  `webSearchTools` is non-empty on Gemini. 9/9 live adapter checks passed (text, JSON, tool round trip, replay, sanitizer,
+  mapping, bad model, timeout). Not verified: a full browser session of /network chat on Gemini.
+- **Phase 1, onboarding.** Strangers get NOTHING: both bots answered an unknown sender with a Hermes pairing code (default
+  `unauthorized_dm_behavior: pair`, unset on the box); `ignore` is set globally and for telegram. The link hook runs BEFORE
+  the gateway's authorization (verified, `gateway/run_inbound.py` line 225 vs 230), so `/start LINK-…` still works. A bad or
+  expired code gets one failure line (copy now says Profile → Telegram). `board_hook._sync_access`: access follows
+  `telegram_user_links` — an ACTIVE link is paired on the first message (the Hannes case: linked 08-09 before auto-pairing),
+  a REVOKED link loses its pairing, someone who never had a link is untouched (manual `hermes pairing approve` stays valid);
+  60 s cache. App: `generateLinkToken(userId, {ttlMs})`; admin `POST /api/admin/users/[id]/telegram-invite` (7-day single-use
+  code, emails a one-tap `t.me/<bot>?start=LINK-…` through Resend, or returns it to copy; audited); `/admin/users` shows
+  "on Telegram since …" / "not on Telegram", a filter, and email-invite / copy-link actions (the username column was null for
+  everyone, so the state is `telegram_linked`); `components/TelegramNudge.tsx` on the home page (connect in one tap, snoozes a
+  week). Not built: the one-bot token cutover, `/profile` redesign.
+- **Phase 5, notifications that explain themselves** (core 064: `notification_log`, `notification_prefs`, policy
+  `agents.linkedin_digest {max_age_days 14, max_items 8}`). The 2026-10-16 screenshots: the bot answered "that message came
+  from me, in this conversation", then "that's outside my world". The digest is posted by `linkedin_sync.py` straight to the
+  Bot API, outside any session. Now `deliver.notify_user(..., source=, reason=)` is the one sender for automatic messages: mute
+  check, footer "— sent by the hourly LinkedIn inbox check · 3 new messages. Say "mute linkedin-sync" to stop these.", and a
+  log row (with the Telegram message id). Callers without a source behave as before. Sources: linkedin-sync, leads-finder,
+  enricher, graph-sync, grant-signals, sales-leads-due, reply-alert, crm-event. Tools `crm_notification_source` (find by quoted
+  text or message id, the asker's own rows only) and `crm_notification_settings` (list / mute / unmute), family crm_agents,
+  147 tools; both personas got an "Automatic messages — look them up, never guess" section and the team persona got the Tool
+  truth rules it lacked. **LinkedIn digest age cap**: `inbox(max_age_days=)` filters IN SQL (the order is stalest-first, so a
+  limit applied before an age filter fills the page with the oldest threads). Live: 15 threads → 5 listed + "10 older
+  waiting"; acceptances alone now produce a digest (the old gate dropped them when no thread awaited a reply).
+- **linkedin_sync.py now has an `if __name__ == "__main__"` guard** (it ran `main()` on import).
+- Migrations 063 + 064 are files only; the integration session applies them. Deploying this = apply 063/064, lockstep bump,
+  `deploy-server.sh` (restarts the gateway: check the bot is idle), merge to Production.
+- Next in the plan: Phase 2 cutover to the single bot (needs Amir's tokens), Phase 3 admin tools, Phase 4 Google / LinkedIn /
+  imports / exports from chat (migrations 065+).
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

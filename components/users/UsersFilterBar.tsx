@@ -36,6 +36,11 @@ export default function UsersFilterBar({ filter, apps, shown, total, onChange }:
         <option value="paused">Paused</option>
         <option value="stopped">Stopped</option>
       </select>
+      <select value={filter.telegram} onChange={(e) => set('telegram', e.target.value as UsersFilter['telegram'])} className="px-2 py-1.5 rounded-lg text-xs" style={sel}>
+        <option value="any">Telegram: any</option>
+        <option value="linked">On Telegram</option>
+        <option value="unlinked">Not on Telegram</option>
+      </select>
       {toggle('has LinkedIn', 'linkedin')}
       {toggle('running now', 'runningNow')}
       {toggle('errors 24h', 'errors24h')}
