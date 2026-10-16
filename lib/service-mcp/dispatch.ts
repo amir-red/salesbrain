@@ -785,6 +785,46 @@ export const SERVICE_TOOLS: ToolDef[] = [
     needsOwner: true,
   },
   {
+    name: 'crm_memory_save',
+    description:
+      "Remember something about THIS employee or how they want work done: a correction ('our value proposition is " +
+      "X, never Y'), a preference (language, tone), a rule, a fact about their accounts or team. One line, ≤300 " +
+      "chars, the fact not the story. Saved to this employee's own notes in SalesBrain (scope personal) — read " +
+      "them back with crm_memory_recall BEFORE drafting anything for them. scope team proposes it to every " +
+      "SalesBrain user; an admin approves it. Secrets and pay data are refused. Tell the user what you saved.",
+    inputSchema: obj({
+      content: { type: 'string', description: 'The note, one line, ≤300 chars' },
+      scope: { type: 'string', enum: ['personal', 'team'], default: 'personal',
+               description: 'personal = only this employee; team = proposed to everyone (admin approves)' },
+      kind: { type: 'string', enum: ['preference', 'fact', 'rule', 'procedure'], default: 'fact',
+              description: 'rule = changes how you behave (shown first)' },
+    }),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_memory_recall',
+    description:
+      "This employee's active notes + the team's shared notes from SalesBrain (corrections, preferences, rules, " +
+      "the value proposition …). CALL THIS BEFORE DRAFTING OR PITCHING ANYTHING for them and follow what it says — " +
+      "it is how a correction given once stays corrected. Optional `query` filters by a word.",
+    inputSchema: obj({ query: { type: 'string', description: 'Optional word to filter on' } }),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_memory_forget',
+    description: "Forget one of this employee's notes (superseded, never deleted). Use when they say 'forget that' " +
+      "or correct an earlier note (save the new one first). `memory_id` from crm_memory_recall.",
+    inputSchema: obj({ memory_id: { type: 'string' } }),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_memory_share',
+    description: "Promote one of this employee's personal notes to the whole SalesBrain team: files a team-scope " +
+      "proposal a SalesBrain admin approves. Use when they say 'share that with the team'.",
+    inputSchema: obj({ memory_id: { type: 'string' } }),
+    needsOwner: true,
+  },
+  {
     name: 'crm_agent_status',
     description:
       "Are the background agents live for this employee: each agent's enabled flag, caps and schedule, its " +
@@ -1225,6 +1265,8 @@ const PASSTHROUGH = new Set([
   'crm_get_deal', 'crm_list_my_deals', 'crm_search_deals', 'crm_update_deal', 'crm_add_note', 'crm_mark_deal_lost', 'crm_schedule_followup',
   'crm_graph_reach', 'crm_who_can_reach',
   'crm_path_find', 'crm_propose_intro',
+  // Per-person memory: the employee's own notes (identity = X-On-Behalf-Of), team notes shared on approval.
+  'crm_memory_save', 'crm_memory_recall', 'crm_memory_forget', 'crm_memory_share',
 ]);
 
 /**

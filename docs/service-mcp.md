@@ -110,7 +110,7 @@ Four JSON-RPC methods:
 | Method | Purpose |
 |---|---|
 | `initialize` | Handshake — returns server info + protocol version. |
-| `tools/list` | The catalog (64 tools) with JSON-Schema for each. |
+| `tools/list` | The catalog (68 tools) with JSON-Schema for each. |
 | `tools/call` | Invoke one tool. This is where the work happens. |
 | `ping` | Health check. |
 
@@ -347,6 +347,10 @@ employee's data.
 | | `crm_linkedin_link_prospect` | write | Attach the profile your user picked to a lead |
 | | `crm_prospect_add` | write | Add one lead by hand (business card, event note, referral). Never duplicates |
 | | `list_leads` | read | The lead list, filterable by ICP, stage and fit |
+| **Memory** | `crm_memory_recall` | read | This employee's notes + team notes — call before drafting or pitching |
+| | `crm_memory_save` | write | Remember a correction / preference / rule / fact for this employee (`scope: team` proposes it to everyone) |
+| | `crm_memory_forget` | write | Supersede one note |
+| | `crm_memory_share` | write | Propose one personal note to the whole team |
 | **Visibility** | `crm_outreach_kpis` | read | Stand-up numbers for any teammate by name (requests, messages, replies, research) |
 | | `marketing_overview` | read | Google Ads + LinkedIn Ads spend, clicks, CTR, CPC per campaign, live |
 | | `crm_team_kpis` | read | `crm_outreach_kpis` for every active teammate in one call |
@@ -916,6 +920,15 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 ---
 
 ## 12. Changelog
+
+### 2026-10-16 — per-person memory on this surface
+
+**`crm_memory_recall`**, **`crm_memory_save`**, **`crm_memory_forget`**, **`crm_memory_share`**: the employee's own
+SalesBrain notes (corrections, preferences, rules, facts — e.g. "our value proposition is …"), keyed on the
+`X-On-Behalf-Of` employee, never another person's. A correction given once stays corrected only if your agent
+**recalls before it drafts**: put `crm_memory_recall` in front of every draft / pitch, and `crm_memory_save` behind
+every correction the user gives. `scope: "team"` files a proposal a SalesBrain admin approves on /admin/learning;
+approved team notes come back in everyone's recall. Secrets and pay data are refused. 68 tools.
 
 ### 2026-10-16 — Excel exports
 
