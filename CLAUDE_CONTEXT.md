@@ -1531,6 +1531,44 @@ is `ONE_BOT=1 bash scripts/deploy-server.sh` with Amir present.
 - Not built yet: Phase 3 admin tools (`crm_jobs_status`, `crm_job_control`, kill switch, policy editor, costs, learning
   review from chat) and Phase 4 (Google / LinkedIn / imports / exports from chat; migrations 066+).
 
+### 5.an Phase 3 — administrator controls from chat, `crm_admin` family (2026-10-16, feat/telegram-one-bot, no migration)
+
+The admin pages' controls, as eight tools on the one bot (family `crm_admin`, added to the Telegram toolset ONLY; web chat
+and cron never get it; each tool is `mcp=None` and refuses a non-admin ITSELF, because `role_policy` deliberately lets every
+`crm_*` tool through). 155 tools now.
+- **Ring-only (`admin_ops.py`)**: `crm_jobs_status` reads `$HERMES_HOME/cron/jobs.json` (default profile + each profile's own:
+  schedule, running/PAUSED, last run + result, next run, failure streak, last error ≤240 chars, `healthy`/`failing`/`paused`);
+  `crm_job_control {name, run|pause|resume}` shells out to `hermes [-p profile] cron <action> <name>` as an ARGUMENT LIST, the name
+  must exist in a jobs.json (an injection attempt never reaches a process), no create/edit/remove, audited. `run` queues for the
+  next scheduler tick (said in the reply). Verified on the real box: pause then resume of `learning-digest` through the real CLI
+  restored `next run 09:15`.
+- **Kernel (`commands/admin.py`, `policy/admin_policy.py`)**: `master_switch` (status / halt / resume — the stored flag
+  `agents.kill_switch.enabled` TRUE means agents are ALLOWED, which reads backwards, so the tool speaks in halt/resume and always
+  reports `agents_running`); `policy_get` / `policy_set` over a WHITELIST of (row, field) pairs with a type and a range each,
+  ~60 fields across `agents.leads_finder|enricher|outreach|followup|supervisor|learn|graph_sync|linkedin_connect|linkedin_digest|
+  memory|telegram` and `prospecting.limits`; only a field that already exists on the row can be set (a typo cannot invent one) and a
+  stored type is never silently changed; audited with old and new. **Never reachable from chat**: `outreach.*` (send gate, quiet hours,
+  frequency caps, channel ladder, commercial gate), `autonomy.*`, `costs.rates`, `agents.linkedin_limits`, and `agents.kill_switch`
+  (its own tool); a test asserts no whitelist entry overlaps the denylist. `users_overview` (name, role, on Telegram, LinkedIn
+  connected, agents held, registering app; stubs excluded; `telegram=unlinked` = the invite list); `telegram_invite` (single-use
+  `LINK-` code, 1-14 days, the same hash as `lib/telegram-links.ts`, refuses an already-linked person, an ambiguous name returns
+  candidates instead of guessing). Ring wrappers: `crm_user_invite` builds the `t.me/<bot>?start=` link (env or one getMe) and can
+  email it; `crm_learning_review` lists / decides staged skill and note writes and lists team-memory proposals.
+- **Persona**: an "Administrator controls" section — read before changing and say old → new, ask before halting / pausing / switching
+  an agent on / raising a LinkedIn cap, a `refused` result means "not an administrator", costs point to the Costs page.
+  Behaviour confirmed with Gemini 3.1 Pro against the real persona and all 155 tools: "raise the cap to 12" → reads
+  `crm_policy_get` first; "pause the enricher" → checks `crm_jobs_status`; "stop all agents" → asks "are you sure?". All 155
+  declarations accepted by Gemini (~24.7k prompt tokens of tool definitions per model call, the admin family ~1.3k of it).
+- **Costs deliberately have NO tool** (Amir, 2026-09-29: `/admin/costs` is the one surface, `cost_report` stays an app-only RPC).
+  The plan listed one; the earlier explicit decision stands unless Amir reverses it.
+- **Found while testing on the live scheduler (the tools' first real use)**: five jobs are failing. `attention-allocator` (6 in a
+  row), `ops:outreach:daily` (23), `ops:supervisor:daily` (23), `ops:learn:weekly` (3): `RuntimeError: Unable to locate credentials` —
+  the Bedrock bearer-token bug of §5.ah.3 in the cron runtime. They should recover once Gemini is the main model (deploy), then
+  confirm with `crm_jobs_status`; the Bedrock fallback would hit the same bug if it ever triggers in cron. `pmi-sync` (21):
+  `CERTIFICATE_VERIFY_FAILED` reaching the PM tool — a certificate problem on the PMI side, not ours.
+- **Left for later**: Phase 4 (Google / LinkedIn connect links, CSV import, exports from chat; migrations 066+), inline approve
+  buttons for team-memory proposals (the tool exists), a user-level "my jobs" view for non-admins.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

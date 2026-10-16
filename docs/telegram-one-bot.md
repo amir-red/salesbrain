@@ -10,6 +10,7 @@ manages their account there. Power is decided by the person's ROLE, not by which
 | Product (every `crm_*` tool: deals, leads, ICPs, approvals, follow-ups, notes, notifications) | yes, as themselves | yes | yes |
 | Web search, skills, vision, voice | yes | yes | yes |
 | Server (shell, files, code, scheduler, browser, past-conversation search) | no | yes, while `agents.telegram.admin_shell` is on | no |
+| Administrator controls from chat (`crm_admin`: jobs, master switch, policy, users, invites, learning review) | no (refused) | yes | yes (they are product tools, not server tools) |
 | Slash commands | `/new /status /retry /undo /title /stop /help /whoami` | all | all |
 
 Enforcement lives in three places, none of them the prompt:
