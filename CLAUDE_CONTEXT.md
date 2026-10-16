@@ -1059,8 +1059,22 @@ knows who is talking; `crm_*` tools do. MEMORY.md is loaded once per cached agen
   it, a teammate's turn does not; "share that with the team" → proposal → approve on /admin/learning → teammate sees
   it; 8 turns → one `memory_review` row in `llm_usage`, ≤3 candidates on /profile → Memory; a cron run writes no memory;
   `grep "Background review complete" logs/agent.log` after a skill-worthy turn; `/admin/learning` lists 9e58e6a1.
+- **Live 2026-10-14 (0.46.0, 055 applied).** 2026-10-16, Amir: "I still don't see self-improvements" with a screenshot of
+  **Zeami Omni** (Mateo's bot, the OTHER repo) saying "Self-improvement review: User profile updated" after Mateo corrected
+  the value proposition — that is Hermes' built-in USER.md on THAT bot's profile, shared across its users, and it never
+  reaches SalesBrain. Our side: 48 chat model calls since the deploy, zero `memory_review` rows — no session had reached 8
+  turns and every gateway restart resets the per-session counter; the loop itself works (a direct `review_operator` run
+  with Mateo's correction wrote `[rule] Value proposition: observe and analyze overall business to identify biggest
+  profit/efficiency levers for AI …` for Amir on the first pass). Hermes logs "provider tools and system-prompt block are
+  both withheld" because the `memory` toolset is off — that gate only hides provider TOOLS; prefetch / sync_turn still
+  run (`_memory_turn_start_and_prefetch` needs only `_memory_manager`), and we expose no provider tools anyway.
+  **Fix for Zeami Omni (app-only, same day)**: `crm_memory_recall` / `save` / `forget` / `share` on the service MCP
+  (68 tools; identity = `X-On-Behalf-Of`, so each employee's notes are their own; `decide` stays admin-only in the
+  app). The other bot must RECALL BEFORE IT DRAFTS and SAVE after a correction — that is a prompt change on Mateo's side;
+  `docs/service-mcp.md` changelog says so.
 - Not built: `curator.consolidate`, `/learn` from the app, team-proposal count in the learning digest, backfilling
-  conversations before the deploy, `crm_memory_*` on the service MCP (same kernel, add when the sibling app asks).
+  conversations before the deploy, a lower review threshold (8 turns is long for Telegram; `agents.memory.review_every_turns`
+  is a policy row — set 4 if the loop should fire sooner).
 Mateo's Zeami Omni bot said "Captured and added to the CRM" for two KIMW business cards (Marius Fedler, Jan-Ole Maras)
 — nothing landed: the service MCP (token "Zeami AppnMCP") had 36 tools and none could create a person, so the bot wrote
 to its own Notion database and called it the CRM. The audit log showed only reads + `register_user`.
