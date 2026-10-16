@@ -1434,6 +1434,15 @@ re-registered it as "Amir Redwan, amir@zeami.io" and has used it since — it lo
 app. Mapping it to Mateo would file Amir's bot activity under Mateo; waiting on Amir. Which id the bot SENDS is decided
 in the Zeami app, not here.
 
+**Hannes = one account too (same day).** His login hannes@chipchip.social absorbed both "Zeami"-key app accounts
+(`1d74dcc5…`: 1,063 prospects, 4 Ethiopian-retail ICPs, LinkedIn `hannes-garben`; `4dc2cfc4…`: 2 funding ICPs). Amir:
+"he uses the MCP mostly — merge all into one." Both app ids still work and now land on the login; his MCP token
+"Hannes Codex" was already there. Before this his login showed no LinkedIn and none of those prospects. Backup:
+`~/.cache/salesbrain/backups/hannes-merge-20261016164741/`. Open question for both: the service MCP has NO company field
+(token = app, header = employee id, `register_user` takes id + name + email only), so if the Zeami app is multi-company,
+equal employee ids from different companies share one account; options + a "refuse re-registration with a different
+email" guard were proposed, not built.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
