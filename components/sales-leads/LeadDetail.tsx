@@ -203,7 +203,7 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, busy, view
           {shown === null ? (
             <div className="space-y-2">{[0, 1, 2].map((i) => <div key={i} className="h-4 rounded animate-pulse" style={{ background: 'var(--bg-input)', width: `${80 - i * 15}%` }} />)}</div>
           ) : shown.length === 0 ? (
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Nothing on record yet. The first line goes below.</p>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Nothing on record yet.</p>
           ) : (
             <ol className="relative pl-6" style={{ borderLeft: '1px solid var(--border)', marginLeft: 7 }}>
               {shown.map((e) => (
@@ -254,16 +254,15 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, busy, view
                 {CHANNELS.map((c) => <option key={c} value={c}>{c.replace('_', ' ')}</option>)}
               </select>
               <input type="date" value={when} onChange={(e) => setWhen(e.target.value)} className="text-xs px-2 py-1.5" style={field} aria-label="When" />
-              <input value={text} onChange={(e) => setText(e.target.value)} placeholder="What happened — coffee in Danville, asked for an intro to the CTO…"
+              <input value={text} onChange={(e) => setText(e.target.value)} placeholder="What happened…"
                 className="text-xs px-3 py-1.5 flex-1 min-w-[220px]" style={field} onKeyDown={(e) => { if (e.key === 'Enter') addEvent(); }} />
-              <button type="button" disabled={busy || !text.trim()} onClick={addEvent}
+              <button type="button" disabled={busy || !text.trim()} onClick={addEvent} title="Calls, meetings, messages and replies reset the days-since-contact counter; notes do not"
                 className="text-xs px-3.5 py-1.5 rounded-full font-medium disabled:opacity-50" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>Add</button>
             </div>
-            <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>Calls, meetings, messages and replies reset the days-since-contact counter. Notes don’t.</p>
           </div>
 
           <Eyebrow>Notes</Eyebrow>
-          <textarea value={notes} onChange={(e) => onNotes(e.target.value)} rows={3} placeholder="Your own notes — saved as you type"
+          <textarea value={notes} onChange={(e) => onNotes(e.target.value)} rows={3} placeholder="Notes (autosaved)"
             className="w-full text-[13px] px-3 py-2 resize-y leading-relaxed" style={field} />
           <div className="text-[11px] h-4" style={{ color: 'var(--green)' }}>{saved}</div>
         </div>
@@ -281,20 +280,18 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, busy, view
 
           <div className="space-y-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
             <label className="block">
-              <span className="z-eyebrow">Back office</span>
+              <span className="z-eyebrow" title={`${ROLES.responsible.duties} Hears: ${ROLES.responsible.hears}`}>Back office</span>
               <select value={lead.responsible_user_id ?? ''} onChange={(e) => onPatch({ responsible_user_id: e.target.value })} className="mt-1 w-full text-xs px-2 py-1.5" style={field}>
                 <option value="">Nobody yet</option>
                 {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
-              <span className="block text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>{ROLES.responsible.duties} Hears: {ROLES.responsible.hears}</span>
             </label>
             <label className="block">
-              <span className="z-eyebrow">Front office</span>
+              <span className="z-eyebrow" title={`${ROLES.front.duties} Hears: ${ROLES.front.hears}`}>Front office</span>
               <select value={lead.front_user_id ?? ''} onChange={(e) => onPatch({ front_user_id: e.target.value })} className="mt-1 w-full text-xs px-2 py-1.5" style={field}>
                 <option value="">Same as back office{lead.responsible_name ? ` (${lead.responsible_name})` : ''}</option>
                 {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
-              <span className="block text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>{ROLES.front.duties} Hears: {ROLES.front.hears}</span>
             </label>
           </div>
 
@@ -311,7 +308,7 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, busy, view
             </div>
             <label className="block">
               <span className="z-eyebrow">Where we met</span>
-              <input defaultValue={lead.met_at ?? ''} key={`${lead.id}-${lead.met_at ?? ''}`} placeholder="PEI Napa 2026, Fakuma…"
+              <input defaultValue={lead.met_at ?? ''} key={`${lead.id}-${lead.met_at ?? ''}`} placeholder="Fakuma 2026…"
                 onBlur={(e) => { if ((e.target.value || '') !== (lead.met_at || '')) onPatch({ met_at: e.target.value }); }}
                 className="mt-1 w-full text-xs px-2 py-1.5" style={field} />
             </label>
