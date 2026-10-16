@@ -25,6 +25,15 @@ export const MANUAL_EVENT_KINDS: { kind: EventKind; label: string; contact: bool
   { kind: 'reply', label: 'They replied', contact: true },
 ];
 export const CHANNELS = ['linkedin', 'email', 'phone', 'in_person', 'telegram', 'whatsapp'] as const;
+
+/** The lead's journey on the card (migration 060). Index = journey_stage; 0 = not started. */
+export const JOURNEY_STAGES: { stage: number; label: string; hint: string }[] = [
+  { stage: 1, label: 'Warm introduction', hint: 'Someone introduced us (rate the intro 1–5)' },
+  { stage: 2, label: 'Connected on LinkedIn', hint: 'Request accepted / in touch on LinkedIn' },
+  { stage: 3, label: 'Other channel', hint: 'WhatsApp, email or phone exchanged' },
+  { stage: 4, label: 'Call or meeting set', hint: 'A date is in the calendar' },
+  { stage: 5, label: 'Qualified', hint: 'Into the sales funnel (convert) — or lost' },
+];
 export type Channel = (typeof CHANNELS)[number];
 
 export interface Dossier {
@@ -40,6 +49,7 @@ export interface Dossier {
 }
 
 export interface LeadEvent {
+  actor_user_id?: string | null;
   id: string;
   occurred_at: string;
   kind: EventKind;
@@ -65,6 +75,9 @@ export interface Lead {
   priority: number | null;
   rank: number | null;                 // order inside the priority (059); null = unordered
   must_talk: boolean;
+  journey_stage: number;               // 0 … 5 (060)
+  intro_quality: number | null;        // 1 … 5
+  journey_outcome: 'qualified' | 'lost' | null;
   met_at: string | null;
   responsible_user_id: string | null;
   responsible_name: string | null;

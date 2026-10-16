@@ -110,7 +110,7 @@ Four JSON-RPC methods:
 | Method | Purpose |
 |---|---|
 | `initialize` | Handshake — returns server info + protocol version. |
-| `tools/list` | The catalog (49 tools) with JSON-Schema for each. |
+| `tools/list` | The catalog (50 tools) with JSON-Schema for each. |
 | `tools/call` | Invoke one tool. This is where the work happens. |
 | `ping` | Health check. |
 
@@ -590,6 +590,11 @@ dossier; `kind` meeting / call / email / linkedin also logs an outbound interact
 ticker; `channel`, `occurred_at` YYYY-MM-DD backdates), `priority` 1 (top) … 10 (0 clears), `must_talk`, `responsible`
 (back office, drives the lead) / `front` (the face in calls) by teammate name, `next_contact_at`, `met_at` — any
 combination; convert to a G1 deal owned by this employee.
+
+**`crm_edit_sales_lead_event`** · write — `{event_id*, text?, occurred_at?}` corrects one track-record line (hand-written
+kinds only; your own unless admin). `crm_update_sales_lead` also takes `full_name / title / company / email /
+linkedin_url` (card corrections, logged) and the journey: `journey_stage` 0–5 (warm introduction → LinkedIn → other
+channel → call set → qualified), `intro_quality` 1–5, `journey_outcome` qualified | lost (lost also archives).
 
 **`crm_prospect_convert`** · write — `{prospect_id*, deal_name?, value?}` promotes one of this employee's prospects to
 a G1 deal (idempotent).

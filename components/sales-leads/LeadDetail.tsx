@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { addDays, CHANNELS, MANUAL_EVENT_KINDS, ROLES, type EventKind, type Lead, type LeadEvent, type TeamUser } from '@/lib/sales-leads';
+import { addDays, CHANNELS, JOURNEY_STAGES, MANUAL_EVENT_KINDS, ROLES, type EventKind, type Lead, type LeadEvent, type TeamUser } from '@/lib/sales-leads';
 import { EventIcon, External, Mail } from './icons';
 
 /**
@@ -11,10 +11,11 @@ import { EventIcon, External, Mail } from './icons';
  * The right rail is "working this lead": back / front office, ping-by date,
  * where met, status actions.
  */
-export default function LeadDetail({ lead, users, onPatch, onConvert, busy }: {
+export default function LeadDetail({ lead, users, onPatch, onConvert, busy, viewerId, viewerIsAdmin }: {
   lead: Lead; users: TeamUser[];
   onPatch: (patch: Record<string, unknown>) => Promise<boolean>;
   onConvert: () => void; busy: boolean;
+  viewerId?: string | null; viewerIsAdmin?: boolean;
 }) {
   const [events, setEvents] = useState<LeadEvent[] | null>(null);
   const [evErr, setEvErr] = useState<string | null>(null);
@@ -26,6 +27,11 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, busy }: {
   const [saved, setSaved] = useState('');
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showAll, setShowAll] = useState(false);
+  // Card edits (name / title / company) and the one track-record line being edited.
+  const [editingCard, setEditingCard] = useState(false);
+  const [card, setCard] = useState({ full_name: lead.full_name, title: lead.title ?? '', company: lead.company === 'Unknown' ? '' : lead.company });
+  const [editingEvent, setEditingEvent] = useState<{ id: string; text: string; when: string } | null>(null);
+  const [evSaving, setEvSaving] = useState(false);
 
   const loadEvents = async () => {
     try {
@@ -42,6 +48,35 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, busy }: {
   const Eyebrow = ({ children }: { children: React.ReactNode }) => <h4 className="z-eyebrow mt-5 mb-2 first:mt-0">{children}</h4>;
   const field = { background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: '0.5rem' } as const;
   const ghost = { background: 'transparent', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: '9999px' } as const;
+
+  async function saveCard() {
+    const patch: Record<string, unknown> = {};
+    if (card.full_name.trim() && card.full_name.trim() !== lead.full_name) patch.full_name = card.full_name.trim();
+    if ((card.title || '') !== (lead.title || '')) patch.title = card.title;
+    if ((card.company || '') !== (lead.company === 'Unknown' ? '' : lead.company)) patch.company = card.company;
+    if (Object.keys(patch).length === 0) { setEditingCard(false); return; }
+    const ok = await onPatch(patch);
+    if (ok) { setEditingCard(false); await loadEvents(); }
+  }
+
+  async function saveEvent() {
+    if (!editingEvent || !editingEvent.text.trim()) return;
+    setEvSaving(true);
+    try {
+      const res = await fetch(`/api/sales-leads/${lead.id}/events/${editingEvent.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: editingEvent.text.trim(), ...(editingEvent.when ? { occurred_at: editingEvent.when } : {}) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not save');
+      setEditingEvent(null);
+      await loadEvents();
+    } catch (err) { setEvErr(err instanceof Error ? err.message : String(err)); }
+    finally { setEvSaving(false); }
+  }
+
+  const canEdit = (e: LeadEvent) => ['note', 'met', 'sent', 'reply', 'call', 'meeting'].includes(e.kind)
+    && (viewerIsAdmin || (!!viewerId && e.actor_user_id === viewerId));
 
   async function addEvent() {
     if (!text.trim()) return;
@@ -67,6 +102,70 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, busy }: {
       <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_300px]">
         {/* ── Left: the briefing ─────────────────────────────────────── */}
         <div className="min-w-0 rounded-2xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+          {/* Who this is — editable in place */}
+          <div className="flex items-start gap-3 mb-3">
+            {editingCard ? (
+              <div className="flex-1 grid gap-2 sm:grid-cols-3">
+                <input value={card.full_name} onChange={(e) => setCard({ ...card, full_name: e.target.value })} placeholder="Name" className="text-sm px-3 py-1.5 font-semibold" style={field} autoFocus
+                  onKeyDown={(e) => { if (e.key === 'Enter') saveCard(); if (e.key === 'Escape') setEditingCard(false); }} />
+                <input value={card.title} onChange={(e) => setCard({ ...card, title: e.target.value })} placeholder="Title" className="text-sm px-3 py-1.5" style={field}
+                  onKeyDown={(e) => { if (e.key === 'Enter') saveCard(); if (e.key === 'Escape') setEditingCard(false); }} />
+                <input value={card.company} onChange={(e) => setCard({ ...card, company: e.target.value })} placeholder="Company" className="text-sm px-3 py-1.5" style={field}
+                  onKeyDown={(e) => { if (e.key === 'Enter') saveCard(); if (e.key === 'Escape') setEditingCard(false); }} />
+                <div className="sm:col-span-3 flex gap-2">
+                  <button type="button" disabled={busy || !card.full_name.trim()} onClick={saveCard} className="text-xs px-3.5 py-1.5 rounded-full font-medium disabled:opacity-50" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>Save</button>
+                  <button type="button" onClick={() => { setEditingCard(false); setCard({ full_name: lead.full_name, title: lead.title ?? '', company: lead.company === 'Unknown' ? '' : lead.company }); }} className="text-xs px-3 py-1.5" style={ghost}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" onClick={() => setEditingCard(true)} title="Edit name, title, company" className="flex-1 text-left group min-w-0">
+                <span className="text-base font-semibold">{lead.full_name}</span>
+                <span className="ml-2 text-[11px] opacity-0 group-hover:opacity-100" style={{ color: 'var(--text-muted)' }}>edit</span>
+                <div className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{[lead.title, lead.company !== 'Unknown' ? lead.company : null].filter(Boolean).join(' · ') || 'no title on file'}</div>
+              </button>
+            )}
+          </div>
+
+          {/* Journey — five steps, click to set; step 1 rates the intro, step 5 closes */}
+          <div className="mb-4 rounded-xl p-3" style={{ background: 'var(--bg-input)' }}>
+            <ol className="flex items-stretch gap-1">
+              {JOURNEY_STAGES.map((st) => {
+                const done = lead.journey_stage >= st.stage;
+                const current = lead.journey_stage === st.stage;
+                const lost = st.stage === 5 && lead.journey_outcome === 'lost';
+                const fill = lost ? 'var(--red)' : done ? 'var(--accent)' : 'var(--border)';
+                return (
+                  <li key={st.stage} className="flex-1 min-w-0">
+                    <button type="button" disabled={busy} title={st.hint}
+                      onClick={() => onPatch({ journey_stage: current ? st.stage - 1 : st.stage })}
+                      className="w-full text-left group">
+                      <div className="h-1.5 rounded-full" style={{ background: fill }} />
+                      <div className="mt-1 text-[11px] leading-tight truncate" style={{ color: done ? 'var(--text)' : 'var(--text-muted)', fontWeight: current ? 600 : 400 }}>
+                        {st.stage}. {st.label}
+                      </div>
+                    </button>
+                    {st.stage === 1 && lead.journey_stage >= 1 && (
+                      <select value={lead.intro_quality ?? 0} onChange={(e) => onPatch({ intro_quality: Number(e.target.value) })} className="mt-1 text-[11px] px-1.5 py-0.5" style={field} aria-label="Quality of the introduction">
+                        <option value={0}>quality?</option>
+                        {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n} / 5</option>)}
+                      </select>
+                    )}
+                    {st.stage === 5 && lead.journey_stage >= 5 && (
+                      <div className="mt-1 flex gap-1">
+                        <button type="button" disabled={busy} onClick={() => { if (lead.journey_outcome !== 'qualified') onPatch({ journey_outcome: 'qualified' }); if (lead.status !== 'converted') onConvert(); }}
+                          className="text-[11px] px-2 py-0.5 rounded-full" style={{ background: lead.journey_outcome === 'qualified' ? 'var(--accent)' : 'var(--bg-card)', color: lead.journey_outcome === 'qualified' ? 'var(--accent-fg)' : 'var(--text)', border: '1px solid var(--border)' }}>
+                          {lead.status === 'converted' ? 'in funnel' : 'qualified → funnel'}
+                        </button>
+                        <button type="button" disabled={busy} onClick={() => onPatch({ journey_outcome: lost ? '' : 'lost' })}
+                          className="text-[11px] px-2 py-0.5 rounded-full" style={{ background: lost ? 'var(--red)' : 'var(--bg-card)', color: lost ? 'var(--accent-fg)' : 'var(--text)', border: '1px solid var(--border)' }}>lost</button>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+
           {d?.talking_points?.length ? (<>
             <Eyebrow>Talking points</Eyebrow>
             <ul className="space-y-1.5">
@@ -117,7 +216,24 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, busy }: {
                     {new Date(e.occurred_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
                     {[e.channel?.replace('_', ' '), e.actor_name].filter(Boolean).map((x) => ` · ${x}`).join('')}
                   </div>
-                  <div className="text-[13px] leading-relaxed whitespace-pre-wrap break-words">{e.text}</div>
+                  {editingEvent?.id === e.id ? (
+                    <div className="mt-1 space-y-1.5">
+                      <textarea value={editingEvent.text} onChange={(ev) => setEditingEvent({ ...editingEvent, text: ev.target.value })} rows={3} className="w-full text-[13px] px-3 py-2 resize-y" style={field} autoFocus />
+                      <div className="flex gap-2 items-center">
+                        <input type="date" value={editingEvent.when} onChange={(ev) => setEditingEvent({ ...editingEvent, when: ev.target.value })} className="text-xs px-2 py-1" style={field} aria-label="Date" />
+                        <button type="button" disabled={evSaving || !editingEvent.text.trim()} onClick={saveEvent} className="text-xs px-3.5 py-1 rounded-full font-medium disabled:opacity-50" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>Save</button>
+                        <button type="button" onClick={() => setEditingEvent(null)} className="text-xs px-3 py-1" style={ghost}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-[13px] leading-relaxed whitespace-pre-wrap break-words group">
+                      {e.text}
+                      {canEdit(e) && (
+                        <button type="button" onClick={() => setEditingEvent({ id: e.id, text: e.text, when: e.occurred_at.slice(0, 10) })}
+                          className="ml-2 text-[11px] underline opacity-0 group-hover:opacity-100" style={{ color: 'var(--text-muted)' }}>edit</button>
+                      )}
+                    </div>
+                  )}
                 </li>
               ))}
             </ol>

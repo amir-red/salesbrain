@@ -456,6 +456,14 @@ export const SERVICE_TOOLS: ToolDef[] = [
     needsOwner: true,
   },
   {
+    name: 'crm_edit_sales_lead_event',
+    description:
+      "Correct one line of a lead's track record — text and/or date (YYYY-MM-DD). Hand-written lines only " +
+      "(note / met / sent / reply / call / meeting), and only the employee's own unless they are an admin.",
+    inputSchema: obj({ event_id: { type: 'string' }, text: { type: 'string' }, occurred_at: { type: 'string' } }, ['event_id']),
+    needsOwner: true,
+  },
+  {
     name: 'crm_convert_lead',
     description:
       "Turn a sales lead into a G1 sales deal. The deal's creator is the lead's BACK OFFICE and its project lead the FRONT " +
@@ -944,7 +952,7 @@ const PASSTHROUGH = new Set([
   'crm_linkedin_revoke', 'crm_agent_activity', 'crm_agent_status', 'crm_linkedin_quota', 'crm_outreach_kpis',
   'crm_graph_status', 'crm_graph_edges', 'crm_graph_sync',
   'crm_pipeline_summary', 'crm_team_kpis', 'crm_lead_lookup', 'crm_lead_note', 'crm_followups_due',
-  'crm_list_sales_leads', 'crm_get_sales_lead', 'crm_update_sales_lead', 'crm_convert_lead', 'crm_prospect_convert',
+  'crm_list_sales_leads', 'crm_get_sales_lead', 'crm_update_sales_lead', 'crm_edit_sales_lead_event', 'crm_convert_lead', 'crm_prospect_convert',
   'crm_graph_reach', 'crm_who_can_reach',
   'crm_path_find', 'crm_propose_intro',
 ]);

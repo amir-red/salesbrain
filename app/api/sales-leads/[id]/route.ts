@@ -35,6 +35,14 @@ const PatchSchema = z.object({
   channel: z.enum(CHANNELS).optional(),
   occurred_at: Ymd.optional(),
   notes: z.string().max(20000).optional(),
+  full_name: z.string().min(1).max(200).optional(),
+  title: z.string().max(200).optional(),
+  company: z.string().max(200).optional(),
+  email: z.string().max(200).optional(),
+  linkedin_url: z.string().max(300).optional(),
+  journey_stage: z.number().int().min(0).max(5).optional(),
+  intro_quality: z.number().int().min(0).max(5).optional(),
+  journey_outcome: z.enum(['qualified', 'lost', '']).optional(),
 }).strict();
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -54,7 +62,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         WHERE l.id = $1`, [id]);
     if (!rows[0]) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const { rows: events } = await client.query(
-      `SELECT e.id, e.occurred_at, e.kind, e.channel, e.text, e.ref, u.name AS actor_name
+      `SELECT e.id, e.occurred_at, e.kind, e.channel, e.text, e.ref, e.actor_user_id, u.name AS actor_name
          FROM sales_lead_events e LEFT JOIN users u ON u.id = e.actor_user_id
         WHERE e.lead_id = $1 ORDER BY e.occurred_at DESC, e.created_at DESC LIMIT 200`, [id]);
     return NextResponse.json({ lead: rows[0], events });
@@ -98,6 +106,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (b.must_talk !== undefined) args.must_talk = b.must_talk;
   if (b.next_contact_at !== undefined) args.next_contact_at = b.next_contact_at;
   if (b.met_at !== undefined) args.met_at = b.met_at;
+  for (const k of ['full_name', 'title', 'company', 'email', 'linkedin_url', 'journey_stage', 'intro_quality', 'journey_outcome'] as const) {
+    if (b[k] !== undefined) args[k] = b[k];
+  }
   if (b.note !== undefined && b.note.trim()) {
     args.note = b.note; args.note_kind = b.note_kind ?? 'note';
     if (b.channel) args.channel = b.channel;

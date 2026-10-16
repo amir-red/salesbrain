@@ -1256,6 +1256,21 @@ FK-catalogue driven, pairs proven by `linkedin_relations.provider_id` + `public_
 `lead_lookup` now also searches the graph (name / organization / thread headline) and returns `people_without_lead[]` with
 `connected_via[]` and `last_thread`; `record_note` accepts a query that resolves to exactly one graph person.
 
+### 5.ai.7 Lead card: editable identity, journey bar, editable track record (2026-10-16, feat/lead-card, core/hermes 0.49.3, migration 060)
+
+Amir, on `/sales-leads`: "how can I make edits to the name? add on the top a progress bar; is there a way to edit the
+last post on the timeline?" — **Migration 060**: `sales_leads.journey_stage` 0–5, `intro_quality` 1–5, `journey_outcome`
+qualified | lost. The journey (Amir's sketch): 1 warm introduction (quality 1–5 dropdown) → 2 connected on LinkedIn →
+3 connected on WhatsApp / email / phone → 4 call or meeting set → 5 qualified (→ Convert) or lost (→ archived). Hand-set,
+not derived; every move is a `status` line on the track record. **Kernel** `update_sales_lead` takes `full_name / title /
+company / email / linkedin_url` (logged as one `note` "edited …" line) and the three journey fields; NEW
+`edit_sales_lead_event(event_id, text?, occurred_at?)` — hand-written kinds only, own lines unless admin, re-derives
+`last_contact_at`. **Ring** `crm_edit_sales_lead_event`; `crm_update_sales_lead` gains the params. **App**: `LeadDetail`
+header is click-to-edit (name · title · company, Enter saves), the journey bar sits above the talking points (click a step
+to set it, click the current step to go back one; step 1 shows the quality select, step 5 the qualified / lost buttons),
+and every hand-written track-record line the viewer wrote (or any, for an admin) shows an `edit` on hover → inline text +
+date, `PATCH /api/sales-leads/[id]/events/[eventId]`. List API returns `viewer_is_admin`. Service MCP 50 tools.
+
 ### 5.aj Marketing — paid ads inside the CRM (2026-10-13, feat/marketing, round 1 app-only)
 
 Amir: "we are starting ads in Google Ads and LinkedIn Ads — add a marketing menu, connectors, pull our performance

@@ -35,6 +35,7 @@ export default function SalesLeadsPage() {
   const [q, setQ] = useState('');
   const [role, setRole] = useState<RoleFilter>('');   // '' everyone · any = mine · responsible / front = mine in that seat
   const [viewerId, setViewerId] = useState<string | null>(null);
+  const [viewerIsAdmin, setViewerIsAdmin] = useState(false);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +56,7 @@ export default function SalesLeadsPage() {
       setCounts(data.counts || null);
       setUsers(data.users || []);
       setViewerId(data.viewer_id || null);
+      setViewerIsAdmin(!!data.viewer_is_admin);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load');
     } finally {
@@ -232,7 +234,7 @@ export default function SalesLeadsPage() {
                 <div key={l.id} style={{ borderTop: i ? '1px solid var(--border)' : undefined }}>
                   <LeadRow lead={l} rank={i + 1} open={open.has(l.id)} viewerId={viewerId} onToggle={() => toggle(l.id)} busy={busyId === l.id} onPatch={(p) => { patch(l.id, p); }} />
                   {open.has(l.id) && (
-                    <LeadDetail lead={l} users={users} busy={busyId === l.id} onPatch={(p) => patch(l.id, p)} onConvert={() => convert(l.id)} />
+                    <LeadDetail lead={l} users={users} viewerId={viewerId} viewerIsAdmin={viewerIsAdmin} busy={busyId === l.id} onPatch={(p) => patch(l.id, p)} onConvert={() => convert(l.id)} />
                   )}
                 </div>
               ))
