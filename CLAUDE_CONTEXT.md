@@ -1729,6 +1729,8 @@ falls to Bedrock within a minute; deploy verify refuses > 120). 3.8 Flash prices
   for an administrator in a private chat, crm_* + web + skills + memory + automations for everyone), the crm profile's Telegram is disabled, one poller, no 409.
   Found on the way: `deploy-server.sh` never forwarded `ONE_BOT` to the remote shell (it runs `ssh … bash -s`), so the first attempt silently did nothing;
   fixed (the script now passes `ONE_BOT=${ONE_BOT:-0}`). @SalesBrainZeamiBot (the old admin bot) is no longer polled; Amir revokes its token in BotFather.
+  **Regression found right after, fixed 18:55:** `platforms.telegram.extra.allow_from: []` (set by the 0.50.0 deploy) made the Telegram adapter block EVERY user
+  ("Blocked unauthorized user"): any adapter-level allow_from, even empty, is the sole authority. The key is now removed (not set) and deploy verify refuses it being present.
   Rollback copies `/root/.hermes/.env.pre-onebot` and `profiles/crm/.env.pre-onebot` stay a day. Teammates' Hermes chat history started fresh.
   Live proof of the automation path: a 2-minute automation for Amir ran as him, unattended, read his due follow-ups (68), was refused `crm_outreach_decide`
   ("A scheduled automation can read and draft but not do that"), delivered without error. Hermes discovery tools (`tool_describe`, `tool_search`) are allowed in runs.
