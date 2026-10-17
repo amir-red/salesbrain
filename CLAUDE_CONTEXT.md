@@ -1666,8 +1666,13 @@ falls to Bedrock within a minute; deploy verify refuses > 120). 3.8 Flash prices
   and a **Remove** (ring RPC `skill_remove` MOVES the folder to `skills-agent/.removed/`, reversible); the learning digest reports "N skills written in the last day".
 - **Memory**: unchanged and already per person (`crm_memory`, §5.aj). Hermes' native MEMORY.md/USER.md stays OFF: one file per profile = shared by every
   teammate. The persona now says automations, live skills and per-person memory explicitly.
-- **Cutover**: with this, the one-bot cutover (`ONE_BOT=1`, `docs/telegram-one-bot.md`) is what gives every user the same bot. Until it runs, the team bot
-  (`crm` profile) has `crm_automations` too, but not Hermes' wider toolset.
+- **CUTOVER DONE 2026-10-17 18:33 EAT.** `ONE_BOT=1` finally ran: @MateSalesCRMBot (the team bot) is now the default profile's ONE bot (full Hermes toolset
+  for an administrator in a private chat, crm_* + web + skills + memory + automations for everyone), the crm profile's Telegram is disabled, one poller, no 409.
+  Found on the way: `deploy-server.sh` never forwarded `ONE_BOT` to the remote shell (it runs `ssh … bash -s`), so the first attempt silently did nothing;
+  fixed (the script now passes `ONE_BOT=${ONE_BOT:-0}`). @SalesBrainZeamiBot (the old admin bot) is no longer polled; Amir revokes its token in BotFather.
+  Rollback copies `/root/.hermes/.env.pre-onebot` and `profiles/crm/.env.pre-onebot` stay a day. Teammates' Hermes chat history started fresh.
+  Live proof of the automation path: a 2-minute automation for Amir ran as him, unattended, read his due follow-ups (68), was refused `crm_outreach_decide`
+  ("A scheduled automation can read and draft but not do that"), delivered without error. Hermes discovery tools (`tool_describe`, `tool_search`) are allowed in runs.
 - Migration number: 068 is claimed by the lead-lifecycle workspace; this feature used 069.
 - Not built: an Automations tab on /profile, per-person skill scopes (Hermes has one skills dir per profile), editing an automation's schedule in place
   (remove and create), web-chat automations (delivery is Telegram).
