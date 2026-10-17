@@ -1624,7 +1624,21 @@ behind Caddy), redirects a forged Google state to login, and keeps normal API au
   (`docs/telegram-one-bot.md`). Until then both bots run, strangers get silence on both, and every admin tool works on both.
 - **Side findings, not ours**: Hermes logs a warning that the linked SQLite 3.50.4 is vulnerable to the WAL-reset corruption bug (upstream; the
   interpreter's SQLite should be updated). `pmi-sync` still fails with `CERTIFICATE_VERIFY_FAILED` against the PM tool (their certificate).
-  The profiles `gilfoyle` and `tesfa` have no Gemini key (not SalesBrain's). Duplicate user accounts exist (two named Mateo Klemmayer, two Beck).
+  The profiles `gilfoyle` and `tesfa` have no Gemini key (not SalesBrain's).
+- **2026-10-17 follow-ups.** **Duplicate accounts**: `mateo.klemmayer@alumni.ie.edu` (created 10-12 by the Zeami Omni bot's `register_user`, owned only
+  24 MCP audit rows, a password-reset row and one employee mapping) was folded into `mateo@zeami.io` with `store/merge_users` (backup CSVs in
+  `~/.cache/salesbrain/backups/pre-merge-mateo-20261017_151438/`); the three Zeami employee mappings (`e80f7ada…`, `EMP-0001`, `EMP-0077`) now point at
+  one user, 31 deals / 122 prospects untouched. LEFT ALONE on purpose: the two Becks (`beck@chipchip.social`, `beck@zeami.io`) both have a real password
+  and zero trace of use, so there is no way to tell which email Beck logs in with, and a merge deletes one login. ROOT CAUSE of the Mateo duplicate:
+  the service MCP's `register_user` creates a new SalesBrain user per unknown employee instead of matching an existing real user by email; it recurs
+  whenever the partner app registers a person under a different address. **PMI** = the delivery tool (`pmi.zeami.io`, "Zeami Ops Console", nginx on
+  AWS, MCP server `zeami-customers`): delivery journey, cadence, daily reports, health, risks; `pmi_sync` reads it every 3 h so customers already in
+  delivery are not flagged as stalled sales deals. **Why `pmi-sync` fails**: PMI's Let's Encrypt certificate EXPIRED 2026-10-14 06:08 GMT (issued
+  07-16, 90 days; expired for every client, other zeami.io hosts are fine). The host's HTTP-01 validation path `/.well-known/acme-challenge/` answers
+  401 (behind the console's Basic auth), the likely reason renewal failed. Fix is on the PMI host (`certbot renew --dry-run`, exempt the challenge path
+  with `auth_basic off`, renew, reload nginx, make sure the certbot timer runs); the sync recovers by itself at the next 3-hourly tick. We do NOT
+  disable TLS verification: the sync sends `PMI_MCP_TOKEN` as a bearer. While it is down nothing breaks: confirmed links keep suppressing false SLA
+  alerts; only refreshes and new auto-links are stale.
 
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
