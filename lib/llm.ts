@@ -43,7 +43,7 @@ export const BEDROCK_MODEL = BEDROCK_ENABLED
 export const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
 export const GEMINI_ENABLED = Boolean(GEMINI_API_KEY);
 /** Thinking model: calls here are infrequent and quality matters more than the last second. */
-export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-pro-preview';
+export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 
 /** Primary model for every call in the app. Never hardcode an id at a call site. */
 export const MODEL = GEMINI_ENABLED ? GEMINI_MODEL : BEDROCK_MODEL;
