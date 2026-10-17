@@ -1640,6 +1640,38 @@ behind Caddy), redirects a forged Google state to login, and keeps normal API au
   disable TLS verification: the sync sends `PMI_MCP_TOKEN` as a bearer. While it is down nothing breaks: confirmed links keep suppressing false SLA
   alerts; only refreshes and new auto-links are stale.
 
+### 5.aq Hermes abilities for every teammate — automations, live skills, memory (2026-10-17, core/hermes 0.51.0, migration 069)
+
+Amir, after the team bot said "I'm caged to CRM tools" and could not set a one-minute reminder: every user gets the CRM tools PLUS the Hermes
+user abilities (learning loop and skill creation, persistent memory, scheduled automations), never root. Plan `~/.claude/plans/glittery-watching-ember.md`.
+Also this day: **main chat model = `gemini-3.8-flash`** (0.50.1, migration 067 price row; benchmark with all 161 tools: 3.1 Pro preview needed 33-85 s per
+answer and stalled one Telegram turn 4 min, 3.8 Flash 2.5-15 s with correct tool calls) and `providers.gemini.stale_timeout_seconds 60` (a hung stream
+falls to Bedrock within a minute; deploy verify refuses > 120). 3.8 Flash prices are promotional through 2026-12-31 (0.75 / 3.75 per MTok, doubling 2027-01-01).
+- **Automations** (`crm_automations` family, 6 tools, Telegram only; `automations.py`, `tools/automations.py`): `crm_automation_create/list/pause/resume/remove/
+  run_now` wrap Hermes' job store (`cron.jobs`). Job name `u-<userid8>-<slug>`, `origin` = the owner's linked Telegram DM, `deliver origin`,
+  `enabled_toolsets` = crm families + web + skills only (never shell, files, code, scheduler). Ownership is ours: list/pause/remove touch your own jobs
+  (an admin sees all); native `cronjob_manage` stays admin-only. Limits are data, policy `agents.automations` (core 069: enabled, per_user_max 10,
+  min_interval_minutes 60, max_prompt_chars 1500; whitelisted in `admin_policy`, so an admin changes them from chat). A job needs an active Telegram link.
+- **Identity inside a run** (the safety core): the `tool_request` middleware recognises session `cron_<jobid>_…` of a `u-` job (+ a Telegram origin
+  stamp, so a lookalike name does nothing), resolves the owner from `telegram_user_links` on the origin chat, injects `_actor_user_id` and
+  `_actor_unattended`; an unresolvable owner = `_actor_deny`, NEVER the env default actor. `role_policy.unattended_allowed` = allowlist on the verb in the
+  tool name: READ tokens (list/get/search/status/summary/lookup/recall/kpis/due/…) and `_propose` (files a card a human still decides); any WRITE token
+  (send/decide/set/save/update/create/run/…) and a deny list of read-sounding spenders (`crm_prospect_search`, `crm_linkedin_find_person`, enrich, graph sync,
+  notification settings) are blocked; `skill_manage`, shell, files are blocked. Kernel: memory writes refuse an unattended actor. A scheduled prompt can
+  draft; it cannot approve, send, decide or change a setting. Tests iterate every registered tool and assert no write tool leaks.
+- **Skills live for everyone** (Amir's choice, with the risk stated): `skills.write_approval false` (deploy verify now REFUSES it being on). Guards in
+  `role_policy.skill_guard` for non-admins: delete refused, git-deployed `salesbrain-*` skills (and anything in `skills-salesbrain`) cannot be patched,
+  secret-shaped content refused (`refuse_shape`), 40k cap; routines (cron) get the same repo-skill guard, so the weekly learn pass can add skills but not
+  rewrite deployed ones. Every non-admin write is audited (`agent_audit_log` command `skill_write`). `/admin/learning`: agent-written skills show their author
+  and a **Remove** (ring RPC `skill_remove` MOVES the folder to `skills-agent/.removed/`, reversible); the learning digest reports "N skills written in the last day".
+- **Memory**: unchanged and already per person (`crm_memory`, §5.aj). Hermes' native MEMORY.md/USER.md stays OFF: one file per profile = shared by every
+  teammate. The persona now says automations, live skills and per-person memory explicitly.
+- **Cutover**: with this, the one-bot cutover (`ONE_BOT=1`, `docs/telegram-one-bot.md`) is what gives every user the same bot. Until it runs, the team bot
+  (`crm` profile) has `crm_automations` too, but not Hermes' wider toolset.
+- Migration number: 068 is claimed by the lead-lifecycle workspace; this feature used 069.
+- Not built: an Automations tab on /profile, per-person skill scopes (Hermes has one skills dir per profile), editing an automation's schedule in place
+  (remove and create), web-chat automations (delivery is Telegram).
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
