@@ -25,7 +25,7 @@ Enforcement lives in three places, none of them the prompt:
 3. **The link table.** Nobody gets in without `/start LINK-…` from the app (`board_hook._sync_access` pairs an active
    link, unpairs a revoked one). Strangers are dropped silently (`unauthorized_dm_behavior: ignore`).
 
-## Cut over (integration session, Amir present, bot idle)
+## Cut over (integration session, Amir present, bot idle) — DONE 2026-10-17 18:33 EAT
 
 Prerequisites shipped by the normal deploy: migrations 063–065, the ring with `role_policy`, the unified persona.
 

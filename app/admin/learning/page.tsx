@@ -63,6 +63,23 @@ export default function LearningAdminPage() {
     } finally { setBusy(null); }
   }, [load]);
 
+  const removeSkill = useCallback(async (profile: string, name: string) => {
+    if (!window.confirm(`Take the skill "${name}" out of service for everyone? It is kept in .removed/ and can be restored.`)) return;
+    setBusy(`skill/${profile}/${name}`);
+    setNotice(null);
+    try {
+      const res = await fetch('/api/admin/learning/skill-remove', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile, name }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.error) throw new Error(json.error || `Remove failed (${res.status})`);
+      setNotice(json.message || `Removed ${name}`);
+      await load();
+    } catch (e) {
+      setNotice(`Error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally { setBusy(null); }
+  }, [load]);
+
   const decideTeam = useCallback(async (id: string, approve: boolean) => {
     setBusy(`team/${id}`);
     setNotice(null);
@@ -117,7 +134,7 @@ export default function LearningAdminPage() {
           {team && <TeamMemorySection team={team} busy={busy} decide={decideTeam} />}
 
           {data?.profiles.map((p) => (
-            <ProfileSection key={p.profile} p={p} busy={busy} decide={decide} />
+            <ProfileSection key={p.profile} p={p} busy={busy} decide={decide} removeSkill={removeSkill} />
           ))}
 
           {data && total === 0 && (
@@ -180,9 +197,10 @@ function Banner({ tone, children }: { tone: 'red' | 'green'; children: React.Rea
   );
 }
 
-function ProfileSection({ p, busy, decide }: {
+function ProfileSection({ p, busy, decide, removeSkill }: {
   p: ProfileLearning; busy: string | null;
   decide: (profile: string, subsystem: Subsystem, id: string, decision: Decision) => Promise<void>;
+  removeSkill: (profile: string, name: string) => Promise<void>;
 }) {
   const health = loopHealth(p.status);
   const [showMemory, setShowMemory] = useState(false);
@@ -216,7 +234,7 @@ function ProfileSection({ p, busy, decide }: {
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>
           <span>memory: {p.status.memory_enabled ? 'on' : 'OFF'} · review every {p.status.memory_nudge_interval} turns · writes {p.status.memory_write_approval ? 'staged' : 'direct'}</span>
-          <span>skills: nudge every {p.status.skills_nudge_interval} iterations · writes {p.status.skills_write_approval ? 'staged' : 'DIRECT'}</span>
+          <span>skills: nudge every {p.status.skills_nudge_interval} iterations · writes {p.status.skills_write_approval ? 'staged' : 'live at once'}</span>
           <span>review: {p.status.review_enabled ? (p.status.review_model || 'main model') : 'disabled'}</span>
           <span>curator: {p.status.curator_enabled ? (p.status.curator_consolidate ? 'prune + consolidate' : 'prune only') : 'off'}</span>
         </div>
@@ -240,10 +258,13 @@ function ProfileSection({ p, busy, decide }: {
         {/* Agent-written skills */}
         {p.agent_skills.length > 0 && (
           <div>
-            <div className="text-xs font-semibold mb-1">Skills the agents wrote</div>
-            <ul className="text-[11px] space-y-0.5">
+            <div className="text-xs font-semibold mb-1">Skills the agents wrote <span className="font-normal" style={{ color: 'var(--text-muted)' }}>· live for everyone at once</span></div>
+            <ul className="text-[11px] space-y-1">
               {p.agent_skills.map((s) => (
-                <li key={s.name}><span className="font-mono">{s.name}</span> <span style={{ color: 'var(--text-muted)' }}>— {s.description || 'no description'} · {new Date(s.updated_at * 1000).toLocaleDateString()}</span></li>
+                <li key={s.name} className="flex items-start justify-between gap-2">
+                  <span><span className="font-mono">{s.name}</span> <span style={{ color: 'var(--text-muted)' }}>— {s.description || 'no description'} · {s.author ? `by ${s.author} · ` : ''}{new Date(s.updated_at * 1000).toLocaleDateString()}</span></span>
+                  <button disabled={busy === `skill/${p.profile}/${s.name}`} onClick={() => removeSkill(p.profile, s.name)} className="shrink-0 rounded-full px-2 py-0.5 text-[11px]" style={{ border: '1px solid var(--border)', color: 'var(--red)' }}>Remove</button>
+                </li>
               ))}
             </ul>
           </div>
