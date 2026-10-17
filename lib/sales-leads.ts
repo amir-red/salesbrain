@@ -10,8 +10,45 @@
  */
 
 export type LeadStatus = 'new' | 'contacted' | 'replied' | 'converted' | 'archived';
-export type LeadView = 'working' | 'due' | 'must' | LeadStatus | 'all';
+export type LeadView = 'working' | 'due' | 'must' | 'needs_you' | LeadStatus | 'all';
 export type LeadSort = 'priority' | 'contact' | 'newest';
+
+/**
+ * The stored lifecycle of a lead (core 068, policy/lifecycle.py): where it is, who has to move next, and one
+ * human sentence. The Lead Conductor writes these columns every hour; the app only READS them, so there is no second
+ * copy of the rules to drift. The labels below mirror the kernel's LABELS / FUNNEL (core tests/test_lifecycle_parity
+ * fails when they differ).
+ */
+export type LifecycleActor = 'system' | 'you' | 'them' | 'none';
+export const LIFECYCLE_LABELS = {
+  landed: 'Setting up', finding_profile: 'Finding LinkedIn', needs_pick: 'Pick a profile',
+  no_linkedin: 'No LinkedIn', ready_to_connect: 'Ready to connect', request_filed: 'Approve request',
+  request_pending: 'Request sent', connected: 'Connected', first_message_waiting: 'Approve message',
+  messaged: 'Messaged', followup_due: 'Follow-up due', followup_waiting: 'Approve follow-up',
+  email_path: 'By email', stalled: 'Stalled', replied: 'Replied', call_set: 'Call set',
+  in_conversation: 'In conversation', paused: 'Paused', done: 'Done',
+} as const;
+export type LifecycleStage = keyof typeof LIFECYCLE_LABELS;
+/** Order of the funnel strip on the page (every stage a working lead can be in). */
+export const LIFECYCLE_FUNNEL: LifecycleStage[] = [
+  'landed', 'finding_profile', 'needs_pick', 'no_linkedin', 'ready_to_connect', 'request_filed', 'request_pending',
+  'connected', 'first_message_waiting', 'messaged', 'followup_due', 'followup_waiting', 'email_path', 'stalled',
+  'replied', 'call_set', 'in_conversation', 'paused',
+];
+export const LIFECYCLE_BLOCKERS: Record<string, string> = {
+  needs_sender_account: 'Nobody on this lead\'s team has a LinkedIn account connected to send from. Connect one on Profile, or set a default sender.',
+  account_paused: 'The LinkedIn account that sends for this lead is paused after errors. Resume it on the Agents page.',
+  caps_reached: 'Today\'s or this week\'s connection-request limit is used. The lead goes into the next batch.',
+  no_reach: 'No LinkedIn profile and no email: there is nothing to reach them with yet.',
+};
+export const ACTOR_STYLE: Record<LifecycleActor, { label: string; color: string }> = {
+  system: { label: 'Automatic', color: 'var(--accent)' },
+  you: { label: 'Needs you', color: 'var(--orange)' },
+  them: { label: 'Waiting for them', color: 'var(--cat-teal)' },
+  none: { label: '', color: 'var(--text-muted)' },
+};
+/** Stages where the person must act, for the Needs you view (mirrors the digest in commands/conductor.needs_you). */
+export const NEEDS_YOU_EXCLUDED: LifecycleStage[] = ['paused', 'in_conversation', 'call_set'];
 
 export const EVENT_KINDS = ['met', 'sent', 'reply', 'call', 'meeting', 'note', 'status', 'priority', 'assign', 'import'] as const;
 export type EventKind = (typeof EVENT_KINDS)[number];
@@ -113,10 +150,17 @@ export interface Lead {
   preferred_demo_time: string | null;
   preferred_demo_timezone: string | null;
   last_event: { kind: EventKind; text: string; occurred_at: string } | null;
+  lifecycle_stage: LifecycleStage | null;   // null until the conductor has evaluated the lead
+  lifecycle_actor: LifecycleActor | null;
+  lifecycle_step: string | null;            // one sentence: what is happening or what is needed
+  lifecycle_blocker: string | null;         // why it cannot move on its own (LIFECYCLE_BLOCKERS)
+  lifecycle_next_at: string | null;         // when something is expected to change
+  lifecycle_paused: boolean;                // a person said hands off
+  sender_name?: string | null;              // whose LinkedIn sends for this lead (the prospect's owner)
 }
 
 export interface LeadCounts {
-  working: number; due: number; must: number;
+  working: number; due: number; must: number; needs_you: number;
   new: number; contacted: number; replied: number; converted: number; archived: number; all: number; booked: number;
 }
 

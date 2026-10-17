@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import pool from '@/lib/db';
-import { JOURNEY_STAGES, type LeadSort, type LeadView } from '@/lib/sales-leads';
-import { DUE, OPEN, SORTS } from '@/lib/sales-leads-sql';
+import { JOURNEY_STAGES, LIFECYCLE_LABELS, type LeadSort, type LeadView, type LifecycleStage } from '@/lib/sales-leads';
+import { DUE, NEEDS_YOU, OPEN, SORTS } from '@/lib/sales-leads-sql';
 import { visibleIcp } from '@/lib/icp-server';
 import type { ExportKind, ExportRequest } from '@/lib/export/sign';
 
@@ -62,7 +62,7 @@ function finish(prefix: string, sheets: { name: string; ws: XLSX.WorkSheet; rows
 
 // ─── Sales leads ───────────────────────────────────────────────────
 
-const VIEWS = new Set<LeadView>(['working', 'due', 'must', 'new', 'contacted', 'replied', 'converted', 'archived', 'all']);
+const VIEWS = new Set<LeadView>(['working', 'due', 'must', 'needs_you', 'new', 'contacted', 'replied', 'converted', 'archived', 'all']);
 
 interface LeadRow {
   id: string; full_name: string; title: string | null; company: string; email: string; linkedin_url: string | null;
@@ -71,6 +71,8 @@ interface LeadRow {
   source: string; created_at: string; last_contact_at: string | null; next_contact: string | null; next_step: string | null; phone: string | null; notes: string | null;
   dossier: { talking_points?: string[]; relevance?: string; firm_summary?: string; sources?: string[] } | null;
   responsible_name: string | null; front_name: string | null; days_since: number | null; last_note: string | null;
+  lifecycle_stage: LifecycleStage | null; lifecycle_actor: string | null; lifecycle_step: string | null; lifecycle_blocker: string | null;
+  sender_name: string | null;
 }
 
 async function salesLeads(args: Record<string, string>, who: Who): Promise<Built> {
@@ -84,6 +86,7 @@ async function salesLeads(args: Record<string, string>, who: Who): Promise<Built
   if (view === 'working') where.push(OPEN);
   else if (view === 'due') where.push(DUE);
   else if (view === 'must') where.push(`${OPEN} AND l.must_talk`);
+  else if (view === 'needs_you') where.push(NEEDS_YOU);
   else if (view === 'contacted') where.push("l.status IN ('contacted', 'replied')");
   else if (view !== 'all') { vals.push(view); where.push(`l.status = $${vals.length}`); }
   if (args.mine === '1') {
@@ -107,6 +110,7 @@ async function salesLeads(args: Record<string, string>, who: Who): Promise<Built
               l.must_talk, l.journey_stage, l.intro_quality, l.journey_outcome, l.met_at, l.source, l.created_at,
               l.last_contact_at, to_char(l.next_contact_at, 'YYYY-MM-DD') AS next_contact, l.next_step, l.phone, l.notes, l.dossier,
               r.name AS responsible_name, f.name AS front_name,
+              l.lifecycle_stage, l.lifecycle_actor, l.lifecycle_step, l.lifecycle_blocker, ou.name AS sender_name,
               EXTRACT(day FROM now() - COALESCE(l.last_contact_at, l.created_at))::int AS days_since,
               (SELECT e.text FROM sales_lead_events e WHERE e.lead_id = l.id
                   AND e.kind NOT IN ('status', 'priority', 'assign', 'import')
@@ -114,6 +118,8 @@ async function salesLeads(args: Record<string, string>, who: Who): Promise<Built
          FROM sales_leads l
          LEFT JOIN users r ON r.id = l.responsible_user_id
          LEFT JOIN users f ON f.id = l.front_user_id
+         LEFT JOIN prospects p ON p.id = l.prospect_id
+         LEFT JOIN users ou ON ou.id = p.owner_user_id
          ${clause}
         ORDER BY ${SORTS[sort]} LIMIT ${SHEET_ROW_CAP}`, vals);
 
@@ -142,6 +148,11 @@ async function salesLeads(args: Record<string, string>, who: Who): Promise<Built
       { h: 'Must talk', w: 9, v: (l) => yn(l.must_talk) },
       { h: 'Back office', w: 16, v: (l) => l.responsible_name },
       { h: 'Front office', w: 16, v: (l) => l.front_name },
+      { h: 'Stage', w: 20, v: (l) => (l.lifecycle_stage ? LIFECYCLE_LABELS[l.lifecycle_stage] : '') },
+      { h: 'Who acts', w: 11, v: (l) => ({ system: 'automatic', you: 'a person', them: 'the contact', none: '' } as Record<string, string>)[l.lifecycle_actor ?? ''] ?? '' },
+      { h: 'What happens next', w: 46, v: (l) => l.lifecycle_step },
+      { h: 'Blocked by', w: 24, v: (l) => l.lifecycle_blocker },
+      { h: 'Sends from', w: 16, v: (l) => l.sender_name },
       { h: 'Journey', w: 26, v: (l) => (l.journey_stage ? JOURNEY_STAGES[l.journey_stage - 1]?.label : '') },
       { h: 'Intro quality (1-5)', w: 12, v: (l) => l.intro_quality },
       { h: 'Outcome', w: 11, v: (l) => l.journey_outcome },

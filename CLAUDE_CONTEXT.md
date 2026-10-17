@@ -1640,6 +1640,65 @@ behind Caddy), redirects a forged Google state to login, and keeps normal API au
   disable TLS verification: the sync sends `PMI_MCP_TOKEN` as a bearer. While it is down nothing breaks: confirmed links keep suppressing false SLA
   alerts; only refreshes and new auto-links are stale.
 
+### 5.al Lead Conductor — every sales lead is alive (2026-10-17, feat/lead-lifecycle, migration 068)
+
+Amir: "when we import or add leads it is for us to outreach them, not just to list them — find the LinkedIn, make it
+visible, connect, draft the first message when connected, follow up. Everything needs to be alive." Found on 2026-10-17:
+the 68 Fakuma leads had been researched by hand but no agent ever touched them (owner Mateo has no LinkedIn and no
+Telegram, so a connection request could not even be filed; the Enricher silently dropped him); the 125 Napa leads had no
+prospect row so NO agent could see them; `sales_leads.next_step` was empty on all 252 rows; the outreach routine never
+proposes a connection request and 26 `agent_runs` rows sat in `running` since August, each counting toward `runs_per_day`.
+
+- **One rulebook** `policy/lifecycle.py` (pure): `decide(facts, cfg, now)` → stage (landed, finding_profile, needs_pick,
+  no_linkedin, ready_to_connect, request_filed, request_pending, connected, first_message_waiting, messaged,
+  followup_due, followup_waiting, email_path, stalled, replied, call_set, in_conversation, paused, done), `actor`
+  (system | you | them | none), one sentence `step`, `blocker`, `next_at` and the ONE allowed `action`
+  (ensure_prospect | connect | first_message | followup). Reuses `policy/next_step.linkedin_state`. `pick_sender` /
+  `sender_candidates` = whose LinkedIn sends (history, back office, front office, prospect owner, `default_sender`).
+  `batch_pick` = today's connect batch (the person's own order, one per company first, within the caps).
+- **Kernel** `commands/conductor.py`: `load_facts` (one query over a dozen tables), `lifecycle_tick(actor, dry_run, hour)`
+  stores the verdict on `sales_leads.lifecycle_*` (one `status` event per STAGE change, silent on first evaluation),
+  creates the prospect behind an orphan lead (`ensure_prospect_for_lead`: links an existing person, else lands a new one
+  in a static list `icp_profiles.objective='list'` that the Leads Finder never searches) and hands the prospect to the
+  sending account (`hand_to_sender`; the account that already holds a conversation or request keeps it). Honest when off:
+  system steps read "waiting for the Lead Conductor". `file_connect_batch` / `decide_connect_batch` /
+  `expire_batches` = ONE daily approval card per sender (`connect_batches`, `outreach_approvals.batch_id`; one pending batch
+  per person; only the sender can decide; a second tap changes nothing). `needs_you` = the daily "what needs you" DM,
+  once per 20 h. `draft_context`, `conductor_status`, `set_lead_paused`.
+- **Link**: `sales_leads.prospect_id` is a GENERATED column over `raw_payload->>'prospect_id'` (unique partial index), so every
+  existing writer keeps working and joins finally use an index.
+- **Sender rule** (Amir): the back office's own LinkedIn sends; Mateo (no account, no Telegram) falls through to front
+  office / owner / `sales_leads.roles.default_sender` — and when nobody has an account the lead says so
+  (`needs_sender_account`, shown to admins) instead of vanishing. The prospect's OWNER becomes the sender, so every
+  existing gate (`propose_connect`, enricher plan, cards to the owner's Telegram) works unchanged.
+- **Curated lists** (`event_list, manual, lead_import, kimw_persona, kimw_top100`) bypass `min_score` in the Enricher and
+  Outreach plans (Fakuma averaged 54 against gates of 60 / 75). `enricher_plan` now returns `blocked` (owners without an
+  account) instead of dropping them.
+- **Housekeeping**: `sweep_stale_runs` (3 h TTL) runs first in every cron script; `outreach_queue.py` got a real
+  `--dry-run` (the old "dry run" opened a run row nothing closed) and closes its run on error; `outreach_queue` /
+  `followup_queue` rank AFTER the reachability filter (an owner's unreachable top scorers used to take every slot).
+- **Ring**: Hermes cron `lead-conductor` (hourly 08:30-20:30) = `assets/scripts/lead_conductor.py` (no LLM routine): files
+  the batch + posts ONE Telegram card (`cb:<batch>:approve|skip`, `telegram_buttons.py`, `connect_batch.run_filed_batch`
+  paces ~10 s per request), drafts first messages (`lead_drafts.py`: the list's template, else a rule-checked model draft;
+  a draft that breaks a rule is dropped, never "fixed") and follow-ups as cards (`oa:`), sends the daily digest. Tools
+  `crm_lead_conductor_status`, `crm_lead_conductor_plan` (dry run), `crm_lead_automation_pause`. Policy `agents.conductor`
+  (ships disabled; `scope` = `[]` | `["icp:<id>","source:<s>","lead:<id>"]`; admin-editable except `scope`).
+- **App**: `/sales-leads` row = stage chip + one sentence (colour = who must act) under every lead; funnel strip (click a stage
+  to filter, `?stage=`); **Needs you** tab = the viewer's own queue (back office, front office or sending account);
+  `LifecyclePanel` at the top of the opened card (six-step path, blocker text, pick candidates, search again, paste a URL,
+  Connect now, Pause automation); `GET /api/sales-leads/[id]/lookup`, `POST …/automation`; Excel export + service MCP
+  `list_leads` + `crm_lead_lookup` carry the same fields; Users page gets the agent chip. Parity of the stage labels with
+  the kernel is a test (`test_lifecycle_parity.py`).
+- **Tests**: 38+ pure policy tests; `tests/test_conductor_db.py` runs the SQL for real when `SALESBRAIN_TEST_DATABASE_URL`
+  points at a LOCAL scratch Postgres (schema.sql + migrations; skipped otherwise, refuses non-local URLs, wipes what it seeds).
+- **Integration** (not done by the feature session): apply 068, then `salesbrain-hermes/scripts/lead_lifecycle_integration.sql`
+  (restore connect caps 15/75 + quiet hours 20, mark the hand-made lists `objective='list'`, Fakuma back office → Hannes
+  after Amir confirms, enable scoped to `source:event:fakuma-2026` + `source:event:pei-napa-2026`). Mateo needs Telegram
+  linked before he can approve anything.
+- Not built: Telegram buttons to pick among profile candidates (the page does it), an email-only drafting path of its own
+  (the outreach routine still drafts email), per-list funnel conversion on `/icp/[id]`, hand-sent LinkedIn messages arming the
+  follow-up timer (they only stop a duplicate first message).
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

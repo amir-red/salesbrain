@@ -1098,10 +1098,13 @@ async function listLeads(ownerUserId: string, args: Record<string, unknown>): Pr
             COALESCE((SELECT (e->>'path_available')::boolean FROM jsonb_array_elements(COALESCE(p.warm_paths, '[]'::jsonb)) e
               WHERE e->>'type' = 'route' LIMIT 1), false) AS path_available,
             (SELECT e->>'computed_at' FROM jsonb_array_elements(COALESCE(p.warm_paths, '[]'::jsonb)) e
-              WHERE e->>'type' = 'route' LIMIT 1) AS route_computed_at
+              WHERE e->>'type' = 'route' LIMIT 1) AS route_computed_at,
+            -- the Lead Conductor's stored verdict on the matching /sales-leads card (core 068)
+            sl.id AS sales_lead_id, sl.lifecycle_stage, sl.lifecycle_actor, sl.lifecycle_step, sl.lifecycle_blocker
      FROM prospects p
      LEFT JOIN contacts c ON c.id = p.contact_id
      LEFT JOIN accounts a ON a.id = p.account_id
+     LEFT JOIN sales_leads sl ON sl.prospect_id = p.id
      WHERE ${filters.join(' AND ')}
      ORDER BY p.icp_score DESC NULLS LAST, p.created_at DESC LIMIT ${limit}`,
     values,

@@ -921,6 +921,13 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 
 ## 12. Changelog
 
+### 2026-10-17 — every lead has a stored lifecycle (Lead Conductor)
+`list_leads` rows now carry `sales_lead_id`, `lifecycle_stage` (e.g. `finding_profile`, `needs_pick`, `ready_to_connect`,
+`request_pending`, `connected`, `messaged`, `followup_due`, `replied`), `lifecycle_actor` (`system` | `you` | `them` |
+`none`), `lifecycle_step` (one sentence for a person) and `lifecycle_blocker`, from the matching /sales-leads card.
+`crm_lead_lookup`'s `next_step` uses the same sentence once the lead has been evaluated, and its `sales_lead` block adds the
+same fields plus `automation_paused`. Nothing new to call; existing clients just see more fields.
+
 ### 2026-10-16 — contact details and who is connected on a sales lead
 
 **`crm_update_sales_lead`** takes `phone` and `website` next to `email` and `linkedin_url` ('' clears; the card always shows all four).

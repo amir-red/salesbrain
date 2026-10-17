@@ -236,7 +236,7 @@ export default function ProspectDetailPage() {
             <Section k="replied" n={7} title="Reply">
               {prospect.last_replied_at
                 ? <p className="text-xs">Replied {relativeTime(prospect.last_replied_at)}{prospect.reply_status ? ` · ${prospect.reply_status}` : ''}</p>
-                : <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{prospect.last_contacted_at ? `Waiting since ${relativeTime(prospect.last_contacted_at)}.` : 'Nothing sent yet.'} Reply detection is not automatic yet — mark it from the chat when they write back.</p>}
+                : <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{prospect.last_contacted_at ? `Waiting since ${relativeTime(prospect.last_contacted_at)}.` : 'Nothing sent yet.'} Replies on LinkedIn and email are picked up automatically within the hour, and the follow-up timer stops when they write back.</p>}
               {prospect.next_action_at && <p className="text-xs mt-1" style={{ color: 'var(--accent)' }}>Next action: {formatDate(prospect.next_action_at)}</p>}
             </Section>
 

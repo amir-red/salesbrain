@@ -8,6 +8,8 @@ export const SORTS: Record<LeadSort, string> = {
 };
 
 export const OPEN = "l.status NOT IN ('converted', 'archived')";
+/** Leads where a person must act (the Lead Conductor's verdict, core 068). Mirrors commands/conductor.needs_you. */
+export const NEEDS_YOU = `${OPEN} AND l.lifecycle_actor = 'you' AND COALESCE(l.lifecycle_stage, '') NOT IN ('paused', 'in_conversation', 'call_set')`;
 // Mirrors the kernel's ONE due predicate (commands/sales_leads.py::due_sql — change both): ping-by date reached, or
 // quiet for 14+ days but only for leads that are starred, high priority, or were contacted at least once.
 export const DUE = `${OPEN} AND (l.next_contact_at <= current_date OR (l.next_contact_at IS NULL AND (l.must_talk OR l.priority <= 2 OR l.last_contact_at IS NOT NULL) AND COALESCE(l.last_contact_at, l.created_at) < now() - interval '${QUIET_WARN_DAYS} days'))`;

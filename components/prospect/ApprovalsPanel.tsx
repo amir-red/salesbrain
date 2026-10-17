@@ -46,6 +46,8 @@ export default function ApprovalsPanel({ approvals, onChanged }: { approvals: Le
                 ? <div className="text-[10px] mb-0.5 inline-block px-1.5 py-0.5 rounded" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>🔗 Connection request → {ap.intro_lead_name || ap.person_name || 'lead'}</div>
                 : ap.kind === 'intro_request'
                 ? <div className="text-[10px] mb-0.5 inline-block px-1.5 py-0.5 rounded" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>🤝 Intro ask → to {ap.person_name || 'connector'}</div>
+                : ap.kind === 'followup'
+                ? <div className="text-[10px] mb-0.5 inline-block px-1.5 py-0.5 rounded" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>↩️ Follow-up</div>
                 : <div className="text-[10px] mb-0.5 inline-block px-1.5 py-0.5 rounded" style={{ background: 'var(--bg-card)', color: 'var(--text-muted)' }}>✉️ Cold message</div>}
               <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>via {ap.channel} · expires {relativeTime(ap.expires_at)}{ap.owner_name ? ` · for ${ap.owner_name}` : ''}</div>
               {ap.rationale && <div className="text-[11px] mt-1 italic" style={{ color: 'var(--text-muted)' }}>{ap.rationale}</div>}

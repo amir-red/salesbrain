@@ -3,6 +3,7 @@
 import { contactAge, firstName, linkedInLabel, linkedInState, myRole, nextContactLabel, PRIORITY_LEVELS, priorityLevel, ROLES, STATUS_COLOR, tierLabel, type Lead } from '@/lib/sales-leads';
 import { useEffect, useState } from 'react';
 import { Chevron, LinkedIn, Star } from './icons';
+import LifecycleLine from './LifecycleLine';
 
 /**
  * One aligned line per lead. Columns: rank · person · status · last / next
@@ -18,6 +19,8 @@ export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy, vie
   const li = linkedInState(lead);
   const liInfo = linkedInLabel(li, lead);
   const liColor = li === 'connected' ? 'var(--cat-blue)' : li === 'pending' || li === 'awaiting_approval' ? 'var(--yellow)' : 'var(--text-muted)';
+  // A profile the system found sits on the prospect (li_public_id) even before it reaches the lead card's own URL.
+  const liHref = lead.linkedin_url || (lead.li_public_id ? `https://www.linkedin.com/in/${lead.li_public_id}` : null);
   const age = contactAge(lead);
   const next = nextContactLabel(lead.next_contact_at);
   const prio = priorityLevel(lead.priority);
@@ -70,6 +73,7 @@ export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy, vie
           {lead.met_at && <span> · met at {lead.met_at}</span>}
           {lead.icp_name && !lead.met_at && <span> · {lead.icp_name}</span>}
         </div>
+        <LifecycleLine lead={lead} className="mt-0.5" />
         {lead.next_step && (
           <div className="text-[11px] truncate font-medium" style={{ color: 'var(--accent)' }} title={`Next step: ${lead.next_step}`}>→ {lead.next_step}</div>
         )}
@@ -128,8 +132,8 @@ export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy, vie
           style={{ color: lead.must_talk ? 'var(--orange)' : 'var(--text-muted)' }}>
           <Star filled={lead.must_talk} />
         </button>
-        {lead.linkedin_url ? (
-          <a href={lead.linkedin_url} target="_blank" rel="noopener noreferrer" title={`Open LinkedIn · ${liInfo.label}`} aria-label={`LinkedIn: ${liInfo.label}`}
+        {liHref ? (
+          <a href={liHref} target="_blank" rel="noopener noreferrer" title={`Open LinkedIn · ${liInfo.label}`} aria-label={`LinkedIn: ${liInfo.label}`}
             className="w-8 h-8 rounded-full inline-flex items-center justify-center" style={{ color: liColor }}><LinkedIn /></a>
         ) : <span className="w-8 h-8" />}
         <span className="w-6 h-8 inline-flex items-center justify-center" style={{ color: 'var(--text-muted)' }}>

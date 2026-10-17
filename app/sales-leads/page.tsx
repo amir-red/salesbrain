@@ -5,7 +5,7 @@ import Sidebar from '@/components/Sidebar';
 import LeadRow, { ROW_GRID } from '@/components/sales-leads/LeadRow';
 import LeadDetail from '@/components/sales-leads/LeadDetail';
 import { Search } from '@/components/sales-leads/icons';
-import { type Lead, type LeadCounts, type LeadSort, type LeadStatus, type LeadView, type RoleFilter, type TeamUser } from '@/lib/sales-leads';
+import { ACTOR_STYLE, LIFECYCLE_FUNNEL, LIFECYCLE_LABELS, type Lead, type LeadCounts, type LeadSort, type LeadStatus, type LeadView, type LifecycleStage, type RoleFilter, type TeamUser } from '@/lib/sales-leads';
 import ExportButton from '@/components/ExportButton';
 
 /**
@@ -19,6 +19,7 @@ import ExportButton from '@/components/ExportButton';
  */
 const WORK_VIEWS: { key: LeadView; label: string; hint: string }[] = [
   { key: 'working', label: 'Working', hint: 'Open leads, best first' },
+  { key: 'needs_you', label: 'Needs you', hint: 'Leads where a person must act: pick a profile, approve a card, answer a reply' },
   { key: 'due', label: 'Due', hint: 'Ping-by date reached, or quiet for 14+ days (starred, high-priority or already-contacted leads)' },
   { key: 'must', label: 'Must talk', hint: 'Starred' },
 ];
@@ -30,6 +31,8 @@ const STATUS_VIEWS: { key: LeadStatus | 'all'; label: string }[] = [
 export default function SalesLeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [counts, setCounts] = useState<LeadCounts | null>(null);
+  const [funnel, setFunnel] = useState<Record<string, number>>({});
+  const [stage, setStage] = useState<LifecycleStage | ''>('');   // funnel filter
   const [users, setUsers] = useState<TeamUser[]>([]);
   const [view, setView] = useState<LeadView>('working');
   const [sort, setSort] = useState<LeadSort>('priority');
@@ -48,6 +51,7 @@ export default function SalesLeadsPage() {
     setError(null);
     try {
       const params = new URLSearchParams({ view, sort });
+      if (stage) params.set('stage', stage);
       if (q.trim()) params.set('q', q.trim());
       if (role) { params.set('mine', '1'); if (role !== 'any') params.set('role', role); }
       const res = await fetch(`/api/sales-leads?${params}`);
@@ -55,6 +59,7 @@ export default function SalesLeadsPage() {
       if (!res.ok) throw new Error(data.error || 'Failed to load');
       setLeads(data.leads || []);
       setCounts(data.counts || null);
+      setFunnel(data.funnel || {});
       setUsers(data.users || []);
       setViewerId(data.viewer_id || null);
       setViewerIsAdmin(!!data.viewer_is_admin);
@@ -63,13 +68,15 @@ export default function SalesLeadsPage() {
     } finally {
       setLoading(false);
     }
-  }, [view, sort, q, role]);
+  }, [view, sort, q, role, stage]);
 
   // Deep links from the digest / chat: /sales-leads?view=due&mine=1[&role=responsible]
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
     const v = sp.get('view') as LeadView | null;
     if (v && (WORK_VIEWS.some((w) => w.key === v) || STATUS_VIEWS.some((w) => w.key === v))) setView(v);
+    const st = sp.get('stage') as LifecycleStage | null;
+    if (st && (LIFECYCLE_FUNNEL as string[]).includes(st)) setStage(st);
     if (sp.get('mine') === '1') setRole(sp.get('role') === 'responsible' ? 'responsible' : sp.get('role') === 'front' ? 'front' : 'any');
   }, []);
 
@@ -106,6 +113,12 @@ export default function SalesLeadsPage() {
     }
   }
 
+  // "Needs you" is a personal queue: open it and it shows MY leads (the Everyone / Mine filter can widen it again).
+  function selectView(v: LeadView) {
+    setView(v);
+    if (v === 'needs_you' && !role) setRole('any');
+  }
+
   function toggle(id: string) {
     setOpen((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   }
@@ -117,7 +130,7 @@ export default function SalesLeadsPage() {
     boxShadow: active ? 'var(--shadow-card)' : 'none',
   });
   const METRICS: { key: LeadView; label: string; color?: string }[] = [
-    { key: 'working', label: 'Working' }, { key: 'due', label: 'Due', color: 'var(--red)' }, { key: 'must', label: 'Must talk', color: 'var(--orange)' },
+    { key: 'working', label: 'Working' }, { key: 'needs_you', label: 'Needs you', color: 'var(--orange)' }, { key: 'due', label: 'Due', color: 'var(--red)' }, { key: 'must', label: 'Must talk', color: 'var(--orange)' },
     { key: 'replied', label: 'Replied', color: 'var(--cat-teal)' }, { key: 'converted', label: 'Converted', color: 'var(--green)' },
   ];
 
@@ -137,7 +150,7 @@ export default function SalesLeadsPage() {
             </div>
             <div className="flex">
               {METRICS.map((m, i) => (
-                <button key={m.key} type="button" onClick={() => setView(m.key)} title={`Show ${m.label.toLowerCase()}`}
+                <button key={m.key} type="button" onClick={() => selectView(m.key)} title={`Show ${m.label.toLowerCase()}`}
                   className="text-left py-1 pr-5 pl-5 first:pl-0 rounded-lg" style={{ borderLeft: i ? '1px solid var(--border)' : undefined, opacity: view === m.key ? 1 : 0.85 }}>
                   <div className="text-xl font-semibold tabular-nums leading-tight" style={{ color: m.color ?? 'var(--text)' }}>{counts ? counts[m.key as keyof LeadCounts] : '–'}</div>
                   <div className="z-eyebrow">{m.label}</div>
@@ -150,7 +163,7 @@ export default function SalesLeadsPage() {
           <div className="sticky top-0 z-10 -mx-6 px-6 py-3 flex flex-wrap items-center gap-3" style={{ background: 'var(--bg)' }}>
             <div className="inline-flex p-1 rounded-full" style={{ background: 'var(--bg-input)' }}>
               {WORK_VIEWS.map((v) => (
-                <button key={v.key} type="button" onClick={() => setView(v.key)} title={v.hint}
+                <button key={v.key} type="button" onClick={() => selectView(v.key)} title={v.hint}
                   className="px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors" style={seg(view === v.key)}>
                   {v.label}{counts ? <span className="ml-1.5 text-xs tabular-nums" style={{ color: 'var(--text-muted)' }}>{counts[v.key as keyof LeadCounts]}</span> : null}
                 </button>
@@ -186,6 +199,25 @@ export default function SalesLeadsPage() {
               title="Download what this list shows (current view, search and Mine filter) as Excel, with every track-record line" />
           </div>
 
+          {/* ── Funnel: where every working lead is. Click a stage to filter. ───────────────── */}
+          {Object.keys(funnel).length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 mb-3" role="group" aria-label="Lead lifecycle stages">
+              {LIFECYCLE_FUNNEL.filter((s) => funnel[s]).map((s) => (
+                <button key={s} type="button" aria-pressed={stage === s} onClick={() => { setStage(stage === s ? '' : s); if (view === 'needs_you') setView('working'); }}
+                  title={stage === s ? 'Clear the filter' : `Show only: ${LIFECYCLE_LABELS[s]}`}
+                  className="text-xs px-2.5 py-1 rounded-full inline-flex items-center gap-1.5 transition-colors"
+                  style={stage === s
+                    ? { background: 'var(--accent)', color: 'var(--accent-fg)', border: '1px solid var(--accent)' }
+                    : { background: 'var(--bg-card)', color: 'var(--text)', border: '1px solid var(--border)' }}>
+                  <span>{LIFECYCLE_LABELS[s]}</span>
+                  <span className="tabular-nums font-semibold" style={{ color: stage === s ? 'var(--accent-fg)' : ACTOR_STYLE.none.color }}>{funnel[s]}</span>
+                </button>
+              ))}
+              {funnel.not_evaluated ? <span className="text-xs" style={{ color: 'var(--text-muted)' }} title="The Lead Conductor checks every lead each hour">{funnel.not_evaluated} not checked yet</span> : null}
+              {stage && <button type="button" onClick={() => setStage('')} className="text-xs underline" style={{ color: 'var(--text-muted)' }}>clear filter</button>}
+            </div>
+          )}
+
           {/* ── List ─────────────────────────────────────────────── */}
           {error && (
             <div className="rounded-xl p-4 mb-4 text-sm flex items-center justify-between gap-3" style={{ background: 'color-mix(in srgb, var(--red) 8%, transparent)', color: 'var(--red)' }}>
@@ -211,10 +243,11 @@ export default function SalesLeadsPage() {
             ) : leads.length === 0 ? (
               <div className="py-16 text-center space-y-2">
                 <p className="text-sm font-medium">
-                  {view === 'due' ? 'Nobody is due.' : view === 'must' ? 'Nobody starred yet.' : q ? `No lead matches “${q}”.` : 'No leads here.'}
+                  {view === 'needs_you' ? 'Nothing is waiting for you.' : view === 'due' ? 'Nobody is due.' : view === 'must' ? 'Nobody starred yet.' : q ? `No lead matches “${q}”.` : 'No leads here.'}
                 </p>
                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                  {view === 'due' ? 'Set a “ping again on” date on a lead and it will show up here when it is time.'
+                  {view === 'needs_you' ? 'The system keeps moving the rest. When it needs a profile picked, a card approved or a reply answered, the lead shows up here.'
+                    : view === 'due' ? 'Set a “ping again on” date on a lead and it will show up here when it is time.'
                     : view === 'must' ? 'Star the people you must talk to with the star on each row.'
                     : role ? 'Nothing in that seat. Assign yourself as back or front office on a lead and it shows up here.'
                     : q ? 'Try a shorter search, or switch to Everything.' : 'Demo requests, event contacts and replies to outreach land here.'}

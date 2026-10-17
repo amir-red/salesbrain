@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { addDays, CHANNELS, JOURNEY_STAGES, linkedInLabel, type LinkedInLink, linkedInState, MANUAL_EVENT_KINDS, NEXT_STEP_PRESETS, ROLES, suggestNextStep, type EventKind, type Lead, type LeadEvent, type TeamUser } from '@/lib/sales-leads';
 import { EventIcon, External, LinkedIn, Mail, Phone } from './icons';
+import LifecyclePanel from './LifecyclePanel';
 
 /**
  * The expanded card, in the order Mateo reads it before a call: talking points
@@ -157,6 +158,9 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
               </button>
             )}
           </div>
+
+          {/* What the system is doing about this lead, and the controls that fit the stage */}
+          <LifecyclePanel lead={lead} onRefresh={() => { onRefresh?.(); loadEvents(); }} onConnect={connect} connecting={connecting} canConnect={canConnect} busy={busy} />
 
           {/* Journey — five steps, click to set; step 1 rates the intro, step 5 closes */}
           <div className="mb-4 rounded-xl p-3" style={{ background: 'var(--bg-input)' }}>
