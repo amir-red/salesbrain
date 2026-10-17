@@ -45,7 +45,7 @@ export type PendingWrite = {
   old_text?: string | null;
 };
 
-export type AgentSkill = { name: string; description: string; chars: number; updated_at: number; path: string };
+export type AgentSkill = { name: string; description: string; chars: number; updated_at: number; path: string; author?: string; written_at?: string };
 
 export type ProfileLearning = {
   profile: string;
@@ -88,7 +88,7 @@ export function loopHealth(st: LoopStatus): { ok: boolean; problems: string[] } 
   // crm_memory family (core agent_memories), which `surfaces[*].memory` reports.
   if (st.memory_enabled) problems.push('Hermes built-in memory is ON (memory.memory_enabled) — it shadows per-person memory');
   if (!st.review_enabled) problems.push('background review disabled (auxiliary.background_review.enabled)');
-  if (!st.skills_write_approval) problems.push('skill writes are NOT gated (skills.write_approval off)');
+  // Skill writes go live at once by decision (2026-10-17); role_policy guards the git-deployed skills and every write is audited.
   for (const key of ['telegram', 'api_server'] as const) {
     const s = st.surfaces[key];
     const missing = (['skills', 'memory'] as const).filter((t) => !s[t]);
