@@ -9,7 +9,7 @@
  * after release; bump when the API answers 404 for the version).
  */
 import { createSign } from 'crypto';
-import type { CampaignRow, DayRow } from '@/lib/marketing';
+import type { AdGroupRow, AdRow, CampaignDetail, CampaignRow, DayRow } from '@/lib/marketing';
 import { cached } from './cache';
 
 const SCOPE = 'https://www.googleapis.com/auth/adwords';
@@ -160,5 +160,100 @@ export async function googleCampaignMetrics(since: string, until: string): Promi
       byDay.set(r.segments.date, d);
     }
     return { currency, campaigns: [...byCampaign.values()], days: [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day)) };
+  });
+}
+
+// ─── Campaign drill-down ────────────────────────────────────────────────────
+
+const label = (s: string | null | undefined) =>
+  s ? s.toLowerCase().replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()) : null;
+const num = (x: unknown) => Number(x ?? 0) || 0;
+
+interface GMetrics { impressions?: string; clicks?: string; costMicros?: string; conversions?: number }
+const metricsOf = (m: GMetrics | undefined) => ({
+  spend: num(m?.costMicros) / 1e6, impressions: num(m?.impressions), clicks: num(m?.clicks), results: num(m?.conversions),
+});
+
+/** One campaign: setup, budget, daily series, every ad group and ad (incl. paused ones), metrics over the range. */
+export async function googleCampaignDetail(campaignId: string, since: string, until: string): Promise<CampaignDetail> {
+  if (!/^\d+$/.test(campaignId)) throw new Error('invalid Google Ads campaign id');
+  return cached(`google_ads:campaign:${campaignId}:${since}:${until}`, 10 * 60 * 1000, async () => {
+    const range = `segments.date BETWEEN '${since}' AND '${until}'`;
+    const [meta, daily, groupsAll, groupsM, adsAll, adsM] = await Promise.all([
+      searchStream<{ campaign: { name: string; status?: string; advertisingChannelType?: string; biddingStrategyType?: string };
+                     campaignBudget?: { amountMicros?: string }; customer?: { currencyCode?: string } }>(
+        `SELECT campaign.name, campaign.status, campaign.advertising_channel_type, campaign.bidding_strategy_type,
+                campaign_budget.amount_micros, customer.currency_code FROM campaign WHERE campaign.id = ${campaignId}`),
+      searchStream<{ segments: { date: string }; metrics: GMetrics }>(
+        `SELECT segments.date, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions
+           FROM campaign WHERE campaign.id = ${campaignId} AND ${range}`),
+      searchStream<{ adGroup: { id: string; name: string; status: string; type?: string } }>(
+        `SELECT ad_group.id, ad_group.name, ad_group.status, ad_group.type FROM ad_group
+          WHERE campaign.id = ${campaignId} AND ad_group.status != 'REMOVED'`),
+      searchStream<{ adGroup: { id: string }; metrics: GMetrics }>(
+        `SELECT ad_group.id, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM ad_group
+          WHERE campaign.id = ${campaignId} AND ${range}`),
+      searchStream<{ adGroup: { id: string; name?: string }; adGroupAd: { status: string; ad: {
+          id: string; name?: string; type?: string; finalUrls?: string[];
+          responsiveSearchAd?: { headlines?: { text?: string }[]; descriptions?: { text?: string }[] } };
+          policySummary?: { approvalStatus?: string } } }>(
+        `SELECT ad_group.id, ad_group.name, ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, ad_group_ad.status,
+                ad_group_ad.ad.final_urls, ad_group_ad.ad.responsive_search_ad.headlines,
+                ad_group_ad.ad.responsive_search_ad.descriptions, ad_group_ad.policy_summary.approval_status
+           FROM ad_group_ad WHERE campaign.id = ${campaignId} AND ad_group_ad.status != 'REMOVED'`),
+      searchStream<{ adGroupAd: { ad: { id: string } }; metrics: GMetrics }>(
+        `SELECT ad_group_ad.ad.id, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions
+           FROM ad_group_ad WHERE campaign.id = ${campaignId} AND ${range}`),
+    ]);
+    const c = meta[0];
+    if (!c) throw new Error('campaign not found in this Google Ads account');
+    const currency = c.customer?.currencyCode ?? 'EUR';
+    const campaignOn = c.campaign.status === 'ENABLED';
+
+    const gm = new Map(groupsM.map((r) => [r.adGroup.id, metricsOf(r.metrics)]));
+    const groups: AdGroupRow[] = groupsAll.map((r) => ({
+      id: r.adGroup.id, name: r.adGroup.name, status: label(r.adGroup.status) ?? r.adGroup.status,
+      active: campaignOn && r.adGroup.status === 'ENABLED', type: label(r.adGroup.type),
+      ...(gm.get(r.adGroup.id) ?? { spend: 0, impressions: 0, clicks: 0, results: 0 }),
+    }));
+    const groupById = new Map(groupsAll.map((r) => [r.adGroup.id, r.adGroup]));
+
+    const am = new Map<string, ReturnType<typeof metricsOf>>();
+    for (const r of adsM) {
+      const prev = am.get(r.adGroupAd.ad.id), m = metricsOf(r.metrics);
+      am.set(r.adGroupAd.ad.id, prev ? { spend: prev.spend + m.spend, impressions: prev.impressions + m.impressions,
+        clicks: prev.clicks + m.clicks, results: prev.results + m.results } : m);
+    }
+    const ads: AdRow[] = adsAll.map((r) => {
+      const ad = r.adGroupAd.ad, g = groupById.get(r.adGroup.id);
+      const heads = (ad.responsiveSearchAd?.headlines ?? []).map((h) => h.text).filter(Boolean) as string[];
+      const descs = (ad.responsiveSearchAd?.descriptions ?? []).map((h) => h.text).filter(Boolean) as string[];
+      const adOn = r.adGroupAd.status === 'ENABLED', groupOn = g?.status === 'ENABLED';
+      const status = !adOn ? label(r.adGroupAd.status) ?? r.adGroupAd.status
+        : !groupOn ? 'Enabled (ad group paused)' : !campaignOn ? 'Enabled (campaign paused)' : 'Enabled';
+      return {
+        id: ad.id, name: ad.name || heads.slice(0, 3).join(' | ') || label(ad.type) || `Ad ${ad.id}`,
+        detail: descs[0] ?? null, type: label(ad.type), status, active: adOn && groupOn && campaignOn,
+        approval: label(r.adGroupAd.policySummary?.approvalStatus), url: ad.finalUrls?.[0] ?? null,
+        group_id: r.adGroup.id, group_name: g?.name ?? r.adGroup.name ?? null,
+        ...(am.get(ad.id) ?? { spend: 0, impressions: 0, clicks: 0, results: 0 }),
+      };
+    });
+
+    const days = daily.map((r) => ({ day: r.segments.date, ...metricsOf(r.metrics) }))
+      .sort((a, b) => a.day.localeCompare(b.day))
+      .map(({ day, spend, impressions, clicks }) => ({ day, spend, impressions, clicks }));
+    const totals = daily.reduce((t, r) => { const m = metricsOf(r.metrics);
+      return { spend: t.spend + m.spend, impressions: t.impressions + m.impressions, clicks: t.clicks + m.clicks, results: t.results + m.results }; },
+      { spend: 0, impressions: 0, clicks: 0, results: 0 });
+
+    return {
+      provider: 'google_ads', campaign_id: campaignId, name: c.campaign.name,
+      status: label(c.campaign.status) ?? '', active: campaignOn, currency, since, until,
+      setup: [label(c.campaign.advertisingChannelType), label(c.campaign.biddingStrategyType)].filter(Boolean) as string[],
+      budget: c.campaignBudget?.amountMicros ? { amount: num(c.campaignBudget.amountMicros) / 1e6, currency, period: 'daily' } : null,
+      parent: null, totals, days, groups, ads,
+      notes: ['Results = conversions as Google reports them (not CRM leads).'],
+    };
   });
 }

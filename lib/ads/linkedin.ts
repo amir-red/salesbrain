@@ -10,7 +10,7 @@
  * version ~12 months after release — bump when it answers 426).
  */
 import pool from '@/lib/db';
-import type { CampaignRow, DayRow } from '@/lib/marketing';
+import type { AdRow, CampaignDetail, CampaignRow, DayRow } from '@/lib/marketing';
 import { cached } from './cache';
 
 const SCOPES = ['r_ads', 'r_ads_reporting'];
@@ -151,5 +151,95 @@ export async function linkedInCampaignMetrics(token: string, since: string, unti
       }
     }
     return { currency, campaigns: [...byCampaign.values()], days: [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day)) };
+  });
+}
+
+// ─── Campaign drill-down ────────────────────────────────────────────────────
+
+const human = (s: string | null | undefined) =>
+  s ? s.toLowerCase().replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()) : null;
+
+const HOLD_TEXT: Record<string, string> = {
+  CAMPAIGN_GROUP_STATUS_HOLD: 'campaign group paused', CAMPAIGN_STATUS_HOLD: 'campaign not active',
+  CAMPAIGN_END_DATE_HOLD: 'campaign ended', CAMPAIGN_START_DATE_HOLD: 'campaign not started',
+  CAMPAIGN_TOTAL_BUDGET_HOLD: 'total budget spent', ACCOUNT_SERVING_HOLD: 'account on hold',
+  UNDER_REVIEW: 'under review', REJECTED: 'rejected by review', CAMPAIGN_STOPPED: 'campaign stopped',
+};
+
+interface LiCreative {
+  id: string; name?: string; intendedStatus?: string; isServing?: boolean; servingHoldReasons?: string[];
+  content?: { reference?: string }; review?: { status?: string };
+}
+
+/** One campaign: setup, budget, its campaign group, daily series and every ad (creative) with metrics.
+ *  LinkedIn has no ad-set level — campaign group → campaign → ads. */
+export async function linkedInCampaignDetail(token: string, campaignId: string, since: string, until: string): Promise<CampaignDetail> {
+  if (!/^\d+$/.test(campaignId)) throw new Error('invalid LinkedIn campaign id');
+  return cached(`linkedin_ads:campaign:${campaignId}:${since}:${until}`, 10 * 60 * 1000, async () => {
+    const acct = accountId();
+    const urn = `urn%3Ali%3AsponsoredCampaign%3A${campaignId}`;
+    const range = `dateRange=(start:${dr(since)},end:${dr(until)})`;
+    const fields = 'fields=impressions,clicks,costInLocalCurrency,externalWebsiteConversions,oneClickLeads,pivotValues,dateRange';
+    const [camp, creatives, byAd, daily] = await Promise.all([
+      li<{ name?: string; status?: string; objectiveType?: string; costType?: string; campaignGroup?: string;
+           dailyBudget?: { amount?: string; currencyCode?: string }; totalBudget?: { amount?: string; currencyCode?: string } }>(
+        `/adAccounts/${acct}/adCampaigns/${campaignId}`, token),
+      li<{ elements?: LiCreative[] }>(`/adAccounts/${acct}/creatives?q=criteria&campaigns=List(${urn})&pageSize=100`, token),
+      li<{ elements?: AnalyticsElement[] }>(`/adAnalytics?q=analytics&pivot=CREATIVE&timeGranularity=ALL&${range}&campaigns=List(${urn})&${fields}`, token),
+      li<{ elements?: AnalyticsElement[] }>(`/adAnalytics?q=analytics&pivot=CAMPAIGN&timeGranularity=DAILY&${range}&campaigns=List(${urn})&${fields}`, token),
+    ]);
+    const notes: string[] = ['LinkedIn has no ad sets: campaign group → campaign → ads.',
+                             'Results = website conversions + Lead Gen form leads as LinkedIn reports them (not CRM leads).'];
+    let parent: CampaignDetail['parent'] = null;
+    const gid = camp.campaignGroup?.split(':').pop();
+    if (gid) {
+      try {
+        const g = await li<{ name?: string; status?: string }>(`/adAccounts/${acct}/adCampaignGroups/${gid}`, token);
+        parent = { label: 'Campaign group', name: g.name ?? `Group ${gid}`, status: human(g.status) ?? '' };
+      } catch { notes.push('campaign group name unavailable'); }
+    }
+    const groupOn = !parent || parent.status === 'Active';
+    const campaignOn = camp.status === 'ACTIVE' && groupOn;
+    const budget = camp.dailyBudget?.amount ? { amount: Number(camp.dailyBudget.amount), currency: camp.dailyBudget.currencyCode ?? 'USD', period: 'daily' as const }
+      : camp.totalBudget?.amount ? { amount: Number(camp.totalBudget.amount), currency: camp.totalBudget.currencyCode ?? 'USD', period: 'total' as const } : null;
+    const currency = budget?.currency ?? 'USD';
+
+    const m = (e?: AnalyticsElement) => ({ spend: Number(e?.costInLocalCurrency ?? 0), impressions: e?.impressions ?? 0,
+      clicks: e?.clicks ?? 0, results: (e?.externalWebsiteConversions ?? 0) + (e?.oneClickLeads ?? 0) });
+    const metricsByAd = new Map((byAd.elements ?? []).map((e) => [(e.pivotValues?.[0] ?? '').split(':').pop() ?? '', m(e)]));
+
+    const ads: AdRow[] = (creatives.elements ?? []).map((c) => {
+      const id = String(c.id).split(':').pop() ?? String(c.id);
+      const ref = c.content?.reference ?? null;
+      const holds = (c.servingHoldReasons ?? []).map((h) => HOLD_TEXT[h] ?? human(h)?.toLowerCase()).filter(Boolean);
+      const on = c.intendedStatus === 'ACTIVE';
+      const status = !on ? human(c.intendedStatus) ?? 'Unknown'
+        : c.isServing ? 'Serving' : `Not serving${holds.length ? `: ${holds.join(', ')}` : ''}`;
+      return {
+        id, name: c.name || `Sponsored post …${id.slice(-6)}`, detail: ref, type: ref?.includes(':share:') || ref?.includes(':ugcPost:') ? 'Sponsored post' : null,
+        status, active: on && Boolean(c.isServing), approval: human(c.review?.status),
+        url: ref && (ref.includes(':share:') || ref.includes(':ugcPost:')) ? `https://www.linkedin.com/feed/update/${ref}` : null,
+        group_id: null, group_name: null,
+        ...(metricsByAd.get(id) ?? { spend: 0, impressions: 0, clicks: 0, results: 0 }),
+      };
+    });
+
+    const days = (daily.elements ?? []).map((e) => {
+      const s = e.dateRange?.start;
+      const day = s ? `${s.year}-${String(s.month).padStart(2, '0')}-${String(s.day).padStart(2, '0')}` : since;
+      const x = m(e);
+      return { day, spend: x.spend, impressions: x.impressions, clicks: x.clicks, results: x.results };
+    }).sort((a, b) => a.day.localeCompare(b.day));
+    const totals = days.reduce((t, d) => ({ spend: t.spend + d.spend, impressions: t.impressions + d.impressions,
+      clicks: t.clicks + d.clicks, results: t.results + d.results }), { spend: 0, impressions: 0, clicks: 0, results: 0 });
+
+    return {
+      provider: 'linkedin_ads', campaign_id: campaignId, name: camp.name ?? `Campaign ${campaignId}`,
+      status: camp.status === 'ACTIVE' && !groupOn ? 'Active (campaign group paused)' : human(camp.status) ?? '',
+      active: campaignOn, currency, since, until,
+      setup: [human(camp.objectiveType), camp.costType].filter(Boolean) as string[],
+      budget, parent, totals, days: days.map(({ day, spend, impressions, clicks }) => ({ day, spend, impressions, clicks })),
+      groups: null, ads, notes,
+    };
   });
 }

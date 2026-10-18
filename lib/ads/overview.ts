@@ -16,7 +16,13 @@ export async function adsOverview(daysWanted: number, untilDay?: string): Promis
   if (!untilDay) until.setUTCDate(until.getUTCDate() - 1);                     // platforms close a day late
   const since = new Date(until); since.setUTCDate(since.getUTCDate() - (days - 1));
   const iso = (d: Date) => d.toISOString().slice(0, 10);
-  const range = { since: iso(since), until: iso(until) };
+  return adsOverviewRange(iso(since), iso(until));
+}
+
+/** Any inclusive [since, until] (YYYY-MM-DD). Today is allowed and is partial on both platforms. */
+export async function adsOverviewRange(since: string, until: string): Promise<AdsOverview> {
+  const days = Math.round((Date.parse(`${until}T00:00:00Z`) - Date.parse(`${since}T00:00:00Z`)) / 86_400_000) + 1;
+  const range = { since, until };
 
   const providers: ProviderReport[] = [];
   const now = new Date().toISOString();

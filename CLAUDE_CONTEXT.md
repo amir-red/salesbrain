@@ -1388,6 +1388,20 @@ zeami.io form, daily restated metrics, offline conversions back to the platforms
   (39 tools) — per-provider totals (spend, impressions, clicks, CTR, CPC, platform conversions / Lead Gen leads, spend on
   the last closed day and the day before), every campaign, optional daily rows — so the Zeami Omni stand-up bot can
   answer "ad spend yesterday / today + inquiries" (inquiries stay "as reported" until touchpoints exist).
+- **Round 1d (2026-10-18, app-only)** — Amir: any period via a calendar, quick ranges, channel-first table, a campaign
+  popup. `components/marketing/DateRangePicker.tsx` = Today · Yesterday · Last 7 days (the 7 closed days before today,
+  the default) · More ▾ (This / Last month, This / Last year) · a calendar popover (two date inputs + Apply); presets in
+  `lib/marketing.ts` (`presetRange`, `rangeLabel`, local dates). The range lives in the URL (`?range=last_7`, or
+  `?range=custom&from=&to=`), so a view is shareable; named presets recompute on load. `GET /api/marketing/overview` takes
+  `since&until` (≤ 1,100 days; `days=` still works) via `adsOverviewRange`. Table: Channel first (Google Ads / LinkedIn
+  Ads by name + campaign type), Campaign second; the "N campaigns · spend per day" line and its sparkline are gone. A
+  campaign name opens `components/marketing/CampaignModal.tsx` ← `GET /api/marketing/campaign?provider&id&since&until`
+  (`googleCampaignDetail` / `linkedInCampaignDetail`, 10-min cache): setup, budget, LinkedIn campaign group, 7 KPIs
+  (spend, impressions, clicks, CTR, CPC, results, cost per result), daily spend sparkline, tabs Ad groups (Google only —
+  LinkedIn has no ad-set level: group → campaign → ads) and Ads, filters All / Active / Not active + "with activity
+  only", sortable columns, ad group → its ads. "Active" = would serve now (the ad AND its parents on). LinkedIn ads are
+  sponsored posts without names: labelled "Sponsored post …<id>", linked to the post. Closes on ×, Escape, outside click.
+  Verified against both live accounts the same day (Search-DE: 3 ad groups / 3 RSAs; LinkedIn: 2 campaigns, 6 ads).
 - **Rounds 2–4 (planned, not built)**: core migrations 055 (`ad_accounts`, `ad_campaigns`, `ad_metrics_daily`),
   056 (`lead_touchpoints`), 057 (`agents.ads_sync` policy + `ad_conversion_outbox`); OAuth flows (Google: existing client
   + `adwords` scope + developer token + MCC id; LinkedIn: new app, Advertising API approval, `r_ads_reporting`);
