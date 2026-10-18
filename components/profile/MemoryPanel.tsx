@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import KnowledgeSection from '@/components/learning/KnowledgeSection';
 import type { Memory, MemoryKind, MemoryScope } from '@/lib/memory-panel';
 import { SOURCE_LABELS, statusLabel } from '@/lib/memory-panel';
 
@@ -106,6 +107,7 @@ export default function MemoryPanel() {
       <Section title={`Team notes (${team.length})`} empty="No shared notes yet. Share one of yours, or an admin adds one.">
         {team.map((m) => <Row key={m.id} m={m} busy={busy === m.id} />)}
       </Section>
+      <KnowledgeSection mode="personal" />
       {forgotten.length > 0 && (
         <details className="text-xs" style={{ color: 'var(--text-muted)' }}>
           <summary className="cursor-pointer">Forgotten ({forgotten.length})</summary>

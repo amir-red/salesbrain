@@ -13,7 +13,7 @@
 
 import type Anthropic from '@anthropic-ai/sdk';
 import pool from './db';
-import { anthropic, BEDROCK_ENABLED, BEDROCK_MODEL, GEMINI_API_KEY, GEMINI_ENABLED, GEMINI_MODEL } from './llm';
+import { anthropic, BEDROCK_ENABLED, BEDROCK_MODEL, GEMINI_API_KEY, GEMINI_ENABLED, GEMINI_MODEL, geminiModelFor } from './llm';
 import { geminiCreate } from './gemini';
 
 export interface UsageTag {
@@ -99,7 +99,16 @@ export async function createMessage(
 ): Promise<Anthropic.Message> {
   if (GEMINI_ENABLED) {
     try {
-      const response = await geminiCreate(params, { apiKey: GEMINI_API_KEY, model: GEMINI_MODEL });
+      const chosen = geminiModelFor(tag.feature);
+      let response;
+      try {
+        response = await geminiCreate(params, { apiKey: GEMINI_API_KEY, model: chosen });
+      } catch (err) {
+        if (chosen === GEMINI_MODEL) throw err;
+        // The strong / lite model failed: the main Gemini model next, Claude after that.
+        console.warn(`[llm] ${chosen} failed for ${tag.feature} (${err instanceof Error ? err.message : 'error'}); trying ${GEMINI_MODEL}`);
+        response = await geminiCreate(params, { apiKey: GEMINI_API_KEY, model: GEMINI_MODEL });
+      }
       recordUsage(response.model, response.usage, tag, 'gemini');
       return response;
     } catch (err) {
