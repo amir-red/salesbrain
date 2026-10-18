@@ -78,13 +78,13 @@ export default function CampaignModal({ provider, campaignId, campaignName, sinc
     </th>
   );
   const metricCells = (r: Metrics) => (<>
-    <td className="py-1.5 px-2 text-right tabular-nums">{fmtMoney(r.spend, ccy)}</td>
-    <td className="py-1.5 px-2 text-right tabular-nums">{fmtInt(r.impressions)}</td>
-    <td className="py-1.5 px-2 text-right tabular-nums">{fmtInt(r.clicks)}</td>
-    <td className="py-1.5 px-2 text-right tabular-nums">{pct(r.clicks, r.impressions)}</td>
-    <td className="py-1.5 px-2 text-right tabular-nums">{per(r.spend, r.clicks, ccy)}</td>
-    <td className="py-1.5 px-2 text-right tabular-nums">{fmtInt(r.results)}</td>
-    <td className="py-1.5 px-2 text-right tabular-nums">{per(r.spend, r.results, ccy)}</td>
+    <td className="py-1.5 px-2 text-right tabular-nums whitespace-nowrap">{fmtMoney(r.spend, ccy)}</td>
+    <td className="py-1.5 px-2 text-right tabular-nums whitespace-nowrap">{fmtInt(r.impressions)}</td>
+    <td className="py-1.5 px-2 text-right tabular-nums whitespace-nowrap">{fmtInt(r.clicks)}</td>
+    <td className="py-1.5 px-2 text-right tabular-nums whitespace-nowrap">{pct(r.clicks, r.impressions)}</td>
+    <td className="py-1.5 px-2 text-right tabular-nums whitespace-nowrap">{per(r.spend, r.clicks, ccy)}</td>
+    <td className="py-1.5 px-2 text-right tabular-nums whitespace-nowrap">{fmtInt(r.results)}</td>
+    <td className="py-1.5 px-2 text-right tabular-nums whitespace-nowrap">{per(r.spend, r.results, ccy)}</td>
   </>);
   const statusDot = (active: boolean, text: string) => (
     <span className="inline-flex items-center gap-1.5 text-[11px]" style={{ color: active ? 'var(--green)' : 'var(--text-muted)' }}>
