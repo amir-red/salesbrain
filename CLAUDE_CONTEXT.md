@@ -1788,6 +1788,25 @@ batch had one card, and its result came as a separate summary message.
   to the summary DM). Tool `crm_linkedin_connect_bundle` (mcp=None) for "approve all my requests"; persona rule. 171 tools.
 - Tests: `salesbrain-core/tests/test_connect_bundle_db.py` (real Postgres), `salesbrain-hermes/tests/test_connect_progress.py`.
 
+### 5.at One person per company for outreach (2026-10-18, core/hermes 0.52.3, migration 071)
+
+Amir, on Matthias's batch of 15 requests with three KIRCHHOFF Automotive managing directors: "for connecting no problem,
+but when outreaching DEFINITELY — flag that and confirm. Unless approved we never send to more than one person per company."
+- **Rule** (`policy/one_per_company.py`, pure): applies to first-touch `outreach` drafts only — not connection requests,
+  follow-ups, replies or intro asks. Same firm = same account, same domain, or the identifying words of one name inside the
+  other's (legal forms dropped, so the twin-account rows "KIRCHHOFF Automotive" / "… GmbH" match). Team-wide: a colleague's
+  delivered message counts. Writing again to someone we already messaged is a conversation, not a second person.
+- **Kernel** `commands/company_guard.company_conflict` finds who at the firm got a delivered message (`outreach_approvals`
+  sent outreach/followup, or an outbound non-web `interactions` row). `agents.flag_company_conflict` records it on the draft
+  (071 `company_conflict`) when it is filed (`propose_outreach`, `linkedin.propose_first_message`) and **again in the send
+  gate** (`outreach._company_hold`, before the approval is consumed), so a firm messaged after filing still holds the draft.
+  The override is `decide_outreach(..., 'approve_anyway')` (sets `company_override_at/by`); it also revives a draft the gate
+  held at send (status failed, never consumed). A plain approve never does.
+- **Surfaces**: the Telegram card gets a ⚠️ line and "👍 Send anyway / 👎 Skip"; a draft held at send time gets that keyboard
+  on the same card. `/agents` and the lead page list held drafts with the warning and a "Send anyway" (confirm prompt).
+  `crm_outreach_decide` takes `approve_anyway`; the persona says ask first, never choose it alone.
+- Tests: `salesbrain-core/tests/test_one_per_company{,_db}.py`, `salesbrain-hermes/tests/test_one_per_company_ring.py`.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
