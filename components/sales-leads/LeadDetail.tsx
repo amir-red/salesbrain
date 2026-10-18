@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { addDays, CHANNELS, JOURNEY_STAGES, linkedInLabel, type LinkedInLink, linkedInState, MANUAL_EVENT_KINDS, NEXT_STEP_PRESETS, ROLES, suggestNextStep, type EventKind, type Lead, type LeadEvent, type TeamUser } from '@/lib/sales-leads';
 import { EventIcon, External, LinkedIn, Mail, Phone } from './icons';
+import { EnrichProgress, useEnrich } from './EnrichPanel';
 import LifecyclePanel from './LifecyclePanel';
 
 /**
@@ -54,6 +55,7 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
   const d = lead.dossier;
   const Eyebrow = ({ children }: { children: React.ReactNode }) => <h4 className="z-eyebrow mt-5 mb-2 first:mt-0">{children}</h4>;
   const field = { background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: '0.5rem' } as const;
+  const enrich = useEnrich(lead, onRefresh);
   const liState = linkedInState(lead);
   const liInfo = linkedInLabel(liState, lead);
   // The back / front office seats (front falls back to the back office); teammates linked but not in a seat.
@@ -306,7 +308,17 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
         {/* ── Right: working this lead ───────────────────────────────── */}
         <aside className="rounded-2xl p-4 space-y-4 self-start" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
           <div>
-            <span className="z-eyebrow">Contact</span>
+            <div className="flex items-center justify-between">
+              <span className="z-eyebrow">Contact</span>
+              <button type="button" onClick={enrich.start} disabled={enrich.running || enrich.missing.length === 0}
+                title={enrich.missing.length === 0 ? 'LinkedIn, website and email are all filled in' : `Look up the missing ${enrich.missing.map((m) => m.label.toLowerCase()).join(', ')}. Phone is not searched.`}
+                className="text-[11px] px-3 py-1 rounded-full font-medium disabled:opacity-50 inline-flex items-center gap-1.5"
+                style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
+                {enrich.running && <span className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin inline-block" />}
+                {enrich.running ? 'Enriching…' : 'Enrich'}
+              </button>
+            </div>
+            {enrich.steps && <EnrichProgress steps={enrich.steps} running={enrich.running} fatal={enrich.fatal} onPick={enrich.pick} />}
             <div className="mt-1.5 space-y-1.5 text-xs">
               <ContactRow label="Website" value={lead.website} field="website" placeholder="add website" icon={<External width={13} height={13} />}
                 href={website} display={website ? website.replace(/^https?:\/\//, '').replace(/\/$/, '') : null} onSave={(v) => onPatch({ website: v })} />

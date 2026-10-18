@@ -66,6 +66,7 @@ const PER_TOOL_LIMITS: Record<string, number> = {
   crm_leads_finder_run: 5,
   crm_prospect_search: 5,
   crm_enrich_prospect: 20,
+  crm_enrich_lead: 20,
   crm_outreach_propose: 20,
   linkedin_connect_start: 10,
   suggest_icp: 20,          // one LLM call (+ maybe a site fetch) per invocation

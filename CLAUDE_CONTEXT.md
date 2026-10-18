@@ -1362,6 +1362,25 @@ Connect on LinkedIn (files the request for the OWNER's approval) and Mark as con
 schema lists `phone` / `website`. Not built: the next-step suggestion still looks only at the lead OWNER's account (a teammate's
 connection is shown, not yet used as "an in"), phone edits do not write back to `contacts.phone`.
 
+### 5.ai.12 Enrich button on the lead card (2026-10-18, feat/lead-enrich, core/hermes 0.52.3, no migration)
+
+Amir: "add an Enrich button next to Contact and show a progress bar — phone, let's leave it." **Steps** (core `policy/lead_enrich.py`,
+ring `lead_enrich.py`, tool `crm_enrich_lead {lead_id, step}`; 172 tools): LinkedIn profile → website → email, ONE server call per step
+so the bar is real. Each reuses the Enricher's own parts (`linkedin_find.find_profile`, `research_prospect` / `research_company`,
+`enrich_one(kinds=("email",))`) and runs as the PROSPECT'S OWNER (their LinkedIn account, their budgets) with an `agent_runs` row
+like `crm_enrich_prospect`. Differences: the LinkedIn step also runs when the owner has NO LinkedIn account (free web search only,
+a hit is offered as a candidate to confirm, never written unverified — Mateo has no account), the website step falls back to the
+company email domain (free-mail excluded), and the email step honours `email_credits_per_day`. **Kernel**:
+`sales_leads.prepare_enrichment` (authorises: admin / back office / front office / prospect owner; finds or CREATES the prospect for a
+lead that came in without one — 39 open leads, 37 of them the PEI Napa import — unscored, owned by the back office, linked via
+`raw_payload.prospect_id` so later sends mirror onto the same row) and `sync_enriched_contact` (copies contact email, profile and
+company website back onto the card, FILLING ONLY EMPTY FIELDS, one "enriched …" track-record line). **App**:
+`POST /api/sales-leads/[id]/enrich {step, public_identifier?}`, `components/sales-leads/EnrichPanel.tsx` (`useEnrich` + progress bar,
+skips steps whose field is already filled, a candidate list with "Use this" for ambiguous LinkedIn hits, which then retries the
+email); the button sits in the Contact header. Service MCP `crm_enrich_lead`. Phone is deliberately not a step: the only realistic
+source is a switchboard number, and the NRW list is no-calls. Not built: bulk enrich from the list, writing a found phone, using a
+teammate's LinkedIn account when the owner has none.
+
 ### 5.aj Marketing — paid ads inside the CRM (2026-10-13, feat/marketing, round 1 app-only)
 
 Amir: "we are starting ads in Google Ads and LinkedIn Ads — add a marketing menu, connectors, pull our performance
