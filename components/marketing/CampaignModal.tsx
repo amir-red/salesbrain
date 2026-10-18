@@ -140,7 +140,10 @@ export default function CampaignModal({ provider, campaignId, campaignName, sinc
             {data.days.length > 1 && (
               <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--text-muted)' }}>
                 <span>Spend per day</span>
-                <Sparkline points={data.days.map((d) => ({ day: d.day, n: Math.round(d.spend * 100) / 100, title: `${d.day}: ${fmtMoney(d.spend, ccy)} · ${fmtInt(d.clicks)} clicks` }))} label="spend / day" />
+                <div className="flex-1 max-w-xl">
+                  <Sparkline points={data.days.map((d) => ({ day: d.day, n: Math.round(d.spend * 100) / 100, title: `${d.day}: ${fmtMoney(d.spend, ccy)} · ${fmtInt(d.clicks)} clicks` }))} />
+                </div>
+                <span>{rangeLabel(data.days[0].day, data.days[data.days.length - 1].day)}</span>
               </div>
             )}
 
