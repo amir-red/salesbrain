@@ -359,7 +359,8 @@ run by design — so an established account's existing connections were never st
   `LIKE '%slug%'`, which was a 13k-row seq scan AND a correctness bug (`%amir%` matches `amir-hassan`);
   `deploy-server.sh` had `VERSION=0.22.0` against pyproject 0.27.0 and never scp'd `leads_finder.py`,
   `enricher.py`, `outreach_queue.py` or `grant_signals.py` — their systemd units pointed at absent files.
-- Disconnecting LinkedIn purges that owner's LinkedIn-derived edges.
+- ~~Disconnecting LinkedIn purges that owner's LinkedIn-derived edges.~~ Reversed 2026-10-18 (0.52.1, §5.ar): a disconnect
+  keeps the graph and the whole mirror; a reconnect adopts them.
 
 ### 5.ab Warm-intro Phase 2 — colleague identity + the second hop (2026-09-08, core/hermes 0.31.0, migration 040)
 
@@ -1751,6 +1752,26 @@ falls to Bedrock within a minute; deploy verify refuses > 120). 3.8 Flash prices
 - Migration number: 068 is claimed by the lead-lifecycle workspace; this feature used 069.
 - Not built: an Automations tab on /profile, per-person skill scopes (Hermes has one skills dir per profile), editing an automation's schedule in place
   (remove and create), web-chat automations (delivery is Telegram).
+
+### 5.ar A LinkedIn reconnect keeps everything (2026-10-18, core/hermes 0.52.1, migration 070)
+
+Matthias disconnected and reconnected (to pick up his new Sales Navigator subscription, then again to move the session
+from FR to DE). Each reconnect made a NEW `linkedin_accounts` row, and the old one kept the request ledger (114, 85
+pending), the connections (78), the sync state and the conversations (37), so the panel said "0 conversations synced",
+every lead looked "not invited" again (duplicate requests risk) and the disconnect had purged the graph edges. Amir:
+"remove that rule — and in such occasions add a label that it's from the old account."
+- **Disconnect** (`commands/linkedin.revoke_account`) no longer purges `person_edges`; nothing is deleted.
+- **Reconnect** (`link_account` → `_adopt_previous`): a revoked account of the same owner and the SAME LinkedIn member
+  (provider_id or slug) hands its invitations, relations and `graph_sync_state` to the new row (keyed by member id, so they
+  move as they are; a member already on the new row keeps the new one) and gets `replaced_by` (070, backfilled).
+- **Conversations** carry the provider's chat id, which is NEW on a new provider account (same attendee, different id —
+  verified on Matthias's). `adopt_previous_threads(actor, chats)` runs at the top of every `linkedin_sync.py` account pass:
+  a thread moves when its attendee has a chat on the new account that is not mirrored yet, and takes the new chat id.
+  Leftovers stay on the old row; `account_status.previous_threads` counts them and `/profile → LinkedIn` shows an
+  **Old account** label ("N conversations from your previous connection").
+- Matthias's data was moved by hand before the code shipped (backup `~/.cache/salesbrain/backups/matthias-reconnect-*`),
+  and his edges were rebuilt from stored threads + relations with no LinkedIn calls (37 + 78).
+- Tests: `salesbrain-core/tests/test_linkedin_reconnect_db.py` (real Postgres, opt-in).
 
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 

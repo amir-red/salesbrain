@@ -15,6 +15,7 @@ interface StatusState {
   };
   threads?: number;
   awaiting_you?: number;
+  previous_threads?: number;
   note?: string;
 }
 
@@ -152,6 +153,16 @@ function LinkedInSettings() {
                 {typeof state.awaiting_you === 'number' && ` · ${state.awaiting_you} awaiting your reply`}
                 {acc.last_synced_at && ` · last synced ${new Date(acc.last_synced_at).toLocaleString()}`}
               </p>
+              {(state.previous_threads ?? 0) > 0 && (
+                <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
+                  <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded mr-1.5"
+                        style={{ background: 'color-mix(in srgb, var(--yellow) 14%, transparent)', color: 'var(--yellow)' }}>
+                    Old account
+                  </span>
+                  {state.previous_threads} conversations from your previous connection. They move over as
+                  the sync finds the same person on this account; the rest stay here as history.
+                </p>
+              )}
               {acc.proxy_country && (
                 <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>
                   Session egress: <span className="font-mono">{acc.proxy_country.toUpperCase()}</span>.
