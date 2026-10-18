@@ -1773,6 +1773,21 @@ every lead looked "not invited" again (duplicate requests risk) and the disconne
   and his edges were rebuilt from stored threads + relations with no LinkedIn calls (37 + 78).
 - Tests: `salesbrain-core/tests/test_linkedin_reconnect_db.py` (real Postgres, opt-in).
 
+### 5.as One tap approves all waiting connection requests, with a live progress card (2026-10-18, core/hermes 0.52.2)
+
+Amir: "can I accept 15 connection requests at once in Telegram, you send them at human pace, and edit the message as a
+progress bar 1/15 … 15/15". Before: "Queue next for approval" filed 15 single cards (15 taps); only the Conductor's daily
+batch had one card, and its result came as a separate summary message.
+- **Kernel** `conductor.bundle_pending_connects(owner)` groups every pending, unexpired, ungrouped `connect` approval of
+  the owner under one `connect_batches` row (joins the one already waiting; the unique pending index allows one per
+  person) and returns ONE `connect_batch_card` event. `invitations.propose_connect_batch` uses it whenever it files more
+  than one, so the list page's button and the chat tool post a single card. Single cards keep working; each request is
+  still its own approval, cap check and once-only gate. `decide_connect_batch` hands back the card's chat/message id.
+- **Ring** `connect_batch.run_filed_batch(progress=(chat, msg))` edits the card after every person:
+  `▰▰▰▱▱▱▱▱▱▱ 3/15` + ✅/⚠️ lines, pace 8–16 s, and the card ends as the summary (no second message; a failed edit falls back
+  to the summary DM). Tool `crm_linkedin_connect_bundle` (mcp=None, 172 tools) for "approve all my requests"; persona rule.
+- Tests: `salesbrain-core/tests/test_connect_bundle_db.py` (real Postgres), `salesbrain-hermes/tests/test_connect_progress.py`.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
