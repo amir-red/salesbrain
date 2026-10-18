@@ -1807,6 +1807,39 @@ but when outreaching DEFINITELY — flag that and confirm. Unless approved we ne
   `crm_outreach_decide` takes `approve_anyway`; the persona says ask first, never choose it alone.
 - Tests: `salesbrain-core/tests/test_one_per_company{,_db}.py`, `salesbrain-hermes/tests/test_one_per_company_ring.py`.
 
+### 5.au Smarter turns: "Recently" block, knowledge base, self-improvement, model per task (2026-10-18, feat/bot-knowledge, migration 072)
+
+Amir, after "how many connection requests did I just receive" got three LinkedIn tools and the wrong meaning (he meant the 15
+approval cards just posted), and "what is a graph sync" made the bot browse the server. Measured before: ~20k input tokens on a
+turn's first call, median 6 model calls per turn (max 39), ~140k input tokens per turn, 79% cached. Plan
+`~/.claude/plans/bot-context-knowledge-models.md`. Amir chose: live context, a knowledge base, the bot improves itself, Argon for deep work.
+- **"Recently" block** (`commands/recent.py`, injected by `memory_provider.prefetch` above the person's notes, user-message side so the
+  prompt cache holds): cards waiting by kind with first expiry, batches filed in the last day (with the list), decisions, the last 6
+  automatic messages (`notification_log`), the person's automations, replies / follow-ups / due sales leads. Relative times, one pooled
+  connection, never raises. Answers "what did I just get" with zero tools. Cards are read from `outreach_approvals` by owner.
+- **Knowledge base** (core 072 `knowledge_entries`): concept | message | phrase | procedure, team or personal, `tool_hint` = the one tool
+  that answers it. Retrieval = Postgres full-text (`simple` dictionary, OR of prefix terms; `policy/knowledge.terms` drops EN/DE stopwords and
+  trims plurals), the person's own entries first, top 3 (`agents.knowledge.inject_max`) put into the turn as "Relevant knowledge"; no model
+  call, no tool call. 57 seed entries (`knowledge_seed.py`, loaded insert-only by deploy, so edits stick). Eval: `knowledge_eval.py`, 30 real
+  questions -> expected entry in top 3; 100% at build time. A ring test asserts every seed `tool_hint` is a registered tool.
+- **Self-improvement, no approval** (Amir's rule; live at once, audited, archived not deleted): (1) in the turn, a correction of meaning ->
+  `crm_knowledge_learn` (personal phrasing or team knowledge; persona "Learn"); (2) `agent_turn_log` (Hermes `post_llm_call` hook,
+  `turn_log.py`: question, answer, the turn's tools, errors, model calls, injected entry ids); (3) nightly `knowledge-review` cron (03:30,
+  `--no-agent`, `knowledge_review.py`): last day's misses (>3 model calls, a tool error, or a next message starting like a correction) ->
+  Argon writes <= 5 team entries (`source='review'`, hints validated); housekeeping archives seed/review entries unused 60 days and trims the
+  turn log (30 d); one operator line: learned N, model calls per turn (median/avg), eval hit rate. Tools `crm_knowledge_search` / `_learn` /
+  `_forget` (family crm_memory); search works inside automations, learn/forget do not. Unattended and SERVICE writes are refused except the review's.
+- **Model per task** (Hermes has no per-turn router; public seams used): chat = `gemini-3.8-flash`; helpers (`auxiliary.salesbrain_aux`) and plain
+  reminders (`crm_automation_create reminder: true`, job pinned, no tools) = `gemini-3.1-flash-lite`; deep work = `gemini-4-argon` via
+  `delegation.model` (persona: drafting, analysis, multi-step plans -> `delegate_task`), the routines `ops:outreach:daily` / `ops:supervisor:daily`
+  / `ops:learn:weekly` (pinned with `hermes cron edit --model`), the nightly review (`converse(model=)`), and app drafts (`geminiModelFor`:
+  intro / follow-up drafts, ICP suggest / optimize, account research; translate and contact style on Flash-Lite; a failure falls to Flash,
+  then Claude). Admins can force one turn: `/model gemini-4-argon --once`. Prices in 072: Argon 2 / 10 per MTok until 2026-11-30, DOUBLING
+  2026-12-01 (update the row); Flash-Lite 0.25 / 1.50.
+- **App**: `/admin/learning` Knowledge section (search, add, edit, archive, author, uses) and `/profile -> Memory` own entries;
+  `GET/POST /api/knowledge` -> app-only RPCs `knowledge_list` / `knowledge_save` / `knowledge_archive`.
+- Not built: point 1 of the plan (fewer, question-shaped tools), embeddings (pgvector) if keyword retrieval weakens, a per-turn tool-call cap.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
