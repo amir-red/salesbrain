@@ -7,6 +7,7 @@ import { ActivityList } from '@/components/icp/IcpLeads';
 import { RUN_STATUS_COLOR } from '@/lib/icp';
 import type { AgentRun } from '@/lib/icp';
 import { relativeTime } from '@/lib/time';
+import { type CompanyConflict, isHeld } from '@/lib/company-conflict';
 
 interface AgentDef {
   name: string; label: string; description: string | null; kind: 'timer' | 'routine'; schedule: string | null;
@@ -21,6 +22,7 @@ interface PausedAccount {
 }
 interface Payload { is_admin: boolean; kill_switch: boolean; agents: AgentDef[]; paused_accounts: PausedAccount[] }
 interface Approval {
+  company_conflict?: CompanyConflict | null; company_override_at?: string | null;
   id: string; status: string; channel: string; subject: string | null; message: string; rationale: string | null;
   created_at: string; expires_at: string; person_name: string | null; title: string | null; company: string | null;
   icp_score: number | null; icp_name: string | null; owner_name: string | null;
@@ -57,8 +59,9 @@ export default function AgentsPage() {
       await load();
     } finally { setBusy(null); }
   };
-  const decide = async (id: string, decision: 'approve' | 'reject') => {
+  const decide = async (id: string, decision: 'approve' | 'reject' | 'approve_anyway') => {
     if (decision === 'approve' && !confirm('Send this message now? It goes through the policy gate (quiet hours, caps) and is delivered as you.')) return;
+    if (decision === 'approve_anyway' && !confirm('Someone at this company was already messaged. Send this one anyway?')) return;
     setBusy(id); setDecideNote(null);
     try {
       const res = await fetch('/api/agents/approvals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ approval_id: id, decision }) });
@@ -218,10 +221,11 @@ export default function AgentsPage() {
                     <div className="font-semibold">{ap.kind === 'proposal' ? (ap.subject || 'Proposal') : (ap.person_name || '—')} <span className="font-normal text-xs" style={{ color: 'var(--text-muted)' }}>{[ap.title, ap.company].filter(Boolean).join(' · ')}</span></div>
                     <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{ap.kind === 'proposal' ? '' : `via ${ap.channel}`}{ap.icp_score !== null && ap.icp_score !== undefined ? ` · fit ${ap.icp_score}` : ''}{ap.icp_name ? ` · ${ap.icp_name}` : ''}{ap.owner_name ? ` · for ${ap.owner_name}` : ''} · expires {relativeTime(ap.expires_at)}</div>
                     {ap.rationale && <div className="text-[11px] mt-1 italic" style={{ color: 'var(--text-muted)' }}>{ap.rationale}</div>}
+                    {isHeld(ap) && <div className="text-[11px] mt-1" style={{ color: 'var(--orange)' }}>{ap.company_conflict?.warning}</div>}
                   </div>
                   <div className="flex gap-2 shrink-0">
                     <button onClick={() => decide(ap.id, 'reject')} disabled={busy === ap.id} className="px-3 py-1.5 rounded-lg text-xs disabled:opacity-40" style={{ border: '1px solid var(--border)', color: 'var(--text)' }}>👎 Skip</button>
-                    <button onClick={() => decide(ap.id, 'approve')} disabled={busy === ap.id} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--green)', color: 'var(--accent-fg)' }}>{busy === ap.id ? 'Working…' : ap.kind === 'proposal' ? '👍 Do it' : '👍 Send'}</button>
+                    <button onClick={() => decide(ap.id, isHeld(ap) ? 'approve_anyway' : 'approve')} disabled={busy === ap.id} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--green)', color: 'var(--accent-fg)' }}>{busy === ap.id ? 'Working…' : ap.kind === 'proposal' ? '👍 Do it' : isHeld(ap) ? '👍 Send anyway' : '👍 Send'}</button>
                   </div>
                 </div>
                 {ap.subject && ap.kind !== 'proposal' && <div className="text-xs"><b>Subject:</b> {ap.subject}</div>}

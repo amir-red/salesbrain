@@ -38,7 +38,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     pool.query(
       `SELECT oa.id, oa.status, oa.kind, oa.channel, oa.subject, oa.message, oa.rationale, oa.created_at,
               oa.decided_at, oa.sent_at, oa.expires_at, oa.person_id, oa.owner_user_id,
-              pe.full_name AS person_name, lc.full_name AS intro_lead_name, u.name AS owner_name
+              pe.full_name AS person_name, lc.full_name AS intro_lead_name, u.name AS owner_name,
+              oa.company_conflict, oa.company_override_at
          FROM outreach_approvals oa
          LEFT JOIN people pe ON pe.id = oa.person_id
          LEFT JOIN prospects ip ON ip.id = oa.intro_for_prospect_id

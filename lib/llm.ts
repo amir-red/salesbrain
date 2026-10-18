@@ -44,6 +44,17 @@ export const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || process.env.GOOGLE_
 export const GEMINI_ENABLED = Boolean(GEMINI_API_KEY);
 /** Thinking model: calls here are infrequent and quality matters more than the last second. */
 export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+/** Model per task (2026-10-18): deep drafting / research on the strong model, small helpers on Flash-Lite. */
+export const GEMINI_STRONG_MODEL = process.env.GEMINI_STRONG_MODEL || 'gemini-4-argon';
+export const GEMINI_LITE_MODEL = process.env.GEMINI_LITE_MODEL || 'gemini-3.1-flash-lite';
+const STRONG_FEATURES = new Set(['intro_draft', 'followup_draft', 'icp_suggest', 'icp_optimize', 'account_research']);
+const LITE_FEATURES = new Set(['translate', 'contact_style']);
+/** The Gemini model for an app feature; unknown features use the main model. */
+export function geminiModelFor(feature: string | undefined): string {
+  if (feature && STRONG_FEATURES.has(feature)) return GEMINI_STRONG_MODEL;
+  if (feature && LITE_FEATURES.has(feature)) return GEMINI_LITE_MODEL;
+  return GEMINI_MODEL;
+}
 
 /** Primary model for every call in the app. Never hardcode an id at a call site. */
 export const MODEL = GEMINI_ENABLED ? GEMINI_MODEL : BEDROCK_MODEL;

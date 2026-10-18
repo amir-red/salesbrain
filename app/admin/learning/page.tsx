@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
 import SectionCard from '@/components/panel/SectionCard';
 import StatTile from '@/components/panel/StatTile';
+import KnowledgeSection from '@/components/learning/KnowledgeSection';
 import {
   fmtAge, loopHealth, originLabel, profileLabel, SURFACE_LABELS,
 } from '@/lib/learning-panel';
@@ -130,6 +131,8 @@ export default function LearningAdminPage() {
                         sub={data.profiles[0]?.status.review_model || 'background review runs on the chat model'} />
             </div>
           )}
+
+          <KnowledgeSection mode="all" />
 
           {team && <TeamMemorySection team={team} busy={busy} decide={decideTeam} />}
 

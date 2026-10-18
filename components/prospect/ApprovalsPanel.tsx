@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { relativeTime } from '@/lib/time';
+import { type CompanyConflict, isHeld } from '@/lib/company-conflict';
 
 export interface LeadApproval {
   id: string; status: string; kind?: string | null; channel: string; subject: string | null; message: string;
   rationale: string | null; created_at: string; decided_at?: string | null; sent_at?: string | null; expires_at: string;
   person_name: string | null; intro_lead_name?: string | null; owner_name?: string | null;
+  company_conflict?: CompanyConflict | null; company_override_at?: string | null;
 }
 
 /**
@@ -18,20 +20,21 @@ export default function ApprovalsPanel({ approvals, onChanged }: { approvals: Le
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
-  const decide = async (id: string, decision: 'approve' | 'reject') => {
+  const decide = async (id: string, decision: 'approve' | 'reject' | 'approve_anyway') => {
+    if (decision === 'approve_anyway' && !confirm('Someone at this company was already messaged. Send this one anyway?')) return;
     setBusy(id); setNote(null);
     try {
       const res = await fetch('/api/agents/approvals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ approval_id: id, decision }) });
       const out = await res.json();
       if (!res.ok || out.error) setNote(out.error || 'Failed');
-      else if (decision === 'approve') setNote(out.sent ? 'Sent.' : `Not sent: ${out.note || out.status || 'see /agents'}`);
+      else if (decision !== 'reject') setNote(out.sent ? 'Sent.' : `Not sent: ${out.note || out.status || 'see /agents'}`);
       else setNote('Skipped.');
       onChanged();
     } finally { setBusy(null); }
   };
 
-  const pending = approvals.filter((a) => a.status === 'pending');
-  const past = approvals.filter((a) => a.status !== 'pending');
+  const pending = approvals.filter((a) => a.status === 'pending' || (a.status === 'failed' && isHeld(a)));
+  const past = approvals.filter((a) => !pending.includes(a));
   const statusColor = (s: string) => s === 'sent' ? 'var(--green)' : s === 'failed' || s === 'rejected' || s === 'expired' ? 'var(--red)' : 'var(--text-muted)';
 
   return (
@@ -51,10 +54,11 @@ export default function ApprovalsPanel({ approvals, onChanged }: { approvals: Le
                 : <div className="text-[10px] mb-0.5 inline-block px-1.5 py-0.5 rounded" style={{ background: 'var(--bg-card)', color: 'var(--text-muted)' }}>✉️ Cold message</div>}
               <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>via {ap.channel} · expires {relativeTime(ap.expires_at)}{ap.owner_name ? ` · for ${ap.owner_name}` : ''}</div>
               {ap.rationale && <div className="text-[11px] mt-1 italic" style={{ color: 'var(--text-muted)' }}>{ap.rationale}</div>}
+              {isHeld(ap) && <div className="text-[11px] mt-1" style={{ color: 'var(--orange)' }}>{ap.company_conflict?.warning}</div>}
             </div>
             <div className="flex gap-2 shrink-0">
               <button onClick={() => decide(ap.id, 'reject')} disabled={busy === ap.id} className="px-2.5 py-1 rounded-lg text-xs disabled:opacity-40" style={{ border: '1px solid var(--border)', color: 'var(--text)' }}>👎 Skip</button>
-              <button onClick={() => decide(ap.id, 'approve')} disabled={busy === ap.id} className="px-2.5 py-1 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--green)', color: 'var(--accent-fg)' }}>{busy === ap.id ? 'Working…' : '👍 Send'}</button>
+              <button onClick={() => decide(ap.id, isHeld(ap) ? 'approve_anyway' : 'approve')} disabled={busy === ap.id} className="px-2.5 py-1 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--green)', color: 'var(--accent-fg)' }}>{busy === ap.id ? 'Working…' : isHeld(ap) ? '👍 Send anyway' : '👍 Send'}</button>
             </div>
           </div>
           {ap.subject && <div className="text-xs"><b>Subject:</b> {ap.subject}</div>}
