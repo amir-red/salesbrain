@@ -1785,7 +1785,7 @@ batch had one card, and its result came as a separate summary message.
   still its own approval, cap check and once-only gate. `decide_connect_batch` hands back the card's chat/message id.
 - **Ring** `connect_batch.run_filed_batch(progress=(chat, msg))` edits the card after every person:
   `▰▰▰▱▱▱▱▱▱▱ 3/15` + ✅/⚠️ lines, pace 8–16 s, and the card ends as the summary (no second message; a failed edit falls back
-  to the summary DM). Tool `crm_linkedin_connect_bundle` (mcp=None, 172 tools) for "approve all my requests"; persona rule.
+  to the summary DM). Tool `crm_linkedin_connect_bundle` (mcp=None) for "approve all my requests"; persona rule. 171 tools.
 - Tests: `salesbrain-core/tests/test_connect_bundle_db.py` (real Postgres), `salesbrain-hermes/tests/test_connect_progress.py`.
 
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
