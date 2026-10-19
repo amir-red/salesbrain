@@ -1917,7 +1917,7 @@ landed; the card could not draft a message.
 - Not built: email drafting from the card, a teammate (non-owner) filing a draft for the owner's approval, logging emails sent
   from Gmail.
 
-### 5.aw A LinkedIn URL on the lead card reaches its prospect (2026-10-19, core/hermes 0.53.2)
+### 5.aw A LinkedIn URL on the lead card reaches its prospect (2026-10-19, core/hermes 0.54.1)
 
 David Rowley's card showed `in/davidrowley` (Mateo's Napa import) while the line said "Finding LinkedIn": the URL lived on
 `sales_leads.linkedin_url`, but every agent reads `prospects.linkedin_public_id`, which was only written when the Conductor
