@@ -452,6 +452,41 @@ export const SERVICE_TOOLS: ToolDef[] = [
     needsOwner: true,
   },
   {
+    name: 'crm_sales_lead_add',
+    description:
+      "Add ONE person to sales-leads (a business card, a name from a call) for the employee. It gets its prospect at once, " +
+      "so LinkedIn lookup and enrichment run. A duplicate (same email, LinkedIn or name at the company) is refused and the " +
+      "existing lead named. responsible / front = teammates by name (default back office: the employee).",
+    inputSchema: obj(
+      {
+        full_name: { type: 'string' }, company: { type: 'string' }, title: { type: 'string' },
+        email: { type: 'string' }, phone: { type: 'string' }, linkedin_url: { type: 'string' }, website: { type: 'string' },
+        met_at: { type: 'string', description: 'where we met' }, notes: { type: 'string' },
+        priority: { type: 'integer', description: '1 (top) … 10' }, must_talk: { type: 'boolean' },
+        responsible: { type: 'string' }, front: { type: 'string' }, list_name: { type: 'string' },
+      },
+      ['full_name'],
+    ),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_sales_leads_import',
+    description:
+      "Import a list into sales-leads (≤500 rows per call): rows of {full_name or first_name + last_name, company, title, " +
+      "email, phone, linkedin_url, website, met_at, notes, priority, must_talk}; list_name, met_at, priority, responsible, " +
+      "front fill empty fields. Duplicates are skipped and reported. Call with dry_run=true first, show the counts, then " +
+      "dry_run=false. Every created lead gets its prospect.",
+    inputSchema: obj(
+      {
+        rows: { type: 'array', items: { type: 'object' } },
+        list_name: { type: 'string' }, met_at: { type: 'string' }, priority: { type: 'integer' },
+        responsible: { type: 'string' }, front: { type: 'string' }, dry_run: { type: 'boolean', default: true },
+      },
+      ['rows'],
+    ),
+    needsOwner: true,
+  },
+  {
     name: 'crm_update_sales_lead',
     description:
       "Work a sales-leads row the way the dashboard does: status new | contacted | replied | archived; a dated " +
@@ -1286,7 +1321,7 @@ const PASSTHROUGH = new Set([
   'crm_linkedin_revoke', 'crm_agent_activity', 'crm_agent_status', 'crm_linkedin_quota', 'crm_outreach_kpis',
   'crm_graph_status', 'crm_graph_edges', 'crm_graph_sync',
   'crm_pipeline_summary', 'crm_team_kpis', 'crm_lead_lookup', 'crm_lead_note', 'crm_followups_due',
-  'crm_list_sales_leads', 'crm_get_sales_lead', 'crm_update_sales_lead', 'crm_edit_sales_lead_event', 'crm_convert_lead', 'crm_prospect_convert',
+  'crm_list_sales_leads', 'crm_get_sales_lead', 'crm_update_sales_lead', 'crm_sales_lead_add', 'crm_sales_leads_import', 'crm_edit_sales_lead_event', 'crm_convert_lead', 'crm_prospect_convert',
   'crm_prospect_update', 'crm_prospect_get', 'crm_prospect_archive', 'crm_icp_set_first_message',
   'crm_get_deal', 'crm_list_my_deals', 'crm_search_deals', 'crm_update_deal', 'crm_add_note', 'crm_mark_deal_lost', 'crm_schedule_followup',
   'crm_graph_reach', 'crm_who_can_reach',

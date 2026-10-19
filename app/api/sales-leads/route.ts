@@ -20,6 +20,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { kernelCall } from '@/lib/mcp/kernel-rpc';
 import { LIFECYCLE_FUNNEL, type LeadCounts, type LeadSort, type LeadView } from '@/lib/sales-leads';
 import { DUE, NEEDS_YOU, OPEN, SORTS } from '@/lib/sales-leads-sql';
 
@@ -154,5 +155,26 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ viewer_id: session.userId, viewer_is_admin: session.role === 'admin', leads, counts, funnel, users, lists, view, sort });
   } finally {
     client.release();
+  }
+}
+
+
+/** POST /api/sales-leads — add ONE lead by hand (crm_sales_lead_add: dedupe, roles, track record, prospect at once). */
+const ADD_FIELDS = ['full_name', 'first_name', 'last_name', 'company', 'title', 'email', 'phone', 'linkedin_url', 'website',
+  'met_at', 'notes', 'priority', 'must_talk', 'responsible', 'front', 'list_name'] as const;
+
+export async function POST(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  let body: Record<string, unknown> = {};
+  try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
+  const args: Record<string, unknown> = {};
+  for (const k of ADD_FIELDS) if (body[k] !== undefined && body[k] !== '') args[k] = body[k];
+  if (typeof args.priority === 'string') args.priority = Number(args.priority);
+  try {
+    const out = await kernelCall('crm_sales_lead_add', args, session.userId);
+    return NextResponse.json(out);
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 400 });
   }
 }

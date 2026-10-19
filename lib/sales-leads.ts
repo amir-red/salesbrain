@@ -197,7 +197,7 @@ export function whoActs(l: Pick<Lead, 'lifecycle_stage' | 'responsible_user_id' 
 
 /** "event:fakuma-2026" → "Fakuma 2026". The list a lead came from, as people say it. */
 export function listLabel(source: string | null | undefined): string {
-  const s = (source || '').replace(/^(event|linkedin|manual|form|calendly):/, '');
+  const s = (source || '').replace(/^(event|linkedin|manual|form|calendly|import):/, '');
   if (!s) return 'No list';
   return s.split(/[-_]/).map((w) => (/^\d+$/.test(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(' ')
     .replace(/^Pei /, 'PEI ').replace(/^Nrw /, 'NRW ');

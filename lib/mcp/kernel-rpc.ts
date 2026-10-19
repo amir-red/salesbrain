@@ -75,6 +75,8 @@ const LONG_RUNNING_TOOLS = new Set<string>([
   'crm_icp_rescore',
   // Paces LinkedIn pages 6s apart and can promote thousands of contacts.
   'crm_graph_sync',
+  // Lands up to 100 leads per call, each with its prospect and person record.
+  'crm_sales_leads_import',
 ]);
 
 async function rpc(

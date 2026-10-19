@@ -1944,6 +1944,27 @@ Conductor created one, and only for leads in its scope with it switched on; a le
   reachability 153), 19 cards filled from their records (never overwriting), duplicate people Frank Barlog and Ralf
   Schwarzkopf merged (`merge_people.merge_pair`). Backup `~/.cache/salesbrain/backups/lead-fill-20261019172642/`.
 
+### 5.ay Add a lead and import a list on /sales-leads (2026-10-19, core/hermes 0.54.3, app)
+
+Amir: "create a new lead add and import feature". **Add lead** (dialog: name, company, title, email, phone, LinkedIn,
+website, where met, list, priority, back / front office, notes, must-talk) → `POST /api/sales-leads` → `crm_sales_lead_add`.
+**Import a list** (dialog: CSV / XLSX / XLS ≤10 MB, ≤2,000 rows → columns matched by header in English and German AND by
+their values — a column of `linkedin.com/in` links is the LinkedIn URL whatever it is called, LinkedIn's connections export
+works as is; the header is the first row with two filled cells, so title lines are skipped → defaults for empty fields:
+list name, where met, priority, back office, front office → **Check** (dry run: new / already a lead / cannot import per row)
+→ **Import N new leads**) → `POST /api/sales-leads/import` (multipart = read the file; JSON = the rows, sent to
+`crm_sales_leads_import` 100 per kernel call; `lib/lead-import.ts` holds the fields and guesses).
+- **Kernel** `deals.add_sales_lead` / `import_sales_leads` share one path: `_clean_lead` (name required, email shape,
+  LinkedIn normalised to `https://www.linkedin.com/in/<slug>`, priority 1–10), `_lead_duplicate` (same email → same
+  LinkedIn → same name at the same company; never merged, the existing lead is named), the roles (back office = the person
+  adding unless set), an `import` track-record line, source `import:<list-slug>` (manual adds: `manual:new`), and the prospect
+  at once (`conductor.ensure_prospect_for_lead_id`, §5.ax). The import also catches the same person twice in one file. Audit
+  `sales_lead_add` / `sales_leads_import`.
+- **Ring** `crm_sales_lead_add`, `crm_sales_leads_import` (family crm_deals, both `mcp="write"`), persona rule (dry run
+  first, counts, then import). **Service MCP**: both as passthroughs (`docs/service-mcp.md` changelog).
+- Tests: `salesbrain-core/tests/test_lead_add_import_db.py` (real Postgres). Not built: a CSV of updates to existing leads
+  (duplicates are skipped, not merged), column mappings remembered between imports.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

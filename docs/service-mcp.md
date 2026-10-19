@@ -921,6 +921,10 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 
 ## 12. Changelog
 
+### 2026-10-19 — add and import sales leads
+`crm_sales_lead_add` adds one person; `crm_sales_leads_import` takes up to 500 rows per call (dry_run first). Both refuse
+duplicates and give every created lead its prospect at once, so LinkedIn lookup and enrichment start by themselves.
+
 ### 2026-10-18 — enrich a sales lead
 
 **`crm_enrich_lead`** `{lead_id, step}` runs ONE enrichment step on a sales-leads card so a screen can show progress: `linkedin`

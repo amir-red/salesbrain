@@ -7,6 +7,8 @@ import LeadDetail from '@/components/sales-leads/LeadDetail';
 import { Search } from '@/components/sales-leads/icons';
 import { ACTOR_STYLE, LIFECYCLE_FUNNEL, LIFECYCLE_LABELS, type Lead, type LeadCounts, type LeadSort, type LeadStatus, type LeadView, type LifecycleStage, type RoleFilter, type TeamUser , listLabel } from '@/lib/sales-leads';
 import ExportButton from '@/components/ExportButton';
+import AddLeadModal from '@/components/sales-leads/AddLeadModal';
+import ImportLeadsModal from '@/components/sales-leads/ImportLeadsModal';
 
 /**
  * /sales-leads — the team's lead dashboard. One aligned line per lead, ranked
@@ -47,6 +49,7 @@ export default function SalesLeadsPage() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [adding, setAdding] = useState<'' | 'one' | 'import'>('');
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -153,6 +156,11 @@ export default function SalesLeadsPage() {
               <p className="text-sm mt-1 max-w-2xl" style={{ color: 'var(--text-muted)' }}>
                 Everyone we are working, best first. The counter is days since we last talked.
               </p>
+              <div className="flex flex-wrap gap-2 mt-3">
+                <button type="button" onClick={() => setAdding('one')} className="z-btn text-sm">Add lead</button>
+                <button type="button" onClick={() => setAdding('import')} className="text-sm px-4 py-1.5 rounded-full"
+                  style={{ border: '1px solid var(--border)', color: 'var(--text)' }}>Import a list</button>
+              </div>
             </div>
             <div className="flex">
               {METRICS.map((m, i) => (
@@ -281,6 +289,14 @@ export default function SalesLeadsPage() {
           <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm z-20" style={{ background: 'var(--text)', color: 'var(--bg)', boxShadow: 'var(--shadow-card)' }}>{toast}</div>
         )}
       </div>
+      {adding === 'one' && (
+        <AddLeadModal users={users} viewerId={viewerId} onClose={() => setAdding('')}
+          onAdded={(name) => { setAdding(''); flash(`${name} added. The agents look up the LinkedIn profile and enrich the lead.`); load(true); }} />
+      )}
+      {adding === 'import' && (
+        <ImportLeadsModal users={users} onClose={() => { setAdding(''); load(true); }}
+          onImported={(n, listName) => { flash(`${n} lead${n === 1 ? '' : 's'} imported${listName ? ` into “${listName}”` : ''}.`); load(true); }} />
+      )}
     </div>
   );
 }
