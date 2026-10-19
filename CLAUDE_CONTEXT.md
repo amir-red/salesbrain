@@ -1362,7 +1362,7 @@ Connect on LinkedIn (files the request for the OWNER's approval) and Mark as con
 schema lists `phone` / `website`. Not built: the next-step suggestion still looks only at the lead OWNER's account (a teammate's
 connection is shown, not yet used as "an in"), phone edits do not write back to `contacts.phone`.
 
-### 5.ai.12 Enrich button on the lead card (2026-10-18, feat/lead-enrich, core/hermes 0.52.3, no migration)
+### 5.ai.12 Enrich button on the lead card (2026-10-18, feat/lead-enrich, core/hermes 0.53.2, no migration)
 
 Amir: "add an Enrich button next to Contact and show a progress bar — phone, let's leave it." **Steps** (core `policy/lead_enrich.py`,
 ring `lead_enrich.py`, tool `crm_enrich_lead {lead_id, step}`; 172 tools): LinkedIn profile → website → email, ONE server call per step
