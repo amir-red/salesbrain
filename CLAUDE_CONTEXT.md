@@ -1285,6 +1285,13 @@ header is click-to-edit (name · title · company, Enter saves), the journey bar
 to set it, click the current step to go back one; step 1 shows the quality select, step 5 the qualified / lost buttons),
 and every hand-written track-record line the viewer wrote (or any, for an admin) shows an `edit` on hover → inline text +
 date, `PATCH /api/sales-leads/[id]/events/[eventId]`. List API returns `viewer_is_admin`. Service MCP 50 tools.
+- **2026-10-19 (app-only, becf572)**: the add-a-line box is a composer — kind pills, a growing text box (⌘/Ctrl+Enter), channel
+  only for contact kinds, date starting at today, and the contact rule written under it. The free `notes` box is labelled
+  **Background** ("standing context, not dated"), grows, and shows Saving / Saved / Not saved. The name shows a pencil and an
+  inline "Not saved" on failure; the page's error toast stays 7 s. Checked: a name edit from the card reaches the kernel
+  (`agent_audit_log` command `update_sales_lead` with `full_name`); no UI name edit had ever been logged before. A /sales-leads
+  rename does NOT update the linked prospect/contact (the ICP list keeps the old name) — not built. The kernel still joins a
+  line's newlines into one paragraph.
 
 ### 5.ai.8 Edit capabilities on the service MCP (2026-10-16, feat/mcp-edits, core/hermes 0.49.4, no migration)
 
