@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { addDays, CHANNELS, JOURNEY_STAGES, linkedInLabel, type LinkedInLink, linkedInState, MANUAL_EVENT_KINDS, NEXT_STEP_PRESETS, ROLES, suggestNextStep, type EventKind, type Lead, type LeadEvent, type TeamUser } from '@/lib/sales-leads';
-import { EventIcon, External, LinkedIn, Mail, Pencil, Phone } from './icons';
+import { addDays, CHANNEL_LABELS, CHANNEL_REQUIRED, CHANNELS, DEFAULT_CHANNEL, JOURNEY_STAGES, linkedInLabel, type LinkedInLink, linkedInState, MANUAL_EVENT_KINDS, NEXT_STEP_PRESETS, ROLES, suggestNextStep, type EventKind, type Lead, type LeadEvent, type TeamUser } from '@/lib/sales-leads';
+import { Chevron, EventIcon, External, LinkedIn, Mail, Pencil, Phone } from './icons';
 import { EnrichProgress, useEnrich } from './EnrichPanel';
 import LifecyclePanel from './LifecyclePanel';
 
@@ -35,6 +35,10 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
   useEffect(() => grow(notesRef.current, 420), [notes]);
   useEffect(() => grow(logRef.current, 240), [text]);
   const [showAll, setShowAll] = useState(false);
+  // Track record open / folded — the viewer's own preference, remembered in this browser only.
+  const [trackOpen, setTrackOpen] = useState(true);
+  useEffect(() => { try { if (localStorage.getItem(TRACK_KEY) === '0') setTrackOpen(false); } catch { /* storage blocked: stay open */ } }, []);
+  const toggleTrack = () => setTrackOpen((o) => { try { localStorage.setItem(TRACK_KEY, o ? '0' : '1'); } catch { /* ignore */ } return !o; });
   // Card edits (name / title / company) and the one track-record line being edited.
   const [editingCard, setEditingCard] = useState(false);
   const [card, setCard] = useState({ full_name: lead.full_name, title: lead.title ?? '', company: lead.company === 'Unknown' ? '' : lead.company });
@@ -122,12 +126,14 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
     && (viewerIsAdmin || (!!viewerId && e.actor_user_id === viewerId));
 
   const kindInfo = MANUAL_EVENT_KINDS.find((k) => k.kind === kind);
+  const needsChannel = CHANNEL_REQUIRED.has(kind) && !channel;
+  function pickKind(k: EventKind) { setKind(k); setChannel(DEFAULT_CHANNEL[k] ?? ''); }
   async function addEvent() {
-    if (!text.trim()) return;
+    if (!text.trim() || needsChannel) return;
     // Today = no date sent: the line keeps the real time instead of noon.
     const ok = await onPatch({ note: text.trim(), note_kind: kind, ...(kindInfo?.contact && channel ? { channel } : {}),
       ...(when && when !== todayLocal() ? { occurred_at: when } : {}) });
-    if (ok) { setText(''); setWhen(todayLocal()); await loadEvents(); }
+    if (ok) { setText(''); setWhen(todayLocal()); setChannel(DEFAULT_CHANNEL[kind] ?? ''); await loadEvents(); }
   }
 
   function onNotes(v: string) {
@@ -250,9 +256,21 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
           ) : null}
           {!d && lead.description ? (<><Eyebrow>Origin</Eyebrow><p className="text-[13px] whitespace-pre-wrap leading-relaxed" style={{ color: 'var(--text-muted)' }}>{lead.description}</p></>) : null}
 
-          <Eyebrow>Track record</Eyebrow>
+          <button type="button" onClick={toggleTrack} aria-expanded={trackOpen}
+            className="mt-5 mb-2 w-full flex items-center gap-2 text-left group">
+            <Chevron width={14} height={14} style={{ color: 'var(--text-muted)', transform: trackOpen ? 'rotate(90deg)' : undefined, transition: 'transform 120ms' }} />
+            <h4 className="z-eyebrow">Track record</h4>
+            {events && <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{events.length} {events.length === 1 ? 'line' : 'lines'}</span>}
+            <span className="ml-auto text-[11px] opacity-60 group-hover:opacity-100" style={{ color: 'var(--text-muted)' }}>{trackOpen ? 'fold' : 'show'}</span>
+          </button>
           {evErr && <p className="text-xs mb-2" style={{ color: 'var(--red)' }}>{evErr} <button type="button" className="underline" onClick={loadEvents}>retry</button></p>}
-          {shown === null ? (
+          {!trackOpen ? (
+            events && events[0] ? (
+              <button type="button" onClick={toggleTrack} className="w-full text-left text-xs truncate" style={{ color: 'var(--text-muted)' }}>
+                Latest · {new Date(events[0].occurred_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} — {events[0].text}
+              </button>
+            ) : null
+          ) : shown === null ? (
             <div className="space-y-2">{[0, 1, 2].map((i) => <div key={i} className="h-4 rounded animate-pulse" style={{ background: 'var(--bg-input)', width: `${80 - i * 15}%` }} />)}</div>
           ) : shown.length === 0 ? (
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Nothing on record yet.</p>
@@ -266,7 +284,7 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
                   </span>
                   <div className="text-[11px] tabular-nums" style={{ color: 'var(--text-muted)' }}>
                     {new Date(e.occurred_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
-                    {[e.channel?.replace('_', ' '), e.actor_name].filter(Boolean).map((x) => ` · ${x}`).join('')}
+                    {[e.channel ? (CHANNEL_LABELS[e.channel] ?? e.channel.replace('_', ' ')) : null, e.actor_name].filter(Boolean).map((x) => ` · ${x}`).join('')}
                   </div>
                   {editingEvent?.id === e.id ? (
                     <div className="mt-1 space-y-1.5">
@@ -290,7 +308,7 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
               ))}
             </ol>
           )}
-          {events && events.length > 8 && (
+          {trackOpen && events && events.length > 8 && (
             <button type="button" className="mt-2 text-xs underline" style={{ color: 'var(--text-muted)' }} onClick={() => setShowAll(!showAll)}>
               {showAll ? 'show fewer' : `show all ${events.length}`}
             </button>
@@ -302,7 +320,7 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
               {MANUAL_EVENT_KINDS.map((k) => {
                 const on = k.kind === kind;
                 return (
-                  <button key={k.kind} type="button" role="radio" aria-checked={on} onClick={() => setKind(k.kind)}
+                  <button key={k.kind} type="button" role="radio" aria-checked={on} onClick={() => pickKind(k.kind)}
                     className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full"
                     style={on ? { background: 'var(--accent)', color: 'var(--accent-fg)', border: '1px solid var(--accent)' }
                       : { background: 'var(--bg-card)', color: 'var(--text)', border: '1px solid var(--border)' }}>
@@ -315,13 +333,25 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
               placeholder={kind === 'note' ? 'Write a note — what you learned, decided or agreed…' : `What happened in this ${kindInfo?.label.toLowerCase() ?? 'contact'}?`}
               onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); addEvent(); } }}
               className="w-full text-[13px] px-3 py-2 leading-relaxed resize-none" style={field} aria-label="What happened" />
+            {kindInfo?.contact && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Channel">
+                <span className="text-xs mr-0.5" style={{ color: needsChannel ? 'var(--red)' : 'var(--text-muted)', fontWeight: needsChannel ? 600 : undefined }}>
+                  {needsChannel ? 'Via which channel?' : 'Via'}
+                </span>
+                {CHANNELS.map((c) => {
+                  const on = c === channel;
+                  return (
+                    <button key={c} type="button" role="radio" aria-checked={on} onClick={() => setChannel(on && !CHANNEL_REQUIRED.has(kind) ? '' : c)}
+                      className="text-[11px] px-2 py-0.5 rounded-full"
+                      style={on ? { background: 'color-mix(in srgb, var(--accent) 14%, transparent)', color: 'var(--accent)', border: '1px solid var(--accent)' }
+                        : { background: 'var(--bg-card)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+                      {CHANNEL_LABELS[c] ?? c}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              {kindInfo?.contact && (
-                <select value={channel} onChange={(e) => setChannel(e.target.value)} className="text-xs px-2 py-1" style={field} aria-label="Channel">
-                  <option value="">Channel…</option>
-                  {CHANNELS.map((c) => <option key={c} value={c}>{c.replace('_', ' ')}</option>)}
-                </select>
-              )}
               <label className="inline-flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
                 {when === todayLocal() ? 'Today' : 'On'}
                 <input type="date" value={when} max={todayLocal()} onChange={(e) => setWhen(e.target.value || todayLocal())} className="text-xs px-2 py-1" style={field} aria-label="Date" />
@@ -329,7 +359,8 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
               <span className="text-[11px] flex-1 min-w-[180px]" style={{ color: 'var(--text-muted)' }}>
                 {kindInfo?.contact ? 'Counts as contact — resets “last talked”.' : 'A note does not reset “last talked”.'} ⌘/Ctrl + Enter to add.
               </span>
-              <button type="button" disabled={busy || !text.trim()} onClick={addEvent}
+              <button type="button" disabled={busy || !text.trim() || needsChannel} onClick={addEvent}
+                title={needsChannel ? 'Pick the channel first' : undefined}
                 className="text-xs px-4 py-1.5 rounded-full font-medium disabled:opacity-50" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
                 Add to track record
               </button>
@@ -538,3 +569,6 @@ function grow(el: HTMLTextAreaElement | null, max: number) {
   el.style.height = 'auto';
   el.style.height = `${Math.min(el.scrollHeight + 2, max)}px`;
 }
+
+/** localStorage key for the folded / open track record (per viewer, this browser only). */
+const TRACK_KEY = 'salesleads.trackOpen';

@@ -62,6 +62,13 @@ export const MANUAL_EVENT_KINDS: { kind: EventKind; label: string; contact: bool
   { kind: 'reply', label: 'They replied', contact: true },
 ];
 export const CHANNELS = ['linkedin', 'email', 'phone', 'in_person', 'telegram', 'whatsapp'] as const;
+export const CHANNEL_LABELS: Record<string, string> = {
+  linkedin: 'LinkedIn', email: 'Email', phone: 'Phone', in_person: 'In person', telegram: 'Telegram', whatsapp: 'WhatsApp',
+};
+/** Channel a hand-logged line starts with. Messages get none: "sent a message" without the channel says nothing. */
+export const DEFAULT_CHANNEL: Partial<Record<string, string>> = { call: 'phone', meeting: 'in_person', met: 'in_person' };
+/** Kinds whose channel must be picked before the line can be added. */
+export const CHANNEL_REQUIRED = new Set<string>(['sent', 'reply']);
 
 /** The lead's journey on the card (migration 060). Index = journey_stage; 0 = not started. */
 export const JOURNEY_STAGES: { stage: number; label: string; hint: string }[] = [
