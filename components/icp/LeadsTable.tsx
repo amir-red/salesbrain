@@ -23,7 +23,8 @@ export interface Lead {
 }
 interface ConnectInfo {
   linkedin: boolean; enabled: boolean; per_day: number; per_week: number; no_answer_after_days: number;
-  sent_today: number; sent_week: number; queued: number;
+  sent_today: number; sent_week: number; queued: number;  // ROLLING: last 24 h / last 7 days
+  subscription?: 'free' | 'sales_navigator'; next_request_at?: string | null;
 }
 interface Payload { leads: Lead[]; counts: { total: number }; connect?: ConnectInfo }
 
@@ -131,7 +132,11 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
             </button>
           ))}
           <span className="ml-auto">
-            {c.linkedin ? `${c.sent_today}/${c.per_day} sent today · ${c.sent_week}/${c.per_week} this week` : 'no LinkedIn account connected'}
+            {c.linkedin
+              ? `${c.sent_today}/${c.per_day} in the last 24 h · ${c.sent_week}/${c.per_week} in the last 7 days`
+                + ` · ${c.subscription === 'sales_navigator' ? 'Sales Navigator' : 'free account'}`
+                + (c.next_request_at ? ` · next request ${new Date(c.next_request_at).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}` : '')
+              : 'no LinkedIn account connected'}
           </span>
           {(tally.no_profile ?? 0) > 0 && (
             <button

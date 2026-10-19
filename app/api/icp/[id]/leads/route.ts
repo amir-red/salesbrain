@@ -86,10 +86,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   ]);
   const pending = await pool.query(
     `SELECT count(*)::int AS n FROM agent_runs WHERE icp_profile_id = $1 AND status = 'requested'`, [params.id]);
-  // What the connect cap still allows today, for the "queue next" button.
+  // What the connect cap still allows right now, for the "queue next" button. Caps follow the account's subscription
+  // and the windows are ROLLING (last 24 h / last 7 days) — the kernel's policy/invitations.py, mirrored here.
   const connect = await pool.query(
     `SELECT (SELECT value FROM policy_rules WHERE key = 'agents.linkedin_connect') AS cfg,
-            la.id IS NOT NULL AS linkedin,
+            la.id IS NOT NULL AS linkedin, la.id AS account_id,
+            COALESCE(la.premium_features::text, '') ILIKE '%sales_navigator%' AS sales_navigator,
             (SELECT count(*)::int FROM linkedin_invitations i
               WHERE i.account_id = la.id AND i.status <> 'failed' AND i.sent_at > now() - interval '24 hours') AS sent_today,
             (SELECT count(*)::int FROM linkedin_invitations i
@@ -100,7 +102,26 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
        LEFT JOIN linkedin_accounts la ON la.owner_user_id = $1 AND la.revoked_at IS NULL`,
     [icp.owner_user_id]);
   const cc = connect.rows[0] ?? {};
-  const cfg = { enabled: true, per_day: 5, per_week: 25, no_answer_after_days: 21, ...(cc.cfg ?? {}) };
+  const raw = { enabled: true, per_day: 5, per_week: 25, no_answer_after_days: 21,
+                per_day_sales_navigator: 25, per_week_sales_navigator: 120, ...(cc.cfg ?? {}) };
+  const cfg = cc.sales_navigator
+    ? { ...raw, per_day: Number(raw.per_day_sales_navigator), per_week: Number(raw.per_week_sales_navigator) }
+    : raw;
+  // When the window is full: the moment enough requests age out of it.
+  let nextAt: string | null = null;
+  if (cc.account_id) {
+    const waits: string[] = [];
+    for (const [n, cap, span] of [[cc.sent_today ?? 0, Number(cfg.per_day), '24 hours'], [cc.sent_week ?? 0, Number(cfg.per_week), '7 days']] as const) {
+      if (cap > 0 && n >= cap) {
+        const r = await pool.query(
+          `SELECT (sent_at + interval '${span}') AS t FROM linkedin_invitations
+            WHERE account_id = $1 AND status <> 'failed' AND sent_at > now() - interval '${span}'
+            ORDER BY sent_at OFFSET $2 LIMIT 1`, [cc.account_id, n - cap]);
+        if (r.rows[0]?.t) waits.push(new Date(r.rows[0].t).toISOString());
+      }
+    }
+    nextAt = waits.sort().pop() ?? null;
+  }
   return NextResponse.json({
     icp: own.rows[0], leads: leads.rows, counts: counts.rows[0],
     agent_state: state.rows[0] ?? null, last_run: last.rows[0] ?? null,
@@ -110,6 +131,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       per_day: Number(cfg.per_day), per_week: Number(cfg.per_week),
       no_answer_after_days: Number(cfg.no_answer_after_days),
       sent_today: cc.sent_today ?? 0, sent_week: cc.sent_week ?? 0, queued: cc.queued ?? 0,
+      subscription: cc.sales_navigator ? 'sales_navigator' : 'free', next_request_at: nextAt,
     },
   });
 }
