@@ -1962,9 +1962,9 @@ list name, where met, priority, back office, front office → **Check** (dry run
   `sales_lead_add` / `sales_leads_import`.
 - **Ring** `crm_sales_lead_add`, `crm_sales_leads_import` (family crm_deals, both `mcp="write"`), persona rule (dry run
   first, counts, then import). **Service MCP**: both as passthroughs (`docs/service-mcp.md` changelog).
-- **Template** (0.54.4): `GET /api/sales-leads/import/template?format=xlsx|csv`, buttons in the import dialog. Headers =
+- **Template** (0.54.5): `GET /api/sales-leads/import/template?format=xlsx|csv`, buttons in the import dialog. Headers =
   `lib/lead-import.ts::TEMPLATE_COLUMNS`, each one maps to its own field by `guessField` (checked), example row, and an
-  Excel sheet "How to fill it". **Linking keeps LinkedIn in step** (0.54.4): `conductor.ensure_prospect_for_lead` copies
+  Excel sheet "How to fill it". **Linking keeps LinkedIn in step** (0.54.5): `conductor.ensure_prospect_for_lead` copies
   the card's profile onto an EXISTING prospect without one (`adopt_lead_linkedin`) and a prospect's profile onto an empty
   card, at link time, so an import never repeats the David Rowley case (§5.aw).
 - Tests: `salesbrain-core/tests/test_lead_add_import_db.py` (real Postgres). Not built: a CSV of updates to existing leads
