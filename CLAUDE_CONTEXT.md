@@ -1926,6 +1926,24 @@ LinkedIn / Pick). Now `conductor.adopt_lead_linkedin` runs on every tick (prereq
 does the same when someone edits the URL on the card; both go through `prospecting.set_prospect_linkedin` (the one writer:
 never overwrites a profile, reports `duplicate_of` when another lead holds it). Stat `profiles_from_lead` on the tick.
 
+### 5.ax Every lead has a prospect behind it, always (2026-10-19, core/hermes 0.54.2)
+
+Amir: "when you create a lead, also include the prospect, at all times: CSV upload, CRM tools, everywhere." Before, only the
+Conductor created one, and only for leads in its scope with it switched on; a lead already in conversation never got one
+(16 Napa leads), so no agent could see their email/LinkedIn. Now:
+- `conductor.ensure_prospect_for_lead_id(lead_id)` = the one bridge for a single lead (owner = back office → front office
+  → `sales_leads.roles.default_sender`; the tick hands it to the actual sender later). `sales_leads.lead_landed` (zeami.io
+  form, Calendly) calls it at once; every Conductor tick runs "prerequisite 0" for ANY open lead without a prospect,
+  independent of scope, the enabled switch and the stage (it is data, not outreach; dry runs change nothing). Leads created
+  by imports or SQL (the Napa script) are therefore bridged within the hour. Kernel `upsert_sales_lead` already starts from
+  a prospect; the bot tools create prospects first (`crm_prospect_add`).
+- `ensure_prospect_for_lead` copies the conversation state: a lead `contacted` → prospect `P5_SENT`, `replied` →
+  `P6_REPLIED`, `last_contacted_at` from the card — so the Outreach agent (queue = P2/P3, never contacted) never drafts a
+  cold message to someone we already talk to. Stages never move backwards. The lead itself stays `in_conversation` (hands-off).
+- Same day, data: 80 prospects with an email on the contact but no person node got one (`ensure_prospect_person`; email
+  reachability 153), 19 cards filled from their records (never overwriting), duplicate people Frank Barlog and Ralf
+  Schwarzkopf merged (`merge_people.merge_pair`). Backup `~/.cache/salesbrain/backups/lead-fill-20261019172642/`.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
