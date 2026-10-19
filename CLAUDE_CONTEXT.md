@@ -1840,7 +1840,7 @@ turn's first call, median 6 model calls per turn (max 39), ~140k input tokens pe
   `GET/POST /api/knowledge` -> app-only RPCs `knowledge_list` / `knowledge_save` / `knowledge_archive`.
 - Not built: point 1 of the plan (fewer, question-shaped tools), embeddings (pgvector) if keyword retrieval weakens, a per-turn tool-call cap.
 
-### 5.au /sales-leads "Needs you" made honest (2026-10-19, core/hermes 0.52.4, app)
+### 5.av /sales-leads "Needs you" made honest (2026-10-19, core/hermes 0.53.1, app)
 
 Amir, on the Needs-you list: "how are they on top — what was the criteria?" Four things were misleading:
 - **Counter vs table**: the tile counts only the viewer's own queue, but a deep link (`?view=needs_you`) opened the table on
