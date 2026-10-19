@@ -330,7 +330,7 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
               })}
             </div>
             <textarea ref={logRef} value={text} onChange={(e) => setText(e.target.value)} rows={2}
-              placeholder={kind === 'note' ? 'Write a note — what you learned, decided or agreed…' : `What happened in this ${kindInfo?.label.toLowerCase() ?? 'contact'}?`}
+              placeholder={PROMPT[kind] ?? 'What happened?'}
               onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); addEvent(); } }}
               className="w-full text-[13px] px-3 py-2 leading-relaxed resize-none" style={field} aria-label="What happened" />
             {kindInfo?.contact && (
@@ -572,3 +572,13 @@ function grow(el: HTMLTextAreaElement | null, max: number) {
 
 /** localStorage key for the folded / open track record (per viewer, this browser only). */
 const TRACK_KEY = 'salesleads.trackOpen';
+
+/** What the log box asks, per kind of line. */
+const PROMPT: Partial<Record<string, string>> = {
+  note: 'Write a note — what you learned, decided or agreed…',
+  call: 'What was said on the call, and what comes next?',
+  meeting: 'What came out of the meeting, and what comes next?',
+  met: 'Where you met and what you talked about…',
+  sent: 'What did we send them? (the gist is enough)',
+  reply: 'What did they answer?',
+};
