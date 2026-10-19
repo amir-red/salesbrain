@@ -1292,6 +1292,10 @@ date, `PATCH /api/sales-leads/[id]/events/[eventId]`. List API returns `viewer_i
   (`agent_audit_log` command `update_sales_lead` with `full_name`); no UI name edit had ever been logged before. A /sales-leads
   rename does NOT update the linked prospect/contact (the ICP list keeps the old name) — not built. The kernel still joins a
   line's newlines into one paragraph.
+  Same day: the track record folds (localStorage `salesleads.trackOpen`, folded = one "Latest · …" line); channel is picked with
+  buttons (`CHANNEL_LABELS` / `DEFAULT_CHANNEL` call→phone, meeting/met→in person / `CHANNEL_REQUIRED` sent + reply in
+  `lib/sales-leads.ts`); email = "Sent a message" or "They replied" + Email, no separate kind. The kernel accepts only the six
+  channels (`_NOTE_CHANNELS`) — a 'video' channel needs a kernel change.
 
 ### 5.ai.8 Edit capabilities on the service MCP (2026-10-16, feat/mcp-edits, core/hermes 0.49.4, no migration)
 
