@@ -3,13 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { addDays, CHANNELS, JOURNEY_STAGES, linkedInLabel, type LinkedInLink, linkedInState, MANUAL_EVENT_KINDS, NEXT_STEP_PRESETS, ROLES, suggestNextStep, type EventKind, type Lead, type LeadEvent, type TeamUser } from '@/lib/sales-leads';
-import { EventIcon, External, LinkedIn, Mail, Phone } from './icons';
+import { EventIcon, External, LinkedIn, Mail, Pencil, Phone } from './icons';
 import { EnrichProgress, useEnrich } from './EnrichPanel';
 import LifecyclePanel from './LifecyclePanel';
 
 /**
  * The expanded card, in the order Mateo reads it before a call: talking points
- * → who they are → why relevant → firm → track record (+ add a line) → notes.
+ * → who they are → why relevant → firm → track record (+ log a line) → background.
  * The right rail is "working this lead": back / front office, ping-by date,
  * where met, status actions.
  */
@@ -23,11 +23,17 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
   const [evErr, setEvErr] = useState<string | null>(null);
   const [kind, setKind] = useState<EventKind>('note');
   const [channel, setChannel] = useState('');
-  const [when, setWhen] = useState('');
+  const [when, setWhen] = useState(todayLocal);
   const [text, setText] = useState('');
   const [notes, setNotes] = useState(lead.notes ?? '');
-  const [saved, setSaved] = useState('');
+  const [saved, setSaved] = useState<'' | 'saving' | 'saved' | 'failed'>('');
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notesRef = useRef<HTMLTextAreaElement | null>(null);
+  const logRef = useRef<HTMLTextAreaElement | null>(null);
+  const [cardErr, setCardErr] = useState(false);
+  // Both boxes grow with their text (the background box up to a sensible height, then it scrolls).
+  useEffect(() => grow(notesRef.current, 420), [notes]);
+  useEffect(() => grow(logRef.current, 240), [text]);
   const [showAll, setShowAll] = useState(false);
   // Card edits (name / title / company) and the one track-record line being edited.
   const [editingCard, setEditingCard] = useState(false);
@@ -90,8 +96,10 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
     if ((card.title || '') !== (lead.title || '')) patch.title = card.title;
     if ((card.company || '') !== (lead.company === 'Unknown' ? '' : lead.company)) patch.company = card.company;
     if (Object.keys(patch).length === 0) { setEditingCard(false); return; }
+    setCardErr(false);
     const ok = await onPatch(patch);
     if (ok) { setEditingCard(false); await loadEvents(); }
+    else setCardErr(true);
   }
 
   async function saveEvent() {
@@ -113,19 +121,23 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
   const canEdit = (e: LeadEvent) => ['note', 'met', 'sent', 'reply', 'call', 'meeting'].includes(e.kind)
     && (viewerIsAdmin || (!!viewerId && e.actor_user_id === viewerId));
 
+  const kindInfo = MANUAL_EVENT_KINDS.find((k) => k.kind === kind);
   async function addEvent() {
     if (!text.trim()) return;
-    const ok = await onPatch({ note: text.trim(), note_kind: kind, ...(channel ? { channel } : {}), ...(when ? { occurred_at: when } : {}) });
-    if (ok) { setText(''); setWhen(''); await loadEvents(); }
+    // Today = no date sent: the line keeps the real time instead of noon.
+    const ok = await onPatch({ note: text.trim(), note_kind: kind, ...(kindInfo?.contact && channel ? { channel } : {}),
+      ...(when && when !== todayLocal() ? { occurred_at: when } : {}) });
+    if (ok) { setText(''); setWhen(todayLocal()); await loadEvents(); }
   }
 
   function onNotes(v: string) {
     setNotes(v);
+    setSaved('saving');
     if (notesTimer.current) clearTimeout(notesTimer.current);
     notesTimer.current = setTimeout(async () => {
       const ok = await onPatch({ notes: v });
-      setSaved(ok ? 'Saved' : 'Not saved');
-      setTimeout(() => setSaved(''), 1500);
+      setSaved(ok ? 'saved' : 'failed');
+      if (ok) setTimeout(() => setSaved((s) => (s === 'saved' ? '' : s)), 2000);
     }, 700);
   }
 
@@ -147,15 +159,17 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
                   onKeyDown={(e) => { if (e.key === 'Enter') saveCard(); if (e.key === 'Escape') setEditingCard(false); }} />
                 <input value={card.company} onChange={(e) => setCard({ ...card, company: e.target.value })} placeholder="Company" className="text-sm px-3 py-1.5" style={field}
                   onKeyDown={(e) => { if (e.key === 'Enter') saveCard(); if (e.key === 'Escape') setEditingCard(false); }} />
-                <div className="sm:col-span-3 flex gap-2">
-                  <button type="button" disabled={busy || !card.full_name.trim()} onClick={saveCard} className="text-xs px-3.5 py-1.5 rounded-full font-medium disabled:opacity-50" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>Save</button>
-                  <button type="button" onClick={() => { setEditingCard(false); setCard({ full_name: lead.full_name, title: lead.title ?? '', company: lead.company === 'Unknown' ? '' : lead.company }); }} className="text-xs px-3 py-1.5" style={ghost}>Cancel</button>
+                <div className="sm:col-span-3 flex flex-wrap items-center gap-2">
+                  <button type="button" disabled={busy || !card.full_name.trim()} onClick={saveCard} className="text-xs px-3.5 py-1.5 rounded-full font-medium disabled:opacity-50" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>{busy ? 'Saving…' : 'Save'}</button>
+                  <button type="button" onClick={() => { setEditingCard(false); setCardErr(false); setCard({ full_name: lead.full_name, title: lead.title ?? '', company: lead.company === 'Unknown' ? '' : lead.company }); }} className="text-xs px-3 py-1.5" style={ghost}>Cancel</button>
+                  {cardErr && <span role="alert" className="text-xs font-medium" style={{ color: 'var(--red)' }}>Not saved — your changes are still here, try Save again.</span>}
                 </div>
               </div>
             ) : (
-              <button type="button" onClick={() => setEditingCard(true)} title="Edit name, title, company" className="flex-1 text-left group min-w-0">
+              <button type="button" onClick={() => { setCard({ full_name: lead.full_name, title: lead.title ?? '', company: lead.company === 'Unknown' ? '' : lead.company }); setEditingCard(true); }}
+                title="Edit name, title, company" className="flex-1 text-left group min-w-0">
                 <span className="text-base font-semibold">{lead.full_name}</span>
-                <span className="ml-2 text-[11px] opacity-0 group-hover:opacity-100" style={{ color: 'var(--text-muted)' }}>edit</span>
+                <span className="ml-2 inline-flex items-center gap-1 text-[11px] align-middle opacity-60 group-hover:opacity-100" style={{ color: 'var(--text-muted)' }}><Pencil width={12} height={12} />edit</span>
                 <div className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{[lead.title, lead.company !== 'Unknown' ? lead.company : null].filter(Boolean).join(' · ') || 'no title on file'}</div>
               </button>
             )}
@@ -282,27 +296,57 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
             </button>
           )}
 
+          {/* Log a line: what kind first (it decides whether "last talked" moves), then what happened. */}
           <div className="mt-4 rounded-xl p-3" style={{ background: 'var(--bg-input)' }}>
-            <div className="flex flex-wrap gap-2 items-center">
-              <select value={kind} onChange={(e) => setKind(e.target.value as EventKind)} className="text-xs px-2 py-1.5" style={field} aria-label="Kind">
-                {MANUAL_EVENT_KINDS.map((k) => <option key={k.kind} value={k.kind}>{k.label}</option>)}
-              </select>
-              <select value={channel} onChange={(e) => setChannel(e.target.value)} className="text-xs px-2 py-1.5" style={field} aria-label="Channel">
-                <option value="">Channel</option>
-                {CHANNELS.map((c) => <option key={c} value={c}>{c.replace('_', ' ')}</option>)}
-              </select>
-              <input type="date" value={when} onChange={(e) => setWhen(e.target.value)} className="text-xs px-2 py-1.5" style={field} aria-label="When" />
-              <input value={text} onChange={(e) => setText(e.target.value)} placeholder="What happened…"
-                className="text-xs px-3 py-1.5 flex-1 min-w-[220px]" style={field} onKeyDown={(e) => { if (e.key === 'Enter') addEvent(); }} />
-              <button type="button" disabled={busy || !text.trim()} onClick={addEvent} title="Calls, meetings, messages and replies reset the days-since-contact counter; notes do not"
-                className="text-xs px-3.5 py-1.5 rounded-full font-medium disabled:opacity-50" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>Add</button>
+            <div className="flex flex-wrap items-center gap-1.5 mb-2" role="radiogroup" aria-label="What kind of line">
+              {MANUAL_EVENT_KINDS.map((k) => {
+                const on = k.kind === kind;
+                return (
+                  <button key={k.kind} type="button" role="radio" aria-checked={on} onClick={() => setKind(k.kind)}
+                    className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full"
+                    style={on ? { background: 'var(--accent)', color: 'var(--accent-fg)', border: '1px solid var(--accent)' }
+                      : { background: 'var(--bg-card)', color: 'var(--text)', border: '1px solid var(--border)' }}>
+                    <EventIcon kind={k.kind} width={13} height={13} />{k.label}
+                  </button>
+                );
+              })}
+            </div>
+            <textarea ref={logRef} value={text} onChange={(e) => setText(e.target.value)} rows={2}
+              placeholder={kind === 'note' ? 'Write a note — what you learned, decided or agreed…' : `What happened in this ${kindInfo?.label.toLowerCase() ?? 'contact'}?`}
+              onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); addEvent(); } }}
+              className="w-full text-[13px] px-3 py-2 leading-relaxed resize-none" style={field} aria-label="What happened" />
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {kindInfo?.contact && (
+                <select value={channel} onChange={(e) => setChannel(e.target.value)} className="text-xs px-2 py-1" style={field} aria-label="Channel">
+                  <option value="">Channel…</option>
+                  {CHANNELS.map((c) => <option key={c} value={c}>{c.replace('_', ' ')}</option>)}
+                </select>
+              )}
+              <label className="inline-flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                {when === todayLocal() ? 'Today' : 'On'}
+                <input type="date" value={when} max={todayLocal()} onChange={(e) => setWhen(e.target.value || todayLocal())} className="text-xs px-2 py-1" style={field} aria-label="Date" />
+              </label>
+              <span className="text-[11px] flex-1 min-w-[180px]" style={{ color: 'var(--text-muted)' }}>
+                {kindInfo?.contact ? 'Counts as contact — resets “last talked”.' : 'A note does not reset “last talked”.'} ⌘/Ctrl + Enter to add.
+              </span>
+              <button type="button" disabled={busy || !text.trim()} onClick={addEvent}
+                className="text-xs px-4 py-1.5 rounded-full font-medium disabled:opacity-50" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
+                Add to track record
+              </button>
             </div>
           </div>
 
-          <Eyebrow>Notes</Eyebrow>
-          <textarea value={notes} onChange={(e) => onNotes(e.target.value)} rows={3} placeholder="Notes (autosaved)"
-            className="w-full text-[13px] px-3 py-2 resize-y leading-relaxed" style={field} />
-          <div className="text-[11px] h-4" style={{ color: 'var(--green)' }}>{saved}</div>
+          <div className="mt-5 mb-2 flex items-baseline gap-2">
+            <h4 className="z-eyebrow">Background</h4>
+            <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>standing context, not dated — anything that happened goes in the track record</span>
+            <span className="ml-auto text-[11px]" aria-live="polite"
+              style={{ color: saved === 'failed' ? 'var(--red)' : saved === 'saved' ? 'var(--green)' : 'var(--text-muted)', fontWeight: saved === 'failed' ? 600 : undefined }}>
+              {saved === 'saving' ? 'Saving…' : saved === 'saved' ? 'Saved ✓' : saved === 'failed' ? 'Not saved — keep typing to retry' : ''}
+            </span>
+          </div>
+          <textarea ref={notesRef} value={notes} onChange={(e) => onNotes(e.target.value)} rows={3}
+            placeholder="Who they are to us, how the relationship works, what to keep in mind… (saves as you type)"
+            className="w-full text-[13px] px-3 py-2 resize-y leading-relaxed" style={field} aria-label="Background" />
         </div>
 
         {/* ── Right: working this lead ───────────────────────────────── */}
@@ -480,4 +524,17 @@ function ContactRow({ label, value, display, href, placeholder, icon, onSave }: 
       </>)}
     </div>
   );
+}
+
+/** Today as YYYY-MM-DD in the viewer's own timezone (what a date input shows). */
+function todayLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Fit a textarea to its text, up to `max` px; past that it scrolls. */
+function grow(el: HTMLTextAreaElement | null, max: number) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = `${Math.min(el.scrollHeight + 2, max)}px`;
 }

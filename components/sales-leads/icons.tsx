@@ -30,7 +30,8 @@ export const User = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><circle cx
 export const Download = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><path d="M12 3v12M7 10l5 5 5-5M4 21h16" /></svg>;
 export const Dot = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" /></svg>;
 export const External = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><path d="M14 4h6v6M20 4l-9 9M19 14v6H4V5h6" /></svg>;
-export const Clock = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></svg>;
+export const Pencil = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><path d="M4 20h4L19 9l-4-4L4 16z M13.5 6.5l4 4" /></svg>;
+export const Clock =(p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></svg>;
 
 export function EventIcon({ kind, ...p }: SVGProps<SVGSVGElement> & { kind: string }) {
   switch (kind) {

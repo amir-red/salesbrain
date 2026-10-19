@@ -88,7 +88,7 @@ export default function SalesLeadsPage() {
 
   useEffect(() => { const t = setTimeout(() => load(), q ? 250 : 0); return () => clearTimeout(t); }, [load, q]);
 
-  function flash(msg: string) { setToast(msg); setTimeout(() => setToast(null), 2200); }
+  function flash(msg: string) { setToast(msg); setTimeout(() => setToast((t) => (t === msg ? null : t)), 7000); }   // errors only: long enough to read
 
   async function patch(id: string, body: Record<string, unknown>): Promise<boolean> {
     setBusyId(id);
