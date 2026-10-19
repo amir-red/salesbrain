@@ -17,6 +17,23 @@ export const IMPORT_FIELDS = [
 ] as const;
 export type ImportField = typeof IMPORT_FIELDS[number]['key'];
 
+/** The downloadable template: one column per field, named the way guessField reads them, plus an example row. */
+export const TEMPLATE_COLUMNS: { header: string; field: ImportField; example: string; help: string }[] = [
+  { header: 'Full name', field: 'full_name', example: 'Anna Berg', help: 'Required (or fill First name + Last name instead).' },
+  { header: 'First name', field: 'first_name', example: '', help: 'Use with Last name when the file splits names.' },
+  { header: 'Last name', field: 'last_name', example: '', help: '' },
+  { header: 'Company', field: 'company', example: 'Berg Plastics GmbH', help: 'Used to spot duplicates (same name at the same company).' },
+  { header: 'Title', field: 'title', example: 'Geschäftsführerin', help: '' },
+  { header: 'Email', field: 'email', example: 'anna@berg-plastics.de', help: 'One address. Used to spot duplicates.' },
+  { header: 'Phone', field: 'phone', example: '+49 151 2345678', help: '' },
+  { header: 'LinkedIn URL', field: 'linkedin_url', example: 'https://www.linkedin.com/in/anna-berg', help: 'The profile link (linkedin.com/in/…). Saves the lookup.' },
+  { header: 'Website', field: 'website', example: 'berg-plastics.de', help: '' },
+  { header: 'Where we met', field: 'met_at', example: 'Fakuma 2026', help: 'Empty = the default you set in the import.' },
+  { header: 'Priority', field: 'priority', example: '2', help: '1 (top) … 10. Empty = the default you set.' },
+  { header: 'Must talk', field: 'must_talk', example: 'yes', help: 'yes / no: stars the lead.' },
+  { header: 'Notes', field: 'notes', example: 'Met at the stand, interested in quoting automation.', help: 'Free text, lands on the lead card.' },
+];
+
 // Lower-cased header words → field. English and German, the way LinkedIn exports, CRMs and fair lists name them.
 const GUESSES: [RegExp, ImportField][] = [
   [/^(full ?name|name|contact( name)?|person|ansprechpartner|kontakt)$/, 'full_name'],

@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { IMPORT_FIELDS, mapRows, type ImportField, type ImportSummary } from '@/lib/lead-import';
 import type { TeamUser } from '@/lib/sales-leads';
+import ExportButton from '@/components/ExportButton';
 
 /**
  * Import a list of leads from a CSV or Excel file: 1 upload → 2 match the columns and set the defaults → 3 preview
@@ -98,6 +99,13 @@ export default function ImportLeadsModal({ users, onClose, onImported }: {
             <input id="imp-file" type="file" accept=".csv,.xlsx,.xls,.txt" className="sr-only" disabled={busy}
               onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); }} />
           </label>
+        )}
+        {step === 'upload' && (
+          <div className="flex flex-wrap items-center gap-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+            <span>No file yet? Start from the template; its columns are matched without any changes.</span>
+            <ExportButton href="/api/sales-leads/import/template?format=xlsx" label="Template (Excel)" title="Download the lead-import template with an example row and a sheet that explains each column" />
+            <ExportButton href="/api/sales-leads/import/template?format=csv" label="Template (CSV)" title="The same template as a CSV file" />
+          </div>
         )}
 
         {step === 'map' && (
