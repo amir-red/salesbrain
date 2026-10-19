@@ -1885,7 +1885,7 @@ Amir, on the Needs-you list: "how are they on top — what was the criteria?" Fo
   errors and auto-paused Hannes's LinkedIn on 2026-10-18 (every agent on it stopped). `policy/linkedin_limits.is_budget_refusal`
   + `agents.record_account_error` now ignore them; only real LinkedIn/Unipile failures count. His account was resumed.
 
-### 5.at Lead card outreach + the whole LinkedIn conversation on the track record (2026-10-19, feat/lead-outreach-card, core 0.53.0, no migration)
+### 5.at Lead card outreach + the whole LinkedIn conversation on the track record (2026-10-19, core/hermes 0.54.0, no migration)
 
 Amir, on /sales-leads: "add the outreach activities to send connection request and draft message — sync replies in here also."
 Before: a lead's track record only heard about sends that went through an approval card and the NEWEST reply of each sync;
