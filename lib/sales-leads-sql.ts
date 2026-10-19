@@ -2,7 +2,8 @@
 import { QUIET_WARN_DAYS, type LeadSort } from '@/lib/sales-leads';
 
 export const SORTS: Record<LeadSort, string> = {
-  priority: 'l.priority NULLS LAST, l.rank NULLS LAST, l.must_talk DESC, l.next_contact_at NULLS LAST, l.last_contact_at DESC NULLS LAST, l.created_at DESC',
+  // Order numbers are per list (each import brought its own), so within a priority the list comes before the order.
+  priority: 'l.priority NULLS LAST, l.source NULLS LAST, l.rank NULLS LAST, l.must_talk DESC, l.next_contact_at NULLS LAST, l.last_contact_at DESC NULLS LAST, l.created_at DESC',
   contact: 'COALESCE(l.last_contact_at, l.created_at) ASC, l.priority NULLS LAST, l.rank NULLS LAST',
   newest: 'l.created_at DESC',
 };

@@ -1,6 +1,6 @@
 'use client';
 
-import { contactAge, firstName, linkedInLabel, linkedInState, myRole, nextContactLabel, PRIORITY_LEVELS, priorityLevel, ROLES, STATUS_COLOR, tierLabel, type Lead } from '@/lib/sales-leads';
+import { contactAge, firstName, linkedInLabel, linkedInState, myRole, nextContactLabel, PRIORITY_LEVELS, priorityLevel, ROLES, STATUS_COLOR, tierLabel, whoActs, type Lead } from '@/lib/sales-leads';
 import { useEffect, useState } from 'react';
 import { Chevron, LinkedIn, Star } from './icons';
 import LifecycleLine from './LifecycleLine';
@@ -73,7 +73,7 @@ export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy, vie
           {lead.met_at && <span> · met at {lead.met_at}</span>}
           {lead.icp_name && !lead.met_at && <span> · {lead.icp_name}</span>}
         </div>
-        <LifecycleLine lead={lead} className="mt-0.5" />
+        <LifecycleLine lead={lead} className="mt-0.5" who={whoActs(lead, viewerId).label} />
         {lead.next_step && (
           <div className="text-[11px] truncate font-medium" style={{ color: 'var(--accent)' }} title={`Next step: ${lead.next_step}`}>→ {lead.next_step}</div>
         )}

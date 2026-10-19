@@ -95,6 +95,7 @@ async function salesLeads(args: Record<string, string>, who: Who): Promise<Built
     where.push(role === 'responsible' ? `l.responsible_user_id = $${n}` : role === 'front' ? `l.front_user_id = $${n}`
       : `(l.responsible_user_id = $${n} OR l.front_user_id = $${n})`);
   }
+  if (args.list) { vals.push(args.list); where.push(`l.source = $${vals.length}`); }
   const q = (args.q || '').trim();
   if (q) {
     vals.push(`%${q}%`);
@@ -353,7 +354,7 @@ export async function buildExport(req: ExportRequest, who: Who): Promise<Built> 
 /** The args each export understands, as the plain strings that travel in a query string / signed link. */
 export function cleanArgs(kind: ExportKind, raw: Record<string, unknown>): Record<string, string> {
   const allowed: Record<ExportKind, string[]> = {
-    'sales-leads': ['view', 'sort', 'q', 'mine', 'role'],
+    'sales-leads': ['view', 'sort', 'q', 'mine', 'role', 'list'],
     prospects: ['stage', 'mine', 'icp_id', 'reply_status', 'q'],
     icp: ['icp_id'],
   };

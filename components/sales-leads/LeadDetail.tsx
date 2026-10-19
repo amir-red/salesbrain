@@ -160,7 +160,7 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
           </div>
 
           {/* What the system is doing about this lead, and the controls that fit the stage */}
-          <LifecyclePanel lead={lead} onRefresh={() => { onRefresh?.(); loadEvents(); }} onConnect={connect} connecting={connecting} canConnect={canConnect} busy={busy} />
+          <LifecyclePanel lead={lead} viewerId={viewerId} onRefresh={() => { onRefresh?.(); loadEvents(); }} onConnect={connect} connecting={connecting} canConnect={canConnect} busy={busy} />
 
           {/* Journey — five steps, click to set; step 1 rates the intro, step 5 closes */}
           <div className="mb-4 rounded-xl p-3" style={{ background: 'var(--bg-input)' }}>

@@ -62,6 +62,8 @@ export async function GET(req: NextRequest) {
       : view === 'needs_you' ? `(l.responsible_user_id = ${me} OR l.front_user_id = ${me} OR ${sender})`
       : `(l.responsible_user_id = ${me} OR l.front_user_id = ${me})`);
   }
+  const list = url.searchParams.get('list') || '';
+  if (list) { vals.push(list); where.push(`l.source = $${vals.length}`); }
   if (q) { vals.push(`%${q}%`); where.push(`(l.full_name ILIKE $${vals.length} OR l.company ILIKE $${vals.length} OR l.title ILIKE $${vals.length} OR l.met_at ILIKE $${vals.length})`); }
   const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
@@ -74,7 +76,7 @@ export async function GET(req: NextRequest) {
               l.last_contact_at, to_char(l.next_contact_at, 'YYYY-MM-DD') AS next_contact_at,
               EXTRACT(day FROM now() - COALESCE(l.last_contact_at, l.created_at))::int AS days_since_contact,
               l.created_at, l.converted_at, l.converted_deal_id, d.name AS converted_deal_name, d.gate AS converted_deal_gate,
-              l.prospect_id::text AS prospect_id, ip.name AS icp_name, ou.name AS sender_name,
+              l.prospect_id::text AS prospect_id, ip.name AS icp_name, ou.name AS sender_name, p.owner_user_id::text AS sender_user_id,
               l.lifecycle_stage, l.lifecycle_actor, l.lifecycle_step, l.lifecycle_blocker, l.lifecycle_next_at, l.lifecycle_paused,
               p.linkedin_public_id AS li_public_id, p.network_degree AS li_degree,
               inv.status AS li_invite_status, inv.sent_at AS li_invite_sent_at, inv.accepted_at AS li_accepted_at,
@@ -115,6 +117,7 @@ export async function GET(req: NextRequest) {
               -- the VIEWER's own queue: leads they back-office, front, or hold the sending account for
               count(*) FILTER (WHERE ${NEEDS_YOU} AND (l.responsible_user_id = $1 OR l.front_user_id = $1
                   OR EXISTS (SELECT 1 FROM prospects pm WHERE pm.id = l.prospect_id AND pm.owner_user_id = $1)))::int AS needs_you,
+              count(*) FILTER (WHERE ${NEEDS_YOU})::int AS needs_anyone,
               count(*) FILTER (WHERE l.status = 'new')::int AS new,
               count(*) FILTER (WHERE l.status IN ('contacted', 'replied'))::int AS contacted,
               count(*) FILTER (WHERE l.status = 'replied')::int AS replied,
@@ -134,6 +137,12 @@ export async function GET(req: NextRequest) {
     );
     const funnel: Record<string, number> = Object.fromEntries(stageRows.map((r) => [r.stage, r.n]));
 
+    // The lists the leads came from (each import has its own order numbers), for the List filter.
+    const { rows: lists } = await client.query(
+      `SELECT COALESCE(l.source, '') AS source, count(*)::int AS n FROM sales_leads l WHERE ${OPEN}
+        GROUP BY 1 HAVING count(*) > 0 ORDER BY 2 DESC`,
+    );
+
     // Teammates for the responsible / front pickers: real logins, no service stubs.
     const { rows: users } = await client.query(
       `SELECT id, name, email FROM users
@@ -142,7 +151,7 @@ export async function GET(req: NextRequest) {
         ORDER BY name`,
     );
 
-    return NextResponse.json({ viewer_id: session.userId, viewer_is_admin: session.role === 'admin', leads, counts, funnel, users, view, sort });
+    return NextResponse.json({ viewer_id: session.userId, viewer_is_admin: session.role === 'admin', leads, counts, funnel, users, lists, view, sort });
   } finally {
     client.release();
   }

@@ -5,7 +5,7 @@ import Sidebar from '@/components/Sidebar';
 import LeadRow, { ROW_GRID } from '@/components/sales-leads/LeadRow';
 import LeadDetail from '@/components/sales-leads/LeadDetail';
 import { Search } from '@/components/sales-leads/icons';
-import { ACTOR_STYLE, LIFECYCLE_FUNNEL, LIFECYCLE_LABELS, type Lead, type LeadCounts, type LeadSort, type LeadStatus, type LeadView, type LifecycleStage, type RoleFilter, type TeamUser } from '@/lib/sales-leads';
+import { ACTOR_STYLE, LIFECYCLE_FUNNEL, LIFECYCLE_LABELS, type Lead, type LeadCounts, type LeadSort, type LeadStatus, type LeadView, type LifecycleStage, type RoleFilter, type TeamUser , listLabel } from '@/lib/sales-leads';
 import ExportButton from '@/components/ExportButton';
 
 /**
@@ -38,6 +38,8 @@ export default function SalesLeadsPage() {
   const [sort, setSort] = useState<LeadSort>('priority');
   const [q, setQ] = useState('');
   const [role, setRole] = useState<RoleFilter>('');   // '' everyone · any = mine · responsible / front = mine in that seat
+  const [list, setList] = useState('');               // one list (sales_leads.source); order numbers only compare inside a list
+  const [lists, setLists] = useState<{ source: string; n: number }[]>([]);
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [viewerIsAdmin, setViewerIsAdmin] = useState(false);
   const [open, setOpen] = useState<Set<string>>(new Set());
@@ -52,6 +54,7 @@ export default function SalesLeadsPage() {
     try {
       const params = new URLSearchParams({ view, sort });
       if (stage) params.set('stage', stage);
+      if (list) params.set('list', list);
       if (q.trim()) params.set('q', q.trim());
       if (role) { params.set('mine', '1'); if (role !== 'any') params.set('role', role); }
       const res = await fetch(`/api/sales-leads?${params}`);
@@ -61,6 +64,7 @@ export default function SalesLeadsPage() {
       setCounts(data.counts || null);
       setFunnel(data.funnel || {});
       setUsers(data.users || []);
+      setLists(data.lists || []);
       setViewerId(data.viewer_id || null);
       setViewerIsAdmin(!!data.viewer_is_admin);
     } catch (err) {
@@ -68,7 +72,7 @@ export default function SalesLeadsPage() {
     } finally {
       setLoading(false);
     }
-  }, [view, sort, q, role, stage]);
+  }, [view, sort, q, role, stage, list]);
 
   // Deep links from the digest / chat: /sales-leads?view=due&mine=1[&role=responsible]
   useEffect(() => {
@@ -78,6 +82,8 @@ export default function SalesLeadsPage() {
     const st = sp.get('stage') as LifecycleStage | null;
     if (st && (LIFECYCLE_FUNNEL as string[]).includes(st)) setStage(st);
     if (sp.get('mine') === '1') setRole(sp.get('role') === 'responsible' ? 'responsible' : sp.get('role') === 'front' ? 'front' : 'any');
+    else if (v === 'needs_you' && sp.get('mine') !== '0') setRole('any');   // "Needs you" is a personal queue
+    const li = sp.get('list'); if (li) setList(li);
   }, []);
 
   useEffect(() => { const t = setTimeout(() => load(), q ? 250 : 0); return () => clearTimeout(t); }, [load, q]);
@@ -182,6 +188,12 @@ export default function SalesLeadsPage() {
               <option value="responsible">Mine · back office</option>
               <option value="front">Mine · front office</option>
             </select>
+            <select value={list} onChange={(e) => setList(e.target.value)} aria-label="Which list"
+              title="Each list keeps its own order numbers; pick one to see them in that list's order"
+              className="text-sm rounded-full px-3 py-1.5" style={{ background: list ? 'var(--accent)' : 'transparent', color: list ? 'var(--accent-fg)' : 'var(--text-muted)', border: `1px solid ${list ? 'var(--accent)' : 'var(--border)'}` }}>
+              <option value="">All lists</option>
+              {lists.filter((l) => l.source).map((l) => <option key={l.source} value={l.source}>{listLabel(l.source)} ({l.n})</option>)}
+            </select>
             <div className="flex-1" />
             <label className="relative">
               <Search width={15} height={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-muted)' }} />
@@ -195,7 +207,7 @@ export default function SalesLeadsPage() {
               <option value="newest">Newest</option>
             </select>
             <ExportButton
-              href={`/api/export/sales-leads?${new URLSearchParams({ view, sort, ...(q ? { q } : {}), ...(role ? { mine: '1', ...(role !== 'any' ? { role } : {}) } : {}) })}`}
+              href={`/api/export/sales-leads?${new URLSearchParams({ view, sort, ...(q ? { q } : {}), ...(list ? { list } : {}), ...(role ? { mine: '1', ...(role !== 'any' ? { role } : {}) } : {}) })}`}
               title="Download what this list shows (current view, search and Mine filter) as Excel, with every track-record line" />
           </div>
 
@@ -229,7 +241,7 @@ export default function SalesLeadsPage() {
           <div className="z-card overflow-hidden mt-2">
             <div className={`hidden md:grid ${ROW_GRID} gap-x-3 px-4 py-2 z-eyebrow`} style={{ borderBottom: '1px solid var(--border)' }}>
               <span>#</span><span title="Order inside the priority (1 = first)">Order</span><span>Lead</span><span>Status</span><span>Last contact</span><span>Works it</span><span>Priority</span>
-              <span className="text-right">{loading ? '' : `${leads.length} shown`}</span>
+              <span className="text-right">{loading ? '' : view === 'needs_you' && !role ? `${leads.length} · everyone's` : `${leads.length} shown`}</span>
             </div>
             {loading ? (
               <div className="divide-y" style={{ borderColor: 'var(--border)' }}>

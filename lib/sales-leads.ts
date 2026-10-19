@@ -157,10 +157,33 @@ export interface Lead {
   lifecycle_next_at: string | null;         // when something is expected to change
   lifecycle_paused: boolean;                // a person said hands off
   sender_name?: string | null;              // whose LinkedIn sends for this lead (the prospect's owner)
+  sender_user_id?: string | null;
+}
+
+/** Stages where the person who must act is the one whose LinkedIn sends (they approve the card), not the back office. */
+const CARD_STAGES = new Set(['request_filed', 'first_message_waiting', 'followup_waiting']);
+
+/** Who has to act on a lead the Lead Conductor marks "a person must act": the sender for an approval card, otherwise
+ *  the back office (then the front office). `label` is "You" for the viewer, else the first name. */
+export function whoActs(l: Pick<Lead, 'lifecycle_stage' | 'responsible_user_id' | 'responsible_name' | 'front_user_id' | 'front_name' | 'sender_user_id' | 'sender_name'>,
+                        viewerId: string | null): { id: string | null; label: string } {
+  const card = l.lifecycle_stage && CARD_STAGES.has(l.lifecycle_stage);
+  const id = (card ? l.sender_user_id : null) || l.responsible_user_id || l.front_user_id || null;
+  const name = (card ? l.sender_name : null) || l.responsible_name || l.front_name || '';
+  if (id && viewerId && id === viewerId) return { id, label: 'You' };
+  return { id, label: (name || 'Someone').split(' ')[0] };
+}
+
+/** "event:fakuma-2026" → "Fakuma 2026". The list a lead came from, as people say it. */
+export function listLabel(source: string | null | undefined): string {
+  const s = (source || '').replace(/^(event|linkedin|manual|form|calendly):/, '');
+  if (!s) return 'No list';
+  return s.split(/[-_]/).map((w) => (/^\d+$/.test(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(' ')
+    .replace(/^Pei /, 'PEI ').replace(/^Nrw /, 'NRW ');
 }
 
 export interface LeadCounts {
-  working: number; due: number; must: number; needs_you: number;
+  working: number; due: number; must: number; needs_you: number; needs_anyone?: number;
   new: number; contacted: number; replied: number; converted: number; archived: number; all: number; booked: number;
 }
 

@@ -1840,6 +1840,21 @@ turn's first call, median 6 model calls per turn (max 39), ~140k input tokens pe
   `GET/POST /api/knowledge` -> app-only RPCs `knowledge_list` / `knowledge_save` / `knowledge_archive`.
 - Not built: point 1 of the plan (fewer, question-shaped tools), embeddings (pgvector) if keyword retrieval weakens, a per-turn tool-call cap.
 
+### 5.au /sales-leads "Needs you" made honest (2026-10-19, core/hermes 0.52.4, app)
+
+Amir, on the Needs-you list: "how are they on top — what was the criteria?" Four things were misleading:
+- **Counter vs table**: the tile counts only the viewer's own queue, but a deep link (`?view=needs_you`) opened the table on
+  *Everyone* (184 vs 25). Needs you now opens as **Mine** unless the link says `mine=0`; on Everyone the count reads "· everyone's".
+- **"You · …" meant "a person"**: the chip now names who must act (`lib/sales-leads.ts::whoActs`): for an approval card
+  (`request_filed`, `first_message_waiting`, `followup_waiting`) the SENDER (the prospect's owner, `sender_user_id`), otherwise
+  the back office, then the front office; "You" only for the viewer. Same on the lead's panel ("Needs Hannes · …").
+- **Order numbers are per list**: each import brought its own ranks, so "order 4" from Fakuma and from NRW tied. The priority
+  sort is now `priority, source, rank, …` (lists grouped inside a priority), and a **List** filter (`?list=<source>`, also on the
+  Excel export) shows one list in its own order; the API returns `lists`.
+- **A budget refusal paused an account**: three "daily search cap reached" refusals from our own guard counted as provider
+  errors and auto-paused Hannes's LinkedIn on 2026-10-18 (every agent on it stopped). `policy/linkedin_limits.is_budget_refusal`
+  + `agents.record_account_error` now ignore them; only real LinkedIn/Unipile failures count. His account was resumed.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

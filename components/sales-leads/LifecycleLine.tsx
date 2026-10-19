@@ -9,17 +9,18 @@ import { ACTOR_STYLE, LIFECYCLE_BLOCKERS, LIFECYCLE_LABELS, type Lead } from '@/
  */
 type Fields = Pick<Lead, 'lifecycle_stage' | 'lifecycle_actor' | 'lifecycle_step' | 'lifecycle_blocker' | 'lifecycle_paused'>;
 
-export default function LifecycleLine({ lead, className = '' }: { lead: Fields; className?: string }) {
+/** `who` names the person who must act ("You", "Hannes"); without it the chip falls back to "Person". */
+export default function LifecycleLine({ lead, className = '', who }: { lead: Fields; className?: string; who?: string }) {
   if (!lead.lifecycle_stage) return null;                  // the conductor has not evaluated this lead yet
   const actor = lead.lifecycle_actor ?? 'none';
   const style = ACTOR_STYLE[actor];
-  const you = actor === 'you';
+  const you = actor === 'you';                       // "a person must act", named by `who`
   const blocker = lead.lifecycle_blocker ? LIFECYCLE_BLOCKERS[lead.lifecycle_blocker] ?? lead.lifecycle_blocker : null;
   return (
     <div className={`flex items-center gap-1.5 min-w-0 text-[11px] ${className}`} title={[style.label, lead.lifecycle_step, blocker].filter(Boolean).join(' · ')}>
       <span className="px-1.5 rounded-full whitespace-nowrap font-medium flex-shrink-0"
         style={{ background: `color-mix(in srgb, ${style.color} 14%, transparent)`, color: style.color }}>
-        {you ? 'You · ' : ''}{LIFECYCLE_LABELS[lead.lifecycle_stage]}
+        {you ? `${who || 'Person'} · ` : ''}{LIFECYCLE_LABELS[lead.lifecycle_stage]}
       </span>
       <span className="truncate" style={{ color: you ? 'var(--text)' : 'var(--text-muted)', fontWeight: you ? 600 : 400 }}>{lead.lifecycle_step}</span>
       {blocker && (

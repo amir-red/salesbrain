@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ACTOR_STYLE, LIFECYCLE_BLOCKERS, LIFECYCLE_LABELS, type Lead, type LifecycleStage } from '@/lib/sales-leads';
+import { ACTOR_STYLE, LIFECYCLE_BLOCKERS, LIFECYCLE_LABELS, type Lead, type LifecycleStage, whoActs } from '@/lib/sales-leads';
 import type { ProfileLookup } from '@/lib/connect';
 
 /**
@@ -24,8 +24,8 @@ function slugOf(input: string): string {
   return (v.includes('/in/') ? v.split('/in/')[1] : v).split('/')[0].toLowerCase();
 }
 
-export default function LifecyclePanel({ lead, onRefresh, onConnect, connecting, canConnect, busy }: {
-  lead: Lead; onRefresh: () => void; onConnect: () => void; connecting: boolean; canConnect: boolean; busy: boolean;
+export default function LifecyclePanel({ lead, onRefresh, onConnect, connecting, canConnect, busy, viewerId = null }: {
+  lead: Lead; onRefresh: () => void; onConnect: () => void; connecting: boolean; canConnect: boolean; busy: boolean; viewerId?: string | null;
 }) {
   const stage = lead.lifecycle_stage;
   const [lookup, setLookup] = useState<ProfileLookup | null>(null);
@@ -89,7 +89,7 @@ export default function LifecyclePanel({ lead, onRefresh, onConnect, connecting,
 
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background: `color-mix(in srgb, ${style.color} 14%, transparent)`, color: style.color }}>
-          {style.label ? `${style.label} · ` : ''}{LIFECYCLE_LABELS[stage]}
+          {actor === 'you' ? `${whoActs(lead, viewerId).label === 'You' ? 'Needs you' : `Needs ${whoActs(lead, viewerId).label}`} · ` : style.label ? `${style.label} · ` : ''}{LIFECYCLE_LABELS[stage]}
         </span>
         <span className="text-xs font-medium">{lead.lifecycle_step}</span>
         {when && <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>expected around {when}</span>}
