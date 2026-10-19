@@ -1970,6 +1970,22 @@ list name, where met, priority, back office, front office → **Check** (dry run
 - Tests: `salesbrain-core/tests/test_lead_add_import_db.py` (real Postgres). Not built: a CSV of updates to existing leads
   (duplicates are skipped, not merged), column mappings remembered between imports.
 
+### 5.az Connection-request caps by subscription, honest rolling counts (2026-10-19, core/hermes 0.54.4, migration 073)
+
+Amir: "what is the cap for Matthias? have you checked his LinkedIn subscription?" — and the bot said "15 sent today" about
+requests sent the evening before. Caps were one global 15/75 and the kernel's rolling counts were labelled "today" / "this week".
+- **By subscription** (`linkedin_accounts.premium_features` via `policy/linkedin_limits.tier`): free `per_day`/`per_week` 15/75,
+  Sales Navigator `per_day_sales_navigator`/`per_week_sales_navigator` 25/120 (+ note 300 chars). Unipile 2026: paid active accounts
+  ~200 invitations a week enforced by LinkedIn, 80-100/day recommended; accounts under ~150 connections may see requests held —
+  Matthias has 76, hence modest. Both fields chat-editable by an admin (`admin_policy`). Guard backstop `sales_navigator.invite` 20 -> 30.
+  Matthias's Sales Navigator was only detected at the 2026-10-18 reconnect (the old account row said []).
+- **Rolling, said so**: `policy/invitations.for_tier`, `next_free_at`; kernel `_quota` returns `window`, `subscription`, `sent_last_24h`,
+  `sent_last_7d`, `remaining`, `next_request` ("in 2 h 10 min (18:05 UTC)"); refusals name the next time. `crm_linkedin_quota` now carries
+  `connection_requests` (it only had searches / profile fetches). Lead Conductor batch card and the /icp list line say "in the last 24 h /
+  last 7 days", the tier and the next request time. Persona "Counts and caps": never "today" for a rolling count; calendar periods come
+  from `crm_outreach_kpis`; never invent a reason for a rule.
+- Retired Matthias's bot-written workaround note ("verify with KPIs, sent_today is rolling"), superseded + audited.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
