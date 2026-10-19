@@ -1917,6 +1917,15 @@ landed; the card could not draft a message.
 - Not built: email drafting from the card, a teammate (non-owner) filing a draft for the owner's approval, logging emails sent
   from Gmail.
 
+### 5.aw A LinkedIn URL on the lead card reaches its prospect (2026-10-19, core/hermes 0.53.2)
+
+David Rowley's card showed `in/davidrowley` (Mateo's Napa import) while the line said "Finding LinkedIn": the URL lived on
+`sales_leads.linkedin_url`, but every agent reads `prospects.linkedin_public_id`, which was only written when the Conductor
+CREATED a prospect. A lead linked to an existing prospect never passed its URL on (30 open leads, 13 stuck in Finding / No
+LinkedIn / Pick). Now `conductor.adopt_lead_linkedin` runs on every tick (prerequisite 1b) and `deals.update_sales_lead`
+does the same when someone edits the URL on the card; both go through `prospecting.set_prospect_linkedin` (the one writer:
+never overwrites a profile, reports `duplicate_of` when another lead holds it). Stat `profiles_from_lead` on the tick.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
