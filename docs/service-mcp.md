@@ -110,7 +110,7 @@ Four JSON-RPC methods:
 | Method | Purpose |
 |---|---|
 | `initialize` | Handshake — returns server info + protocol version. |
-| `tools/list` | The catalog (68 tools) with JSON-Schema for each. |
+| `tools/list` | The catalog (69 tools) with JSON-Schema for each. |
 | `tools/call` | Invoke one tool. This is where the work happens. |
 | `ping` | Health check. |
 
@@ -920,6 +920,16 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 ---
 
 ## 12. Changelog
+
+### 2026-10-18 — enrich a sales lead
+
+**`crm_enrich_lead`** `{lead_id, step}` runs ONE enrichment step on a sales-leads card so a screen can show progress: `linkedin`
+(profile by name + company; web search first, saved only on exactly one strong match, otherwise `candidates`), `website`,
+`email` (free in-DB match, then the configured provider, daily credit cap honoured); run them in that order. `step: "pick"` with a
+`public_identifier` saves a candidate the user chose. It fills ONLY empty fields on the card (never overwrites), has no phone step,
+runs as the lead's owner (their LinkedIn account and budgets) and is allowed for the lead's back / front office, its owner and
+admins. Returns `status` (found | already | none | pick | weak | capped | skipped | duplicate | error), `message`, `filled`. A lead
+with no prospect behind it gets an unscored one, linked to the same row. 69 tools.
 
 ### 2026-10-17 — every lead has a stored lifecycle (Lead Conductor)
 `list_leads` rows now carry `sales_lead_id`, `lifecycle_stage` (e.g. `finding_profile`, `needs_pick`, `ready_to_connect`,

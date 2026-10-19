@@ -229,6 +229,26 @@ export const SERVICE_TOOLS: ToolDef[] = [
     needsOwner: true,
   },
   {
+    name: 'crm_enrich_lead',
+    description:
+      "Enrich ONE sales-leads card, one step per call so a screen can show progress: step 'linkedin' (profile by name + company; " +
+      "web search first, saved only on exactly one strong match, otherwise `candidates` to choose from), 'website' (company site), " +
+      "'email' (free in-DB match, then the configured provider; honours the daily credit cap). Run them in that order; step 'pick' " +
+      "saves a LinkedIn candidate the user chose (public_identifier). Fills ONLY empty fields on the card, never overwrites, no phone. " +
+      "Runs as the lead's owner (their LinkedIn account and budgets); allowed for the lead's back / front office, its owner and admins. " +
+      "Returns {status: found | already | none | pick | weak | capped | skipped | duplicate | error, message, filled, candidates}. Contacts no one.",
+    inputSchema: obj(
+      {
+        lead_id: { type: 'string' },
+        step: { type: 'string', enum: ['linkedin', 'website', 'email', 'pick'] },
+        public_identifier: { type: 'string', description: "for step 'pick': the chosen profile slug" },
+        member_id: { type: 'string', description: "for step 'pick': the candidate's provider_id, if given" },
+      },
+      ['lead_id', 'step'],
+    ),
+    needsOwner: true,
+  },
+  {
     name: 'crm_enrich_prospect',
     description:
       "Run the Enricher on ONE prospect now: the LinkedIn profile found by name + company when the lead " +
@@ -1260,7 +1280,7 @@ async function guardedLinkedinSpend(
 const PASSTHROUGH = new Set([
   'crm_icp_define', 'crm_icp_preview', 'crm_icp_list', 'crm_icp_archive', 'crm_icp_set_state',
   'crm_icp_rescore', 'crm_leads_finder_run',
-  'crm_agent_request_run', 'crm_agent_set_user_state', 'crm_enrich_prospect', 'crm_outreach_propose',
+  'crm_agent_request_run', 'crm_agent_set_user_state', 'crm_enrich_prospect', 'crm_enrich_lead', 'crm_outreach_propose',
   'crm_outreach_pending', 'crm_outreach_decide', 'crm_record_reply', 'crm_linkedin_status',
   'crm_linkedin_find_person', 'crm_linkedin_link_prospect', 'crm_prospect_add',
   'crm_linkedin_revoke', 'crm_agent_activity', 'crm_agent_status', 'crm_linkedin_quota', 'crm_outreach_kpis',
