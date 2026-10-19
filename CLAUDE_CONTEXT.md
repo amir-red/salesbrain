@@ -1885,6 +1885,38 @@ Amir, on the Needs-you list: "how are they on top — what was the criteria?" Fo
   errors and auto-paused Hannes's LinkedIn on 2026-10-18 (every agent on it stopped). `policy/linkedin_limits.is_budget_refusal`
   + `agents.record_account_error` now ignore them; only real LinkedIn/Unipile failures count. His account was resumed.
 
+### 5.at Lead card outreach + the whole LinkedIn conversation on the track record (2026-10-19, feat/lead-outreach-card, core 0.53.0, no migration)
+
+Amir, on /sales-leads: "add the outreach activities to send connection request and draft message — sync replies in here also."
+Before: a lead's track record only heard about sends that went through an approval card and the NEWEST reply of each sync;
+messages typed by hand on LinkedIn (20 lines missing across 22 leads) and every connection request (16 leads, 0 lines) never
+landed; the card could not draft a message.
+- **Kernel** (`commands/sales_leads.py`): `log_conversation` — called by `linkedin.sync_thread` for every NEW message, both
+  directions — writes a `sent` / `reply` line keyed on `ref.message_id`, stamped with the teammate whose account it went
+  through, and lifts the status ladder. `lead_for_thread`: the account owner's prospect → ANY teammate's prospect for the same
+  person / member id → the lead's LinkedIn URL slug (the list is org-wide: Fedler is Mateo's lead, his conversation is on
+  another account). Never creates a lead. `_already_logged` dedupes the two writers that see one LinkedIn message (approval
+  mirror without an id, thread sync with one; same kind + same first 80 normalised characters within 3 days; a message WITH an
+  id only matches id-less lines, so two real "Danke!" stay two). `record_reply` passes `message_id`. A brand-new mirrored lead
+  pulls its conversation history (`backfill_conversation`, every team account). `note_invitation` = `status` lines (never a
+  contact, never moves "last talked") for request sent (product or by hand, with the note) / accepted / not accepted, once
+  per invitation + state; called from `record_invitation` and `reconcile_invitations`. All savepointed; a lost connection
+  re-raises instead of being swallowed per lead.
+- **Backfill** `python -m salesbrain_core.store.backfill_track_record [--lead id] [--apply]` — same writers, one short
+  transaction per lead (one long dry-run transaction outlived the pooler session: "connection is lost" on every later lead).
+  Dry run 2026-10-19: 22 leads, +20 message lines, +32 request lines, 3.5 min from a laptop. Re-running adds nothing.
+- **App**: `components/sales-leads/OutreachPanel.tsx` above the track record ← `GET/POST /api/sales-leads/[id]/outreach`
+  (facts in `lib/sales-lead-outreach.ts`; read-only check `scripts/check-lead-outreach.mts`). Modes: no_prospect · no_profile ·
+  no_sender (owner has no LinkedIn) · connect · request_pending · first_message · thread. Send connection request (+ note ≤200)
+  → `crm_linkedin_connect_propose`; Draft → the list's first-message template, else a model draft (`lead_card_draft`: reply if
+  they wrote last, follow-up if we did, first message for a new connection; same language as the conversation) → editable →
+  Queue for <sender>'s approval → `crm_linkedin_first_message_propose` or `crm_outreach_propose kind=followup` with the
+  thread. NOTHING SENDS from the card: the sender (prospect owner) decides on Telegram / /agents. Acts as the owner for an
+  admin; anyone else only on their own leads (act-as rule unchanged). Waiting requests / drafts are listed and not re-offered.
+  Live distribution at build: connect 93 · thread 26 · no_profile 73 · no_prospect 39 · no_sender 4.
+- Not built: email drafting from the card, a teammate (non-owner) filing a draft for the owner's approval, logging emails sent
+  from Gmail.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

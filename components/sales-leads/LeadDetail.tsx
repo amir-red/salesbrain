@@ -6,6 +6,7 @@ import { addDays, CHANNEL_LABELS, CHANNEL_REQUIRED, CHANNELS, DEFAULT_CHANNEL, J
 import { Chevron, EventIcon, External, LinkedIn, Mail, Pencil, Phone } from './icons';
 import { EnrichProgress, useEnrich } from './EnrichPanel';
 import LifecyclePanel from './LifecyclePanel';
+import OutreachPanel from './OutreachPanel';
 
 /**
  * The expanded card, in the order Mateo reads it before a call: talking points
@@ -255,6 +256,9 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
             </details>
           ) : null}
           {!d && lead.description ? (<><Eyebrow>Origin</Eyebrow><p className="text-[13px] whitespace-pre-wrap leading-relaxed" style={{ color: 'var(--text-muted)' }}>{lead.description}</p></>) : null}
+
+          {/* Connection request / next LinkedIn message — filed for the sender's approval */}
+          <OutreachPanel leadId={lead.id} onChanged={() => { onRefresh?.(); loadEvents(); }} />
 
           <button type="button" onClick={toggleTrack} aria-expanded={trackOpen}
             className="mt-5 mb-2 w-full flex items-center gap-2 text-left group">

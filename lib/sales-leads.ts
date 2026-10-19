@@ -70,6 +70,20 @@ export const DEFAULT_CHANNEL: Partial<Record<string, string>> = { call: 'phone',
 /** Kinds whose channel must be picked before the line can be added. */
 export const CHANNEL_REQUIRED = new Set<string>(['sent', 'reply']);
 
+/** What the card can do on LinkedIn right now (GET /api/sales-leads/:id/outreach). */
+export type OutreachMode = 'no_prospect' | 'no_profile' | 'no_sender' | 'connect' | 'request_pending' | 'first_message' | 'thread';
+export type OutreachState = {
+  mode: OutreachMode;
+  /** Whose LinkedIn sends: the prospect's owner. */
+  sender: { user_id: string; name: string | null } | null;
+  /** The last few messages on the sender's account, oldest first. */
+  thread: { ours: boolean; text: string | null; sent_at: string | null }[];
+  /** Requests / drafts already waiting for the sender's decision. */
+  pending: { id: string; kind: 'connect' | 'outreach' | 'followup'; status: string; message: string | null; created_at: string }[];
+  can_act: boolean;
+  why: string | null;
+};
+
 /** The lead's journey on the card (migration 060). Index = journey_stage; 0 = not started. */
 export const JOURNEY_STAGES: { stage: number; label: string; hint: string }[] = [
   { stage: 1, label: 'Warm introduction', hint: 'Someone introduced us (rate the intro 1–5)' },
