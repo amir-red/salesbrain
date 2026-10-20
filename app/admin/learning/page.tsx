@@ -99,7 +99,7 @@ export default function LearningAdminPage() {
   const skillsPending = data?.profiles.reduce((n, p) => n + p.pending_skills.length, 0) ?? 0;
   const memoryPending = data?.profiles.reduce((n, p) => n + p.pending_memory.length, 0) ?? 0;
   const agentSkills = data?.profiles.reduce((n, p) => n + p.agent_skills.length, 0) ?? 0;
-  const unhealthy = data?.profiles.filter((p) => !loopHealth(p.status).ok).length ?? 0;
+  const unhealthy = data?.profiles.filter((p) => !loopHealth(p.status, p.profile).ok).length ?? 0;
 
   return (
     <div className="flex h-screen">
@@ -205,7 +205,7 @@ function ProfileSection({ p, busy, decide, removeSkill }: {
   decide: (profile: string, subsystem: Subsystem, id: string, decision: Decision) => Promise<void>;
   removeSkill: (profile: string, name: string) => Promise<void>;
 }) {
-  const health = loopHealth(p.status);
+  const health = loopHealth(p.status, p.profile);
   const [showMemory, setShowMemory] = useState(false);
   return (
     <SectionCard

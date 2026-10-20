@@ -82,11 +82,15 @@ export function originLabel(origin: string | null | undefined): string {
 }
 
 /** Every surface where the loop is wired = `skills` + `crm_memory` present, built-in memory off. */
-export function loopHealth(st: LoopStatus): { ok: boolean; problems: string[] } {
+/** Chat profiles serve people; every other SalesBrain profile is a rendered agent (salesbrain-hermes/agents/). */
+const CHAT_PROFILES = new Set(['default', 'crm']);
+
+export function loopHealth(st: LoopStatus, profile = 'default'): { ok: boolean; problems: string[] } {
   const problems: string[] = [];
-  // Hermes' built-in memory must stay OFF: it is one file per bot profile. Per-person memory is the
-  // crm_memory family (core agent_memories), which `surfaces[*].memory` reports.
-  if (st.memory_enabled) problems.push('Hermes built-in memory is ON (memory.memory_enabled) — it shadows per-person memory');
+  // Hermes' built-in memory must stay OFF on the CHAT profiles: it is one file per profile, shared by every person.
+  // Per-person memory is crm_memory. An AGENT profile's MEMORY.md is its own job knowledge, written by its weekly
+  // review job — ON by design there.
+  if (st.memory_enabled && CHAT_PROFILES.has(profile)) problems.push('Hermes built-in memory is ON (memory.memory_enabled) — it shadows per-person memory');
   if (!st.review_enabled) problems.push('background review disabled (auxiliary.background_review.enabled)');
   // Skill writes go live at once by decision (2026-10-17); role_policy guards the git-deployed skills and every write is audited.
   for (const key of ['telegram', 'api_server'] as const) {

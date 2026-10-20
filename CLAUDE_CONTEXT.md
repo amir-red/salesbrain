@@ -1996,6 +1996,45 @@ because a request sent by hand often has no stored name; the member id is never 
 filed for leads, or "say 'add them as leads'" when none is a lead. The inbox digest no longer carries acceptances and no
 longer fires for them. Knowledge entry "Message: X accepted your connection request". Amir's linkedin-sync mute was lifted.
 
+### 5.ba Hermes-native agents, pilot: Outreach + Leads Finder are real profiles (2026-10-20, core/hermes 0.55.0-0.55.1)
+
+Amir: "reuse Hermes's agent infrastructure; the Workspace should show the real things", and every script agent becomes an AI
+agent (graph sync may stay light). Plan `~/.claude/plans/hermes-native-agents.md`; this is §6 (pilot). Rollout order next:
+Enricher → Lead Conductor → Attention / Supervisor / Learn / Knowledge review → Graph sync (light) → retire `crm`.
+- **One folder per agent** `salesbrain-hermes/agents/<agent>/`: SOUL.md, AGENTS.md (Run + Review sections), agent.yaml (model,
+  toolsets, memory, skills, jobs, `replaces`), run_queue.py (deterministic gate + dossier; NOT `queue.py` — that name shadows the
+  stdlib `queue` module and broke psycopg), review_queue.py. `_shared/env.keys` (secrets an agent gets; never
+  SALESBRAIN_ACTOR_EMAIL or the bot token) and `_shared/base-rules.md` (prepended to every AGENTS.md).
+- **Renderer** `scripts/render_agents.py` (deploy step, on the box, idempotent): profile `/root/.hermes/profiles/<agent>/` with SOUL,
+  config.yaml (main config + agent model / `platform_toolsets.cron` / memory ON / no Telegram), .env (0600), workdir/AGENTS.md,
+  scripts, cron jobs `agent:<agent>:<run|review>` (own model, `--workdir`, deliver local) created or edited in place; jobs the agent
+  `replaces` in the main profile are PAUSED (rollback; delete after a week: `leads-finder`, `ops:outreach:daily`). Deploy verify
+  refuses an agent profile with SALESBRAIN_ACTOR_EMAIL or missing / duplicated jobs. Spikes proved: `--workdir` injects AGENTS.md;
+  a profile's job runs once in its own profile.
+- **Identity** (`agents_runtime.py` + the `tool_request` middleware, checked BEFORE the chat-user lookup): an agent run acts as the
+  SERVICE identity, or as the owner set with **`crm_agent_act_as`** (audited `agent_act_as`; refused when the agent is held for that
+  owner); `crm_agent_finish_run` always as the service. **Found on the way: the old outreach routine had filed 0 drafts in 30 days** —
+  its tool calls fell back to SALESBRAIN_ACTOR_EMAIL=amir@test.com (no such user) and every run was reaped as error; the attention
+  routine has the same fallback (still on the main profile until its rollout).
+- **Role policy for agent runs**: CRM tools, web search, skills; blocked = any decide / send / approve / policy / invite / delete /
+  import / export / share / forget / save / learn / set / connect tool and all server tools; the Hermes `memory` tool only in the
+  `review` job (MEMORY.md = the agent's job knowledge; the working run reads it, never writes it — injection guard).
+- **AI Leads Finder** (Flash): run_queue.py = kernel `leads_finder_plan` (budgets, holds, backoff, requested runs) + per-ICP dossier
+  (stored variants, cursor state, `ka.leads_finder_history` = what each query produced in 30 days); the model chooses a stored
+  variant or writes its own query and calls **`crm_leads_finder_search`** (one search per ICP; same budget; an own query is a probe that
+  does not move the cursor), then **`crm_leads_finder_report`** per owner (digest, nothing when no new leads). `leads_agent.search_step`
+  is now the one search step (the chat tool `crm_leads_finder_run` uses it too). First live run: continued variant 1, 40 analyzed,
+  27 new, 5 researched, digest sent, run owned by Matthias with the agent's reason in `detail.reason`.
+- **Outreach** (Argon): own profile, AGENTS.md from the old routine prompt + act-as per owner + no delegation; review_queue.py = last
+  week's drafts sent / skipped / expired + replies. Its queue was empty at launch (no researched strong fit reachable by email or an
+  existing thread; follow-up drafting off), so its first real drafts wait for leads that qualify.
+- **Fixed 0.55.1: the LinkedIn guard counted its own refusals as usage.** 38 real searches + 166 refused retries read as "203/40" and
+  locked searching all afternoon (and indefinitely while callers retry). `linkedin_health.budget` now counts only requests that reached
+  LinkedIn (rows `refused:` with no status code are excluded).
+- `/admin/learning` shows every profile's MEMORY.md already; the "built-in memory ON" warning now applies to chat profiles only.
+- Not built yet: per-agent `/agents` link to its Workspace card, the remaining agents, deleting the paused main-profile jobs (after
+  2026-10-27), cost per agent report (feature = cron job name in `llm_usage`).
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
