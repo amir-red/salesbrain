@@ -290,6 +290,12 @@ export default function Sidebar() {
     fetch('/api/auth/me').then((r) => (r.ok ? r.json() : null)).then((d) => setRole(d?.role ?? null)).catch(() => {});
     try { setCollapsed(localStorage.getItem(COLLAPSE_KEY) === '1'); } catch { /* private mode */ }
   }, []);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const logOut = async () => {
+    setLoggingOut(true);
+    try { await fetch('/api/auth/logout', { method: 'POST' }); } catch { /* go to the login page either way */ }
+    window.location.href = '/login';
+  };
   const toggleCollapsed = () => {
     const next = !collapsed;
     setCollapsed(next);
@@ -370,6 +376,22 @@ export default function Sidebar() {
 
       <div className="flex-shrink-0 px-2 py-2 border-t flex flex-col gap-0.5" style={{ borderColor: 'var(--border)' }}>
         {link(PROFILE)}
+        <button
+          type="button"
+          onClick={logOut}
+          disabled={loggingOut}
+          title="Log out"
+          className={`h-9 rounded-xl flex items-center gap-3 text-sm transition-colors hover:bg-[var(--accent-glow)] disabled:opacity-60 ${collapsed ? 'justify-center' : 'justify-center lg:justify-start lg:px-3'}`}
+          style={{ color: 'var(--text-muted)' }}
+        >
+          <span className="flex-shrink-0">
+            {/* Door with an arrow leaving it */}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </span>
+          <span className={`${wide} truncate`}>{loggingOut ? 'Logging out…' : 'Log out'}</span>
+        </button>
         <div className={`flex items-center gap-1 ${collapsed ? 'flex-col' : 'flex-col lg:flex-row lg:justify-between lg:px-1.5'}`}>
           <span className={wide}><ThemeToggle label /></span>
           <span className={narrow}><ThemeToggle /></span>
