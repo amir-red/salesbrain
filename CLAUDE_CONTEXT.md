@@ -1986,6 +1986,16 @@ requests sent the evening before. Caps were one global 15/75 and the kernel's ro
   from `crm_outreach_kpis`; never invent a reason for a rule.
 - Retired Matthias's bot-written workaround note ("verify with KPIs, sent_today is rolling"), superseded + audited.
 
+### 5.az Acceptances are their own message (2026-10-20, core/hermes 0.54.6)
+
+Amir asked whether he hears when someone accepts; he did not: acceptances rode inside the hourly LinkedIn inbox digest
+(source `linkedin-sync`), which he had muted on 2026-10-17, so the 18 Oct acceptance was withheld with it. Now
+`linkedin_sync.py::_accept_notice` sends ONE message per sync that saw acceptances, source **`linkedin-accepted`** (own mute
+switch; `policy/notify.SOURCES`), owner's DM or nothing: name + headline + profile link (taken from the connection list,
+because a request sent by hand often has no stored name; the member id is never shown), the count of first-message cards
+filed for leads, or "say 'add them as leads'" when none is a lead. The inbox digest no longer carries acceptances and no
+longer fires for them. Knowledge entry "Message: X accepted your connection request". Amir's linkedin-sync mute was lifted.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
