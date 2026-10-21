@@ -7,16 +7,18 @@ import TelegramPanel from '@/components/profile/TelegramPanel';
 import MemoryPanel from '@/components/profile/MemoryPanel';
 import LinkedInPanel from '@/components/profile/LinkedInPanel';
 import ImportsPanel from '@/components/profile/ImportsPanel';
+import EmailSendingPanel from '@/components/profile/EmailSendingPanel';
 import McpPanel from '@/components/profile/McpPanel';
 import ServiceTokenPanel from '@/components/profile/ServiceTokenPanel';
 
-type Tab = 'account' | 'memory' | 'telegram' | 'linkedin' | 'imports' | 'mcp' | 'service';
+type Tab = 'account' | 'memory' | 'telegram' | 'linkedin' | 'email' | 'imports' | 'mcp' | 'service';
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: 'account', label: 'Account', hint: 'Who you are signed in as' },
   { id: 'memory', label: 'Memory', hint: 'What the agents remember about you' },
   { id: 'telegram', label: 'Telegram', hint: 'Chat with the assistant' },
   { id: 'linkedin', label: 'LinkedIn', hint: 'Inbox triage and follow-ups' },
+  { id: 'email', label: 'Email', hint: 'Send email waves from your Gmail' },
   { id: 'imports', label: 'Imports', hint: 'Google, contacts, messages' },
   { id: 'mcp', label: 'MCP', hint: 'Access tokens for Claude and other tools' },
   { id: 'service', label: 'Service API', hint: 'Admin: tokens for a sibling app to run outreach' },
@@ -138,6 +140,7 @@ function Profile() {
         {tab === 'memory' && <MemoryPanel />}
         {tab === 'telegram' && <TelegramPanel />}
         {tab === 'linkedin' && <LinkedInPanel />}
+        {tab === 'email' && <EmailSendingPanel />}
         {tab === 'imports' && <ImportsPanel />}
         {tab === 'mcp' && <McpPanel />}
         {tab === 'service' && me?.role === 'admin' && <ServiceTokenPanel />}

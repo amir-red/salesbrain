@@ -2081,7 +2081,46 @@ credits/day, one tap per wave. Phases: 1 firms + research (this), 2 people at th
   with 11 placeholders, so every NEW /sales-leads card from the mirror failed silently (mirror_safely swallows it):
   hand-added leads (crm_prospect_add / Zeami Omni), first sends and replies of people without a card. Production
   2026-10-21: 3 hand-added leads, 1 messaged prospect, 1 reply without a card — backfill after the fix ships.
-- Not built yet: phase 3 (Gmail send, waves, sequences, reply/bounce detection).
+- **Phase 3 — email waves from each sender's own Gmail (migration 076)**. Decisions (Amir 2026-10-21): each teammate's
+  own mailbox; one tap per wave; 50/day per mailbox; an APPROVED wave counts as the human decision to ask, so the
+  commercial gate does not block its emails (it still blocks asks in drafts agents file alone).
+  - **Core 076**: `email_senders` (address, From name, signature, own daily_cap ≤ policy), `outreach_waves` (one card for
+    N drafts; one pending wave per sender+list+step), `outreach_approvals` + `wave_id`, `sequence_step`, `sender_address`,
+    `email_thread_id` / `email_message_id` / `email_rfc_id`, `icp_profiles.email_sequence`, policy `outreach.email`
+    (per_sender_per_day 50, per_tick 3, gap 90–240 s, wave_size 20, ttl 72 h, followup_hour 9, opt-out line, stop words),
+    `outreach.channel_caps.email` 50/250. `policy/waves.py` (pure: sequence validation — unknown placeholders refused —,
+    render/compose with signature + opt-out, stop-reply + bounce detection, pacing). `commands/waves.py`: sequence get/set,
+    mailboxes, `wave_propose` (step 0 = one person per Go firm, nobody at the firm contacted or with a draft in flight,
+    email known, not suppressed; step N = follow-up in the same thread after the sequence's gap, no reply), decide (ONLY
+    the sender — their mailbox), edit/drop drafts while pending, `outbox` (per mailbox within its cap; closes drafts whose
+    address got suppressed), `record_email_sent` (Gmail ids, firm → contacted, prospect `next_followup_at` NULL so the
+    generic agents.followup routine never sends a second, uncoordinated follow-up), `followups_due`, `threads_to_check`,
+    `record_email_inbound` (bounce → suppression; reply → record_reply, firm → replied; short stop-reply → suppression),
+    `release_for_retry` (a mailbox problem returns the email to the outbox). Send gate (`commands/outreach.py`): approved
+    wave → `ask_approved`, commercial gate skipped; email sends check `suppression_list` (address or domain) and release
+    the approval on refusal.
+  - **Ring**: tools `crm_email_sequence_get/set`, `crm_email_mailboxes`, `crm_email_mailbox_update`,
+    `crm_email_wave_propose`, `crm_email_waves_list`, `crm_email_wave_get`, `crm_email_wave_edit`, `crm_email_wave_decide`
+    (mcp=None; family crm_outreach). Event `email_wave_card` → the SENDER's DM with ✅ Approve all / 👎 Skip / Review
+    (`ew:` taps in telegram_buttons.py). Crons (deploy-server.sh): `email-outbox` `*/10 8-19` (gate → bridge `gmail_send`
+    → mark sent; follow-up waves filed at followup_hour) and `email-replies` `20,50 7-23` (bridge `gmail_threads`).
+    Mailbox tools are NOT named "*send*": role_policy treats any tool name with "send" as a sending tool.
+  - **App**: the app holds the Gmail tokens. `lib/gmail-send.ts` (RFC 2822 plain text UTF-8, From name, threadId +
+    In-Reply-To/References, Message-ID read back; threads read sequentially, snippets unescaped). Bridge tools
+    `gmail_send` / `gmail_threads` in `lib/bridge-tools.ts` (actor = the sender, so nobody can send from another mailbox).
+    Connect for sending = a SEPARATE consent (`GMAIL_SEND_SCOPES`: userinfo.email + gmail.send + gmail.readonly) stored as
+    `oauth_tokens` provider `gmail_send` + an `email_senders` row; same callback URL (state `p: 'send'`). Routes
+    `/api/email/{connect,disconnect,mailboxes}`, `/api/icp/[id]/email/{sequence,waves}`, `/api/waves/[id]` (GET, POST
+    decision), `/api/waves/drafts/[id]` (PATCH). UI: Profile → Email tab, `/icp/[id]` Email outreach section (sequence
+    editor with a starter text, sender, "Queue next 20 for approval", waves table), `/waves/[id]` review page.
+  - **Before the first real email**: (1) add the `gmail.send` scope to the Google OAuth consent screen (Cloud console) —
+    sensitive scope: a published external app needs Google verification; marking the app Internal for the zeami.io
+    Workspace avoids it; (2) a sender connects on Profile → Email and sets From name + signature; (3) write the sequence;
+    (4) research + find people for the Go firms; (5) queue a wave and approve it.
+  - Verified locally: the full chain wave → approve → outbox → kernel gate → signed bridge → app → Gmail call (refused
+    cleanly: no token) → email returned to the outbox and the mailbox marked. No real Gmail send has been made.
+  - Not built: an email-only-to-firm-inbox lane (people with an email only), the bot persona's guidance for waves,
+    service-MCP exposure of the wave tools, open/click tracking (deliberately none).
 
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
