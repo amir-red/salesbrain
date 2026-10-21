@@ -882,6 +882,65 @@ export const SERVICE_TOOLS: ToolDef[] = [
     inputSchema: obj({ memory_id: { type: 'string' } }),
     needsOwner: true,
   },
+  // Brand & Voice (core 079): one writing context for every drafter, rules that learn from each person's ratings.
+  {
+    name: 'crm_voice_context',
+    description:
+      "BEFORE YOU DRAFT any message to a prospect for this employee: the writing context from SalesBrain — who we are, " +
+      "what the list pitches (product, proof, free resources, objection answers), the tone, the team's rules and THIS " +
+      "employee's own learned rules (they win), plus messages they rated highly. Put `context` in front of your " +
+      "drafting and obey it; `checks` lists what the draft must pass (crm_voice_check).",
+    inputSchema: obj({
+      prospect_id: { type: 'string' }, icp_id: { type: 'string' },
+      channel: { type: 'string', enum: ['linkedin', 'email', 'whatsapp'] },
+      step: { type: 'string', enum: ['connect', 'first', 'followup', 'reply', 'intro'] },
+    }),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_voice_check',
+    description: "Check a draft against this employee's voice: never-write phrases, wrong language, du/Sie, too many " +
+      "words. Returns flags; empty = fine. Fix and re-check once before showing or filing a draft.",
+    inputSchema: obj({
+      text: { type: 'string' }, prospect_id: { type: 'string' }, icp_id: { type: 'string' },
+      channel: { type: 'string', enum: ['linkedin', 'email', 'whatsapp'] },
+      step: { type: 'string', enum: ['connect', 'first', 'followup', 'reply', 'intro'] },
+    }, ['text']),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_draft_feedback',
+    description: "Record this employee's verdict on a SalesBrain draft (approval_id): a 1–10 rating and why, " +
+      "optionally their corrected text for a pending draft. A lesson becomes a rule in THEIR OWN voice at once; " +
+      "`say` tells them what was learned.",
+    inputSchema: obj({
+      approval_id: { type: 'string' },
+      rating: { type: 'integer', minimum: 1, maximum: 10 },
+      reasons: { type: 'array', items: { type: 'string', enum: ['too_long', 'too_pushy', 'wrong_tone', 'wrong_language', 'wrong_facts', 'wrong_person', 'good'] } },
+      reason: { type: 'string', description: 'Their reason in their own words' },
+      edited_text: { type: 'string' },
+    }, ['approval_id']),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_voice_rules',
+    description: "This employee's own writing rules (learned from their ratings and edits, or stated) and the brand's " +
+      "team rules. Each rule says where it came from.",
+    inputSchema: obj({ brand: { type: 'string', description: 'zeami (default) or chipchip' } }),
+    needsOwner: true,
+  },
+  {
+    name: 'crm_voice_rule_add',
+    description: "Add a writing rule this employee STATES ('never write circle back', 'always Sie in German'). Lands in " +
+      "their own voice, live at once. kind never_write = an exact phrase that must never appear. Use this — not " +
+      "crm_memory_save — for anything about HOW messages to prospects are written.",
+    inputSchema: obj({
+      content: { type: 'string' },
+      kind: { type: 'string', enum: ['rule', 'never_write'], default: 'rule' },
+      steps: { type: 'array', items: { type: 'string', enum: ['connect', 'first', 'followup', 'reply', 'intro'] } },
+    }, ['content']),
+    needsOwner: true,
+  },
   {
     name: 'crm_agent_status',
     description:
@@ -1328,6 +1387,8 @@ const PASSTHROUGH = new Set([
   'crm_path_find', 'crm_propose_intro',
   // Per-person memory: the employee's own notes (identity = X-On-Behalf-Of), team notes shared on approval.
   'crm_memory_save', 'crm_memory_recall', 'crm_memory_forget', 'crm_memory_share',
+  // Brand & Voice (079): the writing context, checks, ratings and rules — always the employee's OWN voice.
+  'crm_voice_context', 'crm_voice_check', 'crm_draft_feedback', 'crm_voice_rules', 'crm_voice_rule_add',
 ]);
 
 /**
@@ -1456,6 +1517,8 @@ export async function dispatchServiceTool(
     if (PASSTHROUGH.has(toolName)) {
       // owner_user_id is stripped too: an app holds only its own employee's agents.
       const { employee_id: _drop, owner_user_id: _own, ...rest } = args;
+      // A partner app writes only its employee's OWN voice: never a team or list rule (079).
+      if (toolName === 'crm_voice_rule_add') { delete rest.scope; delete rest.brand; delete rest.icp_id; }
       return { status: 'success', data: await kernelCall(toolName, rest, owner) };
     }
     if (toolName === 'marketing_overview') {

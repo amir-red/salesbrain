@@ -7,7 +7,8 @@
  *   POST {action:'connect', note?}                                 file a connection request
  *   POST {action:'draft'}                                          a first message or the next message
  *                                                                  in the conversation; saves nothing
- *   POST {action:'propose', message}                               file that message for approval
+ *   POST {action:'propose', message, voice?}                       file that message for approval; `voice` is the
+ *                                                                  stamp the draft came with (Brand & Voice, 079)
  *
  * mode: no_prospect · no_profile · no_sender (owner has no LinkedIn) · connect · request_pending ·
  *       first_message (connected, no conversation yet) · thread (a conversation exists)
@@ -17,8 +18,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
-import { MODEL } from '@/lib/llm';
-import { createMessage } from '@/lib/llm-usage';
+import { cleanStamp, draftInVoice, templateStamp } from '@/lib/voice-context';
 import { resolveActingUser } from '@/lib/act-as';
 import type { OutreachState } from '@/lib/sales-leads';
 import { outreachFacts as facts, type OutreachFacts as Facts } from '@/lib/sales-lead-outreach';
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const { id } = await params;
-  let body: { action?: string; message?: string; note?: string } = {};
+  let body: { action?: string; message?: string; note?: string; voice?: unknown } = {};
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
   if (!['connect', 'draft', 'propose'].includes(body.action ?? '')) {
     return NextResponse.json({ error: "action must be 'connect' | 'draft' | 'propose'" }, { status: 400 });
@@ -78,7 +78,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (f.mode === 'first_message' && f.template) {
         const text = f.template.replaceAll('{first_name}', first).replaceAll('{full_name}', f.full_name)
           .replaceAll('{company}', f.company ?? '');
-        return NextResponse.json({ message: text.trim(), source: 'template' });
+        return NextResponse.json({ message: text.trim(), source: 'template',
+          voice: templateStamp(text.trim(), 'first_message_template') });
       }
       const convo = f.thread.map((m) => `${m.ours ? 'We' : 'They'}: ${(m.text ?? '').replace(/\s+/g, ' ').slice(0, 600)}`).join('\n');
       const lastFromThem = f.thread.length > 0 && !f.thread[f.thread.length - 1].ours;
@@ -99,22 +100,25 @@ ${points ? `Talking points for this person: ${points}.` : ''}
 ${f.research ? `About their company: ${f.research.slice(0, 800)}` : ''}
 
 Rules: write in the SAME language as the conversation; with no conversation, in German when the person or company is German-speaking (judge from the names and company), otherwise English. At most ~70 words. No subject line, no signature block beyond the first name. Do not invent facts, meetings or numbers. Plain text.`;
-      const res = await createMessage({ model: MODEL, max_tokens: 500, messages: [{ role: 'user', content: prompt }] },
-        { feature: 'lead_card_draft', userId: acting.actingUserId });
-      const text = res.content.map((b) => ('text' in b ? b.text : '')).join('').trim();
-      if (!text) return NextResponse.json({ error: 'The model returned no draft — write it yourself or try again.' }, { status: 502 });
-      return NextResponse.json({ message: text, source: 'model' });
+      const out = await draftInVoice({ prompt, feature: 'lead_card_draft', userId: acting.actingUserId,
+        prospectId: f.prospect_id, channel: 'linkedin',
+        step: f.mode === 'first_message' ? 'first' : lastFromThem ? 'reply' : 'followup' });
+      if ('error' in out) return NextResponse.json({ error: out.error }, { status: 502 });
+      return NextResponse.json({ ...out, source: 'model' });
     }
 
     // propose
     const message = (body.message ?? '').trim();
     if (!message) return NextResponse.json({ error: 'Write the message first.' }, { status: 400 });
+    const voice = cleanStamp(body.voice);
     const out = f.mode === 'first_message'
-      ? await kernelCall('crm_linkedin_first_message_propose', { prospect_id: f.prospect_id, text: message }, acting.actingUserId)
+      ? await kernelCall('crm_linkedin_first_message_propose', { prospect_id: f.prospect_id, text: message,
+          ...(voice ? { voice } : {}) }, acting.actingUserId)
       : await kernelCall('crm_outreach_propose', {
           person_id: f.person_id, prospect_id: f.prospect_id, channel: 'linkedin', kind: 'followup',
           linkedin_thread_id: f.thread_id, message,
           rationale: 'Written on the /sales-leads card — the next message in this LinkedIn conversation.',
+          ...(voice ? { voice } : {}),
         }, acting.actingUserId);
     const o = out as Record<string, unknown>;
     return NextResponse.json({ ...o, acted_as: actedAs }, { status: o.error ? 400 : 200 });

@@ -2181,6 +2181,56 @@ to the theme script), the supplied H12 wordmark (`components/ZeamiLogo.tsx`, `Ze
   states), the cytoscape canvases (`NetworkGraph`, `RouteGraph` still use literal dark-theme colours); `LeadsTable` + `ApprovalsPanel` were left
   untouched for ws-linkedin-connect.
 
+### 5.bd Brand & Voice, and learning from every correction (2026-10-21, feat/brand-voice, migration 079)
+
+Amir, after the Guhan teardown (`docs/research/04-guhan-competitor-map.md`): "build the voice — how we intend to interact —
+and whenever we correct it, learn from it." Decisions: (1) a learned rule lands in the writer's OWN voice and is live at once,
+no admin approval (sharing with the team is live too; anyone can archive their own, admins anything); (2) every draft is rated
+**1–10 with the reason why**; (3) edit and rate in Telegram AND on the web; (4) the whole of Brand & Voice in one round.
+Plan: `~/.claude/plans/brand-voice-learning.md`.
+- **Data (core 079)**: `brands` (zeami, chipchip: description, pain points, tone of 7, formality formal|informal|auto,
+  language, `never_write[]`, word `limits`, `ai_drafted`), `products` (pain, case studies with a number, free resources with an
+  optional URL, objection answers), `competitors`, `message_templates` (guided | fixed), `icp_profiles.product_id /
+  writing_context / language`, **`voice_rules`** (scope sender | team | list, kind rule | never_write, channels/steps, source
+  stated | edit | rating | shared | weekly | app, evidence {approval_id, before, after, rating, reason}, confirmations,
+  superseded/archived, never deleted), `outreach_approvals` + `draft_original, drafted_by, voice_rule_ids, check_flags,
+  edited_at/by, edit_ratio, rating 1–10, rating_reason, rated_by/at, learned_rule_ids`, `telegram_pending_inputs`, policy
+  `agents.voice`. A list's brand: its product's brand → `icp_profiles.product` when it names a brand key → zeami.
+- **Kernel**: `policy/voice.py` (pure: `check_draft` = never-write with umlaut folding, de/en language, du/Sie, word cap;
+  `edit_ratio`; `classify_feedback` → learn | golden | none, "wrong person" is targeting not voice; `render_context` team →
+  list → sender, "the sender's own rules win"). `commands/voice.py`: `writing_context`, `check`, `stamp` (every propose path:
+  `propose_outreach`, `propose_first_message`, `propose_connect` take `voice={draft_original, drafted_by, voice_rule_ids}`),
+  `edit_draft` (pending only; keeps the model's text), `record_feedback`, `learn` (twin → confirmations+1, `replaces_id` →
+  supersede, cap 40/sender), rules add/forget/share/list, `stats`. `commands/brand.py`: brand/product/competitor/template CRUD
+  (any user, audited; the service actor never writes), `set_list_voice`, and `criteria_plus_competitors` — every
+  `score_and_label` call goes through `_score(conn, …)` so a competitor's employees are never prospects. Wave edits keep the
+  original too. The approval card shows "⚠️ Check: …" and "✏️ Edited".
+- **Ring**: cards get **✏️ Edit** (ForceReply; the reply is caught in `board_hook._voice_reply_inner` before any model turn,
+  `edit_draft`, card re-rendered). After 👍/👎: **"Rate this draft 1–10"** → reason chips or a typed reply →
+  `voice_feedback.feedback_and_learn`: one cheap `converse(feature='voice_learn', json_mode)` extracts ≤2 rules, kernel
+  `learn` stores them in the SENDER's voice, "🧠 Learned for your voice: … [↩️ Undo]". callback_data `oa:<id>:edit`,
+  `vr:<id>:<1-10>`, `vy:<id>:<reason>`, `vu:<rule>`. **Fixed on the way: `telegram_buttons.PATTERN` never allowed
+  `approve_anyway`, so "Send anyway" (071) taps never reached the handler.** Family **`crm_brand`** (16 tools; five reads on
+  the MCP catalogue) on telegram, api_server, cron and the Outreach agent. Drafters now write in the voice: lead conductor
+  (a draft breaking a checked voice rule is dropped like any other broken rule), `crm_linkedin_draft_reply` (returns `voice`),
+  Outreach skill / rulebook / routine prompt, prospecting skill, SOUL ("HOW messages are written is the VOICE, not memory").
+  `role_policy._READ` gained context/rules/stats/check so a teammate's automation may read the voice.
+- **App**: `/brand` (Sidebar → Prospecting): Brand (tiles + **Draft from website** — shows the suggestion, fills only empty
+  fields, marks them AI-drafted), **Voice** (Your voice: sent-unchanged %, average rating, rules learned, each rule with
+  "learned from your edit" + the before/after, Forget / Share with team; the team's tone, du/Sie, language, never-write chips,
+  word limits; team rules), Products, Competitors, Templates. `lib/voice-context.ts::draftInVoice` = context → model →
+  kernel check → one redraft → `{message, voice, flags}`; used by the follow-up, lead-card and intro drafters, whose panels
+  send `voice` back on propose. `components/voice/{DraftEditor,DraftFeedback}` in ApprovalsPanel and /agents (✏️ Edit, rate
+  after a decision, "Rate recent drafts" = `GET /api/agents/approvals?rate=1`). ICP builder: "What this list pitches"
+  (product, hook, language → `PATCH /api/icp/[id]/voice`). Routes: `/api/brand`, `/api/brand/[key]` (+`/suggest`),
+  `/api/drafts/[id]` (edit | feedback), `/api/voice/rules`, `/api/voice/rules/[id]`, `/api/voice/stats`.
+- **Service MCP**: `crm_voice_context`, `crm_voice_check`, `crm_draft_feedback`, `crm_voice_rules`, `crm_voice_rule_add` (always
+  the employee's OWN voice — scope/brand/icp are stripped).
+- Verified: migration 079 + every new query ran on the live schema inside a transaction that was rolled back (2026-10-21).
+- Not built: per-product fit rating in the research brief, a template picker on message steps (templates are listed and
+  editable; the ICP first-message template stays as it was), the weekly tidy of rules (the retired learn routine was not
+  revived — rules are deduped and superseded at write time), email-wave drafts stay template-only (edits are captured).
+
 ## 6. Env vars
 
 All must be in `.env.local` (dev) and as GitHub repo secrets (prod — workflow writes them to `.env.production`).

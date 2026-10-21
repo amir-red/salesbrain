@@ -3,22 +3,29 @@
 import { useState } from 'react';
 import { relativeTime } from '@/lib/time';
 import { type CompanyConflict, isHeld } from '@/lib/company-conflict';
+import DraftEditor from '@/components/voice/DraftEditor';
+import DraftFeedback from '@/components/voice/DraftFeedback';
+import type { VoiceFlag } from '@/lib/voice';
 
 export interface LeadApproval {
   id: string; status: string; kind?: string | null; channel: string; subject: string | null; message: string;
   rationale: string | null; created_at: string; decided_at?: string | null; sent_at?: string | null; expires_at: string;
   person_name: string | null; intro_lead_name?: string | null; owner_name?: string | null;
   company_conflict?: CompanyConflict | null; company_override_at?: string | null;
+  check_flags?: VoiceFlag[] | null; edited_at?: string | null; rating?: number | null;
 }
 
 /**
  * Drafts filed for this lead — cold first messages to the lead, and intro asks
  * to a connector on the lead's behalf. Same 👍/👎 as /agents and the Telegram
- * card; approve = send now through the policy gate.
+ * card; approve = send now through the policy gate. ✏️ edits a waiting draft, and
+ * every decided draft can be rated 1–10 with the reason (Brand & Voice, 079).
  */
 export default function ApprovalsPanel({ approvals, onChanged }: { approvals: LeadApproval[]; onChanged: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [rateId, setRateId] = useState<string | null>(null);
 
   const decide = async (id: string, decision: 'approve' | 'reject' | 'approve_anyway') => {
     if (decision === 'approve_anyway' && !confirm('Someone at this company was already messaged. Send this one anyway?')) return;
@@ -29,6 +36,7 @@ export default function ApprovalsPanel({ approvals, onChanged }: { approvals: Le
       if (!res.ok || out.error) setNote(out.error || 'Failed');
       else if (decision !== 'reject') setNote(out.sent ? 'Sent.' : `Not sent: ${out.note || out.status || 'see /agents'}`);
       else setNote('Skipped.');
+      if (res.ok && !out.error) setRateId(id);
       onChanged();
     } finally { setBusy(null); }
   };
@@ -40,6 +48,7 @@ export default function ApprovalsPanel({ approvals, onChanged }: { approvals: Le
   return (
     <div className="space-y-2">
       {note && <div className="text-xs" style={{ color: note.startsWith('Not sent') || note === 'Failed' ? 'var(--red)' : 'var(--text-muted)' }}>{note}</div>}
+      {rateId && <DraftFeedback key={rateId} approvalId={rateId} label="How good was that draft?" />}
       {approvals.length === 0 && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No drafts yet. Find a route and ask for an intro, or send cold.</p>}
       {pending.map((ap) => (
         <div key={ap.id} className="rounded-lg p-3 space-y-2" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
@@ -57,12 +66,22 @@ export default function ApprovalsPanel({ approvals, onChanged }: { approvals: Le
               {isHeld(ap) && <div className="text-[11px] mt-1" style={{ color: 'var(--orange)' }}>{ap.company_conflict?.warning}</div>}
             </div>
             <div className="flex gap-2 shrink-0">
+              {ap.kind !== 'proposal' && editing !== ap.id && (
+                <button onClick={() => setEditing(ap.id)} disabled={busy === ap.id} className="px-2.5 py-1 rounded-lg text-xs disabled:opacity-40" style={{ border: '1px solid var(--border)', color: 'var(--text)' }}>✏️ Edit</button>
+              )}
               <button onClick={() => decide(ap.id, 'reject')} disabled={busy === ap.id} className="px-2.5 py-1 rounded-lg text-xs disabled:opacity-40" style={{ border: '1px solid var(--border)', color: 'var(--text)' }}>👎 Skip</button>
               <button onClick={() => decide(ap.id, isHeld(ap) ? 'approve_anyway' : 'approve')} disabled={busy === ap.id} className="px-2.5 py-1 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--green)', color: 'var(--accent-fg)' }}>{busy === ap.id ? 'Working…' : isHeld(ap) ? '👍 Send anyway' : '👍 Send'}</button>
             </div>
           </div>
           {ap.subject && <div className="text-xs"><b>Subject:</b> {ap.subject}</div>}
-          <pre className="text-xs whitespace-pre-wrap rounded-lg p-2" style={{ background: 'var(--bg-card)', color: 'var(--text)', fontFamily: 'inherit' }}>{ap.message || (ap.kind === 'connect' ? 'No note — a plain connection request.' : '')}</pre>
+          {editing === ap.id
+            ? <DraftEditor approvalId={ap.id} text={ap.message || ''} onCancel={() => setEditing(null)}
+                onSaved={() => { setEditing(null); setNote('Saved your text — approve it when it is right.'); onChanged(); }} />
+            : <pre className="text-xs whitespace-pre-wrap rounded-lg p-2" style={{ background: 'var(--bg-card)', color: 'var(--text)', fontFamily: 'inherit' }}>{ap.message || (ap.kind === 'connect' ? 'No note — a plain connection request.' : '')}</pre>}
+          {ap.edited_at && editing !== ap.id && <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>✏️ Edited — this is your text.</div>}
+          {Array.isArray(ap.check_flags) && ap.check_flags.length > 0 && (
+            <div className="text-[11px]" style={{ color: 'var(--orange)' }}>⚠️ Check: {ap.check_flags.map((f) => f.detail).join(' · ')}</div>
+          )}
         </div>
       ))}
       {past.length > 0 && (
@@ -72,6 +91,10 @@ export default function ApprovalsPanel({ approvals, onChanged }: { approvals: Le
               <span style={{ color: statusColor(ap.status) }}>{ap.status}</span>
               <span>{ap.kind === 'connect' ? `connection request to ${ap.intro_lead_name || ap.person_name || '?'}` : ap.kind === 'intro_request' ? `intro ask to ${ap.person_name || '?'}` : 'cold message'} · {ap.channel}</span>
               <span>· {relativeTime(ap.sent_at || ap.decided_at || ap.created_at)}</span>
+              {ap.rating != null
+                ? <span>· rated {ap.rating}/10</span>
+                : ['sent', 'rejected'].includes(ap.status) && ap.kind !== 'proposal' && rateId !== ap.id
+                  ? <button onClick={() => setRateId(ap.id)} className="underline">Rate</button> : null}
             </div>
           ))}
         </div>
