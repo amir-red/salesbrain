@@ -2031,6 +2031,11 @@ Enricher → Lead Conductor → Attention / Supervisor / Learn / Knowledge revie
 - **Fixed 0.55.1: the LinkedIn guard counted its own refusals as usage.** 38 real searches + 166 refused retries read as "203/40" and
   locked searching all afternoon (and indefinitely while callers retry). `linkedin_health.budget` now counts only requests that reached
   LinkedIn (rows `refused:` with no status code are excluded).
+- **Fixed 0.55.2: agent profiles' scheduled runs had no DATABASE_URL.** In the multiplexing gateway a profile's `.env` is NOT in
+  `os.environ` — it lives in a context-local secret scope (`agent.secret_scope.get_secret`). Manual `cron run` from the CLI worked,
+  the scheduler's workers did not ("No database configured"; both Leads Finder ticks on 2026-10-21 morning). Every kernel / ring
+  setting read now goes through `salesbrain_core.env.get` (os.environ first, then the Hermes scope). Proven with a scheduled probe
+  in the leads-finder profile. Lesson: validate an agent through the SCHEDULER, not `hermes cron run` from a shell.
 - `/admin/learning` shows every profile's MEMORY.md already; the "built-in memory ON" warning now applies to chat profiles only.
 - Not built yet: per-agent `/agents` link to its Workspace card, the remaining agents, deleting the paused main-profile jobs (after
   2026-10-27), cost per agent report (feature = cron job name in `llm_usage`).
