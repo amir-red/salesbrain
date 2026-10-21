@@ -311,6 +311,35 @@ async function icp(args: Record<string, string>, who: Who): Promise<Built> {
       `SELECT started_at, agent, trigger, status, analyzed, matched, created, researched, error
          FROM agent_runs WHERE icp_profile_id = $1 ORDER BY started_at DESC LIMIT 200`, [args.icp_id]);
 
+    // Firms on the list (core 075) — one row each with the research summary; empty for a people-only list.
+    const { rows: firms } = await client.query<Record<string, unknown>>(
+      `SELECT f.rank, f.priority, a.name AS firm, a.domain, a.website, f.eligibility, f.eligibility_reasons, f.status,
+              f.contact_email, f.contact_route, f.notes, f.researched_at, ap.profile, ap.confidence,
+              (SELECT count(*)::int FROM prospects x WHERE x.icp_profile_id = f.icp_profile_id AND x.account_id = f.account_id) AS people
+         FROM list_firms f JOIN accounts a ON a.id = f.account_id
+         LEFT JOIN account_profiles ap ON ap.account_id = f.account_id AND ap.kind = 'investor'
+        WHERE f.icp_profile_id = $1 ORDER BY f.priority NULLS LAST, f.rank NULLS LAST, a.name LIMIT ${SHEET_ROW_CAP}`, [args.icp_id]);
+    const prof = (r: Record<string, unknown>) => (r.profile || {}) as Record<string, unknown>;
+    const joinList = (v: unknown) => (Array.isArray(v) ? v.map((x) => (typeof x === 'object' && x ? Object.values(x as object).filter(Boolean).join(' ') : String(x))).join('; ') : '');
+    const firmCols: Col<Record<string, unknown>>[] = [
+      { h: 'Rank', w: 6, v: (r) => r.rank as number }, { h: 'Priority', w: 8, v: (r) => r.priority as number },
+      { h: 'Firm', w: 28, v: (r) => String(r.firm ?? '') }, { h: 'Website', w: 28, v: (r) => String(r.website ?? r.domain ?? '') },
+      { h: 'Verdict', w: 10, v: (r) => String(r.eligibility ?? '') }, { h: 'Why', w: 60, v: (r) => joinList(r.eligibility_reasons) },
+      { h: 'Status', w: 12, v: (r) => String(r.status ?? '') },
+      { h: 'Invests in', w: 60, v: (r) => String(prof(r).thesis ?? '') }, { h: 'Stages', w: 20, v: (r) => joinList(prof(r).stages) },
+      { h: 'Sectors', w: 30, v: (r) => joinList(prof(r).sectors) }, { h: 'Geographies', w: 20, v: (r) => joinList(prof(r).geographies) },
+      { h: 'Cheque min', w: 12, v: (r) => prof(r).cheque_min as number }, { h: 'Cheque max', w: 12, v: (r) => prof(r).cheque_max as number },
+      { h: 'Currency', w: 8, v: (r) => String(prof(r).currency ?? '') },
+      { h: 'Latest fund', w: 30, v: (r) => joinList(prof(r).last_fund ? [prof(r).last_fund] : []) },
+      { h: 'Investing now', w: 12, v: (r) => String(prof(r).actively_investing ?? '') },
+      { h: 'Recent investments', w: 60, v: (r) => joinList(prof(r).recent_investments) },
+      { h: 'Opening line', w: 60, v: (r) => String(prof(r).hook ?? '') },
+      { h: 'Contact email', w: 28, v: (r) => String(r.contact_email ?? '') }, { h: 'Pitch form', w: 30, v: (r) => String(r.contact_route ?? '') },
+      { h: 'Team on site', w: 60, v: (r) => joinList(((prof(r).team as { name?: string; title?: string }[]) || []).map((m) => `${m.name}${m.title ? ` (${m.title})` : ''}`)) },
+      { h: 'People on list', w: 10, v: (r) => r.people as number }, { h: 'Confidence', w: 10, v: (r) => String(r.confidence ?? '') },
+      { h: 'Researched', w: 16, v: (r) => ts(r.researched_at) }, { h: 'Notes', w: 40, v: (r) => String(r.notes ?? '') },
+    ];
+
     const p = profile as Record<string, unknown>;
     const state = p.is_active === false ? 'stopped' : p.paused_at ? 'paused' : 'running';
     const overview: [string, string | number | null][] = [
@@ -334,6 +363,7 @@ async function icp(args: Record<string, string>, who: Who): Promise<Built> {
     const slug = String(p.name ?? 'icp').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'icp';
     return finish(`salesbrain-icp-${slug}`, [
       { name: 'ICP', ws: pairsSheet(overview), rows: overview.length },
+      ...(firms.length ? [{ name: 'Firms', ws: sheetOf(firmCols, firms), rows: firms.length }] : []),
       { name: 'Leads', ws: sheetOf(prospectCols(), leads), rows: leads.length },
       { name: 'Funnel', ws: sheetOf(funnelCols, funnel), rows: funnel.length },
       { name: 'Activity', ws: sheetOf(runCols, runs), rows: runs.length },

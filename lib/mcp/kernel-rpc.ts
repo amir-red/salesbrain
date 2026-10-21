@@ -77,6 +77,11 @@ const LONG_RUNNING_TOOLS = new Set<string>([
   'crm_graph_sync',
   // Lands up to 100 leads per call, each with its prospect and person record.
   'crm_sales_leads_import',
+  // A firm's site + one Google-grounded call + one extraction (~20-60 s); an import lands 100 firms per call.
+  'crm_firm_research',
+  'crm_firm_import',
+  // Land 2 people, then a LinkedIn lookup + a FullEnrich poll each (~1-2 min).
+  'crm_firm_find_people',
 ]);
 
 async function rpc(

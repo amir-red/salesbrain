@@ -17,7 +17,7 @@ import { sendTelegram } from '@/lib/tg-notify';
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get('code');
   const error = req.nextUrl.searchParams.get('error');
-  const st = verifyState<{ uid: string; t?: string }>(req.nextUrl.searchParams.get('state'));
+  const st = verifyState<{ uid: string; t?: string; p?: string }>(req.nextUrl.searchParams.get('state'));
 
   const done = (ok: boolean, reason?: string) =>
     publicUrl(req, `/connect/done?provider=google&ok=${ok ? 1 : 0}${reason ? `&reason=${encodeURIComponent(reason)}` : ''}`);
@@ -59,6 +59,20 @@ export async function GET(req: NextRequest) {
   // ── Browser flow ────────────────────────────────────────────────
   const session = await getSession();
   if (!session) return NextResponse.redirect(publicUrl(req, '/login'));
+  // A SENDING mailbox (email waves): its own token row ('gmail_send') and the email_senders row.
+  if (st?.p === 'send') {
+    if (error || !code || st.uid !== session.userId) {
+      return NextResponse.redirect(publicUrl(req, `/profile?tab=email&error=${encodeURIComponent(error || (code ? 'invalid_state' : 'missing_code'))}`));
+    }
+    try {
+      await storeGoogleTokens(session.userId, code, 'gmail_send');
+      return NextResponse.redirect(publicUrl(req, '/profile?tab=email&connected=1'));
+    } catch (err) {
+      console.error('[Google OAuth callback · send]', err);
+      const msg = (err instanceof Error ? err.message : 'exchange_failed').replace(/\s+/g, ' ').slice(0, 140);
+      return NextResponse.redirect(publicUrl(req, `/profile?tab=email&error=${encodeURIComponent(msg)}`));
+    }
+  }
   if (error) return NextResponse.redirect(publicUrl(req, `/profile?tab=imports&error=${encodeURIComponent(error)}`));
   if (!code) return NextResponse.redirect(publicUrl(req, '/profile?tab=imports&error=missing_code'));
   if (!st || st.uid !== session.userId) {

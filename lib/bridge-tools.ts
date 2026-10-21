@@ -14,6 +14,7 @@ import { EXPORT_KINDS, exportUrl, signExport, type ExportKind } from '@/lib/expo
 import { listUserTokens, revokeToken } from '@/lib/mcp/tokens';
 import { sendTelegram } from '@/lib/tg-notify';
 import { syncZeamiDealEvents } from '@/lib/zeami-sync';
+import { readThreads, sendGmail } from '@/lib/gmail-send';
 
 export interface Who { userId: string; role: string }
 const MAX_XLSX_BYTES = 20 * 1024 * 1024;
@@ -77,12 +78,29 @@ async function zeamiDealSync(who: Who, args: Args) {
   return { ...(await syncZeamiDealEvents({ dryRun: Boolean(args.dry_run) })) };
 }
 
+// Email waves (core 076): the ring's outbox has already passed the kernel send gate for this email; this only delivers
+// it from the person's own Gmail. The person is the bridge actor, so nobody can send from someone else's mailbox.
+async function gmailSendTool(who: Who, args: Args) {
+  return sendGmail(who.userId, {
+    to: String(args.to || ''), subject: String(args.subject || ''), body: String(args.body || ''),
+    threadId: args.thread_id ? String(args.thread_id) : null, inReplyTo: args.in_reply_to ? String(args.in_reply_to) : null,
+  });
+}
+
+async function gmailThreadsTool(who: Who, args: Args) {
+  const ids = Array.isArray(args.thread_ids) ? args.thread_ids.map(String).filter(Boolean) : [];
+  if (!ids.length) return { threads: [] };
+  return readThreads(who.userId, ids);
+}
+
 const TOOLS: Record<string, (who: Who, args: Args) => Promise<Record<string, unknown>>> = {
   google_sync: googleSync,
   import_contacts: importContacts,
   export: exportFile,
   mcp_tokens: mcpTokens,
   zeami_deal_sync: zeamiDealSync,
+  gmail_send: gmailSendTool,
+  gmail_threads: gmailThreadsTool,
 };
 
 export async function runBridgeTool(tool: string, args: Args, userId: string): Promise<Record<string, unknown>> {
