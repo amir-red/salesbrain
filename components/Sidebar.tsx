@@ -115,6 +115,16 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    href: '/brand',
+    label: 'Brand & Voice',
+    icon: (
+      // Speech bubble — how we write to prospects (Brand & Voice, 079)
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><line x1="8" y1="9" x2="16" y2="9" /><line x1="8" y1="13" x2="13" y2="13" />
+      </svg>
+    ),
+  },
+  {
     href: '/agents',
     label: 'Agents',
     icon: (
@@ -269,7 +279,7 @@ const NAV_ITEMS: NavItem[] = [
 // find people → work the deal → keep the relationship → fund it → learn from it.
 const GROUPS: { label: string; hrefs: string[] }[] = [
   { label: 'Pipeline', hrefs: ['/', '/pipeline', '/followups', '/sales-leads'] },
-  { label: 'Prospecting', hrefs: ['/icp', '/prospecting', '/discovery', '/campaigns', '/agents'] },
+  { label: 'Prospecting', hrefs: ['/icp', '/brand', '/prospecting', '/discovery', '/campaigns', '/agents'] },
   { label: 'Marketing', hrefs: ['/marketing', '/marketing/connectors'] },
   { label: 'Relationships', hrefs: ['/relationships', '/network', '/clients'] },
   { label: 'Funding', hrefs: ['/grants', '/credits'] },

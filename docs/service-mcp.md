@@ -921,6 +921,15 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 
 ## 12. Changelog
 
+### 2026-10-21 — Brand & Voice: draft in the employee's own voice, and learn from their ratings
+**Call `crm_voice_context` before you draft any message to a prospect** and put its `context` in front of your drafting:
+who we are, what the list pitches (product, proof, free resources, objection answers), the tone, the team's rules and the
+employee's OWN learned rules (they win). `crm_voice_check` flags never-write phrases, wrong language, du/Sie and word caps.
+When the employee rates or corrects a SalesBrain draft, call **`crm_draft_feedback`** `{approval_id, rating 1–10, reasons?,
+reason?, edited_text?}` — a lesson becomes a rule in their own voice at once (`say` is the line to show them).
+`crm_voice_rules` lists their rules; `crm_voice_rule_add` adds one they state (always their own voice — `scope` is ignored
+on this surface). Use these, not `crm_memory_save`, for anything about HOW messages to prospects are written.
+
 ### 2026-10-19 — add and import sales leads
 `crm_sales_lead_add` adds one person; `crm_sales_leads_import` takes up to 500 rows per call (dry_run first). Both refuse
 duplicates and give every created lead its prospect at once, so LinkedIn lookup and enrichment start by themselves.

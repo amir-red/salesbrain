@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth';
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
 import { draftIntroRequest } from '@/lib/intro-draft';
 import { parseActAs, resolveActingUser } from '@/lib/act-as';
+import { cleanStamp, getVoiceContext } from '@/lib/voice-context';
 
 /**
  * Step 6 — the intro ask. {action:'draft'} writes a proposal text with the
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   let body: {
     action?: 'draft' | 'propose'; as?: string; connector_person_id?: string; path_id?: string;
     connector?: { name: string; role: string; evidence: string; why?: string | null; channel?: string | null };
-    message?: string; subject?: string; forwardable_blurb?: string; rationale?: string;
+    message?: string; subject?: string; forwardable_blurb?: string; rationale?: string; voice?: unknown;
   } = {};
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
   if (!body.connector_person_id) return NextResponse.json({ error: 'connector_person_id required' }, { status: 400 });
@@ -40,7 +41,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         WHERE p.id = $1 ${own}`, [...vals, body.connector_person_id]);
     if (!rows[0]) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const r = rows[0];
+    const voice = await getVoiceContext({ prospectId: params.id, step: 'intro',
+      channel: body.connector?.channel === 'email' ? 'email' : 'linkedin' }, acting.actingUserId);
     const out = await draftIntroRequest({
+      voice,
       owner_name: acting.actingName || 'me',
       connector: { name: body.connector?.name || r.connector_name || 'them', role: body.connector?.role || 'connection',
                    evidence: body.connector?.evidence || 'you know each other', why: body.connector?.why, channel: body.connector?.channel },
@@ -59,6 +63,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         connector_person_id: body.connector_person_id, lead_prospect_id: params.id,
         message: body.message, subject: body.subject, forwardable_blurb: body.forwardable_blurb,
         path_id: body.path_id, rationale: body.rationale,
+        ...(cleanStamp(body.voice) ? { voice: cleanStamp(body.voice) } : {}),
       }, acting.actingUserId) as Record<string, unknown>;
       return NextResponse.json({ ...out, acted_as: { user_id: acting.actingUserId, name: acting.actingName, on_behalf: acting.onBehalf } });
     } catch (err) {

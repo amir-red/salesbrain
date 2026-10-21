@@ -18,6 +18,7 @@ export default function OutreachPanel({ leadId, onChanged }: { leadId: string; o
   const [showNote, setShowNote] = useState(false);
   const [msg, setMsg] = useState('');
   const [source, setSource] = useState<'' | 'template' | 'model'>('');
+  const [stamp, setStamp] = useState<unknown>(null); // Brand & Voice (079): sent back on propose
 
   const load = useCallback(async () => {
     try {
@@ -35,16 +36,22 @@ export default function OutreachPanel({ leadId, onChanged }: { leadId: string; o
       const res = await fetch(`/api/sales-leads/${leadId}/outreach`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(action === 'connect' ? { action, note: note.trim() || undefined }
-          : action === 'propose' ? { action, message: msg } : { action }),
+          : action === 'propose' ? { action, message: msg, voice: stamp ?? undefined } : { action }),
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Failed');
-      if (action === 'draft') { setMsg(data.message); setSource(data.source); return; }
+      if (action === 'draft') {
+        setMsg(data.message); setSource(data.source); setStamp(data.voice ?? null);
+        if (Array.isArray(data.flags) && data.flags.length) {
+          setErr(`Check before filing: ${data.flags.map((f: { detail: string }) => f.detail).join(' · ')}`);
+        }
+        return;
+      }
       const who = data.acted_as?.name ?? s?.sender?.name ?? 'the sender';
       setOk(data.duplicate
         ? `Already waiting for ${who}'s decision — nothing new filed.`
         : `Filed for ${who}'s approval (Telegram card or /agents). Nothing goes out until they approve.`);
-      if (action === 'propose') { setMsg(''); setSource(''); }
+      if (action === 'propose') { setMsg(''); setSource(''); setStamp(null); }
       if (action === 'connect') { setNote(''); setShowNote(false); }
       await load(); onChanged?.();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
