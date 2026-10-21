@@ -2148,6 +2148,13 @@ credits/day, one tap per wave. Phases: 1 firms + research (this), 2 people at th
     (`_AUTO_LIST`, `_PEOPLE_DUE` in commands/firms.py). Automatic work is NOT announced by DM (only hand-queued work is).
     `set_firm_auto` / `crm_firm_auto_set`, `POST /api/icp/[id]/firms/auto`. The Firms section shows the switch and what
     it is doing instead of the two bulk buttons, and pages the table 10 / 50 / 100 / all (default 10).
+  - **Progress view (0.57.2, migration 078)** — `firm_research` is a registered agent (agent_definitions, AGENTS, LABELS),
+    so the sweep logs ONE agent_runs row per list per batch: opened with the firms it is about to research
+    (`note_sweep_run` keeps detail.firms current → "Now"), closed with a one-line summary ("researched 25 · 9 go · …
+    · people at 3 firm(s): +6 people, 4 with email"). `firm_progress` / `crm_firm_progress` / `GET /api/icp/[id]/firms/
+    progress` (light, polled 30 s): counts per stage, running batch, last batches, `next_sweep_at` (pure: */15 07:00-22:45
+    Addis), sweep-time ETA, blockers (Automatic off, paused, no brief, sweep disabled) and notes (email lookups used up,
+    owner has no LinkedIn). `components/firms/FirmProgress.tsx` reloads the table when the counts move.
   - Not built: an email-only-to-firm-inbox lane (people with an email only), the bot persona's guidance for waves,
     service-MCP exposure of the wave tools, open/click tracking (deliberately none).
 

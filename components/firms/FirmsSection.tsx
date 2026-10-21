@@ -5,6 +5,7 @@ import SectionCard from '@/components/panel/SectionCard';
 import FirmCard from '@/components/firms/FirmCard';
 import FirmBriefEditor from '@/components/firms/FirmBriefEditor';
 import ImportFirmsModal from '@/components/firms/ImportFirmsModal';
+import FirmProgress from '@/components/firms/FirmProgress';
 import { STATUS_LABEL, VERDICT_STYLE, chequeRange, type FirmListPayload, type FirmVerdict } from '@/lib/firms';
 
 /**
@@ -90,22 +91,7 @@ export default function FirmsSection({ icpId, canEdit }: { icpId: string; canEdi
         <div className="mb-3"><FirmBriefEditor icpId={icpId} brief={data.brief || {}} onCancel={() => setBriefOpen(false)}
           onSaved={(t) => { setBriefOpen(false); setNote(`Brief saved; the list was re-judged: ${Object.entries(t).map(([k, n]) => `${n} ${VERDICT_STYLE[k as FirmVerdict]?.label.toLowerCase() || k}`).join(', ') || 'nothing researched yet'}.`); void load(); }} /></div>
       )}
-      {data && !hasBrief && !briefOpen && !!c?.total && (
-        <div className="mb-3 text-xs rounded-lg px-3 py-2" style={{ background: 'color-mix(in srgb, var(--yellow) 10%, transparent)', color: 'var(--text)' }}>
-          Set the brief (our stage, round, where we are, sectors) so researched firms get a Go / Check / Out verdict.
-        </div>
-      )}
-      {!!c?.total && data?.auto && (
-        <div className="mb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
-          {!data.auto.on ? 'Automatic is off: only firms someone asks for are researched (Research now on a firm).'
-            : data.auto.held ? `Automatic is on but ${data.auto.held}, so nothing runs.`
-            : data.auto.needs_brief ? 'Automatic is on and starts once the brief is set: then firms are researched in rank order (25 every 15 minutes) and people are found at the Go ones. Nothing is sent without an approved wave.'
-            : <>Working by itself: {data.auto.to_research ? `${data.auto.to_research} firms left to research, 25 every 15 minutes in rank order` : 'every firm is researched'}
-                {data.auto.needs_brief ? ''
-                  : data.auto.to_find_people ? ` · finding people at ${data.auto.to_find_people} Go firm(s), within today's email and LinkedIn limits` : ''}.
-                Nothing is sent without an approved wave.</>}
-        </div>
-      )}
+      {!!c?.total && <FirmProgress icpId={icpId} onMoved={load} />}
       {note && <div className="mb-2 text-xs" style={{ color: 'var(--text-muted)' }}>{note}</div>}
       {error && <div className="mb-2 text-xs" role="alert" style={{ color: 'var(--red)' }}>{error}</div>}
 
