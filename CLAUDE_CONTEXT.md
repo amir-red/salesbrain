@@ -2138,10 +2138,8 @@ credits/day, one tap per wave. Phases: 1 firms + research (this), 2 people at th
   - Verified locally: the full chain wave → approve → outbox → kernel gate → signed bridge → app → Gmail call (refused
     cleanly: no token) → email returned to the outbox and the mailbox marked. No real Gmail send has been made.
   - **Merged 2026-10-21 as 0.57.0**: migrations 075 + 076 APPLIED to production; ring deployed (crons firm-research,
-    email-outbox, email-replies created; smoke-tested, nothing queued). The app (Firms section, Email tab, /waves) goes
-    live with the next push of `main` to `Production` — the push from the integration session was blocked by its
-    permission rules, so Amir pushes (`git push origin main` in all three repos, `git push origin main:Production` in
-    salesbrain). Until then the new kernel/ring tools work from Telegram only. Mirror-bug backfill done: Friedrich
+    email-outbox, email-replies created; smoke-tested, nothing queued); app on Production the same day (deploy run
+    39585333626 green; /waves, /api/email/*, /api/firms/* answer). Mirror-bug backfill done: Friedrich
     Fries-Henrich's /sales-leads card recreated (send + reply); the 3 other "missing" rows were archived KIMW stand-ins.
   - Not built: an email-only-to-firm-inbox lane (people with an email only), the bot persona's guidance for waves,
     service-MCP exposure of the wave tools, open/click tracking (deliberately none).
