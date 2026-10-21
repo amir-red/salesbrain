@@ -12,7 +12,7 @@ import { STATUS_LABEL, VERDICT_STYLE, chequeRange, type FirmListPayload, type Fi
  * verdict against the list's brief, open a firm for sources, team and contact. Loads on open and after every action
  * (not polled: 500+ rows, and research runs in the background sweep).
  */
-const PAGE = 100;
+const PAGE_SIZES = [10, 50, 100, 0] as const;   // 0 = all
 const VERDICTS: (FirmVerdict | 'all')[] = ['all', 'go', 'later', 'out', 'unknown'];
 
 export default function FirmsSection({ icpId, canEdit }: { icpId: string; canEdit: boolean }) {
@@ -22,7 +22,8 @@ export default function FirmsSection({ icpId, canEdit }: { icpId: string; canEdi
   const [verdict, setVerdict] = useState<FirmVerdict | 'all'>('all');
   const [q, setQ] = useState('');
   const [open, setOpen] = useState<string | null>(null);
-  const [shown, setShown] = useState(PAGE);
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [page, setPage] = useState(0);
   const [importing, setImporting] = useState(false);
   const [briefOpen, setBriefOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -36,12 +37,12 @@ export default function FirmsSection({ icpId, canEdit }: { icpId: string; canEdi
   }, [icpId]);
   useEffect(() => { void load(); }, [load]);
 
-  const queue = async (limit: number, what: 'research' | 'people' = 'research') => {
+  const setAuto = async (on: boolean) => {
     setBusy(true); setNote(null);
     try {
-      const res = await fetch(`/api/icp/${icpId}/firms/${what}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ limit }) });
+      const res = await fetch(`/api/icp/${icpId}/firms/auto`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ on }) });
       const out = await res.json().catch(() => ({}));
-      setNote(out.error || out.note || 'Queued.');
+      setNote(out.error || out.note || null);
       await load();
     } finally { setBusy(false); }
   };
@@ -52,6 +53,8 @@ export default function FirmsSection({ icpId, canEdit }: { icpId: string; canEdi
     return all.filter((f) => (verdict === 'all' || f.eligibility === verdict)
       && (!needle || f.firm.toLowerCase().includes(needle) || (f.domain || '').includes(needle)));
   }, [data, verdict, q]);
+  const pages = pageSize ? Math.max(1, Math.ceil(firms.length / pageSize)) : 1;
+  const visible = pageSize ? firms.slice(page * pageSize, (page + 1) * pageSize) : firms;
 
   const c = data?.counts;
   // A people list with no firms: one slim line instead of a whole card.
@@ -72,16 +75,12 @@ export default function FirmsSection({ icpId, canEdit }: { icpId: string; canEdi
         <button type="button" onClick={() => setImporting(true)} className="px-2.5 py-1 rounded-lg text-xs" style={{ border: '1px solid var(--border)' }}>Import firms</button>
         <button type="button" onClick={() => setBriefOpen((o) => !o)} className="px-2.5 py-1 rounded-lg text-xs" style={{ border: '1px solid var(--border)' }}
           title="What each firm is judged against">{hasBrief ? 'Edit brief' : 'Set the brief'}</button>
-        {!!c?.total && (
-          <button type="button" onClick={() => queue(25)} disabled={busy} className="px-2.5 py-1 rounded-lg text-xs font-medium disabled:opacity-40"
-            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }} title="Queue the next 25 unresearched firms in the list's order; the sweep researches them within 15 minutes">
-            {busy ? 'Queuing…' : 'Research next 25'}
-          </button>
-        )}
-        {!!c?.total && (
-          <button type="button" onClick={() => queue(10, 'people')} disabled={busy} className="px-2.5 py-1 rounded-lg text-xs font-medium disabled:opacity-40"
-            style={{ border: '1px solid var(--accent)', color: 'var(--accent)' }} title="Queue the next 10 firms with nobody on the list (not Out): the sweep picks their partners, adds them as leads and finds LinkedIn + email">
-            Find people for next 10
+        {!!c?.total && data?.auto && (
+          <button type="button" role="switch" aria-checked={data.auto.on} onClick={() => setAuto(!data.auto.on)} disabled={busy}
+            className="px-2.5 py-1 rounded-lg text-xs font-medium disabled:opacity-40 inline-flex items-center gap-1.5"
+            style={data.auto.on ? { background: 'var(--accent)', color: 'var(--accent-fg)' } : { border: '1px solid var(--border)', color: 'var(--text-muted)' }}
+            title="Automatic: firms are researched in rank order and people are found at Go firms by themselves. Nothing is ever sent without an approved wave.">
+            <span aria-hidden>{data.auto.on ? '●' : '○'}</span> Automatic {data.auto.on ? 'on' : 'off'}
           </button>
         )}
       </div>
@@ -94,6 +93,17 @@ export default function FirmsSection({ icpId, canEdit }: { icpId: string; canEdi
       {data && !hasBrief && !briefOpen && !!c?.total && (
         <div className="mb-3 text-xs rounded-lg px-3 py-2" style={{ background: 'color-mix(in srgb, var(--yellow) 10%, transparent)', color: 'var(--text)' }}>
           Set the brief (our stage, round, where we are, sectors) so researched firms get a Go / Check / Out verdict.
+        </div>
+      )}
+      {!!c?.total && data?.auto && (
+        <div className="mb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+          {!data.auto.on ? 'Automatic is off: only firms someone asks for are researched (Research now on a firm).'
+            : data.auto.held ? `Automatic is on but ${data.auto.held}, so nothing runs.`
+            : data.auto.needs_brief ? 'Automatic is on and starts once the brief is set: then firms are researched in rank order (25 every 15 minutes) and people are found at the Go ones. Nothing is sent without an approved wave.'
+            : <>Working by itself: {data.auto.to_research ? `${data.auto.to_research} firms left to research, 25 every 15 minutes in rank order` : 'every firm is researched'}
+                {data.auto.needs_brief ? ''
+                  : data.auto.to_find_people ? ` · finding people at ${data.auto.to_find_people} Go firm(s), within today's email and LinkedIn limits` : ''}.
+                Nothing is sent without an approved wave.</>}
         </div>
       )}
       {note && <div className="mb-2 text-xs" style={{ color: 'var(--text-muted)' }}>{note}</div>}
@@ -112,13 +122,13 @@ export default function FirmsSection({ icpId, canEdit }: { icpId: string; canEdi
               const n = v === 'all' ? c.total : c[v as 'go'];
               const active = verdict === v;
               return (
-                <button key={v} type="button" onClick={() => { setVerdict(v); setShown(PAGE); }} className="px-2.5 py-1 rounded-full text-xs"
+                <button key={v} type="button" onClick={() => { setVerdict(v); setPage(0); }} className="px-2.5 py-1 rounded-full text-xs"
                   style={{ border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`, color: active ? 'var(--accent)' : 'var(--text-muted)' }}>
                   {v === 'all' ? 'All' : VERDICT_STYLE[v].label} {n}
                 </button>
               );
             })}
-            <input id="firms-search" value={q} onChange={(e) => { setQ(e.target.value); setShown(PAGE); }} placeholder="Search firms" aria-label="Search firms"
+            <input id="firms-search" value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }} placeholder="Search firms" aria-label="Search firms"
               className="z-input text-xs py-1 ml-auto w-48" />
           </div>
           <div className="overflow-x-auto">
@@ -133,7 +143,7 @@ export default function FirmsSection({ icpId, canEdit }: { icpId: string; canEdi
                 </tr>
               </thead>
               <tbody>
-                {firms.slice(0, shown).map((f) => {
+                {visible.map((f) => {
                   const v = VERDICT_STYLE[f.eligibility];
                   const r = f.research;
                   const isOpen = open === f.id;
@@ -166,11 +176,21 @@ export default function FirmsSection({ icpId, canEdit }: { icpId: string; canEdi
               </tbody>
             </table>
           </div>
-          {firms.length > shown && (
-            <button type="button" onClick={() => setShown((s) => s + PAGE)} className="mt-2 text-xs underline" style={{ color: 'var(--text-muted)' }}>
-              Show {Math.min(PAGE, firms.length - shown)} more of {firms.length - shown}
-            </button>
-          )}
+          <div className="flex flex-wrap items-center justify-between gap-2 mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+            <label className="flex items-center gap-1.5 whitespace-nowrap">Show
+              <select id="firms-page-size" value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }} className="z-input text-xs py-0.5">
+                {PAGE_SIZES.map((n) => <option key={n} value={n}>{n === 0 ? 'all' : n}</option>)}
+              </select>
+              of {firms.length}
+            </label>
+            {pages > 1 && (
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} className="px-2 py-0.5 rounded disabled:opacity-40" style={{ border: '1px solid var(--border)' }}>‹ Prev</button>
+                <span>{page * pageSize + 1}–{Math.min(firms.length, (page + 1) * pageSize)}</span>
+                <button type="button" onClick={() => setPage((p) => Math.min(pages - 1, p + 1))} disabled={page >= pages - 1} className="px-2 py-0.5 rounded disabled:opacity-40" style={{ border: '1px solid var(--border)' }}>Next ›</button>
+              </div>
+            )}
+          </div>
         </>
       )}
     </SectionCard>
