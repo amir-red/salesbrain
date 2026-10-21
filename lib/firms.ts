@@ -131,3 +131,15 @@ export function mapFirmRows(rows: string[][], mapping: (FirmImportField | '')[])
 
 export interface FirmImportResult { row: number; status: 'new' | 'created' | 'duplicate' | 'error'; firm?: string; reason?: string; firm_id?: string }
 export interface FirmImportSummary { dry_run: boolean; rows: number; new: number; created: number; duplicate: number; error: number; results: FirmImportResult[] }
+
+export interface FirmProgressRun { started_at: string; finished_at: string | null; status: string; researched: number;
+  people_added: number; summary: string | null; error: string | null }
+export interface FirmProgressPayload {
+  icp_id: string;
+  auto: { on: boolean; working: boolean; held: string | null; needs_brief: boolean };
+  counts: { total: number; researched: number; failed: number; to_research: number; go: number; later: number; out: number;
+    go_with_people: number; go_nobody_found: number; to_find_people: number; people: number; with_email: number; with_linkedin: number };
+  per_run: number; eta_minutes: number | null; next_batch_at: string | null;
+  running: { started_at: string; firms: string[] } | null;
+  runs: FirmProgressRun[]; blockers: string[]; notes: string[];
+}
