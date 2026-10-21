@@ -30,6 +30,16 @@ export default function FirmCard({ firmId, onChanged }: { firmId: string; onChan
       await load(); onChanged();
     } finally { setBusy(null); }
   };
+  const findPeople = async (names?: string[]) => {
+    setBusy(names ? `add:${names[0]}` : 'people'); setError(null);
+    try {
+      const res = await fetch(`/api/firms/${firmId}/people`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(names ? { names } : {}) });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok || out.error) setError(out.error || 'Could not find people.');
+      else if (!out.landed?.length) setError(out.already?.length ? `Already on the list: ${out.already.map((a: { name: string }) => a.name).join(', ')}` : 'Nobody found to add.');
+      await load(); onChanged();
+    } finally { setBusy(null); }
+  };
   const research = async () => {
     setBusy('research'); setError(null);
     try {
@@ -93,15 +103,21 @@ export default function FirmCard({ firmId, onChanged }: { firmId: string; onChan
               <div>
                 <div className="z-eyebrow mb-1">Team on their site ({p.team.length})</div>
                 <ul className="text-sm grid gap-0.5 sm:grid-cols-2">
-                  {p.team.slice(0, 24).map((m, i) => (
-                    <li key={i} className="truncate">
-                      <b>{m.name}</b><span style={muted}>{m.title ? ` · ${m.title}` : ''}{m.focus ? ` · ${m.focus}` : ''}</span>
-                      {m.linkedin_url && <a href={m.linkedin_url} target="_blank" rel="noreferrer" className="ml-1 text-xs underline" style={{ color: 'var(--accent)' }}>in</a>}
-                      {m.email && <span className="ml-1 text-xs" style={muted}>{m.email}</span>}
-                    </li>
-                  ))}
+                  {p.team.slice(0, 24).map((m, i) => {
+                    const onList = f.people.some((x) => (x.full_name || '').trim().toLowerCase() === m.name.trim().toLowerCase());
+                    return (
+                      <li key={i} className="truncate">
+                        <b>{m.name}</b><span style={muted}>{m.title ? ` · ${m.title}` : ''}{m.focus ? ` · ${m.focus}` : ''}</span>
+                        {m.linkedin_url && <a href={m.linkedin_url} target="_blank" rel="noreferrer" className="ml-1 text-xs underline" style={{ color: 'var(--accent)' }}>in</a>}
+                        {m.email && <span className="ml-1 text-xs" style={muted}>{m.email}</span>}
+                        {onList ? <span className="ml-1 text-[11px]" style={{ color: 'var(--green)' }}>on the list</span>
+                          : <button type="button" onClick={(e) => { e.stopPropagation(); void findPeople([m.name]); }} disabled={busy !== null}
+                              className="ml-1 text-[11px] underline disabled:opacity-40" style={{ color: 'var(--accent)' }} title="Add as a lead and look up LinkedIn + email">
+                              {busy === `add:${m.name}` ? 'adding…' : 'add as lead'}</button>}
+                      </li>
+                    );
+                  })}
                 </ul>
-                <p className="text-[11px] mt-1" style={muted}>Finding the right partner here and adding them as leads is the next step (coming in the people phase).</p>
               </div>
             )}
             {!!f.research?.sources?.length && (
@@ -170,6 +186,11 @@ export default function FirmCard({ firmId, onChanged }: { firmId: string; onChan
           <textarea id={`firm-notes-${f.id}`} value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} className="z-input text-xs"
             onBlur={() => { if (notes !== (f.notes || '')) void patch({ notes }, 'notes'); }} />
         </div>
+        <button type="button" onClick={() => findPeople()} disabled={busy !== null} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40"
+          style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }} title="Pick the best partners, add them as leads, find LinkedIn + email (~1-2 min)">
+          {busy === 'people' ? 'Finding people… (up to 2 min)' : f.people.length ? 'Find more people' : 'Find people now'}
+        </button>
+        {f.people_error && !f.people.length && <div className="text-[11px]" style={muted}>Last try: {f.people_error}</div>}
         <button type="button" onClick={research} disabled={busy !== null} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40"
           style={{ border: '1px solid var(--accent)', color: 'var(--accent)' }} title="Reads the firm's site and searches Google (~20-60 s)">
           {busy === 'research' ? 'Researching… (up to a minute)' : f.research ? 'Research again now' : 'Research now'}

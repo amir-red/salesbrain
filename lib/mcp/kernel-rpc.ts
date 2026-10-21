@@ -80,6 +80,8 @@ const LONG_RUNNING_TOOLS = new Set<string>([
   // A firm's site + one Google-grounded call + one extraction (~20-60 s); an import lands 100 firms per call.
   'crm_firm_research',
   'crm_firm_import',
+  // Land 2 people, then a LinkedIn lookup + a FullEnrich poll each (~1-2 min).
+  'crm_firm_find_people',
 ]);
 
 async function rpc(

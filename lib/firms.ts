@@ -18,7 +18,7 @@ export interface FirmRow {
   status: FirmStatus; eligibility: FirmVerdict; eligibility_reasons: string[]; eligibility_override: boolean;
   contact_email: string | null; contact_route: string | null; notes: string | null;
   research_requested_at: string | null; research_error: string | null; researched_at: string | null;
-  people_found_at: string | null; updated_at: string;
+  people_found_at: string | null; people_requested_at: string | null; people_error: string | null; updated_at: string;
   firm: string; website: string | null; domain: string | null; hq_location: string | null;
   confidence: string | null; people: number; contacted: number;
   research: FirmResearchSummary | null;
@@ -31,7 +31,7 @@ export interface FirmBrief {
 
 export interface FirmListPayload {
   icp_id: string; list: string; brief: FirmBrief;
-  counts: { total: number; researched: number; queued: number; go: number; later: number; out: number; unknown: number; with_email: number };
+  counts: { total: number; researched: number; queued: number; go: number; later: number; out: number; unknown: number; with_email: number; with_people: number; people_queued: number };
   firms: FirmRow[];
 }
 

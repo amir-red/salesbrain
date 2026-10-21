@@ -36,10 +36,10 @@ export default function FirmsSection({ icpId, canEdit }: { icpId: string; canEdi
   }, [icpId]);
   useEffect(() => { void load(); }, [load]);
 
-  const queue = async (limit: number) => {
+  const queue = async (limit: number, what: 'research' | 'people' = 'research') => {
     setBusy(true); setNote(null);
     try {
-      const res = await fetch(`/api/icp/${icpId}/firms/research`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ limit }) });
+      const res = await fetch(`/api/icp/${icpId}/firms/${what}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ limit }) });
       const out = await res.json().catch(() => ({}));
       setNote(out.error || out.note || 'Queued.');
       await load();
@@ -63,7 +63,7 @@ export default function FirmsSection({ icpId, canEdit }: { icpId: string; canEdi
       </div>
     );
   }
-  const subtitle = c ? `${c.total} firms · ${c.researched} researched${c.queued ? ` · ${c.queued} queued` : ''} · ${c.go} go · ${c.later} to check · ${c.out} out · ${c.with_email} with an email` : 'Loading…';
+  const subtitle = c ? `${c.total} firms · ${c.researched} researched${c.queued ? ` (${c.queued} queued)` : ''} · ${c.go} go · ${c.later} to check · ${c.out} out · ${c.with_people} with people${c.people_queued ? ` (${c.people_queued} queued)` : ''} · ${c.with_email} with a firm email` : 'Loading…';
   const hasBrief = data && Object.keys(data.brief || {}).length > 0;
 
   return (
@@ -76,6 +76,12 @@ export default function FirmsSection({ icpId, canEdit }: { icpId: string; canEdi
           <button type="button" onClick={() => queue(25)} disabled={busy} className="px-2.5 py-1 rounded-lg text-xs font-medium disabled:opacity-40"
             style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }} title="Queue the next 25 unresearched firms in the list's order; the sweep researches them within 15 minutes">
             {busy ? 'Queuing…' : 'Research next 25'}
+          </button>
+        )}
+        {!!c?.total && (
+          <button type="button" onClick={() => queue(10, 'people')} disabled={busy} className="px-2.5 py-1 rounded-lg text-xs font-medium disabled:opacity-40"
+            style={{ border: '1px solid var(--accent)', color: 'var(--accent)' }} title="Queue the next 10 firms with nobody on the list (not Out): the sweep picks their partners, adds them as leads and finds LinkedIn + email">
+            Find people for next 10
           </button>
         )}
       </div>
@@ -143,6 +149,7 @@ export default function FirmsSection({ icpId, canEdit }: { icpId: string; canEdi
                           <span className="px-1.5 py-0.5 rounded font-medium" style={{ color: v.color, background: `color-mix(in srgb, ${v.color} 14%, transparent)` }}>{v.label}</span>
                           {f.research_requested_at && <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>queued</div>}
                           {f.research_error && !f.research_requested_at && <div className="text-[10px] mt-0.5" style={{ color: 'var(--red)' }} title={f.research_error}>failed</div>}
+                          {f.people_requested_at && <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>finding people</div>}
                         </td>
                         <td className="px-2 py-1.5 max-w-[22rem]"><div className="line-clamp-2" style={{ color: r?.thesis ? 'var(--text)' : 'var(--text-muted)' }}>{r?.thesis || '—'}</div></td>
                         <td className="px-2 py-1.5 whitespace-nowrap">{r?.stages?.slice(0, 2).join(', ') || '—'}</td>

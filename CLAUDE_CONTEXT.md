@@ -2064,7 +2064,24 @@ credits/day, one tap per wave. Phases: 1 firms + research (this), 2 people at th
   investor+customer twins and two Viola vehicles merged; 42 research links rejected as websites); Point Nine, Seedcamp,
   Bain Capital Ventures, firstminute, Frontline, Fly and Notion Capital researched in 20-30 s each, all "go", Notion with
   14 investment-team members and "Notion Capital V · €300M · 2023".
-- Not built yet: phase 2 (people at the firm → leads), phase 3 (Gmail send, waves, sequences, reply/bounce detection).
+- **Phase 2 — people at the firm (same branch)**: `policy/firms.investor_rank` (1 partner/GP/MD/founder · 2 principal/
+  director · 3 venture partner · 4 VP/investment manager · 5 associate · 6 analyst · None = advisor/ops/finance/legal/
+  platform — VC titles only, `leader_title` for NRW untouched) + `pick_people` (best rank, then focus on the brief's
+  sectors). `commands/firms.land_firm_people` → prospects owned by the LIST owner, `source_type='firm_team'` (added to
+  CURATED_SOURCE_TYPES and to the stored `agents.conductor.curated_source_types` in 075), tied to the firm's own account
+  (not a same-name twin), priority_rank = firm rank, a /sales-leads card each; never twice (slug, else name at the firm).
+  Queue `list_firms.people_requested_at` + `request_firm_people` / `firm_people_plan`; the same 15-min sweep runs it
+  after research. Ring `firm_people.find_people`: research first if needed → team from the site (Google-grounded search
+  when the site lists nobody) → land → per person `find_profile` WITHOUT the company_web rung + `enrich_one(email)`
+  guarded by `email_credits_per_day` (enrich_one itself does not check the cap). Tool `crm_firm_find_people`
+  (firm_id now / icp_id queue / names = pick). 075 also raises `agents.enricher.email_credits_per_day` to 100.
+  App: "Find people for next 10", card "Find people now" / "add as lead" per team member. Live (scratch): Point Nine
+  researched + 2 partners landed in 46 s.
+- **Fixed on the way (bug on main since 0.49.7, 2026-10-16)**: `sales_leads.upsert_sales_lead` INSERT listed 12 columns
+  with 11 placeholders, so every NEW /sales-leads card from the mirror failed silently (mirror_safely swallows it):
+  hand-added leads (crm_prospect_add / Zeami Omni), first sends and replies of people without a card. Production
+  2026-10-21: 3 hand-added leads, 1 messaged prospect, 1 reply without a card — backfill after the fix ships.
+- Not built yet: phase 3 (Gmail send, waves, sequences, reply/bounce detection).
 
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
