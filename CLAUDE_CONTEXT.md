@@ -2053,7 +2053,7 @@ Enricher → Lead Conductor → Attention / Supervisor / Learn / Knowledge revie
 - Not built yet: per-agent `/agents` link to its Workspace card, the remaining agents, deleting the paused main-profile jobs (after
   2026-10-27), cost per agent report (feature = cron job name in `llm_usage`).
 
-### 5.bb Firm outreach — firms on a list, investor research (2026-10-21, feat/firm-outreach, migration 075, phase 1 of 3)
+### 5.bc Firm outreach — firms on a list, investor research (2026-10-21, feat/firm-outreach, migration 075, phase 1 of 3)
 
 Amir: "research the companies, know what they invest in, find their contact email, find the persons, mass outreach" —
 first for the Zeami raise (563 VC funds, 44 named partners; Mateo's workbook). Plan `~/.claude/plans/vc-firm-outreach.md`.
