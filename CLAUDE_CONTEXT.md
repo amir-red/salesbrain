@@ -2036,6 +2036,19 @@ Enricher → Lead Conductor → Attention / Supervisor / Learn / Knowledge revie
   the scheduler's workers did not ("No database configured"; both Leads Finder ticks on 2026-10-21 morning). Every kernel / ring
   setting read now goes through `salesbrain_core.env.get` (os.environ first, then the Hermes scope). Proven with a scheduled probe
   in the leads-finder profile. Lesson: validate an agent through the SCHEDULER, not `hermes cron run` from a shell.
+- **Rollout done 2026-10-21 (0.56.0): every SalesBrain agent is a Hermes-native profile** (8): outreach, leads-finder, enricher,
+  lead-conductor, graph-sync, attention, supervisor, knowledge-review. Enricher (Flash) decides who and what per owner and
+  calls `crm_enrich_batch` (closes the owner's run, sends the digest; "needs a pick" stays a person's job — Amir's 2026-10-09
+  rule); Lead Conductor (Flash, hourly) and Graph sync (Flash-Lite) call `crm_agent_run_step` (the proven script as a tool)
+  and report only problems via `crm_agent_report`; Attention (Flash) and Supervisor (Argon) moved as they were, with act-as
+  per owner (the old attention prompt named `crm_get_person_dossier`, a tool that no longer exists, and ran with the dead
+  identity — it had done nothing for weeks); Knowledge review (Argon) writes its entries with `crm_knowledge_review_write` and
+  closes with `crm_knowledge_review_finish`. Review jobs (MEMORY.md) for outreach, leads-finder, enricher. **Learn retired**
+  (`agents/_shared/retired.txt`; its skill patch could never apply to a git-deployed skill; the Outreach review replaces it).
+  **`crm` profile deleted** (backup `/root/backups/profile-crm-*.tgz`); deploy no longer recreates it. Paused main-profile jobs
+  to delete after 2026-10-28: attention-allocator, enricher, graph-sync, knowledge-review, lead-conductor, ops:supervisor:daily,
+  ops:learn:weekly (+ leads-finder, ops:outreach:daily after 2026-10-27). A test checks every `crm_*` named in a rulebook exists.
+  First scheduled check: lead-conductor ran its tick (279 leads, nothing due) and stayed silent, ~10k input tokens per call.
 - `/admin/learning` shows every profile's MEMORY.md already; the "built-in memory ON" warning now applies to chat profiles only.
 - Not built yet: per-agent `/agents` link to its Workspace card, the remaining agents, deleting the paused main-profile jobs (after
   2026-10-27), cost per agent report (feature = cron job name in `llm_usage`).
