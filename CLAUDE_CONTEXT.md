@@ -2035,6 +2035,37 @@ Enricher → Lead Conductor → Attention / Supervisor / Learn / Knowledge revie
 - Not built yet: per-agent `/agents` link to its Workspace card, the remaining agents, deleting the paused main-profile jobs (after
   2026-10-27), cost per agent report (feature = cron job name in `llm_usage`).
 
+### 5.ba Firm outreach — firms on a list, investor research (2026-10-21, feat/firm-outreach, migration 075, phase 1 of 3)
+
+Amir: "research the companies, know what they invest in, find their contact email, find the persons, mass outreach" —
+first for the Zeami raise (563 VC funds, 44 named partners; Mateo's workbook). Plan `~/.claude/plans/vc-firm-outreach.md`.
+Decisions: each sender's own Gmail, Gemini + Google Search for research, 50 emails/day per mailbox, 100 FullEnrich
+credits/day, one tap per wave. Phases: 1 firms + research (this), 2 people at the firm, 3 email waves from Gmail.
+- **Core 075**: `account_profiles` (org-wide research per account + kind `investor`, sources per claim),
+  `list_firms` (a firm ON a list: rank, priority, status new→researched→people_found→contacted→replied→meeting,
+  eligibility go|later|out|unknown + reasons, `eligibility_override`, contact_email/route, research queue flag),
+  `icp_profiles.firm_brief` (stage, round, entity country, geographies, sectors, exclusions, pitch), policy
+  `agents.firm_research`. `policy/firms.py` (pure: `eligibility`, `pick_contact` — never legal@/privacy@/press@/
+  careers@/investors@, `domain_of` + `site_matches` — a research link to sec.gov / prnewswire / a parent company is NOT
+  the firm's site, it is kept as `source_row.source_url`), `commands/firms.py` (import, list, get, save research →
+  re-judges every list holding the firm, update incl. verdict override, brief, queue, sweep plan).
+- **Ring**: `llm.grounded()` (Gemini REST + `google_search` tool → text + sources; grounding redirect links are
+  resolved to the article URL), `llm.converse(json_mode=True)` (Gemini strict JSON — the long team lists truncated
+  plain JSON at 3k tokens), `firm_research.py` (site pages home/about/team/people/portfolio/contact + one grounded call
+  + one extraction; an email is kept ONLY if it appears literally in the fetched text), tools `crm_firm_import/list/
+  get/research/update/brief_set` (family crm_prospecting, 6 new), sweep `assets/scripts/firm_research.py` = Hermes cron
+  `firm-research` `*/15 7-22 * * *` — researches ONLY queued firms, DMs the list owner (`firm-research` source), silent
+  in the operator chat.
+- **App**: `/icp/[id]` Firms section at the top (`components/firms/{FirmsSection,FirmCard,FirmBriefEditor,
+  ImportFirmsModal}.tsx`, slim one-liner on a people-only list), `lib/firms.ts`, routes `GET/POST /api/icp/[id]/firms`
+  (import: multipart parse + 100-row kernel chunks), `/api/icp/[id]/firms/{research,brief}`, `GET/PATCH /api/firms/[id]`,
+  `POST /api/firms/[id]/research` (now, ~20-30 s). Export: a Firms sheet in the ICP workbook.
+- **Verified locally (scratch Postgres, real Gemini key)**: the ranked VC file imports as 562 firms in ~1.5 s (6
+  investor+customer twins and two Viola vehicles merged; 42 research links rejected as websites); Point Nine, Seedcamp,
+  Bain Capital Ventures, firstminute, Frontline, Fly and Notion Capital researched in 20-30 s each, all "go", Notion with
+  14 investment-team members and "Notion Capital V · €300M · 2023".
+- Not built yet: phase 2 (people at the firm → leads), phase 3 (Gmail send, waves, sequences, reply/bounce detection).
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

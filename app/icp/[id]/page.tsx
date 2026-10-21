@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import IcpBuilder from '@/components/icp/IcpBuilder';
 import LeadsTable from '@/components/icp/LeadsTable';
+import FirmsSection from '@/components/firms/FirmsSection';
 import { ActivityList } from '@/components/icp/IcpLeads';
 import type { RunMode } from '@/components/icp/IcpRow';
 import DefinitionSection from '@/components/icp/panel/DefinitionSection';
@@ -138,6 +139,10 @@ export default function IcpPanelPage() {
             <SectionCard title="2 · The list" subtitle={`${data.coverage.total} leads · ${data.coverage.matched} matched · ${data.coverage.engaged} engaged · ${data.coverage.deals} became deals`}>
               <FunnelBar stages={data.stages} legend height={12} />
             </SectionCard>
+
+            {/* Firms first: on a firm list (e.g. VC funds) they are the work; on a people list the section is one slim line.
+                Only the owner or an admin can open this page, and the kernel enforces the same rule. */}
+            <div id="firms"><FirmsSection icpId={id} canEdit /></div>
 
             <div className="grid gap-4 xl:grid-cols-2">
               <DefinitionSection data={data} onEdit={data.is_owner ? () => setEditing(true) : undefined} />
