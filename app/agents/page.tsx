@@ -6,6 +6,9 @@ import Sidebar from '@/components/Sidebar';
 import { ActivityList } from '@/components/icp/IcpLeads';
 import { RUN_STATUS_COLOR } from '@/lib/icp';
 import type { AgentRun } from '@/lib/icp';
+import DraftEditor from '@/components/voice/DraftEditor';
+import DraftFeedback from '@/components/voice/DraftFeedback';
+import type { VoiceFlag } from '@/lib/voice';
 import { relativeTime } from '@/lib/time';
 import { type CompanyConflict, isHeld } from '@/lib/company-conflict';
 
@@ -27,6 +30,7 @@ interface Approval {
   created_at: string; expires_at: string; person_name: string | null; title: string | null; company: string | null;
   icp_score: number | null; icp_name: string | null; owner_name: string | null;
   kind?: string; intro_lead_name?: string | null; commercial?: boolean;
+  check_flags?: VoiceFlag[] | null; edited_at?: string | null; rating?: number | null; decided_at?: string | null;
 }
 
 /**
@@ -38,15 +42,19 @@ export default function AgentsPage() {
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [decideNote, setDecideNote] = useState<string | null>(null);
+  const [toRate, setToRate] = useState<Approval[]>([]);       // Brand & Voice (079): my decided drafts, not yet rated
+  const [editing, setEditing] = useState<string | null>(null);
+  const [rateId, setRateId] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('');
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [a, b, c] = await Promise.all([fetch('/api/agents'), fetch(`/api/agents/runs?limit=60${filter ? `&agent=${filter}` : ''}`), fetch('/api/agents/approvals')]);
+    const [a, b, c, d] = await Promise.all([fetch('/api/agents'), fetch(`/api/agents/runs?limit=60${filter ? `&agent=${filter}` : ''}`), fetch('/api/agents/approvals'), fetch('/api/agents/approvals?rate=1')]);
     if (a.ok) setData(await a.json());
     if (b.ok) setRuns(await b.json());
     if (c.ok) setApprovals(await c.json());
+    if (d.ok) setToRate(await d.json());
   }, [filter]);
   useEffect(() => { load(); }, [load]);
 
@@ -69,6 +77,7 @@ export default function AgentsPage() {
       if (!res.ok || out.error) setDecideNote(out.error || 'Failed');
       else if (decision === 'reject') setDecideNote('Skipped — nothing sent.');
       else setDecideNote(out.sent ? `Sent (${out.status}).` : `Not sent: ${out.note || 'policy denied'}`);
+      if (res.ok && !out.error && approvals.find((x) => x.id === id)?.kind !== 'proposal') setRateId(id);
       await load();
     } finally { setBusy(null); }
   };
@@ -209,6 +218,7 @@ export default function AgentsPage() {
               <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Drafts the Outreach agent filed for you — same 👍/👎 as the Telegram card.</span>
             </div>
             {decideNote && <div className="text-xs" style={{ color: decideNote.startsWith('Not sent') || decideNote === 'Failed' ? 'var(--red)' : 'var(--text-muted)' }}>{decideNote}</div>}
+            {rateId && <DraftFeedback key={rateId} approvalId={rateId} label="How good was that draft?" onDone={() => load()} />}
             {approvals.length === 0 && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Nothing waiting.</p>}
             {approvals.map((ap) => (
               <div key={ap.id} className="rounded-xl p-4 space-y-2" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
@@ -224,15 +234,44 @@ export default function AgentsPage() {
                     {isHeld(ap) && <div className="text-[11px] mt-1" style={{ color: 'var(--orange)' }}>{ap.company_conflict?.warning}</div>}
                   </div>
                   <div className="flex gap-2 shrink-0">
+                    {ap.kind !== 'proposal' && editing !== ap.id && (
+                      <button onClick={() => setEditing(ap.id)} disabled={busy === ap.id} className="px-3 py-1.5 rounded-lg text-xs disabled:opacity-40" style={{ border: '1px solid var(--border)', color: 'var(--text)' }}>✏️ Edit</button>
+                    )}
                     <button onClick={() => decide(ap.id, 'reject')} disabled={busy === ap.id} className="px-3 py-1.5 rounded-lg text-xs disabled:opacity-40" style={{ border: '1px solid var(--border)', color: 'var(--text)' }}>👎 Skip</button>
                     <button onClick={() => decide(ap.id, isHeld(ap) ? 'approve_anyway' : 'approve')} disabled={busy === ap.id} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--green)', color: 'var(--accent-fg)' }}>{busy === ap.id ? 'Working…' : ap.kind === 'proposal' ? '👍 Do it' : isHeld(ap) ? '👍 Send anyway' : '👍 Send'}</button>
                   </div>
                 </div>
                 {ap.subject && ap.kind !== 'proposal' && <div className="text-xs"><b>Subject:</b> {ap.subject}</div>}
-                <pre className="text-xs whitespace-pre-wrap rounded-lg p-3" style={{ background: 'var(--bg-input)', color: 'var(--text)', fontFamily: 'inherit' }}>{ap.message}</pre>
+                {editing === ap.id
+                  ? <DraftEditor approvalId={ap.id} text={ap.message} onCancel={() => setEditing(null)}
+                      onSaved={() => { setEditing(null); setDecideNote('Saved your text — approve it when it is right.'); load(); }} />
+                  : <pre className="text-xs whitespace-pre-wrap rounded-lg p-3" style={{ background: 'var(--bg-input)', color: 'var(--text)', fontFamily: 'inherit' }}>{ap.message}</pre>}
+                {ap.edited_at && editing !== ap.id && <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>✏️ Edited — this is your text.</div>}
+                {Array.isArray(ap.check_flags) && ap.check_flags.length > 0 && (
+                  <div className="text-[11px]" style={{ color: 'var(--orange)' }}>⚠️ Check: {ap.check_flags.map((f) => f.detail).join(' · ')}</div>
+                )}
               </div>
             ))}
           </div>
+
+          {toRate.length > 0 && (
+            <div className="pt-2 space-y-2">
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-semibold">Rate recent drafts</h2>
+                <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Your drafts from the last 14 days that nobody rated. A 1–10 and the reason teach your voice — <Link href="/brand?tab=voice" className="underline">see what it learned</Link>.</span>
+              </div>
+              {toRate.map((ap) => (
+                <details key={ap.id} className="rounded-xl p-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                  <summary className="text-xs cursor-pointer flex flex-wrap gap-x-2">
+                    <span className="font-medium">{ap.person_name || '—'}</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{ap.kind === 'followup' ? 'follow-up' : ap.kind === 'intro_request' ? 'intro ask' : ap.kind === 'connect' ? 'connection note' : 'message'} · {ap.status === 'sent' ? 'sent' : 'skipped'} {relativeTime(ap.decided_at || ap.created_at)}</span>
+                  </summary>
+                  <pre className="text-xs whitespace-pre-wrap rounded-lg p-2 my-2" style={{ background: 'var(--bg-input)', color: 'var(--text)', fontFamily: 'inherit' }}>{ap.message}</pre>
+                  <DraftFeedback approvalId={ap.id} compact />
+                </details>
+              ))}
+            </div>
+          )}
 
           <div className="flex items-center gap-2 pt-2">
             <h2 className="text-sm font-semibold">Activity</h2>

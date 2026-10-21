@@ -164,6 +164,7 @@ function IntroAskModal({ prospectId, path, hop, as, actingName, onClose, onFiled
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [blurb, setBlurb] = useState('');
+  const [stamp, setStamp] = useState<unknown>(null); // Brand & Voice (079): sent back on propose
   const [busy, setBusy] = useState<'draft' | 'propose' | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const connector = { person_id: hop.to.person_id, name: hop.to.name, role: hop.to.role, evidence: hop.evidence, why: hop.why_this_person, channel: hop.channel };
@@ -174,13 +175,13 @@ function IntroAskModal({ prospectId, path, hop, as, actingName, onClose, onFiled
       const res = await fetch(`/api/prospects/${prospectId}/intro`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'draft', as, connector_person_id: connector.person_id, connector }) });
       const out = await res.json();
       if (out.error) setErr(String(out.error));
-      else { setSubject(out.subject || ''); setMessage(out.message || ''); setBlurb(out.forwardable_blurb || ''); }
+      else { setSubject(out.subject || ''); setMessage(out.message || ''); setBlurb(out.forwardable_blurb || ''); setStamp(out.voice ?? null); }
     } finally { setBusy(null); }
   };
   const propose = async () => {
     setBusy('propose'); setErr(null);
     try {
-      const res = await fetch(`/api/prospects/${prospectId}/intro`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'propose', as, connector_person_id: connector.person_id, path_id: path.path_id, message, subject: hop.channel === 'email' ? subject : undefined, forwardable_blurb: blurb, rationale: `Route via ${hop.to.name}: ${hop.evidence}` }) });
+      const res = await fetch(`/api/prospects/${prospectId}/intro`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'propose', as, connector_person_id: connector.person_id, path_id: path.path_id, message, subject: hop.channel === 'email' ? subject : undefined, forwardable_blurb: blurb, rationale: `Route via ${hop.to.name}: ${hop.evidence}`, voice: stamp ?? undefined }) });
       const out = await res.json();
       if (out.error) setErr(String(out.error));
       else onFiled();

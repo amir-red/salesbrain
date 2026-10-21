@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import ChipSelect from './ChipSelect';
+import ListVoiceFields, { type ListVoice } from './ListVoiceFields';
 import {
   COMPANY_SIZES, DEFAULT_WEIGHTS, EXCLUDE_TITLE_PRESETS, INDUSTRIES, LOCATION_GROUPS, PRODUCTS,
   ROLE_GROUPS, SENIORITY_BANDS, WEIGHT_LABELS, buildSalesNavFilters, emptyCriteria,
@@ -62,6 +63,10 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
   const [product, setProduct] = useState<string>(initial?.product ?? 'zeami');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [firstMessage, setFirstMessage] = useState<string>(((initial as { first_message_template?: string | null } | undefined)?.first_message_template) ?? '');
+  // Brand & Voice (079): what this list pitches. Saved after the list itself (it needs the list's id).
+  const initVoice = initial as { product_id?: string | null; writing_context?: string | null; language?: string | null } | undefined;
+  const startVoice: ListVoice = { product_id: initVoice?.product_id ?? '', writing_context: initVoice?.writing_context ?? '', language: initVoice?.language ?? '' };
+  const [listVoice, setListVoice] = useState<ListVoice>(startVoice);
   const [criteria, setCriteria] = useState<IcpCriteria>(initial?.criteria ?? emptyCriteria());
 
   const [website, setWebsite] = useState('');
@@ -164,6 +169,11 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Save failed'); return; }
+      const listId = (data as { id?: string; profile?: { id?: string } }).id ?? (data as { profile?: { id?: string } }).profile?.id ?? initial?.id;
+      if (listId && JSON.stringify(listVoice) !== JSON.stringify(startVoice)) {
+        const v = await fetch(`/api/icp/${listId}/voice`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(listVoice) });
+        if (!v.ok) { const e = await v.json().catch(() => ({})); setError(`List saved, but what it pitches was not: ${e.error || v.status}`); return; }
+      }
       onSaved(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');
@@ -200,6 +210,7 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2}
                     placeholder="What we sell and to whom (used by the agent when drafting outreach)"
                     className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y" style={inputStyle} />
+          <ListVoiceFields brandKey={product === 'chipchip' ? 'chipchip' : 'zeami'} value={listVoice} onChange={setListVoice} inputStyle={inputStyle} />
           <div>
             <div className="text-xs font-medium mb-1">First message after they accept <span style={{ color: 'var(--text-muted)' }}>(optional)</span></div>
             <textarea value={firstMessage} onChange={(e) => setFirstMessage(e.target.value)} rows={4}

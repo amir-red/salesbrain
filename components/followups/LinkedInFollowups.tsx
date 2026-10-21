@@ -50,6 +50,8 @@ export function LinkedInFollowups({ tab, onCounts }: { tab: 'pending' | 'sent'; 
   const [data, setData] = useState<LinkedInData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
+  // Brand & Voice (079): the stamp each model draft came with — sent back on propose so an edit can be learned from.
+  const [stamp, setStamp] = useState<Record<string, unknown>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<Record<string, string>>({});
   // "Show in English": display-only translations, fetched in one batch and kept per text.
@@ -115,11 +117,18 @@ export function LinkedInFollowups({ tab, onCounts }: { tab: 'pending' | 'sent'; 
     try {
       const res = await fetch(`/api/prospects/${id}/followup`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, message: action === 'propose' ? draft[id] : undefined }),
+        body: JSON.stringify({ action, message: action === 'propose' ? draft[id] : undefined,
+          voice: action === 'propose' ? stamp[id] : undefined }),
       });
       const out = await res.json();
       if (!res.ok) throw new Error(out.error || 'Failed');
-      if (action === 'draft') setDraft((d) => ({ ...d, [id]: out.message }));
+      if (action === 'draft') {
+        setDraft((d) => ({ ...d, [id]: out.message }));
+        setStamp((v) => ({ ...v, [id]: out.voice }));
+        if (Array.isArray(out.flags) && out.flags.length) {
+          setNotice((n) => ({ ...n, [id]: `Check before filing: ${out.flags.map((f: { detail: string }) => f.detail).join(' · ')}` }));
+        }
+      }
       if (action === 'propose') {
         setDraft((d) => { const c = { ...d }; delete c[id]; return c; });
         setNotice((n) => ({ ...n, [id]: `Draft filed — ${out.acted_as?.name || 'the owner'} approves it on Telegram or /agents.` }));

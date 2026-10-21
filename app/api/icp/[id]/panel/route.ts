@@ -129,7 +129,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       `SELECT oa.id, oa.status, oa.kind, oa.channel, oa.subject, oa.message, oa.rationale, oa.created_at,
               oa.decided_at, oa.sent_at, oa.expires_at,
               pe.full_name AS person_name, lc.full_name AS intro_lead_name, u.name AS owner_name,
-              lp.id AS lead_prospect_id
+              lp.id AS lead_prospect_id, oa.check_flags, oa.edited_at, oa.rating, oa.owner_user_id
          FROM outreach_approvals oa
          JOIN prospects lp ON lp.id = COALESCE(oa.intro_for_prospect_id, oa.prospect_id)
          LEFT JOIN people pe ON pe.id = oa.person_id
