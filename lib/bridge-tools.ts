@@ -13,6 +13,7 @@ import { buildExport, cleanArgs } from '@/lib/export/build';
 import { EXPORT_KINDS, exportUrl, signExport, type ExportKind } from '@/lib/export/sign';
 import { listUserTokens, revokeToken } from '@/lib/mcp/tokens';
 import { sendTelegram } from '@/lib/tg-notify';
+import { syncZeamiDealEvents } from '@/lib/zeami-sync';
 
 export interface Who { userId: string; role: string }
 const MAX_XLSX_BYTES = 20 * 1024 * 1024;
@@ -69,11 +70,19 @@ async function mcpTokens(who: Who, args: Args) {
            note: 'Creating a token is done on Profile → MCP: its secret is shown once and must not pass through a chat.' };
 }
 
+/** The `zeami-deal-sync` cron job: tell Zeami about won sales deals and sales-rep changes (lib/zeami-sync.ts).
+ *  Org-wide, so admins (and the service user the job runs as) only. */
+async function zeamiDealSync(who: Who, args: Args) {
+  if (who.role !== 'admin') return { error: 'Only an administrator can run the Zeami deal sync.' };
+  return { ...(await syncZeamiDealEvents({ dryRun: Boolean(args.dry_run) })) };
+}
+
 const TOOLS: Record<string, (who: Who, args: Args) => Promise<Record<string, unknown>>> = {
   google_sync: googleSync,
   import_contacts: importContacts,
   export: exportFile,
   mcp_tokens: mcpTokens,
+  zeami_deal_sync: zeamiDealSync,
 };
 
 export async function runBridgeTool(tool: string, args: Args, userId: string): Promise<Record<string, unknown>> {

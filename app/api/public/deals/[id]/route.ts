@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import pool from '@/lib/db';
 import { requireApiKey, jsonWithCors, corsOptions } from '@/lib/public-api';
 import { SALES_GATES, GRANT_GATES } from '@/lib/gates';
+import { SALES_REP_JOIN } from '@/lib/zeami';
 
 /**
  * GET /api/public/deals/[id]
@@ -18,6 +19,9 @@ import { SALES_GATES, GRANT_GATES } from '@/lib/gates';
  *   - `deal`:     pipeline identity + state (id, name, gate, etc.)
  *   - `company`:  client-side metadata (name, website, size, industry, etc.)
  *   - `contact`:  primary deal contact (name, email, title, phone)
+ *   - `sales_rep`: the teammate who carries the deal — the assigned person
+ *                 (lead_id), else the creator; name + email, no id. Zeami's
+ *                 setup wizard matches the email to one of its users.
  *   - `insights`: agent-captured `deals.fields` raw, plus a curated subset
  *   - `onboarding`: always null (retired 2026-08-03 — see `delivery`)
  *   - `delivery`:   PM-tool state when the deal is linked to a customer
@@ -25,7 +29,7 @@ import { SALES_GATES, GRANT_GATES } from '@/lib/gates';
  * Intentionally NOT returned:
  *   - score, risk, verdict (sales-internal scoring)
  *   - flags, missing, raw notes (sales-internal annotations)
- *   - lead_id / user_id (internal CRM identity)
+ *   - lead_id / user_id (internal CRM identity — `sales_rep` carries name + email only)
  */
 
 export function OPTIONS(req: NextRequest) {
@@ -47,6 +51,8 @@ interface DealRow {
   fields: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
+  rep_name: string | null;
+  rep_email: string | null;
 }
 
 interface AccountRow {
@@ -124,10 +130,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   try {
     const { rows } = await pool.query<DealRow>(
-      `SELECT id, name, company, contact_name, contact_email, contact_phone,
-              gate, gate_entered_at, deal_type, value, currency, fields,
-              created_at, updated_at
-       FROM deals WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
+      `SELECT d.id, d.name, d.company, d.contact_name, d.contact_email, d.contact_phone,
+              d.gate, d.gate_entered_at, d.deal_type, d.value, d.currency, d.fields,
+              d.created_at, d.updated_at, rep.name AS rep_name, rep.email AS rep_email
+       FROM deals d
+       ${SALES_REP_JOIN}
+       WHERE d.id = $1 AND d.deleted_at IS NULL LIMIT 1`,
       [id]
     );
     const deal = rows[0];
@@ -210,6 +218,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         phone: deal.contact_phone,
         title: getStr(fields.contact_title),
       },
+      // Zeami handover part 1: who sells this deal. null = nobody Zeami could match.
+      sales_rep: deal.rep_email ? { name: deal.rep_name, email: deal.rep_email } : null,
       insights,
       // Retired 2026-08-03. client_onboardings was dropped when the PM tool
       // took over onboarding; this key stays so existing callers keep parsing
