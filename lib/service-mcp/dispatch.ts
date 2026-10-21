@@ -926,7 +926,7 @@ export const SERVICE_TOOLS: ToolDef[] = [
     name: 'crm_voice_rules',
     description: "This employee's own writing rules (learned from their ratings and edits, or stated) and the brand's " +
       "team rules. Each rule says where it came from.",
-    inputSchema: obj({ brand: { type: 'string', description: 'zeami (default) or chipchip' } }),
+    inputSchema: obj({ brand: { type: 'string', description: 'zeami (the only brand; the default)' } }),
     needsOwner: true,
   },
   {

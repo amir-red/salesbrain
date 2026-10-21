@@ -2184,6 +2184,7 @@ to the theme script), the supplied H12 wordmark (`components/ZeamiLogo.tsx`, `Ze
 ### 5.bd Brand & Voice, and learning from every correction (2026-10-21, feat/brand-voice, migration 079)
 
 **LIVE 2026-10-21 20:25 Addis (0.58.0)**: 079 applied, ring deployed (crm_brand on telegram, api_server, cron; smoke OK), app on Production.
+**One brand (2026-10-21, Amir: "we don't need ChipChip")**: migration 080 removed the seeded chipchip row (applied); every list writes under Zeami.
 
 Amir, after the Guhan teardown (`docs/research/04-guhan-competitor-map.md`): "build the voice — how we intend to interact —
 and whenever we correct it, learn from it." Decisions: (1) a learned rule lands in the writer's OWN voice and is live at once,

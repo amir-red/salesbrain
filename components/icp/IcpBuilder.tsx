@@ -210,7 +210,7 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2}
                     placeholder="What we sell and to whom (used by the agent when drafting outreach)"
                     className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y" style={inputStyle} />
-          <ListVoiceFields brandKey={product === 'chipchip' ? 'chipchip' : 'zeami'} value={listVoice} onChange={setListVoice} inputStyle={inputStyle} />
+          <ListVoiceFields brandKey="zeami" value={listVoice} onChange={setListVoice} inputStyle={inputStyle} />
           <div>
             <div className="text-xs font-medium mb-1">First message after they accept <span style={{ color: 'var(--text-muted)' }}>(optional)</span></div>
             <textarea value={firstMessage} onChange={(e) => setFirstMessage(e.target.value)} rows={4}
