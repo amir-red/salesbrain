@@ -2183,6 +2183,8 @@ to the theme script), the supplied H12 wordmark (`components/ZeamiLogo.tsx`, `Ze
 
 ### 5.bd Brand & Voice, and learning from every correction (2026-10-21, feat/brand-voice, migration 079)
 
+**LIVE 2026-10-21 20:25 Addis (0.58.0)**: 079 applied, ring deployed (crm_brand on telegram, api_server, cron; smoke OK), app on Production.
+
 Amir, after the Guhan teardown (`docs/research/04-guhan-competitor-map.md`): "build the voice — how we intend to interact —
 and whenever we correct it, learn from it." Decisions: (1) a learned rule lands in the writer's OWN voice and is live at once,
 no admin approval (sharing with the team is live too; anyone can archive their own, admins anything); (2) every draft is rated
