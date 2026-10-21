@@ -2141,6 +2141,13 @@ credits/day, one tap per wave. Phases: 1 firms + research (this), 2 people at th
     email-outbox, email-replies created; smoke-tested, nothing queued); app on Production the same day (deploy run
     39585333626 green; /waves, /api/email/*, /api/firms/* answer). Mirror-bug backfill done: Friedrich
     Fries-Henrich's /sales-leads card recreated (send + reply); the 3 other "missing" rows were archived KIMW stand-ins.
+  - **Automatic firm lists (0.57.1, migration 077, same day)** — Amir: "why is there a button for research next 25 —
+    shouldn't it be automated?". `icp_profiles.firm_auto` (default true): the 15-minute sweep fills its batch (after
+    queued firms) with never-researched firms of automatic, active, unpaused lists in rank order (a failed firm retried
+    after 7 days), and finds people at researched Go firms with nobody on the list that have not come up empty
+    (`_AUTO_LIST`, `_PEOPLE_DUE` in commands/firms.py). Automatic work is NOT announced by DM (only hand-queued work is).
+    `set_firm_auto` / `crm_firm_auto_set`, `POST /api/icp/[id]/firms/auto`. The Firms section shows the switch and what
+    it is doing instead of the two bulk buttons, and pages the table 10 / 50 / 100 / all (default 10).
   - Not built: an email-only-to-firm-inbox lane (people with an email only), the bot persona's guidance for waves,
     service-MCP exposure of the wave tools, open/click tracking (deliberately none).
 

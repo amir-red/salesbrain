@@ -29,8 +29,10 @@ export interface FirmBrief {
   geographies?: string[]; sectors?: string[]; exclude_sectors?: string[]; min_fund_year?: number; pitch?: string;
 }
 
+export interface FirmAuto { on: boolean; working: boolean; held: string | null; needs_brief: boolean; to_research: number; to_find_people: number }
+
 export interface FirmListPayload {
-  icp_id: string; list: string; brief: FirmBrief;
+  icp_id: string; list: string; brief: FirmBrief; auto: FirmAuto;
   counts: { total: number; researched: number; queued: number; go: number; later: number; out: number; unknown: number; with_email: number; with_people: number; people_queued: number };
   firms: FirmRow[];
 }
