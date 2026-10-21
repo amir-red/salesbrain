@@ -99,8 +99,9 @@ export default function FirmsSection({ icpId, canEdit }: { icpId: string; canEdi
         <div className="mb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
           {!data.auto.on ? 'Automatic is off: only firms someone asks for are researched (Research now on a firm).'
             : data.auto.held ? `Automatic is on but ${data.auto.held}, so nothing runs.`
+            : data.auto.needs_brief ? 'Automatic is on and starts once the brief is set: then firms are researched in rank order (25 every 15 minutes) and people are found at the Go ones. Nothing is sent without an approved wave.'
             : <>Working by itself: {data.auto.to_research ? `${data.auto.to_research} firms left to research, 25 every 15 minutes in rank order` : 'every firm is researched'}
-                {data.auto.needs_brief ? ' · set the brief so firms get a verdict and people are found at the Go ones'
+                {data.auto.needs_brief ? ''
                   : data.auto.to_find_people ? ` · finding people at ${data.auto.to_find_people} Go firm(s), within today's email and LinkedIn limits` : ''}.
                 Nothing is sent without an approved wave.</>}
         </div>
