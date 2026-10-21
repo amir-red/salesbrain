@@ -19,7 +19,15 @@ export const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
 ];
 
-export function getGoogleAuthUrl(state: string): string {
+// A SENDING mailbox (email waves, core 076) is a separate consent: send + read (to see replies on the threads we
+// sent), stored as oauth_tokens provider 'gmail_send' so the read-only import connection is never widened silently.
+export const GMAIL_SEND_SCOPES = [
+  'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/gmail.readonly',
+];
+
+export function getGoogleAuthUrl(state: string, scopes: string[] = GOOGLE_SCOPES): string {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const redirect = process.env.GOOGLE_REDIRECT_URI;
   if (!clientId || !redirect) throw new Error('Google OAuth not configured');
@@ -28,7 +36,7 @@ export function getGoogleAuthUrl(state: string): string {
     client_id: clientId,
     redirect_uri: redirect,
     response_type: 'code',
-    scope: GOOGLE_SCOPES.join(' '),
+    scope: scopes.join(' '),
     access_type: 'offline',
     prompt: 'consent',
     state,
@@ -87,10 +95,10 @@ export async function getGoogleUserEmail(accessToken: string): Promise<string | 
 /**
  * Get a valid access token for this user, refreshing if needed.
  */
-export async function getValidAccessToken(userId: string): Promise<{ accessToken: string; email: string | null } | null> {
+export async function getValidAccessToken(userId: string, provider: 'google' | 'gmail_send' = 'google'): Promise<{ accessToken: string; email: string | null } | null> {
   const { rows } = await pool.query(
-    `SELECT * FROM oauth_tokens WHERE user_id = $1 AND provider = 'google'`,
-    [userId]
+    `SELECT * FROM oauth_tokens WHERE user_id = $1 AND provider = $2`,
+    [userId, provider]
   );
   const row = rows[0];
   if (!row) return null;

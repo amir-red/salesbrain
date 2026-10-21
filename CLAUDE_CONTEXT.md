@@ -2053,6 +2053,93 @@ Enricher → Lead Conductor → Attention / Supervisor / Learn / Knowledge revie
 - Not built yet: per-agent `/agents` link to its Workspace card, the remaining agents, deleting the paused main-profile jobs (after
   2026-10-27), cost per agent report (feature = cron job name in `llm_usage`).
 
+### 5.ba Firm outreach — firms on a list, investor research (2026-10-21, feat/firm-outreach, migration 075, phase 1 of 3)
+
+Amir: "research the companies, know what they invest in, find their contact email, find the persons, mass outreach" —
+first for the Zeami raise (563 VC funds, 44 named partners; Mateo's workbook). Plan `~/.claude/plans/vc-firm-outreach.md`.
+Decisions: each sender's own Gmail, Gemini + Google Search for research, 50 emails/day per mailbox, 100 FullEnrich
+credits/day, one tap per wave. Phases: 1 firms + research (this), 2 people at the firm, 3 email waves from Gmail.
+- **Core 075**: `account_profiles` (org-wide research per account + kind `investor`, sources per claim),
+  `list_firms` (a firm ON a list: rank, priority, status new→researched→people_found→contacted→replied→meeting,
+  eligibility go|later|out|unknown + reasons, `eligibility_override`, contact_email/route, research queue flag),
+  `icp_profiles.firm_brief` (stage, round, entity country, geographies, sectors, exclusions, pitch), policy
+  `agents.firm_research`. `policy/firms.py` (pure: `eligibility`, `pick_contact` — never legal@/privacy@/press@/
+  careers@/investors@, `domain_of` + `site_matches` — a research link to sec.gov / prnewswire / a parent company is NOT
+  the firm's site, it is kept as `source_row.source_url`), `commands/firms.py` (import, list, get, save research →
+  re-judges every list holding the firm, update incl. verdict override, brief, queue, sweep plan).
+- **Ring**: `llm.grounded()` (Gemini REST + `google_search` tool → text + sources; grounding redirect links are
+  resolved to the article URL), `llm.converse(json_mode=True)` (Gemini strict JSON — the long team lists truncated
+  plain JSON at 3k tokens), `firm_research.py` (site pages home/about/team/people/portfolio/contact + one grounded call
+  + one extraction; an email is kept ONLY if it appears literally in the fetched text), tools `crm_firm_import/list/
+  get/research/update/brief_set` (family crm_prospecting, 6 new), sweep `assets/scripts/firm_research.py` = Hermes cron
+  `firm-research` `*/15 7-22 * * *` — researches ONLY queued firms, DMs the list owner (`firm-research` source), silent
+  in the operator chat.
+- **App**: `/icp/[id]` Firms section at the top (`components/firms/{FirmsSection,FirmCard,FirmBriefEditor,
+  ImportFirmsModal}.tsx`, slim one-liner on a people-only list), `lib/firms.ts`, routes `GET/POST /api/icp/[id]/firms`
+  (import: multipart parse + 100-row kernel chunks), `/api/icp/[id]/firms/{research,brief}`, `GET/PATCH /api/firms/[id]`,
+  `POST /api/firms/[id]/research` (now, ~20-30 s). Export: a Firms sheet in the ICP workbook.
+- **Verified locally (scratch Postgres, real Gemini key)**: the ranked VC file imports as 562 firms in ~1.5 s (6
+  investor+customer twins and two Viola vehicles merged; 42 research links rejected as websites); Point Nine, Seedcamp,
+  Bain Capital Ventures, firstminute, Frontline, Fly and Notion Capital researched in 20-30 s each, all "go", Notion with
+  14 investment-team members and "Notion Capital V · €300M · 2023".
+- **Phase 2 — people at the firm (same branch)**: `policy/firms.investor_rank` (1 partner/GP/MD/founder · 2 principal/
+  director · 3 venture partner · 4 VP/investment manager · 5 associate · 6 analyst · None = advisor/ops/finance/legal/
+  platform — VC titles only, `leader_title` for NRW untouched) + `pick_people` (best rank, then focus on the brief's
+  sectors). `commands/firms.land_firm_people` → prospects owned by the LIST owner, `source_type='firm_team'` (added to
+  CURATED_SOURCE_TYPES and to the stored `agents.conductor.curated_source_types` in 075), tied to the firm's own account
+  (not a same-name twin), priority_rank = firm rank, a /sales-leads card each; never twice (slug, else name at the firm).
+  Queue `list_firms.people_requested_at` + `request_firm_people` / `firm_people_plan`; the same 15-min sweep runs it
+  after research. Ring `firm_people.find_people`: research first if needed → team from the site (Google-grounded search
+  when the site lists nobody) → land → per person `find_profile` WITHOUT the company_web rung + `enrich_one(email)`
+  guarded by `email_credits_per_day` (enrich_one itself does not check the cap). Tool `crm_firm_find_people`
+  (firm_id now / icp_id queue / names = pick). 075 also raises `agents.enricher.email_credits_per_day` to 100.
+  App: "Find people for next 10", card "Find people now" / "add as lead" per team member. Live (scratch): Point Nine
+  researched + 2 partners landed in 46 s.
+- **Fixed on the way (bug on main since 0.49.7, 2026-10-16)**: `sales_leads.upsert_sales_lead` INSERT listed 12 columns
+  with 11 placeholders, so every NEW /sales-leads card from the mirror failed silently (mirror_safely swallows it):
+  hand-added leads (crm_prospect_add / Zeami Omni), first sends and replies of people without a card. Production
+  2026-10-21: 3 hand-added leads, 1 messaged prospect, 1 reply without a card — backfill after the fix ships.
+- **Phase 3 — email waves from each sender's own Gmail (migration 076)**. Decisions (Amir 2026-10-21): each teammate's
+  own mailbox; one tap per wave; 50/day per mailbox; an APPROVED wave counts as the human decision to ask, so the
+  commercial gate does not block its emails (it still blocks asks in drafts agents file alone).
+  - **Core 076**: `email_senders` (address, From name, signature, own daily_cap ≤ policy), `outreach_waves` (one card for
+    N drafts; one pending wave per sender+list+step), `outreach_approvals` + `wave_id`, `sequence_step`, `sender_address`,
+    `email_thread_id` / `email_message_id` / `email_rfc_id`, `icp_profiles.email_sequence`, policy `outreach.email`
+    (per_sender_per_day 50, per_tick 3, gap 90–240 s, wave_size 20, ttl 72 h, followup_hour 9, opt-out line, stop words),
+    `outreach.channel_caps.email` 50/250. `policy/waves.py` (pure: sequence validation — unknown placeholders refused —,
+    render/compose with signature + opt-out, stop-reply + bounce detection, pacing). `commands/waves.py`: sequence get/set,
+    mailboxes, `wave_propose` (step 0 = one person per Go firm, nobody at the firm contacted or with a draft in flight,
+    email known, not suppressed; step N = follow-up in the same thread after the sequence's gap, no reply), decide (ONLY
+    the sender — their mailbox), edit/drop drafts while pending, `outbox` (per mailbox within its cap; closes drafts whose
+    address got suppressed), `record_email_sent` (Gmail ids, firm → contacted, prospect `next_followup_at` NULL so the
+    generic agents.followup routine never sends a second, uncoordinated follow-up), `followups_due`, `threads_to_check`,
+    `record_email_inbound` (bounce → suppression; reply → record_reply, firm → replied; short stop-reply → suppression),
+    `release_for_retry` (a mailbox problem returns the email to the outbox). Send gate (`commands/outreach.py`): approved
+    wave → `ask_approved`, commercial gate skipped; email sends check `suppression_list` (address or domain) and release
+    the approval on refusal.
+  - **Ring**: tools `crm_email_sequence_get/set`, `crm_email_mailboxes`, `crm_email_mailbox_update`,
+    `crm_email_wave_propose`, `crm_email_waves_list`, `crm_email_wave_get`, `crm_email_wave_edit`, `crm_email_wave_decide`
+    (mcp=None; family crm_outreach). Event `email_wave_card` → the SENDER's DM with ✅ Approve all / 👎 Skip / Review
+    (`ew:` taps in telegram_buttons.py). Crons (deploy-server.sh): `email-outbox` `*/10 8-19` (gate → bridge `gmail_send`
+    → mark sent; follow-up waves filed at followup_hour) and `email-replies` `20,50 7-23` (bridge `gmail_threads`).
+    Mailbox tools are NOT named "*send*": role_policy treats any tool name with "send" as a sending tool.
+  - **App**: the app holds the Gmail tokens. `lib/gmail-send.ts` (RFC 2822 plain text UTF-8, From name, threadId +
+    In-Reply-To/References, Message-ID read back; threads read sequentially, snippets unescaped). Bridge tools
+    `gmail_send` / `gmail_threads` in `lib/bridge-tools.ts` (actor = the sender, so nobody can send from another mailbox).
+    Connect for sending = a SEPARATE consent (`GMAIL_SEND_SCOPES`: userinfo.email + gmail.send + gmail.readonly) stored as
+    `oauth_tokens` provider `gmail_send` + an `email_senders` row; same callback URL (state `p: 'send'`). Routes
+    `/api/email/{connect,disconnect,mailboxes}`, `/api/icp/[id]/email/{sequence,waves}`, `/api/waves/[id]` (GET, POST
+    decision), `/api/waves/drafts/[id]` (PATCH). UI: Profile → Email tab, `/icp/[id]` Email outreach section (sequence
+    editor with a starter text, sender, "Queue next 20 for approval", waves table), `/waves/[id]` review page.
+  - **Before the first real email**: (1) add the `gmail.send` scope to the Google OAuth consent screen (Cloud console) —
+    sensitive scope: a published external app needs Google verification; marking the app Internal for the zeami.io
+    Workspace avoids it; (2) a sender connects on Profile → Email and sets From name + signature; (3) write the sequence;
+    (4) research + find people for the Go firms; (5) queue a wave and approve it.
+  - Verified locally: the full chain wave → approve → outbox → kernel gate → signed bridge → app → Gmail call (refused
+    cleanly: no token) → email returned to the outbox and the mailbox marked. No real Gmail send has been made.
+  - Not built: an email-only-to-firm-inbox lane (people with an email only), the bot persona's guidance for waves,
+    service-MCP exposure of the wave tools, open/click tracking (deliberately none).
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
