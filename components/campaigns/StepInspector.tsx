@@ -112,7 +112,7 @@ export default function StepInspector({ node, editable, blockers, warnings, samp
           {mode !== 'fixed' && mode !== 'none' && (
             sample ? (
               <div className="grid gap-1.5 rounded-lg p-2.5" style={{ background: 'var(--bg-input)' }}>
-                <span className="text-xs font-medium">Sample from the last Test run</span>
+                <span className="text-xs font-medium">Sample message</span>
                 {sample.subject && <span className="text-xs"><span style={{ color: 'var(--text-muted)' }}>Subject:</span> <FillableText text={toTemplate(sample.subject, sample.person)} /></span>}
                 <p className="text-sm whitespace-pre-wrap"><FillableText text={toTemplate(sample.text, sample.person)} /></p>
                 {editable && (

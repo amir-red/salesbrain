@@ -23,7 +23,7 @@ export interface Campaign {
   id: string; name: string; status: CampaignStatus; goal: string | null; writing_context: string | null;
   language: string | null; product_id: string | null; owner_user_id: string | null; graph: Graph;
   draft_graph: Graph | null; editing_graph: Graph; graph_version: number; validation: Validation; can_edit: boolean;
-  lists: CampaignList[]; settings: { daily_max_per_step?: number }; launched_at: string | null;
+  lists: CampaignList[]; settings: { daily_max_per_step?: number; samples?: Record<string, SavedSample> }; launched_at: string | null;
   paused_at: string | null; updated_at: string;
 }
 
@@ -162,7 +162,7 @@ export function nodeSummary(n: Pick<GraphNode, 'type' | 'config'>): string {
     case 'email':
       return MODES.find((x) => x.key === String(c.mode || 'auto'))?.label ?? String(c.mode);
     case 'wait_for':
-      return `gives up after ${plural(Number(c.timeout_days || 7), 'day')}`;
+      return `up to ${plural(Number(c.timeout_days || 7), 'day')}`;
     case 'branch': {
       const rules = (c.rules as { field: string; op: string; value?: unknown }[] | undefined) ?? [];
       if (!rules.length) return 'no rule yet';
@@ -173,7 +173,7 @@ export function nodeSummary(n: Pick<GraphNode, 'type' | 'config'>): string {
       return `${f?.label ?? r.field} ${op ?? ''}${f && f.kind !== 'bool' ? ` ${r.value ?? ''}` : ''}${more}`;
     }
     case 'handoff':
-      return HANDOFF_TO.find((x) => x.key === String(c.to || 'back_office'))?.label.split(' (')[0] ?? '';
+      return ({ back_office: 'back office', front_office: 'front office', sender: 'the sender' } as Record<string, string>)[String(c.to || 'back_office')] ?? '';
     case 'end':
       return END_REASONS.find((x) => x.key === String(c.reason || 'completed'))?.label ?? String(c.reason);
     default:
@@ -322,4 +322,31 @@ export function fillableParts(text: string): { text: string; field?: string; kno
   }
   if (last < text.length) out.push({ text: text.slice(last) });
   return out;
+}
+
+// ---------------------------------------------------------------- saved samples (settings.samples)
+
+/** A sample kept on the campaign: the words written for one person, and the step settings they were written for. */
+export interface SavedSample extends Sample { cfg?: Record<string, unknown>; at?: string }
+
+const SAMPLE_KEYS = ['mode', 'note_mode', 'instructions', 'text', 'subject'] as const;
+
+/** A message step whose words are written per person (so a sample shows what that looks like). */
+export function needsSample(n: Pick<GraphNode, 'type' | 'config'>): boolean {
+  const c = n.config || {};
+  if (n.type === 'linkedin_connect') return ['auto', 'guided'].includes(String(c.note_mode || 'none'));
+  return (n.type === 'linkedin_message' || n.type === 'email') && ['auto', 'guided'].includes(String(c.mode || 'auto'));
+}
+
+/** True when the step was changed (how it is written, its instructions) after its sample was written. */
+export function sampleIsStale(n: Pick<GraphNode, 'config'>, s?: SavedSample): boolean {
+  if (!s?.cfg) return false;
+  const c = n.config || {};
+  return SAMPLE_KEYS.some((k) => (c[k] ?? null) !== (s.cfg?.[k] ?? null) && !(c[k] == null && s.cfg?.[k] == null));
+}
+
+/** The first words of a message, for the card: one or two short lines. */
+export function summaryOf(text: string, max = 110): string {
+  const t = text.replace(/\s+/g, ' ').trim();
+  return t.length > max ? `${t.slice(0, max).replace(/\s\S*$/, '')}…` : t;
 }
