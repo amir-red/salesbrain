@@ -2078,8 +2078,11 @@ handover (matebackend `docs/Api_integrations/SALESBRAIN_ONBOARDING_API.md`) aske
 - Tested against a local mock of Zeami's API (new table in a scratch schema, dropped after): part 1 on Kabana, the sweep
   (dry run, send, silent rerun, rep change, Zeami down), panel routes (no session 401, view-only, 404 → not onboarded,
   non-owner 403, http link 422, add, 409). Not tested: the real Zeami API, the panel in a browser.
-- First live run will send `deal.won` for the two won sales deals: Kabana (mateo@zeami.io) and ChipChip Pilot
-  (amir@chipchip.social — likely `sales_rep_not_a_user` unless Zeami has that address).
+- **LIVE 2026-10-22 (0.60.0)**: 074 applied, app on Production (run 39792603699), ring deployed (cron `zeami-deal-sync`
+  created; its first :25 tick ran during the deploy). `ZEAMI_API_URL` = `https://app.zeami.io`, key accepted (404, not 401/503).
+  Both won sales deals were told `deal.won`: Kabana (mateo@zeami.io) and ChipChip Pilot (amir@chipchip.social), both
+  `no_company_for_deal` — no client is set up in Zeami for either yet, so their panels say "Not onboarded yet". Part 1 verified
+  live (Kabana → Mateo Klemmayer). Not yet seen live: a found status, a support group added, a `sales_rep_changed`.
 
 ### 5.bc Firm outreach — firms on a list, investor research (2026-10-21, feat/firm-outreach, migration 075, phase 1 of 3)
 
