@@ -36,3 +36,12 @@ export function dueLabel(date: Date | string): string {
   if (diffDays <= 7) return 'This week';
   return 'Later';
 }
+
+/** A time in the future, said plainly: "in 5 min", "in 3h", "in 2d"; a past time falls back to relativeTime. */
+export function timeUntil(date: Date | string): string {
+  const diffMin = Math.round((new Date(date).getTime() - Date.now()) / 60000);
+  if (diffMin <= 0) return relativeTime(date);
+  if (diffMin < 60) return `in ${diffMin} min`;
+  if (diffMin < 48 * 60) return `in ${Math.round(diffMin / 60)}h`;
+  return `in ${Math.round(diffMin / 1440)}d`;
+}
