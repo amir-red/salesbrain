@@ -8,11 +8,12 @@ import Sidebar from '@/components/Sidebar';
 import Button from '@/components/panel/Button';
 import PageHeader, { Pill } from '@/components/panel/PageHeader';
 import StepInspector from '@/components/campaigns/StepInspector';
-import type { StepStats } from '@/components/campaigns/SequenceCanvas';
+import type { SampleState, StepStats } from '@/components/campaigns/SequenceCanvas';
 import { timeUntil } from '@/lib/time';
 import {
   ENROLLMENT_STYLE, STATUS_STYLE, nodeLabel, toTemplate,
-  type PreviewDraft, type PreviewPerson, type Sample,
+  needsSample, sampleIsStale,
+  type PreviewDraft, type PreviewPerson, type Sample, type SavedSample,
   type Campaign, type CampaignList, type Graph, type Validation,
 } from '@/lib/campaigns';
 
@@ -73,7 +74,10 @@ export default function CampaignPage() {
   const [check, setCheck] = useState<Check | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
-  const [samples, setSamples] = useState<Record<string, Sample>>({});   // the last Test run's drafts, per step
+  // The message samples on the canvas cards: kept on the campaign (settings.samples), written when missing.
+  const [samples, setSamples] = useState<Record<string, SavedSample>>({});
+  const [writingSamples, setWritingSamples] = useState(false);
+  const autoWritten = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pending = useRef<Graph | null>(null);
 
@@ -81,6 +85,7 @@ export default function CampaignPage() {
     try {
       const out = await api<Campaign>(`/api/campaigns/${id}`);
       setC(out); setGraph(out.editing_graph); graphRef.current = out.editing_graph; setValidation(out.validation); setSave('saved');
+      setSamples((cur) => ({ ...(out.settings?.samples ?? {}), ...cur }));
       past.current = []; future.current = []; setHist({ undo: 0, redo: 0 });
       if (out.status !== 'draft') api<Results>(`/api/campaigns/${id}/results`).then(setResults).catch(() => setResults(null));
     } catch (err) { setError(err instanceof Error ? err.message : 'Could not load the campaign.'); }
@@ -174,6 +179,39 @@ export default function CampaignPage() {
     finally { setBusy(null); }
   };
 
+  const writeSamples = useCallback(async () => {
+    if (writingSamples) return;
+    if (timer.current) { clearTimeout(timer.current); await flush(); }
+    setWritingSamples(true);
+    try {
+      const o = await api<{ samples?: Record<string, SavedSample> }>(`/api/campaigns/${id}`, json('POST', { action: 'samples' }));
+      if (o.samples) setSamples((cur) => ({ ...cur, ...o.samples }));
+    } catch (err) { setError(err instanceof Error ? `Could not write the sample drafts: ${err.message}` : 'Could not write the sample drafts.'); }
+    finally { setWritingSamples(false); }
+  }, [id, writingSamples, flush]);
+  const sampleStates = useMemo<Record<string, SampleState>>(() => {
+    const out: Record<string, SampleState> = {};
+    for (const n of graph?.nodes ?? []) {
+      if (!needsSample(n)) continue;
+      const smp = samples[n.id];
+      const stale = !!smp && sampleIsStale(n, smp);
+      out[n.id] = writingSamples && (!smp || stale) ? 'writing' : !smp ? 'none' : stale ? 'stale' : 'ready';
+    }
+    return out;
+  }, [graph, samples, writingSamples]);
+  // Once per visit: a step whose words are written per person and has no sample yet gets one, so every card shows
+  // what its message looks like without anyone pressing a button.
+  useEffect(() => {
+    if (autoWritten.current || !c?.can_edit || !graph) return;
+    if (Object.values(sampleStates).some((st) => st === 'none')) { autoWritten.current = true; void writeSamples(); }
+  }, [c, graph, sampleStates, writeSamples]);
+  const samplesStatus = {
+    writing: writingSamples,
+    stale: Object.values(sampleStates).filter((st) => st === 'stale').length,
+    missing: Object.values(sampleStates).filter((st) => st === 'none').length,
+    refresh: () => { void writeSamples(); },
+  };
+
   const stats = useMemo<Record<string, StepStats> | undefined>(() => (results ? Object.fromEntries(results.steps.map((s) =>
     [s.node_id, { here_now: s.here_now, sent: s.sent, reply_rate: s.reply_rate }])) : undefined), [results]);
 
@@ -248,6 +286,7 @@ export default function CampaignPage() {
             <div className="flex h-full min-h-0">
               <div className="flex-1 min-w-0 relative">
                 <SequenceCanvas graph={graph} validation={validation} editable={c.can_edit} stats={stats} samples={samples}
+                  sampleStates={sampleStates} samplesStatus={samplesStatus}
                   selected={selected} onSelect={setSelected} onChange={onGraph} onRemoved={removed}
                   history={{ canUndo: hist.undo > 0, canRedo: hist.redo > 0, undo, redo }} />
                 {notice && (
@@ -259,28 +298,16 @@ export default function CampaignPage() {
                   </div>
                 )}
               </div>
-              <aside className="w-80 shrink-0 border-l p-4 overflow-y-auto" style={{ borderColor: 'var(--border)' }} aria-label="Step settings">
-                {sel ? (
+              {sel && (
+                <aside className="w-80 shrink-0 border-l p-4 overflow-y-auto relative" style={{ borderColor: 'var(--border)' }} aria-label="Step settings">
+                  <button type="button" aria-label="Close" title="Close (or click the canvas)" onClick={() => setSelected(null)}
+                    className="absolute top-3 right-3 text-lg leading-none" style={{ color: 'var(--text-muted)' }}>×</button>
                   <StepInspector key={sel.id} node={sel} editable={c.can_edit} blockers={problems('blockers')} warnings={problems('warnings')}
                     sample={samples[sel.id]} onTestRun={() => setTesting(true)}
                     onChange={(config) => onGraph({ ...graph, nodes: graph.nodes.map((n) => (n.id === sel.id ? { ...n, config } : n)) }, 'edit')}
                     onRemove={() => { onGraph({ nodes: graph.nodes.filter((n) => n.id !== sel.id), edges: graph.edges.filter((e) => e.source !== sel.id && e.target !== sel.id) }); removed([nodeLabel(sel)]); setSelected(null); }} />
-                ) : (
-                  <div className="grid gap-3 text-sm">
-                    <div className="text-xs font-medium">The sequence</div>
-                    <p style={{ color: 'var(--text-muted)' }}>Select a step to change what it does. Every message is drafted in the sender’s voice and waits on one card per step per day for their approval — nothing goes out by itself.</p>
-                    <div className="grid gap-1">
-                      <div>{validation?.ok ? <span style={{ color: 'var(--green)' }}>✓ Ready to run</span> : <span style={{ color: 'var(--red)' }}>{validation?.blockers.length ?? 0} thing(s) to fix before it can run</span>}</div>
-                      {(validation?.warnings.length ?? 0) > 0 && <div style={{ color: 'var(--orange)' }}>{validation!.warnings.length} warning(s)</div>}
-                    </div>
-                    {(validation?.blockers ?? []).filter((b) => b.node).slice(0, 8).map((b, i) => (
-                      <button key={i} type="button" className="text-left text-xs underline" style={{ color: 'var(--red)' }} onClick={() => setSelected(b.node)}>
-                        {nodeLabel(graph.nodes.find((n) => n.id === b.node) ?? { type: 'start', config: {} })}: {b.message}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </aside>
+                </aside>
+              )}
             </div>
           ) : tab === 'people' ? (
             <PeopleTab id={id} />

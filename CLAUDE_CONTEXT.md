@@ -2258,6 +2258,25 @@ Amir: "what does the test run do? show the drafted message in the test run and o
   in `file_step_draft`; the drafter is told not to sign off itself. The draft prompt forbids inventing numbers,
   results, customers, offers or claims (a live test had invented "15 hours per employee per month").
 
+### 5.bi Campaign canvas for reading: saved samples on every card, compact steps, Tidy up (2026-10-22, feat/canvas-design)
+
+Amir: "the canvas still says 'Write it for me' — it should already show the drafted message; a summary on the card, the
+full message on hover; the canvas is hard to see."
+- **Samples are kept**: `campaigns.settings.samples {node_id: {text, subject, person, cfg, at}}` (kernel `save_samples` —
+  outside the graph, so never published, undone or sent). `preview_plan(all_steps=True)` covers every message step
+  (`policy.message_steps`: breadth-first, follow-up = an earlier message of the same channel upstream); ring
+  `preview(all_steps, save)` writes them (each follow-up given the last message of its channel) and saves; app action
+  `samples`. The campaign page writes missing samples once on open (owner/admin), marks a card "out of date" when the
+  step's mode / instructions / text / subject changed since (`sampleIsStale` against `cfg`), and offers Refresh.
+- **Canvas** (`SequenceCanvas.tsx` rewritten): message steps are 270 px cards with a 2-line summary (fields as chips);
+  hover = the whole message in a fixed popover drawn outside the zoomed pane (readable at any zoom); every other step
+  is a slim pill; opens readable (fit if >= 80 %, else 85 % top-aligned) with `panOnScroll` (wheel scrolls, pinch /
+  ⌘-scroll zooms); "Ready to run" / "N to fix · show" and the samples state are badges on the canvas; the right panel
+  appears only while a step is selected; palette 176 px; **Tidy up** = `tidyLayout` (rows by longest path from Start,
+  the main path straight down: a reply-wait's timeout, an acceptance's yes, an If's yes).
+- **Drafts**: email drafts lose a closing the model wrote anyway (`_strip_signoff`: "Best regards, Amir Redwan" — the
+  signature is added at send); a draft opening with "hope this … finds you well" is dropped.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
