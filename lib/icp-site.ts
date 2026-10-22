@@ -60,11 +60,37 @@ async function bundleText(base: string, html: string): Promise<string> {
   return out.join('\n');
 }
 
+/** Same-origin pages a near-empty homepage points at: its <link rel="canonical"> and a meta refresh. */
+function shellTargets(base: string, html: string): string[] {
+  const out: string[] = [];
+  for (const re of [/<link[^>]+rel=["']canonical["'][^>]*href=["']([^"']+)["']/i,
+                    /<link[^>]+href=["']([^"']+)["'][^>]*rel=["']canonical["']/i,
+                    /<meta[^>]+http-equiv=["']refresh["'][^>]*content=["'][^"']*url=([^"';]+)/i]) {
+    const m = html.match(re);
+    if (!m) continue;
+    const href = m[1].trim();
+    const url = href.startsWith('http') ? href : `${base}${href.startsWith('/') ? '' : '/'}${href}`;
+    if (url.startsWith(base) && url.replace(/\/$/, '') !== base) out.push(url);
+  }
+  return out;
+}
+
 export async function fetchSite(website: string): Promise<{ url: string; pages: { url: string; text: string; via: 'html' | 'bundle' }[] }> {
   const base = (website.startsWith('http') ? website : `https://${website}`).replace(/\/$/, '');
   const pages: { url: string; text: string; via: 'html' | 'bundle' }[] = [];
   let shellHtml: string | null = null;
-  for (const url of [base, `${base}/about`, `${base}/about-us`]) {
+  // A homepage can be a script-only language switch (zeami.io since 2026-10: `/` holds no text and sends
+  // visitors to /de/ or /en/; a server never runs that script). When the homepage has no text, read the page its
+  // canonical link names and the usual language paths before giving up.
+  const queue = [base, `${base}/about`, `${base}/about-us`];
+  const tried = new Set<string>();
+  for (let i = 0; i < queue.length && i < 8; i++) {
+    const url = queue[i];
+    if (tried.has(url)) continue;
+    tried.add(url);
+    // One language version is enough: /de/ and /en/ are the same page twice.
+    const lang = /\/[a-z]{2}\/?$/.test(url);
+    if (lang && pages.some((p) => /\/[a-z]{2}\/?$/.test(p.url))) continue;
     try {
       const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(12000), redirect: 'follow' });
       if (!res.ok) continue;
@@ -73,7 +99,10 @@ export async function fetchSite(website: string): Promise<{ url: string; pages: 
       const html = await res.text();
       const text = stripHtml(html).slice(0, 7000);
       if (text.length > 200) pages.push({ url, text, via: 'html' });
-      else if (url === base) shellHtml = html;
+      else if (url === base) {
+        shellHtml = html;
+        queue.splice(1, 0, ...shellTargets(base, html), `${base}/en/`, `${base}/de/`);
+      }
     } catch { /* skip page */ }
     if (pages.length >= 2) break;
   }
