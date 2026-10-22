@@ -2260,6 +2260,8 @@ Amir: "what does the test run do? show the drafted message in the test run and o
 
 ### 5.bi Campaign canvas for reading: saved samples on every card, compact steps, Tidy up (2026-10-22, feat/canvas-design)
 
+**LIVE 2026-10-22 (0.63.0)**: ring deployed (smoke 0.63.0), app on Production (run 39842137712).
+
 Amir: "the canvas still says 'Write it for me' — it should already show the drafted message; a summary on the card, the
 full message on hover; the canvas is hard to see."
 - **Samples are kept**: `campaigns.settings.samples {node_id: {text, subject, person, cfg, at}}` (kernel `save_samples` —
@@ -2301,6 +2303,9 @@ to the theme script), the supplied H12 wordmark (`components/ZeamiLogo.tsx`, `Ze
   untouched for ws-linkedin-connect.
 
 ### 5.bj Gmail push — replies within seconds (2026-10-22, feat/gmail-push, no migration)
+
+**LIVE 2026-10-22 (0.63.0)**: ring deployed (smoke 0.63.0), app on Production (run 39842137712). Watch registered for the one active sender (amir@zeami.io); the endpoint refuses calls without Google's token (401). Not yet seen live: a real Google push.
+
 
 Amir: "can't we have a webhook listening to the inbox?" Before, replies to wave / campaign emails were found by the
 `email-replies` cron (`20,50 7-23` Addis), so up to 30 minutes late and not at night. Now Gmail tells us.
