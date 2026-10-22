@@ -80,7 +80,8 @@ export default function CampaignPage() {
   const load = useCallback(async () => {
     try {
       const out = await api<Campaign>(`/api/campaigns/${id}`);
-      setC(out); setGraph(out.editing_graph); setValidation(out.validation); setSave('saved');
+      setC(out); setGraph(out.editing_graph); graphRef.current = out.editing_graph; setValidation(out.validation); setSave('saved');
+      past.current = []; future.current = []; setHist({ undo: 0, redo: 0 });
       if (out.status !== 'draft') api<Results>(`/api/campaigns/${id}/results`).then(setResults).catch(() => setResults(null));
     } catch (err) { setError(err instanceof Error ? err.message : 'Could not load the campaign.'); }
   }, [id]);
@@ -98,11 +99,62 @@ export default function CampaignPage() {
     } catch (err) { setSave('failed'); setError(err instanceof Error ? err.message : 'Could not save the sequence.'); }
   }, [id]);
 
-  const onGraph = useCallback((g: Graph) => {
-    setGraph(g); pending.current = g; setSave('unsaved');
+  const save_ = useCallback((g: Graph) => {
+    setGraph(g); graphRef.current = g; pending.current = g; setSave('unsaved');
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => { void flush(); }, 900);
   }, [flush]);
+
+  // Undo / redo over the sequence being edited. A drag ('move') or typing in the step panel ('edit') is folded into
+  // one step: a new step starts only after 0.8 s without that kind of change. Everything else is its own step.
+  const graphRef = useRef<Graph | null>(null);
+  const past = useRef<Graph[]>([]);
+  const future = useRef<Graph[]>([]);
+  const lastKind = useRef<{ kind: string; at: number } | null>(null);
+  const [hist, setHist] = useState({ undo: 0, redo: 0 });
+  const syncHist = () => setHist({ undo: past.current.length, redo: future.current.length });
+  const onGraph = useCallback((g: Graph, kind?: 'move' | 'edit') => {
+    const now = Date.now();
+    const fold = kind && lastKind.current?.kind === kind && now - lastKind.current.at < 800;
+    if (!fold && graphRef.current) {
+      past.current = [...past.current.slice(-99), graphRef.current];
+      future.current = [];
+    }
+    lastKind.current = kind ? { kind, at: now } : null;
+    save_(g); syncHist();
+  }, [save_]);
+  const undo = useCallback(() => {
+    const prev = past.current.pop();
+    if (!prev || !graphRef.current) return;
+    future.current.push(graphRef.current); lastKind.current = null;
+    save_(prev); syncHist();
+  }, [save_]);
+  const redo = useCallback(() => {
+    const next = future.current.pop();
+    if (!next || !graphRef.current) return;
+    past.current.push(graphRef.current); lastKind.current = null;
+    save_(next); syncHist();
+  }, [save_]);
+  const [notice, setNotice] = useState<string | null>(null);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const removed = useCallback((labels: string[]) => {
+    const lines = labels.length === 1 && /^(a line|\d+ lines)$/.test(labels[0]);
+    setNotice(lines ? `Removed ${labels[0]}` : `Removed ${labels.length === 1 ? `“${labels[0]}”` : `${labels.length} steps`} and ${labels.length === 1 ? 'its' : 'their'} lines`);
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(null), 7000);
+  }, []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+      else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redo(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [undo, redo]);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => { if (pending.current) { e.preventDefault(); e.returnValue = ''; } };
@@ -194,16 +246,25 @@ export default function CampaignPage() {
             !error && <div className="p-6 text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</div>
           ) : tab === 'sequence' && graph ? (
             <div className="flex h-full min-h-0">
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 relative">
                 <SequenceCanvas graph={graph} validation={validation} editable={c.can_edit} stats={stats} samples={samples}
-                  selected={selected} onSelect={setSelected} onChange={onGraph} />
+                  selected={selected} onSelect={setSelected} onChange={onGraph} onRemoved={removed}
+                  history={{ canUndo: hist.undo > 0, canRedo: hist.redo > 0, undo, redo }} />
+                {notice && (
+                  <div role="status" className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 rounded-lg px-3 py-2 text-xs flex items-center gap-3 shadow"
+                    style={{ background: 'var(--text)', color: 'var(--bg)' }}>
+                    <span>{notice}</span>
+                    <button type="button" className="font-semibold underline" onClick={() => { undo(); setNotice(null); }}>Undo</button>
+                    <button type="button" aria-label="Dismiss" onClick={() => setNotice(null)} style={{ opacity: 0.7 }}>×</button>
+                  </div>
+                )}
               </div>
               <aside className="w-80 shrink-0 border-l p-4 overflow-y-auto" style={{ borderColor: 'var(--border)' }} aria-label="Step settings">
                 {sel ? (
                   <StepInspector key={sel.id} node={sel} editable={c.can_edit} blockers={problems('blockers')} warnings={problems('warnings')}
                     sample={samples[sel.id]} onTestRun={() => setTesting(true)}
-                    onChange={(config) => onGraph({ ...graph, nodes: graph.nodes.map((n) => (n.id === sel.id ? { ...n, config } : n)) })}
-                    onRemove={() => { onGraph({ nodes: graph.nodes.filter((n) => n.id !== sel.id), edges: graph.edges.filter((e) => e.source !== sel.id && e.target !== sel.id) }); setSelected(null); }} />
+                    onChange={(config) => onGraph({ ...graph, nodes: graph.nodes.map((n) => (n.id === sel.id ? { ...n, config } : n)) }, 'edit')}
+                    onRemove={() => { onGraph({ nodes: graph.nodes.filter((n) => n.id !== sel.id), edges: graph.edges.filter((e) => e.source !== sel.id && e.target !== sel.id) }); removed([nodeLabel(sel)]); setSelected(null); }} />
                 ) : (
                   <div className="grid gap-3 text-sm">
                     <div className="text-xs font-medium">The sequence</div>

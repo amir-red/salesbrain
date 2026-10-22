@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ReactFlow, ReactFlowProvider, Background, Controls, MiniMap, Handle, Position, MarkerType,
+  ReactFlow, ReactFlowProvider, Background, Controls, MiniMap, Handle, Panel, Position, MarkerType,
   applyNodeChanges, useReactFlow,
   type Connection, type Edge, type Node, type NodeChange, type EdgeChange, type NodeProps,
 } from '@xyflow/react';
@@ -23,6 +23,7 @@ export interface StepStats { here_now?: number; sent?: number; reply_rate?: numb
 
 interface StepData extends Record<string, unknown> {
   node: GraphNode; blockers: string[]; warnings: string[]; stats?: StepStats; selected: boolean; sample?: Sample;
+  onDelete?: (id: string) => void;
 }
 
 const TONE: Partial<Record<NodeType, string>> = {
@@ -43,13 +44,21 @@ function StepNode({ data }: NodeProps) {
   const bad = d.blockers.length > 0;
   const warn = !bad && d.warnings.length > 0;
   return (
-    <div className="rounded-xl text-left" title={[...d.blockers, ...d.warnings].join('\n') || undefined}
+    <div className="rounded-xl text-left relative" title={[...d.blockers, ...d.warnings].join('\n') || undefined}
       style={{
         width: 220, background: 'var(--bg-card)', color: 'var(--text)',
         border: `1.5px solid ${bad ? 'var(--red)' : d.selected ? 'var(--accent)' : 'var(--border)'}`,
         boxShadow: d.selected ? '0 0 0 3px var(--accent-glow)' : '0 1px 2px color-mix(in srgb, black 8%, transparent)',
       }}>
       {n.type !== 'start' && <Handle type="target" position={Position.Top} style={{ background: 'var(--text-muted)', width: 9, height: 9 }} />}
+      {d.selected && d.onDelete && n.type !== 'start' && (
+        <button type="button" aria-label={`Remove ${nodeLabel(n)}`} title="Remove this step (Delete)"
+          // React Flow handles mouse-down on a node (drag, select) before any click: act on pointer-down, and stop it.
+          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); d.onDelete!(n.id); }}
+          onClick={(e) => e.stopPropagation()}
+          className="nodrag nopan absolute -top-2.5 -right-2.5 w-6 h-6 rounded-full text-xs leading-none flex items-center justify-center"
+          style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--red)', boxShadow: '0 1px 3px color-mix(in srgb, black 15%, transparent)' }}>×</button>
+      )}
       <div className="px-3 pt-2.5 pb-2 grid gap-1">
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-bold rounded-md px-1.5 py-0.5 shrink-0"
@@ -119,7 +128,12 @@ function newId(g: Graph, t: NodeType): string {
 
 interface Props {
   graph: Graph; validation: Validation | null; editable: boolean; stats?: Record<string, StepStats>; samples?: Record<string, Sample>;
-  selected: string | null; onSelect: (id: string | null) => void; onChange: (g: Graph) => void;
+  selected: string | null; onSelect: (id: string | null) => void;
+  /** kind 'move' = a drag in progress: the page folds a whole drag into one undo step. */
+  onChange: (g: Graph, kind?: 'move' | 'edit') => void;
+  history?: { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void };
+  /** Something was removed (shown with an Undo by the page). */
+  onRemoved?: (labels: string[]) => void;
 }
 
 /** The app's theme lives on <html class="light|dark"> (set by the theme script), not in the system setting. */
@@ -135,11 +149,12 @@ function useAppTheme(): 'light' | 'dark' {
   return mode;
 }
 
-function Canvas({ graph, validation, editable, stats, samples, selected, onSelect, onChange }: Props) {
+function Canvas({ graph, validation, editable, stats, samples, selected, onSelect, onChange, history, onRemoved }: Props) {
   const rf = useReactFlow();
   const theme = useAppTheme();
   // A controlled flow must hand measured sizes back to its nodes, or the minimap has nothing to draw.
   const [dims, setDims] = useState<Record<string, { width: number; height: number }>>({});
+  const [pickedEdges, setPickedEdges] = useState<Set<string>>(new Set());
   const wrapper = useRef<HTMLDivElement>(null);
 
   const problems = useMemo(() => {
@@ -149,21 +164,34 @@ function Canvas({ graph, validation, editable, stats, samples, selected, onSelec
     return { b, w };
   }, [validation]);
 
+  const remove = useCallback((nodeIds: string[], edgeIds: string[] = []) => {
+    const ids = new Set(graph.nodes.filter((n) => nodeIds.includes(n.id) && n.type !== 'start').map((n) => n.id));
+    const lines = new Set(edgeIds);
+    if (!ids.size && !lines.size) return;
+    const labels = graph.nodes.filter((n) => ids.has(n.id)).map((n) => nodeLabel(n));
+    onChange({
+      nodes: graph.nodes.filter((n) => !ids.has(n.id)),
+      edges: graph.edges.filter((e) => !ids.has(e.source) && !ids.has(e.target) && !lines.has(e.id)),
+    });
+    if (selected && ids.has(selected)) onSelect(null);
+    onRemoved?.(labels.length ? labels : [lines.size === 1 ? 'a line' : `${lines.size} lines`]);
+  }, [graph, onChange, onRemoved, onSelect, selected]);
+
   const nodes: Node[] = useMemo(() => graph.nodes.map((n) => ({
     id: n.id, type: 'step', position: n.position ?? { x: 0, y: 0 }, deletable: editable && n.type !== 'start',
     measured: dims[n.id],
     draggable: editable, selected: n.id === selected,
     data: { node: n, blockers: problems.b[n.id] ?? [], warnings: problems.w[n.id] ?? [], stats: stats?.[n.id],
-      selected: n.id === selected, sample: samples?.[n.id] } satisfies StepData,
-  })), [graph.nodes, problems, stats, samples, editable, selected, dims]);
+      selected: n.id === selected, sample: samples?.[n.id], onDelete: editable ? (id: string) => remove([id]) : undefined } satisfies StepData,
+  })), [graph.nodes, problems, stats, samples, editable, selected, dims, remove]);
 
   const edges: Edge[] = useMemo(() => graph.edges.map((e) => ({
-    id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, deletable: editable,
+    id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, deletable: editable, selected: pickedEdges.has(e.id),
     label: e.sourceHandle === 'next' ? undefined : HANDLE_LABELS[e.sourceHandle],
     labelStyle: { fontSize: 11, fill: 'var(--text-muted)' }, labelBgStyle: { fill: 'var(--bg)' },
     markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
-    style: { strokeWidth: 1.6, stroke: e.sourceHandle === 'yes' ? 'var(--green)' : e.sourceHandle === 'next' ? 'var(--text-muted)' : 'var(--orange)' },
-  })), [graph.edges, editable]);
+    style: { strokeWidth: pickedEdges.has(e.id) ? 3 : 1.6, stroke: e.sourceHandle === 'yes' ? 'var(--green)' : e.sourceHandle === 'next' ? 'var(--text-muted)' : 'var(--orange)' },
+  })), [graph.edges, editable, pickedEdges]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     const sized = changes.filter((c) => c.type === 'dimensions' && c.dimensions);
@@ -179,25 +207,31 @@ function Canvas({ graph, validation, editable, stats, samples, selected, onSelec
       if (sel && 'id' in sel) onSelect(sel.id);
       return;
     }
-    const removed = new Set(changes.filter((c) => c.type === 'remove').map((c) => (c as { id: string }).id));
-    const moved = applyNodeChanges(changes.filter((c) => c.type === 'position' || c.type === 'remove'), nodes);
-    const pos = Object.fromEntries(moved.map((n) => [n.id, n.position]));
     const sel = changes.find((c) => c.type === 'select' && c.selected);
     if (sel && 'id' in sel) onSelect(sel.id);
-    if (!changes.some((c) => c.type === 'position' || c.type === 'remove')) return;
+    // Removals arrive through onDelete as ONE change (a step and its lines together), so undo restores both at once.
+    const moves = changes.filter((c) => c.type === 'position');
+    if (!moves.length) return;
+    const pos = Object.fromEntries(applyNodeChanges(moves, nodes).map((n) => [n.id, n.position]));
     onChange({
-      nodes: graph.nodes.filter((n) => !removed.has(n.id) || n.type === 'start')
-        .map((n) => ({ ...n, position: pos[n.id] ? { x: Math.round(pos[n.id].x), y: Math.round(pos[n.id].y) } : n.position })),
-      edges: graph.edges.filter((e) => !removed.has(e.source) && !removed.has(e.target)),
-    });
-    if (selected && removed.has(selected)) onSelect(null);
-  }, [editable, nodes, graph, onChange, onSelect, selected]);
+      nodes: graph.nodes.map((n) => ({ ...n, position: pos[n.id] ? { x: Math.round(pos[n.id].x), y: Math.round(pos[n.id].y) } : n.position })),
+      edges: graph.edges,
+    }, 'move');
+  }, [editable, nodes, graph, onChange, onSelect]);
 
+  // Which lines are selected (so Delete can remove one, and it shows); removal itself goes through onDelete.
   const onEdgesChange = useCallback((changes: EdgeChange[]) => {
-    if (!editable) return;
-    const removed = new Set(changes.filter((c) => c.type === 'remove').map((c) => (c as { id: string }).id));
-    if (removed.size) onChange({ ...graph, edges: graph.edges.filter((e) => !removed.has(e.id)) });
-  }, [editable, graph, onChange]);
+    const sel = changes.filter((c) => c.type === 'select');
+    if (!sel.length) return;
+    setPickedEdges((cur) => {
+      const next = new Set(cur);
+      for (const c of sel) if (c.type === 'select') { if (c.selected) next.add(c.id); else next.delete(c.id); }
+      return next;
+    });
+  }, []);
+  const onDelete = useCallback(({ nodes: ns, edges: es }: { nodes: Node[]; edges: Edge[] }) => {
+    if (editable) remove(ns.map((n) => n.id), es.map((e) => e.id));
+  }, [editable, remove]);
 
   const onConnect = useCallback((c: Connection) => {
     if (!editable || !c.source || !c.target || c.source === c.target) return;
@@ -257,12 +291,25 @@ function Canvas({ graph, validation, editable, stats, samples, selected, onSelec
       )}
       <div ref={wrapper} className="flex-1 min-w-0" onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }} onDrop={onDrop}>
         <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes}
-          onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
+          onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onDelete={onDelete}
           onPaneClick={() => onSelect(null)} fitView fitViewOptions={{ padding: 0.2, maxZoom: 1 }} minZoom={0.2}
           nodesConnectable={editable} elementsSelectable connectionRadius={70} deleteKeyCode={editable ? ['Delete', 'Backspace'] : null}
           proOptions={{ hideAttribution: true }} colorMode={theme} style={{ background: 'var(--bg)' }}>
           <Background gap={20} size={1} color="var(--border)" />
           <Controls showInteractive={false} />
+          {editable && history && (
+            <Panel position="top-left">
+              <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)', background: 'var(--bg-card)' }}>
+                {([['Undo', '↶', history.canUndo, history.undo, '⌘Z / Ctrl+Z'], ['Redo', '↷', history.canRedo, history.redo, '⇧⌘Z / Ctrl+Y']] as const).map(([label, icon, ok, fn, keys], i) => (
+                  <button key={label} type="button" onClick={fn} disabled={!ok} title={`${label} (${keys})`} aria-label={label}
+                    className="px-2.5 py-1 text-xs flex items-center gap-1 disabled:opacity-35"
+                    style={{ color: 'var(--text)', borderLeft: i ? '1px solid var(--border)' : undefined }}>
+                    <span className="text-sm leading-none">{icon}</span>{label}
+                  </button>
+                ))}
+              </div>
+            </Panel>
+          )}
           {/* SVG fill attributes cannot read CSS variables: plain colours here. */}
           <MiniMap pannable zoomable nodeStrokeWidth={2}
             nodeColor={(n) => ((n.data as StepData)?.blockers?.length ? '#d93a3a' : theme === 'dark' ? '#5c5470' : '#c9bfd3')} />
