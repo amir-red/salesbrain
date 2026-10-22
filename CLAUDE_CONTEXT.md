@@ -2191,6 +2191,8 @@ credits/day, one tap per wave. Phases: 1 firms + research (this), 2 people at th
 
 ### 5.bf Campaign wizard + /campaigns and /brand in the house style (2026-10-22, feat/campaign-wizard, no migration)
 
+**LIVE 2026-10-22 (0.61.0)** together with §5.bg: ring deployed (smoke 0.61.0, one gateway), app on Production (run 39806274692).
+
 Amir, after the first try: the dialog opened an EMPTY canvas with a red "sends nothing" error, there was no email /
 LinkedIn choice, and /campaigns + /brand looked unlike the other pages ("you copied Guhan; it is an inspiration").
 - **Wizard** `/campaigns/new` (`components/campaigns/CampaignWizard.tsx`, the ICP builder's shape): 1 what it is for
