@@ -19,7 +19,7 @@ interface Props {
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="grid gap-1 text-sm">
-      <span className="z-eyebrow">{label}</span>
+      <span className="text-xs font-medium">{label}</span>
       {children}
       {hint && <span className="text-[11px] leading-snug" style={{ color: 'var(--text-muted)' }}>{hint}</span>}
     </label>
@@ -43,7 +43,7 @@ export default function StepInspector({ node, editable, blockers, warnings, onCh
   return (
     <div className="grid gap-4 content-start">
       <div>
-        <div className="z-eyebrow">{LABELS[t]}</div>
+        <div className="text-xs font-medium">{LABELS[t]}</div>
         <div className="font-semibold">{nodeLabel(node)}</div>
       </div>
       {blockers.length > 0 && (

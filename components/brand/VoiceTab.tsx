@@ -107,8 +107,8 @@ function RuleRow({ r, actions }: { r: VoiceRule; actions?: React.ReactNode }) {
         <details className="text-[12px]">
           <summary className="cursor-pointer" style={{ color: 'var(--text-muted)' }}>What it learned from</summary>
           <div className="grid gap-2 md:grid-cols-2 pt-1">
-            {ev.before && <div><div className="z-eyebrow">Draft</div><p className="whitespace-pre-wrap">{ev.before}</p></div>}
-            {ev.after && <div><div className="z-eyebrow">What was sent</div><p className="whitespace-pre-wrap">{ev.after}</p></div>}
+            {ev.before && <div><div className="text-xs font-medium">Draft</div><p className="whitespace-pre-wrap">{ev.before}</p></div>}
+            {ev.after && <div><div className="text-xs font-medium">What was sent</div><p className="whitespace-pre-wrap">{ev.after}</p></div>}
           </div>
         </details>
       )}
@@ -143,7 +143,7 @@ function MyVoice({ rules, stats, brandKey, reload, showOld, setShowOld }: {
             ['Rules learned', String(stats.rules.learned_recently ?? 0), `${stats.rules.active ?? 0} active in your voice`],
           ].map(([k, v, h]) => (
             <div key={k} className="rounded-xl p-3" style={{ background: 'var(--bg-input)' }}>
-              <div className="z-eyebrow">{k}</div>
+              <div className="text-xs font-medium">{k}</div>
               <div className="text-xl font-semibold tabular-nums">{v}</div>
               <Help>{h}</Help>
             </div>

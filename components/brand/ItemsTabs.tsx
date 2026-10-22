@@ -17,7 +17,7 @@ export function ProductsTab({ data, reload }: { data: BrandPayload; reload: () =
         open === p.id
           ? <ProductForm key={p.id} brandKey={data.brand.key} product={p} onDone={() => { setOpen(null); reload(); }} />
           : (
-            <div key={p.id} className="z-card p-4 flex items-start justify-between gap-3">
+            <div key={p.id} className="z-panel p-4 flex items-start justify-between gap-3">
               <div className="min-w-0 space-y-1">
                 <h3 className="text-sm font-semibold">{p.name}</h3>
                 {p.pain && <p className="text-sm">{p.pain}</p>}
@@ -29,7 +29,7 @@ export function ProductsTab({ data, reload }: { data: BrandPayload; reload: () =
       ))}
       {open === 'new'
         ? <ProductForm brandKey={data.brand.key} product={null} onDone={() => { setOpen(null); reload(); }} />
-        : <button onClick={() => setOpen('new')} className="z-btn !min-h-0 !py-2 text-xs">+ New product or service</button>}
+        : <button onClick={() => setOpen('new')} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>+ New product or service</button>}
     </div>
   );
 }
@@ -82,7 +82,7 @@ function ProductForm({ brandKey, product, onDone }: { brandKey: string; product:
                    { key: 'answer', label: 'Answer', placeholder: 'How we answer it', multiline: true }]} /></div>
       {err && <div className="text-xs" style={{ color: 'var(--red)' }}>{err}</div>}
       <div className="flex gap-2">
-        <button onClick={save} disabled={busy || !p.name.trim()} className="z-btn !min-h-0 !py-2 text-xs">{busy ? 'Saving…' : 'Save product'}</button>
+        <button onClick={save} disabled={busy || !p.name.trim()} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>{busy ? 'Saving…' : 'Save product'}</button>
         <button onClick={onDone} className="px-3 py-1.5 rounded-lg text-xs" style={{ border: '1px solid var(--border)' }}>Cancel</button>
         {product && <button onClick={archive} className="ml-auto text-xs underline" style={{ color: 'var(--text-muted)' }}>Archive</button>}
       </div>
@@ -110,7 +110,7 @@ export function CompetitorsTab({ data, reload }: { data: BrandPayload; reload: (
       <Help>Used when a prospect names one — never in a cold opener. People who work at a listed competitor are never treated as prospects.</Help>
       {data.competitors.length === 0 && !form && <Help>No competitors yet.</Help>}
       {data.competitors.map((c) => (
-        <div key={c.id} className="z-card p-4 flex items-start justify-between gap-3">
+        <div key={c.id} className="z-panel p-4 flex items-start justify-between gap-3">
           <div className="min-w-0"><h3 className="text-sm font-semibold">{c.name}{c.domain ? <span className="font-normal text-xs" style={{ color: 'var(--text-muted)' }}> · {c.domain}</span> : null}</h3>
             {c.differentiation ? <p className="text-sm whitespace-pre-wrap">{c.differentiation}</p> : <Help>No positioning written yet.</Help>}</div>
           <span className="flex gap-2 text-xs shrink-0">
@@ -129,11 +129,11 @@ export function CompetitorsTab({ data, reload }: { data: BrandPayload; reload: (
             placeholder="Where we win, and where we would honestly concede." aria-label="How we differ" />
           {err && <div className="text-xs" style={{ color: 'var(--red)' }}>{err}</div>}
           <div className="flex gap-2">
-            <button onClick={save} disabled={!form.name?.trim()} className="z-btn !min-h-0 !py-2 text-xs">Save</button>
+            <button onClick={save} disabled={!form.name?.trim()} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>Save</button>
             <button onClick={() => setForm(null)} className="px-3 py-1.5 rounded-lg text-xs" style={{ border: '1px solid var(--border)' }}>Cancel</button>
           </div>
         </Section>
-      ) : <button onClick={() => setForm({})} className="z-btn !min-h-0 !py-2 text-xs">+ New competitor</button>}
+      ) : <button onClick={() => setForm({})} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>+ New competitor</button>}
     </div>
   );
 }
@@ -159,7 +159,7 @@ export function TemplatesTab({ data, reload }: { data: BrandPayload; reload: () 
       <Help><b>Guided</b> = instructions the writer follows for each person (the angle, the hook, the ask). <b>Fixed</b> = the exact text, with {'{first_name}'} and {'{company}'} filled in, never rewritten — and skipped for anyone a placeholder has no value for.</Help>
       {data.templates.length === 0 && !form && <Help>No templates yet.</Help>}
       {data.templates.map((t) => (
-        <div key={t.id} className="z-card p-4 space-y-1">
+        <div key={t.id} className="z-panel p-4 space-y-1">
           <div className="flex items-start justify-between gap-3">
             <h3 className="text-sm font-semibold">{t.name}
               <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-normal" style={{ background: 'var(--bg-input)' }}>{t.kind === 'fixed' ? 'Fixed' : 'Guided'}</span>
@@ -193,11 +193,11 @@ export function TemplatesTab({ data, reload }: { data: BrandPayload; reload: () 
             placeholder={form.kind === 'fixed' ? 'Guten Tag {first_name}, …' : 'Open with where we met. Offer the readiness checklist. End with one easy question. No meeting ask.'} />
           {err && <div className="text-xs" style={{ color: 'var(--red)' }}>{err}</div>}
           <div className="flex gap-2">
-            <button onClick={save} disabled={!form.name?.trim() || !form.body?.trim()} className="z-btn !min-h-0 !py-2 text-xs">Save</button>
+            <button onClick={save} disabled={!form.name?.trim() || !form.body?.trim()} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>Save</button>
             <button onClick={() => setForm(null)} className="px-3 py-1.5 rounded-lg text-xs" style={{ border: '1px solid var(--border)' }}>Cancel</button>
           </div>
         </Section>
-      ) : <button onClick={() => setForm({ kind: 'guided', step: 'first', channels: ['linkedin'] })} className="z-btn !min-h-0 !py-2 text-xs">+ New template</button>}
+      ) : <button onClick={() => setForm({ kind: 'guided', step: 'first', channels: ['linkedin'] })} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>+ New template</button>}
     </div>
   );
 }

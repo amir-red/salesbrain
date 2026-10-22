@@ -198,3 +198,80 @@ export function defaultConfig(t: NodeType): Record<string, unknown> {
 export const CHANNEL_ICON: Partial<Record<NodeType, string>> = {
   linkedin_connect: 'in', linkedin_message: 'in', email: '@',
 };
+
+// ---------------------------------------------------------------- the wizard (/campaigns/new)
+// The answers go to the kernel as `spec`; policy/campaigns.py::graph_from_spec draws the sequence from them. The
+// functions below only DESCRIBE that plan for the right-hand column — the graph itself is built once, in Python.
+
+export type Channel = 'email' | 'linkedin' | 'linkedin_then_email';
+export type WriteMode = 'auto' | 'guided' | 'fixed';
+export interface MessageSpec { mode: WriteMode; instructions: string; text: string; subject?: string }
+export interface WizardSpec {
+  channel: Channel; messages: number; reply_days: number[]; accept_days: number;
+  connect_note: 'none' | WriteMode; connect_text: string; connect_instructions: string;
+  first: MessageSpec; followups: MessageSpec; reply_to: 'back_office' | 'front_office' | 'sender'; reply_note: string;
+}
+
+export const DEFAULT_SPEC: WizardSpec = {
+  channel: 'linkedin_then_email', messages: 3, reply_days: [5, 7, 7, 7], accept_days: 21,
+  connect_note: 'none', connect_text: '', connect_instructions: '',
+  first: { mode: 'auto', instructions: '', text: '', subject: '' },
+  followups: { mode: 'guided', text: '', instructions: 'Shorter than the last message; one new useful thing; one easy question.' },
+  reply_to: 'back_office', reply_note: 'They replied — take over the conversation.',
+};
+
+export const CHANNEL_OPTIONS: { key: Channel; label: string; hint: string; needs: ('email' | 'linkedin')[] }[] = [
+  { key: 'email', label: 'Email only', hint: 'From the sender’s Gmail. Follow-ups reply in the same thread.', needs: ['email'] },
+  { key: 'linkedin', label: 'LinkedIn only', hint: 'A connection request, then messages once they accept.', needs: ['linkedin'] },
+  { key: 'linkedin_then_email', label: 'LinkedIn first, then email',
+    hint: 'Connect on LinkedIn; anyone who does not accept gets the emails instead, if we have their address.',
+    needs: ['linkedin', 'email'] },
+];
+
+const WRITTEN: Record<WriteMode, string> = { auto: 'written for you', guided: 'from your instructions', fixed: 'your exact text' };
+
+export interface PlanLine { kind: 'send' | 'wait' | 'branch' | 'end'; text: string; detail?: string; indent?: boolean }
+
+/** The sequence the wizard will draw, as lines a person reads top to bottom. */
+export function describeSpec(s: WizardSpec): PlanLine[] {
+  const out: PlanLine[] = [];
+  const chain = (channel: 'email' | 'linkedin', indent = false) => {
+    for (let i = 0; i < s.messages; i++) {
+      const part = i === 0 ? s.first : s.followups;
+      const name = i === 0 ? (channel === 'email' ? 'First email' : 'First LinkedIn message') : `Follow-up ${i}`;
+      out.push({ kind: 'send', text: name, detail: WRITTEN[part.mode], indent });
+      out.push({ kind: 'wait', text: `Wait ${s.reply_days[i] ?? 7} days for a reply`, indent });
+    }
+    out.push({ kind: 'end', text: 'Still no reply: the sequence ends', indent });
+  };
+  if (s.channel === 'email') {
+    chain('email');
+  } else {
+    out.push({ kind: 'send', text: 'LinkedIn connection request',
+      detail: s.connect_note === 'none' ? 'no note' : `note ${WRITTEN[s.connect_note as WriteMode]}` });
+    out.push({ kind: 'wait', text: `Wait up to ${s.accept_days} days for them to accept` });
+    chain('linkedin');
+    out.push({ kind: 'branch', text: s.channel === 'linkedin_then_email'
+      ? 'Not accepted, and we have their email:' : 'Not accepted: the sequence ends' });
+    if (s.channel === 'linkedin_then_email') chain('email', true);
+  }
+  return out;
+}
+
+/** What still has to be filled before the wizard can draw a sequence that runs. */
+export function specProblems(s: WizardSpec): string[] {
+  const p: string[] = [];
+  const check = (part: MessageSpec, label: string, needsSubject: boolean) => {
+    if (part.mode === 'fixed' && !part.text.trim()) p.push(`Write the text for ${label}.`);
+    if (part.mode === 'guided' && !part.instructions.trim()) p.push(`Write the instructions for ${label}.`);
+    if (needsSubject && part.mode === 'fixed' && !(part.subject ?? '').trim()) p.push('Give the first email a subject.');
+  };
+  check(s.first, 'the first message', s.channel !== 'linkedin');
+  if (s.messages > 1) check(s.followups, 'the follow-ups', false);
+  if (s.channel !== 'email') {
+    if (s.connect_note === 'fixed' && !s.connect_text.trim()) p.push('Write the connection note, or choose no note.');
+    if (s.connect_note === 'fixed' && s.connect_text.length > 300) p.push('The connection note is over 300 characters.');
+    if (s.connect_note === 'guided' && !s.connect_instructions.trim()) p.push('Write the instructions for the connection note.');
+  }
+  return p;
+}

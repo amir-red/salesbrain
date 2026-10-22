@@ -82,7 +82,7 @@ function DraftFromWebsite({ data, reload }: { data: BrandPayload; reload: () => 
   return (
     <Section title="Draft from website"
       help={<>Reads {b.website ? <b>{b.website}</b> : 'the website'} and drafts what is empty. You see it first; only empty fields are filled, and they stay marked as AI-drafted until you edit them.</>}
-      aside={<button onClick={run} disabled={busy} className="z-btn !min-h-0 !py-1.5 text-xs shrink-0">{busy ? 'Reading…' : 'Draft'}</button>}>
+      aside={<button onClick={run} disabled={busy} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40 shrink-0" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>{busy ? 'Reading…' : 'Draft'}</button>}>
       {empty && !s && <Help>Still empty: {data.missing.map((m) => m.replace('_', ' ')).join(', ')}.</Help>}
       <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="z-input"
         placeholder="Optional: a few sentences in your own words — what we sell, to whom, what changes for them. Used with the website, or instead of it when the site can't be read." aria-label="Notes for the draft" />
@@ -90,13 +90,13 @@ function DraftFromWebsite({ data, reload }: { data: BrandPayload; reload: () => 
       {s && (
         <div className="space-y-2 rounded-xl p-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
           {(['description', 'pain_points', 'industry', 'tone', 'language'] as const).map((k) => s[k] ? (
-            <div key={k} className="text-sm"><span className="z-eyebrow">{k.replace('_', ' ')}</span>
+            <div key={k} className="text-sm"><span className="text-xs font-medium">{k.replace('_', ' ')}</span>
               <p className="whitespace-pre-wrap">{s[k]}</p>
               {(b as unknown as Record<string, string | null>)[k] ? <Help>Already filled — yours is kept.</Help> : null}
             </div>) : null)}
-          {s.products.length > 0 && <div className="text-sm"><span className="z-eyebrow">products</span>
+          {s.products.length > 0 && <div className="text-sm"><span className="text-xs font-medium">products</span>
             {s.products.map((p) => <p key={p.name}><b>{p.name}</b>{p.description ? ` — ${p.description}` : ''}</p>)}</div>}
-          {s.competitors.length > 0 && <div className="text-sm"><span className="z-eyebrow">competitors</span>
+          {s.competitors.length > 0 && <div className="text-sm"><span className="text-xs font-medium">competitors</span>
             <p>{s.competitors.map((c) => c.name).join(', ')}</p></div>}
           <div className="flex gap-2 pt-1">
             <button onClick={accept} disabled={saving} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>{saving ? 'Saving…' : 'Use these'}</button>

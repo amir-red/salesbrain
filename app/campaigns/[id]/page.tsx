@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
+import Button from '@/components/panel/Button';
+import PageHeader, { Pill } from '@/components/panel/PageHeader';
 import StepInspector from '@/components/campaigns/StepInspector';
 import type { StepStats } from '@/components/campaigns/SequenceCanvas';
 import { timeUntil } from '@/lib/time';
@@ -44,13 +46,21 @@ async function api<T = Record<string, unknown>>(url: string, init?: RequestInit)
 }
 const json = (method: string, body: unknown): RequestInit => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
-function Alert({ tone = 'red', children }: { tone?: 'red' | 'orange'; children: React.ReactNode }) {
-  return <div className="rounded-lg px-3 py-2 text-sm" role={tone === 'red' ? 'alert' : undefined}
-    style={{ background: `color-mix(in srgb, var(--${tone}) 10%, transparent)`, color: `var(--${tone})` }}>{children}</div>;
+function Alert({ tone = 'red', children, onClose }: { tone?: 'red' | 'orange' | 'green' | 'neutral'; children: React.ReactNode; onClose?: () => void }) {
+  const color = tone === 'neutral' ? 'var(--text)' : `var(--${tone})`;
+  const bg = tone === 'neutral' ? 'var(--bg-input)' : `color-mix(in srgb, var(--${tone}) 10%, transparent)`;
+  return (
+    <div className="rounded-lg px-3 py-2 text-xs flex items-start gap-3" role={tone === 'red' ? 'alert' : undefined} style={{ background: bg, color }}>
+      <div className="flex-1">{children}</div>
+      {onClose && <button type="button" onClick={onClose} aria-label="Dismiss" style={{ color: 'var(--text-muted)' }}>×</button>}
+    </div>
+  );
 }
 
 export default function CampaignPage() {
   const { id } = useParams<{ id: string }>();
+  const sp = useSearchParams();
+  const [created, setCreated] = useState<string | null>(sp.get('created'));
   const [c, setC] = useState<Campaign | null>(null);
   const [tab, setTab] = useState<Tab>('sequence');
   const [error, setError] = useState<string | null>(null);
@@ -123,42 +133,33 @@ export default function CampaignPage() {
     <div className="flex h-screen">
       <Sidebar />
       <div className="flex-1 min-w-0 flex flex-col">
-        <div className="px-4 py-3 border-b flex items-center justify-between gap-3 flex-wrap" style={{ borderColor: 'var(--border)' }}>
-          <div className="min-w-0">
-            <div className="text-xs" style={{ color: 'var(--text-muted)' }}><Link href="/campaigns" className="underline">Campaigns</Link></div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-lg font-bold truncate">{c?.name ?? 'Campaign'}</h1>
-              {st && <span className="text-xs px-2 py-0.5 rounded-full" style={{ color: st.color, background: `color-mix(in srgb, ${st.color} 14%, transparent)` }}>{st.label}</span>}
-              {tab === 'sequence' && c?.can_edit && (
-                <span className="text-xs" style={{ color: save === 'failed' ? 'var(--red)' : 'var(--text-muted)' }}>
-                  {{ saved: 'Saved', saving: 'Saving…', unsaved: 'Unsaved changes', failed: 'Not saved' }[save]}
-                </span>
-              )}
-            </div>
-          </div>
-          {c?.can_edit && (
-            <div className="flex items-center gap-2 flex-wrap">
-              {tab === 'sequence' && <button type="button" className="text-sm px-3 py-1.5 rounded-full" style={{ border: '1px solid var(--border)' }} onClick={() => setTesting(true)}>Test run</button>}
-              {(c.status === 'paused' || c.status === 'draft') && unpublished && (
-                <button type="button" className="text-sm px-3 py-1.5 rounded-full" style={{ border: '1px solid var(--border)' }} disabled={busy !== null}
-                  onClick={() => act('discard', 'Throw away the edits and go back to the published sequence?')}>Discard edits</button>
-              )}
-              {c.status !== 'live' && c.status !== 'archived' && (
-                <button type="button" className="text-sm px-3 py-1.5 rounded-full" style={{ border: '1px solid var(--border)' }} disabled={busy !== null}
-                  onClick={() => act('archive', 'Archive this campaign? Everyone still in it leaves, and waiting drafts are dropped.')}>Archive</button>
-              )}
-              {c.status === 'live' && (
-                <button type="button" className="text-sm px-3 py-1.5 rounded-full" style={{ border: '1px solid var(--border)' }} disabled={busy !== null}
-                  onClick={() => act('pause')}>{busy === 'pause' ? 'Pausing…' : 'Pause'}</button>
-              )}
-              {(c.status === 'draft' || c.status === 'paused') && (
-                <button type="button" className="z-btn text-sm" disabled={busy !== null} onClick={() => act('check')}>
-                  {busy === 'check' ? 'Checking…' : c.status === 'draft' ? 'Check & launch' : unpublished ? 'Publish & resume' : 'Resume'}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        <PageHeader back={{ href: '/campaigns', label: 'Back to campaigns' }} title={c?.name ?? 'Campaign'}
+          badge={st ? <Pill color={st.color}>{st.label}</Pill> : null}
+          subtitle={c ? <>
+            {c.lists.filter((l) => l.include).map((l) => l.name).join(' · ') || 'no list yet'}
+            {c.goal ? ` · ${c.goal}` : ''}
+            {tab === 'sequence' && c.can_edit && (
+              <span style={{ color: save === 'failed' ? 'var(--red)' : undefined }}>
+                {' · '}{{ saved: 'Saved', saving: 'Saving…', unsaved: 'Unsaved changes', failed: 'Not saved' }[save]}
+              </span>
+            )}
+          </> : null}
+          actions={c?.can_edit ? <>
+            {tab === 'sequence' && <Button onClick={() => setTesting(true)}>Test run</Button>}
+            {(c.status === 'paused' || c.status === 'draft') && unpublished && (
+              <Button disabled={busy !== null} onClick={() => act('discard', 'Throw away the edits and go back to the published sequence?')}>Discard edits</Button>
+            )}
+            {c.status !== 'live' && c.status !== 'archived' && (
+              <Button variant="danger" disabled={busy !== null}
+                onClick={() => act('archive', 'Archive this campaign? Everyone still in it leaves, and waiting drafts are dropped.')}>Archive</Button>
+            )}
+            {c.status === 'live' && <Button disabled={busy !== null} onClick={() => act('pause')}>{busy === 'pause' ? 'Pausing…' : 'Pause'}</Button>}
+            {(c.status === 'draft' || c.status === 'paused') && (
+              <Button variant="primary" disabled={busy !== null} onClick={() => act('check')}>
+                {busy === 'check' ? 'Checking…' : c.status === 'draft' ? 'Check & launch' : unpublished ? 'Publish & resume' : 'Resume'}
+              </Button>
+            )}
+          </> : null} />
 
         <div className="px-4 border-b flex gap-4 text-sm" role="tablist" style={{ borderColor: 'var(--border)' }}>
           {(['sequence', 'people', 'results', 'settings'] as Tab[]).map((t) => (
@@ -167,11 +168,22 @@ export default function CampaignPage() {
           ))}
         </div>
 
-        {(error || unpublished || general.length > 0) && (
+        {(error || unpublished || general.length > 0 || created) && (
           <div className="px-4 pt-3 grid gap-2">
+            {created === 'drawn' && tab === 'sequence' && (
+              <Alert tone="green" onClose={() => setCreated(null)}>
+                Your sequence is drawn from your answers. Click any step to change it, try <b>Test run</b>, then <b>Check &amp; launch</b>.
+                Nothing is sent until you launch it.
+              </Alert>
+            )}
             {error && <Alert>{error}</Alert>}
             {unpublished && c?.status === 'live' && <Alert tone="orange">You have edits that are not live yet. People keep walking the published sequence until you pause and resume the campaign.</Alert>}
-            {tab === 'sequence' && general.map((g) => <Alert key={g.message} tone="orange">{g.message}</Alert>)}
+            {tab === 'sequence' && (graph?.nodes.length ?? 0) <= 1 && c?.can_edit ? (
+              <Alert tone="neutral">
+                Start by adding the first step from the left — <b>Email</b>, <b>LinkedIn connection request</b> or <b>LinkedIn message</b>.
+                It connects to Start on its own. Prefer answering a few questions instead? <Link href="/campaigns/new" className="underline">Use the guided setup</Link>.
+              </Alert>
+            ) : tab === 'sequence' && general.map((g) => <Alert key={g.message} tone="orange">{g.message}</Alert>)}
           </div>
         )}
 
@@ -191,7 +203,7 @@ export default function CampaignPage() {
                     onRemove={() => { onGraph({ nodes: graph.nodes.filter((n) => n.id !== sel.id), edges: graph.edges.filter((e) => e.source !== sel.id && e.target !== sel.id) }); setSelected(null); }} />
                 ) : (
                   <div className="grid gap-3 text-sm">
-                    <div className="z-eyebrow">The sequence</div>
+                    <div className="text-xs font-medium">The sequence</div>
                     <p style={{ color: 'var(--text-muted)' }}>Select a step to change what it does. Every message is drafted in the sender’s voice and waits on one card per step per day for their approval — nothing goes out by itself.</p>
                     <div className="grid gap-1">
                       <div>{validation?.ok ? <span style={{ color: 'var(--green)' }}>✓ Ready to run</span> : <span style={{ color: 'var(--red)' }}>{validation?.blockers.length ?? 0} thing(s) to fix before it can run</span>}</div>
@@ -234,7 +246,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center p-4" style={{ background: 'color-mix(in srgb, black 45%, transparent)' }}
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div role="dialog" aria-modal="true" aria-label={title} className="z-card w-full max-w-lg max-h-[85vh] overflow-y-auto p-5 grid gap-3" style={{ background: 'var(--bg-card)' }}>
+      <div role="dialog" aria-modal="true" aria-label={title} className="z-panel w-full max-w-lg max-h-[85vh] overflow-y-auto p-5 grid gap-3" style={{ background: 'var(--bg-card)' }}>
         <div className="flex items-center justify-between">
           <h2 className="font-bold">{title}</h2>
           <button type="button" aria-label="Close" onClick={onClose} className="text-lg leading-none" style={{ color: 'var(--text-muted)' }}>×</button>
@@ -267,8 +279,8 @@ function LaunchDialog({ check, status, busy, onClose, onGo }: { check: Check; st
         </p>
       )}
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onClose} className="text-sm px-4 py-2 rounded-full" style={{ border: '1px solid var(--border)' }}>Close</button>
-        {check.ok && <button type="button" onClick={onGo} disabled={busy !== null} className="z-btn text-sm">{busy ? 'Working…' : status === 'draft' ? 'Launch' : 'Resume'}</button>}
+        <Button onClick={onClose}>Close</Button>
+        {check.ok && <Button variant="primary" onClick={onGo} disabled={busy !== null}>{busy ? 'Working…' : status === 'draft' ? 'Launch' : 'Resume'}</Button>}
       </div>
     </Modal>
   );
@@ -337,7 +349,7 @@ function PeopleTab({ id }: { id: string }) {
       {people === null && !error ? <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</div> : people && people.length === 0 ? (
         <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Nobody here yet. People join when the campaign is live, at the hourly run.</div>
       ) : (
-        <div className="z-card overflow-x-auto" style={{ background: 'var(--bg-card)' }}>
+        <div className="z-panel overflow-x-auto" style={{ background: 'var(--bg-card)' }}>
           <table className="w-full text-sm">
             <thead><tr className="text-left text-xs" style={{ color: 'var(--text-muted)' }}>
               <th className="p-2">Person</th><th className="p-2">Step</th><th className="p-2">Status</th><th className="p-2">Why they wait / next</th><th className="p-2">Sender</th>
@@ -379,13 +391,13 @@ function ResultsTab({ results, draft }: { results: Results | null; draft: boolea
     <div className="p-4 grid gap-4 overflow-y-auto h-full content-start">
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         {[['In the campaign', t.enrolled], ['Still going', t.active], ['Sent', t.sent], ['Replied → handed off', t.handed_off], ['Finished', t.completed]].map(([k, v]) => (
-          <div key={String(k)} className="z-card p-3" style={{ background: 'var(--bg-card)' }}>
+          <div key={String(k)} className="z-panel p-3" style={{ background: 'var(--bg-card)' }}>
             <div className="text-xl font-bold tabular-nums">{v ?? 0}</div>
             <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{k}</div>
           </div>
         ))}
       </div>
-      <div className="z-card overflow-x-auto" style={{ background: 'var(--bg-card)' }}>
+      <div className="z-panel overflow-x-auto" style={{ background: 'var(--bg-card)' }}>
         <table className="w-full text-sm">
           <thead><tr className="text-left text-xs" style={{ color: 'var(--text-muted)' }}>
             <th className="p-2">Step</th><th className="p-2 text-right">Reached</th><th className="p-2 text-right">Here now</th>
@@ -440,27 +452,27 @@ function SettingsTab({ c, onSaved }: { c: Campaign; onSaved: () => Promise<void>
   return (
     <div className="p-4 overflow-y-auto h-full">
       <div className="max-w-2xl grid gap-4">
-        <label className="grid gap-1 text-sm"><span className="z-eyebrow">Name</span><input className="z-input" disabled={dis} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
-        <label className="grid gap-1 text-sm"><span className="z-eyebrow">Goal</span><input className="z-input" disabled={dis} value={f.goal} onChange={(e) => setF({ ...f, goal: e.target.value })} placeholder="What a good outcome is — steers the ask in every draft" /></label>
-        <label className="grid gap-1 text-sm"><span className="z-eyebrow">Who we target and the hook</span>
+        <label className="grid gap-1 text-sm"><span className="text-xs font-medium">Name</span><input className="z-input" disabled={dis} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
+        <label className="grid gap-1 text-sm"><span className="text-xs font-medium">Goal</span><input className="z-input" disabled={dis} value={f.goal} onChange={(e) => setF({ ...f, goal: e.target.value })} placeholder="What a good outcome is — steers the ask in every draft" /></label>
+        <label className="grid gap-1 text-sm"><span className="text-xs font-medium">Who we target and the hook</span>
           <textarea className="z-input" rows={3} disabled={dis} value={f.writing_context} onChange={(e) => setF({ ...f, writing_context: e.target.value })} placeholder="e.g. Owner-run plastics processors in NRW; we met many at Fakuma; their pain is quoting time." /></label>
         <div className="grid sm:grid-cols-2 gap-3">
-          <label className="grid gap-1 text-sm"><span className="z-eyebrow">Language</span>
+          <label className="grid gap-1 text-sm"><span className="text-xs font-medium">Language</span>
             <select className="z-input" disabled={dis} value={f.language} onChange={(e) => setF({ ...f, language: e.target.value })}>
               <option value="">decide per person</option><option value="de">German</option><option value="en">English</option>
             </select></label>
-          <label className="grid gap-1 text-sm"><span className="z-eyebrow">Product it pitches</span>
+          <label className="grid gap-1 text-sm"><span className="text-xs font-medium">Product it pitches</span>
             <select className="z-input" disabled={dis} value={f.product_id} onChange={(e) => setF({ ...f, product_id: e.target.value })}>
               <option value="">— the brand in general —</option>
               {opts?.products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select></label>
         </div>
-        <label className="grid gap-1 text-sm"><span className="z-eyebrow">Most drafts per step per sender per day</span>
+        <label className="grid gap-1 text-sm"><span className="text-xs font-medium">Most drafts per step per sender per day</span>
           <input type="number" min={1} max={100} className="z-input" style={{ width: 128 }} disabled={dis} value={f.daily_max_per_step} placeholder="25"
             onChange={(e) => setF({ ...f, daily_max_per_step: e.target.value ? Number(e.target.value) : '' })} />
           <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>The LinkedIn and email caps of each sender still apply on top.</span></label>
         <div className="grid gap-2 text-sm">
-          <span className="z-eyebrow">Lists</span>
+          <span className="text-xs font-medium">Lists</span>
           {!opts ? <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Loading…</span> : (
             <div className="grid gap-1 max-h-72 overflow-y-auto">
               {[...lists.filter((l) => !opts.icps.some((i) => i.id === l.icp_id) && !opts.sources.some((s) => s.source === l.source)),
@@ -477,7 +489,7 @@ function SettingsTab({ c, onSaved }: { c: Campaign; onSaved: () => Promise<void>
           {c.status !== 'draft' && <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Removing a list stops new people joining from it; people already in keep going.</span>}
         </div>
         {msg && <div className="text-sm" role={msg.ok ? undefined : 'alert'} style={{ color: msg.ok ? 'var(--green)' : 'var(--red)' }}>{msg.text}</div>}
-        {c.can_edit && <div><button type="button" className="z-btn text-sm" disabled={busy} onClick={saveAll}>{busy ? 'Saving…' : 'Save settings'}</button></div>}
+        {c.can_edit && <div><Button variant="primary" disabled={busy} onClick={saveAll}>{busy ? 'Saving…' : 'Save settings'}</Button></div>}
       </div>
     </div>
   );

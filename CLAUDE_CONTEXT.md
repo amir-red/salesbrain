@@ -2158,6 +2158,31 @@ credits/day, one tap per wave. Phases: 1 firms + research (this), 2 people at th
   - Not built: an email-only-to-firm-inbox lane (people with an email only), the bot persona's guidance for waves,
     service-MCP exposure of the wave tools, open/click tracking (deliberately none).
 
+### 5.bf Campaign wizard + /campaigns and /brand in the house style (2026-10-22, feat/campaign-wizard, no migration)
+
+Amir, after the first try: the dialog opened an EMPTY canvas with a red "sends nothing" error, there was no email /
+LinkedIn choice, and /campaigns + /brand looked unlike the other pages ("you copied Guhan; it is an inspiration").
+- **Wizard** `/campaigns/new` (`components/campaigns/CampaignWizard.tsx`, the ICP builder's shape): 1 what it is for
+  (name, goal, hook, language, product) · 2 who (lists + sales-lead sources with people / with email / on LinkedIn) ·
+  3 channel (Email only · LinkedIn only · LinkedIn first, then email) · 4 what we send (connection note + acceptance
+  wait, how many messages 1–4, days to wait for a reply after each, how the first and the follow-ups are written) ·
+  5 when they reply (hand to whom, note, drafts per step per day — default 10). Sticky right column: the sequence as
+  lines (`lib/campaigns.ts::describeSpec`), "Sent from" with each list owner's Gmail / LinkedIn state, what is still
+  missing, Create campaign. "Or draw it yourself on an empty canvas" stays as a link.
+- **Kernel** `policy/campaigns.py::normalize_spec` + `graph_from_spec` (pure, laid out top to bottom; every answer
+  combination validates — test matrix) and `create_campaign(spec=, daily_max_per_step=)`; the answers are kept in
+  `campaigns.settings.wizard` (`update_campaign` now MERGES settings). `launch_check` blocks an email-only campaign
+  when nobody who would send it has Gmail (it only warned before). The TS side only describes the plan; the graph is
+  built once, in Python.
+- **Canvas**: the campaign opens with "Your sequence is drawn from your answers…"; an empty canvas shows a neutral
+  how-to instead of the red error; a palette click attaches the new step to the selected step or the last open exit
+  ("then", a wait's "no / timed out", an If's "yes").
+- **House style**: shared `components/panel/PageHeader.tsx` (+ `Pill`) and `components/panel/Button.tsx`; `.z-panel`
+  in globals.css (the flat bordered 12px card of /icp). /campaigns, /campaigns/[id], /campaigns/cards/[id] and /brand
+  use them; z-btn pills and uppercase eyebrows are gone from those pages. Use PageHeader/Button for new pages.
+- Tested: 624 core / 347 ring tests, build; the wizard clicked through in Chrome (email-only VC example → drawn,
+  valid, "Ready to run"). Not tested live: nothing new is sent by this change.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

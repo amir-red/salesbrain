@@ -83,6 +83,22 @@ function StepNode({ data }: NodeProps) {
 
 const nodeTypes = { step: StepNode };
 
+/** Which exit a new step hangs from: "then", or a wait's "no / timed out" (the sequence goes on when nobody answers),
+ *  or an If's "yes". The selected step if it has one free, otherwise the lowest step on the canvas that does. */
+const EXIT_ORDER: Exit[] = ['next', 'timeout', 'yes', 'no'];
+function freeExit(g: Graph, n: GraphNode): Exit | null {
+  for (const h of EXIT_ORDER) {
+    if (HANDLES[n.type].includes(h) && !g.edges.some((e) => e.source === n.id && e.sourceHandle === h)) return h;
+  }
+  return null;
+}
+function attachPoint(g: Graph, selected: string | null): { node: GraphNode; exit: Exit } | null {
+  const sel = selected ? g.nodes.find((n) => n.id === selected) : null;
+  if (sel) { const exit = freeExit(g, sel); return exit ? { node: sel, exit } : null; }
+  const open = g.nodes.map((n) => ({ node: n, exit: freeExit(g, n) })).filter((x): x is { node: GraphNode; exit: Exit } => !!x.exit);
+  return open.sort((a, b) => (b.node.position?.y ?? 0) - (a.node.position?.y ?? 0))[0] ?? null;
+}
+
 function newId(g: Graph, t: NodeType): string {
   const base = t.replace('linkedin_', 'li_');
   let i = 1;
@@ -184,11 +200,9 @@ function Canvas({ graph, validation, editable, stats, selected, onSelect, onChan
     const id = newId(graph, t);
     const node: GraphNode = { id, type: t, config: defaultConfig(t), position };
     const edges = [...graph.edges];
-    // Added while a step with a free "then" exit is selected: wire it in below that step.
-    const from = selected ? graph.nodes.find((n) => n.id === selected) : null;
-    if (from && HANDLES[from.type].includes('next') && !edges.some((e) => e.source === from.id && e.sourceHandle === 'next')) {
-      edges.push({ id: `${from.id}-next-${id}`, source: from.id, sourceHandle: 'next', target: id });
-    }
+    // Wire it in: from the selected step, else from the lowest step that still has a free exit.
+    const from = attachPoint(graph, selected);
+    if (from) edges.push({ id: `${from.node.id}-${from.exit}-${id}`, source: from.node.id, sourceHandle: from.exit, target: id });
     onChange({ nodes: [...graph.nodes, node], edges });
     onSelect(id);
     // Bring the new step into view: it may land below the visible part of a long sequence.
@@ -196,7 +210,7 @@ function Canvas({ graph, validation, editable, stats, selected, onSelect, onChan
   }, [graph, onChange, onSelect, selected, rf]);
 
   const addBelow = (t: NodeType) => {
-    const from = selected ? graph.nodes.find((n) => n.id === selected) : null;
+    const from = attachPoint(graph, selected)?.node ?? null;
     const lowest = graph.nodes.reduce((m, n) => Math.max(m, n.position?.y ?? 0), 0);
     addAt(t, from ? { x: from.position.x, y: from.position.y + 140 } : { x: 260, y: lowest + 140 });
   };
@@ -213,7 +227,7 @@ function Canvas({ graph, validation, editable, stats, selected, onSelect, onChan
     <div className="flex h-full min-h-0">
       {editable && (
         <aside className="w-52 shrink-0 border-r p-3 grid grid-cols-[minmax(0,1fr)] content-start gap-1.5 overflow-y-auto" style={{ borderColor: 'var(--border)' }} aria-label="Steps you can add">
-          <div className="z-eyebrow mb-1">Add a step</div>
+          <div className="text-xs font-medium mb-1">Add a step</div>
           {PALETTE.map((p) => (
             <button key={p.type} type="button" draggable title={p.hint}
               onDragStart={(e) => { e.dataTransfer.setData('application/x-campaign-step', p.type); e.dataTransfer.effectAllowed = 'move'; }}
@@ -225,8 +239,8 @@ function Canvas({ graph, validation, editable, stats, selected, onSelect, onChan
             </button>
           ))}
           <p className="text-[11px] mt-2 leading-snug" style={{ color: 'var(--text-muted)' }}>
-            Drag onto the canvas, or click to add below the selected step. Draw a line from an exit dot to the next
-            step. Select a step or line and press Delete to remove it.
+            Click a step to add it after the selected one (or after the last open exit). You can also drag it onto the
+            canvas and draw a line from an exit dot. Select a step or a line and press Delete to remove it.
           </p>
         </aside>
       )}
