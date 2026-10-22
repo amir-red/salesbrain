@@ -8,8 +8,10 @@ import { kernelCall } from '@/lib/mcp/kernel-rpc';
  *   PATCH /api/campaigns/[id] { fields?, lists?, graph? }
  *         fields: name, goal, writing_context, language, product_id, settings{daily_max_per_step}
  *         graph:  the canvas autosave (draft_graph) — a live campaign keeps running on the published one
- *   POST  /api/campaigns/[id] { action }         check | launch | pause | resume | archive | discard | test
+ *   POST  /api/campaigns/[id] { action }         check | launch | pause | resume | archive | discard | test | preview | people
  *         test: { prospect_id?, choices? } walks one person through the graph; nothing is drafted or sent
+ *         preview: the same walk, with every message on the path drafted as the live campaign would (model calls,
+ *                  ~5–30 s; nothing filed or sent). people: who a test can use (in the campaign, or on its lists)
  * The kernel checks owner / admin on every write.
  */
 function fail(err: unknown, status = 400) {
@@ -41,6 +43,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 const ACTIONS: Record<string, string> = {
   check: 'campaign_launch_check', launch: 'campaign_launch', pause: 'crm_campaign_pause', resume: 'crm_campaign_resume',
   archive: 'campaign_archive', discard: 'campaign_discard_draft', test: 'campaign_test_run',
+  preview: 'campaign_preview', people: 'campaign_candidates',
 };
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
@@ -51,7 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const tool = ACTIONS[body.action ?? ''];
   if (!tool) return NextResponse.json({ error: `action must be one of ${Object.keys(ACTIONS).join(', ')}` }, { status: 400 });
   const args: Record<string, unknown> = { campaign_id: params.id };
-  if (body.action === 'test') {
+  if (body.action === 'test' || body.action === 'preview') {
     if (body.prospect_id) args.prospect_id = body.prospect_id;
     if (body.choices && typeof body.choices === 'object') args.choices = body.choices;
   }

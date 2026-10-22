@@ -1,8 +1,8 @@
 'use client';
 
 import {
-  BRANCH_FIELDS, BRANCH_OPS, END_REASONS, EVENTS, HANDOFF_TO, LABELS, MODES, NOTE_MODES, PLACEHOLDERS, nodeLabel,
-  type GraphNode,
+  BRANCH_FIELDS, BRANCH_OPS, END_REASONS, EVENTS, HANDOFF_TO, LABELS, MODES, NOTE_MODES, PLACEHOLDERS, nodeLabel, toTemplate,
+  type GraphNode, type Sample,
 } from '@/lib/campaigns';
 
 /**
@@ -12,7 +12,7 @@ import {
 interface Rule { field: string; op: string; value?: string | number }
 
 interface Props {
-  node: GraphNode; editable: boolean; blockers: string[]; warnings: string[];
+  node: GraphNode; editable: boolean; blockers: string[]; warnings: string[]; sample?: Sample; onTestRun?: () => void;
   onChange: (config: Record<string, unknown>) => void; onRemove: () => void;
 }
 
@@ -26,7 +26,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-export default function StepInspector({ node, editable, blockers, warnings, onChange, onRemove }: Props) {
+export default function StepInspector({ node, editable, blockers, warnings, sample, onTestRun, onChange, onRemove }: Props) {
   const c = node.config || {};
   const set = (patch: Record<string, unknown>) => onChange({ ...c, ...patch });
   const str = (k: string) => (typeof c[k] === 'string' ? (c[k] as string) : '');
@@ -107,6 +107,25 @@ export default function StepInspector({ node, editable, blockers, warnings, onCh
                 )}
               </Field>
             </>
+          )}
+          {mode !== 'fixed' && mode !== 'none' && (
+            sample ? (
+              <div className="grid gap-1.5 rounded-lg p-2.5" style={{ background: 'var(--bg-input)' }}>
+                <span className="text-xs font-medium">Sample for {sample.person?.full_name ?? 'the test person'}</span>
+                {sample.subject && <span className="text-xs"><span style={{ color: 'var(--text-muted)' }}>Subject:</span> {sample.subject}</span>}
+                <p className="text-sm whitespace-pre-wrap">{sample.text}</p>
+                {editable && (
+                  <button type="button" className="text-xs underline justify-self-start"
+                    onClick={() => onChange({ ...c, [modeKey]: 'fixed', text: toTemplate(sample.text, sample.person),
+                      ...(t === 'email' && sample.subject ? { subject: toTemplate(sample.subject, sample.person) } : {}) })}>
+                    Edit it and use it as this step’s text
+                  </button>
+                )}
+                <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Each person gets their own draft; this one is from the last Test run.</span>
+              </div>
+            ) : onTestRun ? (
+              <button type="button" className="text-xs underline justify-self-start" onClick={onTestRun}>See a draft of this message (Test run)</button>
+            ) : null
           )}
           <p className="text-[11px] leading-snug" style={{ color: 'var(--text-muted)' }}>
             {t === 'linkedin_connect' && 'Skipped for anyone already connected or with a request already pending. '}

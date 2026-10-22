@@ -275,3 +275,37 @@ export function specProblems(s: WizardSpec): string[] {
   }
   return p;
 }
+
+
+// ---------------------------------------------------------------- Test run drafts
+
+export interface PreviewDraft { text: string | null; subject: string | null; why: string; mode: string; type: NodeType }
+export interface PreviewPerson { full_name: string | null; company: string | null; title: string | null }
+export interface Sample { text: string; subject: string | null; person: PreviewPerson | null }
+
+function esc(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+/** A draft written for one person, turned back into a text for everyone: their name, company and title become
+ *  {full_name} / {first_name} / {company} / {title}, so "Use as this step's text" works for the whole list. */
+export function toTemplate(text: string, p: PreviewPerson | null): string {
+  if (!p) return text;
+  let out = text;
+  const swap = (value: string | null | undefined, ph: string) => {
+    const v = (value || '').trim();
+    if (v.length >= 2) out = out.replace(new RegExp(`(?<![\\w{])${esc(v)}(?![\\w}])`, 'g'), ph);
+  };
+  swap(p.full_name, '{full_name}');
+  swap(p.company, '{company}');
+  swap(p.title, '{title}');
+  swap((p.full_name || '').split(/\s+/)[0], '{first_name}');
+  return out;
+}
+
+/** What a message step says on the canvas: its own text when written by you, else the latest sample draft. */
+export function messageOf(n: Pick<GraphNode, 'type' | 'config'>, sample?: Sample): { text: string; sample: boolean } | null {
+  const c = n.config || {};
+  const mode = String(n.type === 'linkedin_connect' ? c.note_mode || 'none' : c.mode || 'auto');
+  if (mode === 'fixed' && typeof c.text === 'string' && c.text.trim()) return { text: c.text, sample: false };
+  if (sample?.text) return { text: sample.text, sample: true };
+  return null;
+}
