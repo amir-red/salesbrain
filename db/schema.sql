@@ -834,3 +834,18 @@ CREATE INDEX IF NOT EXISTS sales_leads_front_idx ON sales_leads (front_user_id, 
 ALTER TABLE sales_leads ADD COLUMN IF NOT EXISTS next_step TEXT CHECK (next_step IS NULL OR char_length(next_step) <= 200);
 -- Phone on the card (core 062): website / email / phone / LinkedIn are always shown and editable.
 ALTER TABLE sales_leads ADD COLUMN IF NOT EXISTS phone TEXT CHECK (phone IS NULL OR char_length(phone) <= 60);
+
+-- What SalesBrain has told Zeami about each won sales deal (core 074; lib/zeami-sync.ts, cron zeami-deal-sync).
+CREATE TABLE IF NOT EXISTS zeami_deal_sync (
+    deal_id          UUID PRIMARY KEY REFERENCES deals(id) ON DELETE CASCADE,
+    won_sent_at      TIMESTAMPTZ NULL,
+    rep_email        TEXT NULL,
+    seq              INT NOT NULL DEFAULT 0,
+    last_type        TEXT NULL,
+    last_event_id    TEXT NULL,
+    last_result      TEXT NULL,
+    last_error       TEXT NULL,
+    last_attempt_at  TIMESTAMPTZ NULL,
+    failures         INT NOT NULL DEFAULT 0,
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);

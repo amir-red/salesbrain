@@ -2053,6 +2053,37 @@ Enricher → Lead Conductor → Attention / Supervisor / Learn / Knowledge revie
 - Not built yet: per-agent `/agents` link to its Workspace card, the remaining agents, deleting the paused main-profile jobs (after
   2026-10-27), cost per agent report (feature = cron job name in `llm_usage`).
 
+### 5.bb Zeami handover — sales rep on deals + client setup status (2026-10-21, feat/zeami-onboarding, migration 074)
+
+Zeami's platform console now gives every client a sales person and a project manager (+ optional backups). Their
+handover (matebackend `docs/Api_integrations/SALESBRAIN_ONBOARDING_API.md`) asked for four parts; all four are built.
+- **Sales rep rule** (`lib/zeami.ts::SALES_REP_JOIN`): the deal's assigned person (`lead_id`), else the creator;
+  never a `…@<app>.service.salesbrain` stub or `agent@salesbrain.internal`. Sales deals only.
+- **Part 1**: `GET /api/public/deals/[id]` returns `sales_rep {name, email}` or null (Zeami's wizard reads it; our
+  `ONBOARDING_API_KEY`).
+- **Part 2**: `lib/zeami-sync.ts::syncZeamiDealEvents` compares every won sales deal (G9 or status won) with
+  `zeami_deal_sync` (core 074) and posts `deal.won` once, then `deal.sales_rep_changed` when the rep differs. One
+  sweep covers every writer of gate / lead_id (app, kernel, agent, SQL), no hooks. event_id
+  `sb:<deal>:<seq>:<type>:<rep>` (stable across retries; A→B→A stays distinct). Any 200 = told (including
+  `no_company_for_deal`: part 1 covers the wizard later); 401/503/not configured stop the run; other failures retry next
+  run; a 4xx rejection waits for the deal to change. Run by Hermes cron **`zeami-deal-sync`** (hourly :25,
+  `--no-agent`, `assets/scripts/zeami_deal_sync.py`) through the signed bridge (tool `zeami_deal_sync`, admin/service
+  only); stdout only when something was sent or Zeami refused our key. Dry run: `python zeami_deal_sync.py --dry-run`.
+- **Parts 3 + 4**: `components/ZeamiOnboardingPanel.tsx` on `/deals/[id]` (sales) ← `GET /api/deals/[id]/zeami`
+  (asks Zeami live on open; states found / not_onboarded / unavailable; renders Zeami's stage labels as given; footer =
+  what we last told Zeami) and `PUT /api/deals/[id]/zeami/support-group` (creator / assigned person / admin; https only;
+  409 = already set, changed in the Zeami console).
+- **Env** (app only): `ZEAMI_API_URL` (base, without `/api/platform/v1`) + `ZEAMI_API_KEY` (= Zeami's
+  `SALESBRAIN_INBOUND_API_KEY`); in deploy.yml, GitHub secrets to be set. Without them nothing is called.
+- Tested against a local mock of Zeami's API (new table in a scratch schema, dropped after): part 1 on Kabana, the sweep
+  (dry run, send, silent rerun, rep change, Zeami down), panel routes (no session 401, view-only, 404 → not onboarded,
+  non-owner 403, http link 422, add, 409). Not tested: the real Zeami API, the panel in a browser.
+- **LIVE 2026-10-22 (0.60.0)**: 074 applied, app on Production (run 39792603699), ring deployed (cron `zeami-deal-sync`
+  created; its first :25 tick ran during the deploy). `ZEAMI_API_URL` = `https://app.zeami.io`, key accepted (404, not 401/503).
+  Both won sales deals were told `deal.won`: Kabana (mateo@zeami.io) and ChipChip Pilot (amir@chipchip.social), both
+  `no_company_for_deal` — no client is set up in Zeami for either yet, so their panels say "Not onboarded yet". Part 1 verified
+  live (Kabana → Mateo Klemmayer). Not yet seen live: a found status, a support group added, a `sales_rep_changed`.
+
 ### 5.bc Firm outreach — firms on a list, investor research (2026-10-21, feat/firm-outreach, migration 075, phase 1 of 3)
 
 Amir: "research the companies, know what they invest in, find their contact email, find the persons, mass outreach" —
@@ -2349,6 +2380,8 @@ HERMES_API_URL=http://127.0.0.1:8642
 HERMES_API_KEY=...
 HERMES_VENV_PYTHON=/usr/local/lib/hermes-agent/venv/bin/python   # kernelCall subprocess interpreter
 BRIDGE_SECRET=...              # >=32 chars; the ring signs calls to /api/internal/bridge with it (same value in /root/.hermes/.env + profiles/crm/.env + GitHub secret)
+ZEAMI_API_URL=...              # Zeami platform API base (client setup status, deal events), e.g. https://api.zeami.io
+ZEAMI_API_KEY=...              # = Zeami's SALESBRAIN_INBOUND_API_KEY (different from ONBOARDING_API_KEY)
 GEMINI_API_KEY=...             # DEFAULT model (Gemini) for the app AND every Hermes profile .env; GitHub secret + /root/.hermes/.env
 AWS_BEARER_TOKEN_BEDROCK=...   # shared with Hermes; the FALLBACK model (Claude on Bedrock)
 

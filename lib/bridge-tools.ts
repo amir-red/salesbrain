@@ -13,6 +13,7 @@ import { buildExport, cleanArgs } from '@/lib/export/build';
 import { EXPORT_KINDS, exportUrl, signExport, type ExportKind } from '@/lib/export/sign';
 import { listUserTokens, revokeToken } from '@/lib/mcp/tokens';
 import { sendTelegram } from '@/lib/tg-notify';
+import { syncZeamiDealEvents } from '@/lib/zeami-sync';
 import { readThreads, sendGmail } from '@/lib/gmail-send';
 
 export interface Who { userId: string; role: string }
@@ -70,6 +71,13 @@ async function mcpTokens(who: Who, args: Args) {
            note: 'Creating a token is done on Profile → MCP: its secret is shown once and must not pass through a chat.' };
 }
 
+/** The `zeami-deal-sync` cron job: tell Zeami about won sales deals and sales-rep changes (lib/zeami-sync.ts).
+ *  Org-wide, so admins (and the service user the job runs as) only. */
+async function zeamiDealSync(who: Who, args: Args) {
+  if (who.role !== 'admin') return { error: 'Only an administrator can run the Zeami deal sync.' };
+  return { ...(await syncZeamiDealEvents({ dryRun: Boolean(args.dry_run) })) };
+}
+
 // Email waves (core 076): the ring's outbox has already passed the kernel send gate for this email; this only delivers
 // it from the person's own Gmail. The person is the bridge actor, so nobody can send from someone else's mailbox.
 async function gmailSendTool(who: Who, args: Args) {
@@ -90,6 +98,7 @@ const TOOLS: Record<string, (who: Who, args: Args) => Promise<Record<string, unk
   import_contacts: importContacts,
   export: exportFile,
   mcp_tokens: mcpTokens,
+  zeami_deal_sync: zeamiDealSync,
   gmail_send: gmailSendTool,
   gmail_threads: gmailThreadsTool,
 };
