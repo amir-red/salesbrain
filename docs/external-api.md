@@ -568,6 +568,16 @@ X-API-Key: <ONBOARDING_API_KEY>
 
 `<deal_id>` is the UUID from `deals.id`.
 
+`sales_rep` (added 2026-10-21 for Zeami's setup wizard): the deal's assigned person (`deals.lead_id`), else its
+creator, as name + email only. Partner-app stub accounts and the agent's service user are never returned. Zeami
+matches the email (case-insensitive) to one of its users. When no one can be matched, the field is `null` and the
+operator picks someone by hand.
+
+SalesBrain also calls Zeami in the other direction, with a separate key (`ZEAMI_API_KEY` here = Zeami's
+`SALESBRAIN_INBOUND_API_KEY`): it reads the client's setup status and adds the support group from the deal page,
+and the hourly `zeami-deal-sync` job posts `deal.won` / `deal.sales_rep_changed` events. Zeami's spec of record:
+matebackend `docs/Api_integrations/SALESBRAIN_ONBOARDING_API.md`.
+
 ### Response (`200 OK`)
 
 ```json
@@ -597,6 +607,10 @@ X-API-Key: <ONBOARDING_API_KEY>
     "email": "bruk@chipchip.social",
     "phone": null,
     "title": "CEO"
+  },
+  "sales_rep": {                                   // who sells this deal; null when nobody Zeami could match
+    "name":  "Mateo Klemmayer",
+    "email": "mateo@zeami.io"
   },
   "insights": {
     "industry":         "Tech",

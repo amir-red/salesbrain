@@ -9,6 +9,7 @@ import DealPricingPanel from '@/components/DealPricingPanel';
 import MarkAsLostModal from '@/components/MarkAsLostModal';
 import GrantStage2Panels from '@/components/GrantStage2Panels';
 import AiCreditPanel from '@/components/AiCreditPanel';
+import ZeamiOnboardingPanel from '@/components/ZeamiOnboardingPanel';
 import { getPipeline, SALES_GATES } from '@/lib/gates';
 
 interface Deal {
@@ -472,6 +473,13 @@ export default function DealViewPage() {
                   </span>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Client setup in the Zeami platform (sales deals only) — asked live from Zeami on open. */}
+          {deal.deal_type === 'sales' && (
+            <div className="mb-6">
+              <ZeamiOnboardingPanel dealId={deal.id} />
             </div>
           )}
 
