@@ -2211,6 +2211,9 @@ to the theme script), the supplied H12 wordmark (`components/ZeamiLogo.tsx`, `Ze
 
 ### 5.bd Brand & Voice, and learning from every correction (2026-10-21, feat/brand-voice, migration 079)
 
+**LIVE 2026-10-21 20:25 Addis (0.58.0)**: 079 applied, ring deployed (crm_brand on telegram, api_server, cron; smoke OK), app on Production.
+**One brand (2026-10-21, Amir: "we don't need ChipChip")**: migration 080 removed the seeded chipchip row (applied); every list writes under Zeami.
+
 Amir, after the Guhan teardown (`docs/research/04-guhan-competitor-map.md`): "build the voice — how we intend to interact —
 and whenever we correct it, learn from it." Decisions: (1) a learned rule lands in the writer's OWN voice and is live at once,
 no admin approval (sharing with the team is live too; anyone can archive their own, admins anything); (2) every draft is rated
@@ -2258,6 +2261,65 @@ Plan: `~/.claude/plans/brand-voice-learning.md`.
 - Not built: per-product fit rating in the research brief, a template picker on message steps (templates are listed and
   editable; the ICP first-message template stays as it was), the weekly tidy of rules (the retired learn routine was not
   revived — rules are deduped and superseded at write time), email-wave drafts stay template-only (edits are captured).
+
+### 5.be Campaigns — sequences on a canvas, one approval card per step (2026-10-22, feat/campaigns, migration 081)
+
+Amir, from a Guhan video: "brainstorm /campaign". Decisions: (1) a campaign is SEPARATE from the lists it includes;
+(2) one approval card per step = per (campaign, step, sender, day); (3) the Lead Conductor runs campaigns and leaves
+enrolled people alone; (4) a free canvas; (5) LinkedIn + email in the first version. Plan `~/.claude/plans/campaigns.md`.
+- **Core 081**: the legacy `campaigns` table (0 rows, unread) gains owner, status draft|live|paused|done|archived,
+  product, goal, writing_context, language, `graph` (published) + `draft_graph` (edits), graph_version, settings
+  {daily_max_per_step}; `campaign_lists` (icp list XOR /sales-leads source, include); `campaign_enrollments` (one ACTIVE
+  or paused per prospect across all campaigns, once per campaign; node_id, due_at, approval_id, blocked_reason, path,
+  exit_reason); `campaign_cards` (one pending per campaign+node+sender+Addis day; expires 30 h);
+  `outreach_approvals.campaign_id / _node_id / _enrollment_id / _card_id`; policy `agents.campaigns`
+  {enabled, per_card_max 25, card_ttl_hours 30, recheck_minutes 60, retry_hours 24}.
+- **Graph** (`policy/campaigns.py`, pure; mirrored in `lib/campaigns.ts` — change both): nodes start, linkedin_connect,
+  linkedin_message, email, wait, wait_for (accepted | replied | linkedin_replied | email_replied, exits yes/timeout),
+  branch (rules on has_email, connected, fit_score, title, … — unknown is never yes; exits yes/no), handoff
+  (back office | front office | sender), end. Message modes auto | guided (instructions) | fixed (text with
+  {first_name} {full_name} {company} {title}; a missing value HOLDS the person, never a gap). `validate` blocks
+  launches (one Start, every exit wired, wait_for needs a cause upstream, no loops, first email needs a subject, …).
+  `default_graph` = today's conductor path (connect → acceptance 21 d → first message → 3 follow-ups 4/7/10 d, any reply
+  → back office; not accepted → email if we have one).
+- **Kernel** `commands/campaigns.py`: create (draft, default or blank graph; the list's first-message template becomes
+  the first message), update, save_draft_graph (autosave; a draft equal to the live graph is dropped), launch_check /
+  launch / pause / resume (= publish edits) / archive, `campaign_tick` (enroll from the lists; walk each DUE person or
+  anyone with a reply since joining; a reply anywhere hands off unless they sit on a wait-for-reply; returns `to_draft`
+  + hand-off events), `file_step_draft` (proposes through the normal lanes — propose_connect / propose_first_message /
+  propose_outreach — and puts the approval on the day's card; email drafts get sender_address + thread), card,
+  card_text, decide_card (ONLY the sender; skip = drafts expire, people redrafted in 20 h), claim_card (approved →
+  sending, once), cards_to_send, drop_draft, people, results, test_run, cards_waiting.
+  `mark_approval_result` wakes the enrollment so a sent step moves on at the next tick.
+- **Safety lives in the send gate**: `outreach.send_gate` → `campaigns.send_allowed` refuses a campaign draft once the
+  campaign is paused/archived, the person left it or replied (`permanent`, approval not consumed). An approved campaign
+  card = `ask_approved` (the human decision), like an approved wave. Gmail: `waves.outbox` sends approved campaign
+  emails within each sender's cap and marks the card sending/done; threads/replies as waves. The Lead Conductor shows
+  "Campaign “X”: <step>" on enrolled leads and takes no action of its own; `outreach_queue` / `followup_queue` skip them.
+- **Ring**: `campaign_runner.py` (called from `assets/scripts/lead_conductor.py` every hour after the conductor's tick):
+  sends LinkedIn cards approved on the web since the last run, ticks, drafts each due step in the sender's voice (fixed
+  text as is; guided/auto through `converse(json_mode)` + the writing context; a rule-breaking draft is dropped and
+  retried next tick), files it, posts or EDITS the one Telegram card (`cg:<card>:approve|skip` + Review). A Telegram
+  Approve all sends LinkedIn drafts in a gateway thread one every 8–16 s through `outreach_agent.handle_decision`, the
+  card turning into a progress bar; the app's one-shot RPC cannot wait minutes, so a WEB approval leaves the card
+  `approved` and the hourly run sends it. Tools (crm_outreach): `crm_campaigns_list`, `crm_campaign_get`,
+  `crm_campaign_results`, `crm_campaign_people`, `crm_campaign_cards`, `crm_campaign_pause`, `crm_campaign_resume` and
+  `crm_campaign_card_decide` (both withheld from MCP). App-only RPCs `campaign_*` (create, update, save_graph,
+  discard_draft, launch_check, launch, archive, test_run, card, draft_drop). Persona + knowledge entries "Campaign" and
+  "Message: Campaign card".
+- **App**: `/campaigns` (list + New campaign: lists, sources, product, goal, usual path or blank), `/campaigns/[id]`
+  (Sequence = `components/campaigns/SequenceCanvas.tsx` on `@xyflow/react` 12.11.6 + `StepInspector.tsx`; People;
+  Results; Settings; Test run; Check & launch / Pause / Publish & resume / Discard edits / Archive),
+  `/campaigns/cards/[id]` (edit via `/api/drafts/[id]`, drop, Approve all / Skip). Routes `/api/campaigns`, `/[id]`
+  (GET, PATCH fields|lists|graph, POST action), `/[id]/people`, `/[id]/results`, `/cards/[id]`, `/options`.
+  Gotchas found in the browser: a controlled React Flow must feed `dimensions` changes back or the minimap is blank;
+  the canvas follows `<html class="dark">`, not the OS; SVG fills cannot read CSS variables.
+- **Rollout** (integration session): apply 081; deploy ring + app; `python -m salesbrain_core.store.seed_default_campaigns`
+  (dry run) then `--apply --owner <email>` gives every conductor-scoped list a DRAFT default campaign — nothing changes
+  until someone launches one. Tested: 33 campaign tests (8 on a real Postgres), the runner end to end on a scratch DB,
+  the canvas clicked through in Chrome. NOT tested: a real Telegram card, a real LinkedIn/Gmail send.
+- Not built: A/B variants per step, per-step send windows, sending to a teammate's card for someone else's lead, a
+  campaign view on the lead card, re-entering a finished campaign.
 
 ## 6. Env vars
 

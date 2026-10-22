@@ -1,51 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
-import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { kernelCall } from '@/lib/mcp/kernel-rpc';
 
-const CreateCampaignSchema = z.object({
-  name: z.string().min(1).max(255),
-  description: z.string().optional(),
-  deal_type: z.enum(['sales', 'grant', 'ai_credit']).default('sales'),
-  persona_target: z.string().optional(),
-  segment_definition: z.string().optional(),
-  positioning_angle: z.string().optional(),
-});
+/**
+ * Campaigns (core 081) — org-wide list, like /pipeline.
+ *   GET  /api/campaigns?archived=1        every campaign with its lists and live counts
+ *   POST /api/campaigns { name, lists: [{icp_id}|{source}], product_id?, goal?, writing_context?, language?,
+ *                         start_from: 'default'|'blank' }      a new DRAFT, owned by the caller
+ */
+function fail(err: unknown, status = 400) {
+  return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status });
+}
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const { rows } = await pool.query(
-    `SELECT c.*, u.name as created_by_name,
-       (SELECT COUNT(*)::int FROM prospects WHERE campaign_id = c.id) as prospect_count,
-       (SELECT COUNT(*)::int FROM outreach_approvals oa
-          JOIN prospects p ON p.id = oa.prospect_id
-          WHERE p.campaign_id = c.id AND oa.status = 'sent') as messages_sent
-     FROM campaigns c
-     LEFT JOIN users u ON u.id = c.created_by
-     ORDER BY c.updated_at DESC`
-  );
-  return NextResponse.json(rows);
+  const archived = req.nextUrl.searchParams.get('archived') === '1';
+  try { return NextResponse.json(await kernelCall('crm_campaigns_list', { include_archived: archived }, session.userId)); }
+  catch (err) { return fail(err, 502); }
 }
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  let body: unknown;
-  try { body = await req.json(); } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
-  }
-  const parsed = CreateCampaignSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: 'Validation failed', details: parsed.error.issues }, { status: 400 });
-  }
-  const d = parsed.data;
-  const { rows } = await pool.query(
-    `INSERT INTO campaigns (name, description, deal_type, persona_target, segment_definition, positioning_angle, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-    [d.name, d.description || null, d.deal_type, d.persona_target || null, d.segment_definition || null, d.positioning_angle || null, session.userId]
-  );
-  return NextResponse.json(rows[0], { status: 201 });
+  let body: Record<string, unknown> = {};
+  try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
+  const name = String(body.name ?? '').trim();
+  if (!name) return NextResponse.json({ error: 'A campaign needs a name' }, { status: 400 });
+  const lists = Array.isArray(body.lists) ? body.lists.slice(0, 20) : [];
+  try {
+    return NextResponse.json(await kernelCall('campaign_create', {
+      name: name.slice(0, 120), lists,
+      product_id: body.product_id || null, goal: body.goal || null, writing_context: body.writing_context || null,
+      language: body.language || null, start_from: body.start_from === 'blank' ? 'blank' : 'default',
+    }, session.userId), { status: 201 });
+  } catch (err) { return fail(err); }
 }
