@@ -65,6 +65,8 @@ export async function fetchRingCatalog(): Promise<RingToolDef[]> {
 // timer isn't subprocess-bounded; these app/MCP-driven calls are, so give them
 // real headroom or they get SIGKILLed mid-research (run left stuck 'running').
 const LONG_RUNNING_TOOLS = new Set<string>([
+  // A Gmail push: reads every open thread of one mailbox (one Gmail call each) and records what came back.
+  'email_replies_check',
   // Campaign Test run that writes: one model draft per message on the path (up to ~8).
   'campaign_preview',
   'crm_leads_finder_run',
