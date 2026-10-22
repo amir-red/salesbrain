@@ -7,6 +7,7 @@ import {
   type Connection, type Edge, type Node, type NodeChange, type EdgeChange, type NodeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import FillableText from '@/components/campaigns/FillableText';
 import {
   HANDLES, HANDLE_LABELS, LABELS, PALETTE, defaultConfig, messageOf, nodeLabel, nodeSummary,
   type Graph, type Sample, type GraphNode, type Handle as Exit, type NodeType, type Validation,
@@ -64,7 +65,7 @@ function StepNode({ data }: NodeProps) {
             <div className="text-[11px] leading-snug rounded-md px-2 py-1 mt-0.5 whitespace-pre-line"
               style={{ background: 'var(--bg-input)', color: 'var(--text)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
               title={m.text}>
-              {m.sample && <span className="font-medium" style={{ color: 'var(--text-muted)' }}>sample · </span>}{m.text}
+              {m.sample && <span className="font-medium" style={{ color: 'var(--text-muted)' }}>sample · </span>}<FillableText text={m.text} />
             </div>
           ) : null;
         })()}

@@ -306,6 +306,20 @@ export function messageOf(n: Pick<GraphNode, 'type' | 'config'>, sample?: Sample
   const c = n.config || {};
   const mode = String(n.type === 'linkedin_connect' ? c.note_mode || 'none' : c.mode || 'auto');
   if (mode === 'fixed' && typeof c.text === 'string' && c.text.trim()) return { text: c.text, sample: false };
-  if (sample?.text) return { text: sample.text, sample: true };
+  // A sample was written for one person; the canvas speaks for everyone, so show it with the fillable fields.
+  if (sample?.text) return { text: toTemplate(sample.text, sample.person), sample: true };
   return null;
+}
+
+/** Split a message into plain text and {placeholder} parts, so the fillable fields can be shown as such. */
+export function fillableParts(text: string): { text: string; field?: string; known?: boolean }[] {
+  const out: { text: string; field?: string; known?: boolean }[] = [];
+  let last = 0;
+  for (const m of text.matchAll(/\{(\w+)\}/g)) {
+    if (m.index! > last) out.push({ text: text.slice(last, m.index) });
+    out.push({ text: m[0], field: m[1], known: PLACEHOLDERS.includes(m[1]) });
+    last = m.index! + m[0].length;
+  }
+  if (last < text.length) out.push({ text: text.slice(last) });
+  return out;
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import FillableText from '@/components/campaigns/FillableText';
 import {
   BRANCH_FIELDS, BRANCH_OPS, END_REASONS, EVENTS, HANDOFF_TO, LABELS, MODES, NOTE_MODES, PLACEHOLDERS, nodeLabel, toTemplate,
   type GraphNode, type Sample,
@@ -111,9 +112,9 @@ export default function StepInspector({ node, editable, blockers, warnings, samp
           {mode !== 'fixed' && mode !== 'none' && (
             sample ? (
               <div className="grid gap-1.5 rounded-lg p-2.5" style={{ background: 'var(--bg-input)' }}>
-                <span className="text-xs font-medium">Sample for {sample.person?.full_name ?? 'the test person'}</span>
-                {sample.subject && <span className="text-xs"><span style={{ color: 'var(--text-muted)' }}>Subject:</span> {sample.subject}</span>}
-                <p className="text-sm whitespace-pre-wrap">{sample.text}</p>
+                <span className="text-xs font-medium">Sample from the last Test run</span>
+                {sample.subject && <span className="text-xs"><span style={{ color: 'var(--text-muted)' }}>Subject:</span> <FillableText text={toTemplate(sample.subject, sample.person)} /></span>}
+                <p className="text-sm whitespace-pre-wrap"><FillableText text={toTemplate(sample.text, sample.person)} /></p>
                 {editable && (
                   <button type="button" className="text-xs underline justify-self-start"
                     onClick={() => onChange({ ...c, [modeKey]: 'fixed', text: toTemplate(sample.text, sample.person),
@@ -121,7 +122,7 @@ export default function StepInspector({ node, editable, blockers, warnings, samp
                     Edit it and use it as this step’s text
                   </button>
                 )}
-                <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Each person gets their own draft; this one is from the last Test run.</span>
+                <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Written for {sample.person?.full_name ?? 'the test person'}; the highlighted fields are filled in for each person. With “Write it for me” each person still gets their own draft.</span>
               </div>
             ) : onTestRun ? (
               <button type="button" className="text-xs underline justify-self-start" onClick={onTestRun}>See a draft of this message (Test run)</button>
