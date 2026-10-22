@@ -2236,6 +2236,13 @@ Plan: `~/.claude/plans/brand-voice-learning.md`.
 
 ### 5.be Campaigns — sequences on a canvas, one approval card per step (2026-10-22, feat/campaigns, migration 081)
 
+**LIVE 2026-10-22 (0.59.0)**: 081 applied, ring deployed (smoke 0.59.0, one gateway), app on Production (run 39785750255).
+Five DRAFT default campaigns seeded (Fakuma 2026, PEI Napa 2026, NRW Kunststoff-Netzwerk (Matthias), LinkedIn ·
+nrw matthias, LinkedIn · outreach); none launched, nobody enrolled. Deploy note: the network path from Amir's Mac to
+the box dropped about half of NEW connections that day (site and SSH alike; the box itself was healthy), so
+`deploy-server.sh` was run through ONE persistent SSH connection (ControlMaster wrappers on PATH; the ControlPath must
+be under 104 characters, e.g. ~/.ssh/sbcm-%C).
+
 Amir, from a Guhan video: "brainstorm /campaign". Decisions: (1) a campaign is SEPARATE from the lists it includes;
 (2) one approval card per step = per (campaign, step, sender, day); (3) the Lead Conductor runs campaigns and leaves
 enrolled people alone; (4) a free canvas; (5) LinkedIn + email in the first version. Plan `~/.claude/plans/campaigns.md`.
