@@ -2240,6 +2240,8 @@ the same day SalesBrain moved to a NEW Google Cloud project under the heyyazz.co
 
 ### 5.bh Test run writes the real drafts; messages on the canvas; campaign emails signed (2026-10-22, feat/campaign-preview)
 
+**LIVE 2026-10-22 (0.62.0)**: ring deployed (smoke 0.62.0, one gateway), app on Production (run 39813504481).
+
 Amir: "what does the test run do? show the drafted message in the test run and on the canvas, and make it editable."
 - **Test run** (campaign page): pick who — the sample person or anyone in the campaign / on its lists
   (`campaigns.candidates`); the path is instant; **Write the drafts** = app-only RPC `campaign_preview` (180 s class in
