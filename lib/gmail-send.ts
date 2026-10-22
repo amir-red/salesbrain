@@ -49,9 +49,9 @@ async function sender(userId: string) {
 export async function sendGmail(userId: string, msg: { to: string; subject: string; body: string; threadId?: string | null; inReplyTo?: string | null }):
   Promise<{ message_id: string; thread_id: string; rfc_id: string | null } | { error: string }> {
   const s = await sender(userId);
-  if (!s) return { error: 'No sending mailbox connected (Profile → Email).' };
-  const tok = await getValidAccessToken(userId, 'gmail_send');
-  if (!tok) return { error: 'The sending mailbox is not connected or its permission was revoked (401). Reconnect on Profile → Email.' };
+  if (!s) return { error: 'Google is not connected for sending (Profile → Google, allow sending email).' };
+  const tok = await getValidAccessToken(userId);
+  if (!tok) return { error: 'The Google connection stopped working (permission revoked or expired). Reconnect on Profile → Google.' };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(msg.to)) return { error: `not an email address: ${msg.to}` };
   const raw = b64url(buildMime({ from: s.address, fromName: s.display_name, to: msg.to, subject: msg.subject, body: msg.body, inReplyTo: msg.inReplyTo }));
   const res = await fetch(`${GMAIL}/messages/send`, {
@@ -84,8 +84,8 @@ export interface ThreadMessage { id: string; from: string; subject: string; snip
 
 /** The messages of the given threads (metadata + snippet only), marked whether this mailbox sent them. */
 export async function readThreads(userId: string, threadIds: string[]): Promise<{ threads: { thread_id: string; messages: ThreadMessage[] }[] } | { error: string }> {
-  const tok = await getValidAccessToken(userId, 'gmail_send');
-  if (!tok) return { error: 'The sending mailbox is not connected or its permission was revoked (401).' };
+  const tok = await getValidAccessToken(userId);
+  if (!tok) return { error: 'The Google connection stopped working (permission revoked or expired). Reconnect on Profile → Google.' };
   const s = await sender(userId);
   const me = (s?.address || tok.email || '').toLowerCase();
   const out: { thread_id: string; messages: ThreadMessage[] }[] = [];

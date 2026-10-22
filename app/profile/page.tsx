@@ -7,19 +7,19 @@ import TelegramPanel from '@/components/profile/TelegramPanel';
 import MemoryPanel from '@/components/profile/MemoryPanel';
 import LinkedInPanel from '@/components/profile/LinkedInPanel';
 import ImportsPanel from '@/components/profile/ImportsPanel';
-import EmailSendingPanel from '@/components/profile/EmailSendingPanel';
+import GooglePanel from '@/components/profile/GooglePanel';
 import McpPanel from '@/components/profile/McpPanel';
 import ServiceTokenPanel from '@/components/profile/ServiceTokenPanel';
 
-type Tab = 'account' | 'memory' | 'telegram' | 'linkedin' | 'email' | 'imports' | 'mcp' | 'service';
+type Tab = 'account' | 'memory' | 'telegram' | 'linkedin' | 'google' | 'imports' | 'mcp' | 'service';
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: 'account', label: 'Account', hint: 'Who you are signed in as' },
   { id: 'memory', label: 'Memory', hint: 'What the agents remember about you' },
   { id: 'telegram', label: 'Telegram', hint: 'Chat with the assistant' },
   { id: 'linkedin', label: 'LinkedIn', hint: 'Inbox triage and follow-ups' },
-  { id: 'email', label: 'Email', hint: 'Send email waves from your Gmail' },
-  { id: 'imports', label: 'Imports', hint: 'Google, contacts, messages' },
+  { id: 'google', label: 'Google', hint: 'Contacts, Gmail sync and sending email' },
+  { id: 'imports', label: 'Imports', hint: 'LinkedIn contacts, pasted messages' },
   { id: 'mcp', label: 'MCP', hint: 'Access tokens for Claude and other tools' },
   { id: 'service', label: 'Service API', hint: 'Admin: tokens for a sibling app to run outreach' },
 ];
@@ -38,7 +38,9 @@ export default function ProfilePage() {
 function Profile() {
   const params = useSearchParams();
   const router = useRouter();
-  const initial = (params.get('tab') as Tab) || 'account';
+  // ?tab=email (the separate sending connection, 0.57–0.60) is part of Google now.
+  const asked = params.get('tab') === 'email' ? 'google' : params.get('tab');
+  const initial = (asked as Tab) || 'account';
   const [tab, setTab] = useState<Tab>(TABS.some((t) => t.id === initial) ? initial : 'account');
   const [me, setMe] = useState<Me | null>(null);
 
@@ -140,7 +142,7 @@ function Profile() {
         {tab === 'memory' && <MemoryPanel />}
         {tab === 'telegram' && <TelegramPanel />}
         {tab === 'linkedin' && <LinkedInPanel />}
-        {tab === 'email' && <EmailSendingPanel />}
+        {tab === 'google' && <GooglePanel />}
         {tab === 'imports' && <ImportsPanel />}
         {tab === 'mcp' && <McpPanel />}
         {tab === 'service' && me?.role === 'admin' && <ServiceTokenPanel />}

@@ -17,7 +17,7 @@ export function AiBadge() {
 
 export function Section({ title, help, children, aside }: { title: string; help?: ReactNode; children: ReactNode; aside?: ReactNode }) {
   return (
-    <section className="z-card p-4 space-y-3">
+    <section className="z-panel p-4 space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-0.5 min-w-0">
           <h2 className="text-sm font-semibold">{title}</h2>
@@ -46,7 +46,7 @@ export function TextTile({ label, help, value, placeholder, multiline = true, ai
     if (e) setErr(e); else setEditing(false);
   };
   return (
-    <div className="z-card p-4 space-y-2">
+    <div className="z-panel p-4 space-y-2">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2"><h3 className="text-sm font-semibold">{label}</h3>{aiDrafted && <AiBadge />}</div>
         {!editing && <button onClick={() => { setDraft(value ?? ''); setEditing(true); }} className="text-xs underline" style={{ color: 'var(--text-muted)' }}>Edit</button>}

@@ -119,6 +119,13 @@ table, .tabular {
   border-radius: 1rem;
   box-shadow: var(--shadow-card);
 }
+/* The main pages' card (/icp, /agents, /pipeline): flat, bordered, 12px. Prefer it inside app pages; z-card is the
+   softer marketing-style card. */
+.z-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
 .z-input {
   width: 100%;
   padding: 0.625rem 0.875rem;

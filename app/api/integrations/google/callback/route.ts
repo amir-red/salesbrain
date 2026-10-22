@@ -9,7 +9,7 @@ import { sendTelegram } from '@/lib/tg-notify';
 
 /**
  * Google OAuth callback. Two ways in, one verified `state`:
- *  - the browser (Profile → Imports): the cookie session must be the user named in the state;
+ *  - the browser (Profile → Google): the cookie session must be the user named in the state;
  *  - a link the Telegram bot gave out (`state.t` names an open row in connect_tokens): there is no browser
  *    session on a phone, the signed state + the still-open token are the proof, and the result is reported
  *    back in the chat (then the person's contacts are imported in the background).
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(done(false, error || 'not approved'));
     }
     try {
-      const { email } = await storeGoogleTokens(flow.user_id, code);
+      const { email } = await storeGoogleTokens(flow.user_id, code);   // also the sending mailbox when allowed
       await completeFlow(flow.id, 'connected');
       await sendTelegram(flow.telegram_chat_id, `✅ Google connected${email ? ` (${email})` : ''}. I'm importing your contacts now and will tell you when it is done.`);
       // Background: a large address book takes minutes; the browser must not wait for it.
@@ -59,32 +59,18 @@ export async function GET(req: NextRequest) {
   // ── Browser flow ────────────────────────────────────────────────
   const session = await getSession();
   if (!session) return NextResponse.redirect(publicUrl(req, '/login'));
-  // A SENDING mailbox (email waves): its own token row ('gmail_send') and the email_senders row.
-  if (st?.p === 'send') {
-    if (error || !code || st.uid !== session.userId) {
-      return NextResponse.redirect(publicUrl(req, `/profile?tab=email&error=${encodeURIComponent(error || (code ? 'invalid_state' : 'missing_code'))}`));
-    }
-    try {
-      await storeGoogleTokens(session.userId, code, 'gmail_send');
-      return NextResponse.redirect(publicUrl(req, '/profile?tab=email&connected=1'));
-    } catch (err) {
-      console.error('[Google OAuth callback · send]', err);
-      const msg = (err instanceof Error ? err.message : 'exchange_failed').replace(/\s+/g, ' ').slice(0, 140);
-      return NextResponse.redirect(publicUrl(req, `/profile?tab=email&error=${encodeURIComponent(msg)}`));
-    }
-  }
-  if (error) return NextResponse.redirect(publicUrl(req, `/profile?tab=imports&error=${encodeURIComponent(error)}`));
-  if (!code) return NextResponse.redirect(publicUrl(req, '/profile?tab=imports&error=missing_code'));
+  if (error) return NextResponse.redirect(publicUrl(req, `/profile?tab=google&error=${encodeURIComponent(error)}`));
+  if (!code) return NextResponse.redirect(publicUrl(req, '/profile?tab=google&error=missing_code'));
   if (!st || st.uid !== session.userId) {
-    return NextResponse.redirect(publicUrl(req, '/profile?tab=imports&error=invalid_state'));
+    return NextResponse.redirect(publicUrl(req, '/profile?tab=google&error=invalid_state'));
   }
   try {
     await storeGoogleTokens(session.userId, code);
-    return NextResponse.redirect(publicUrl(req, '/profile?tab=imports&connected=google'));
+    return NextResponse.redirect(publicUrl(req, '/profile?tab=google&connected=1'));
   } catch (err) {
     console.error('[Google OAuth callback]', err);
     return NextResponse.redirect(
-      publicUrl(req, `/profile?tab=imports&error=${encodeURIComponent(err instanceof Error ? err.message : 'exchange_failed')}`)
+      publicUrl(req, `/profile?tab=google&error=${encodeURIComponent(err instanceof Error ? err.message : 'exchange_failed')}`)
     );
   }
 }

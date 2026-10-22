@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
+import Button from '@/components/panel/Button';
+import PageHeader from '@/components/panel/PageHeader';
 import { timeUntil } from '@/lib/time';
 
 /**
@@ -65,28 +66,20 @@ export default function CampaignCardPage() {
     <div className="flex h-screen">
       <Sidebar />
       <div className="flex-1 overflow-y-auto">
-        <div className="p-4 border-b flex items-start justify-between gap-4 sticky top-0 z-10" style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}>
-          <div className="min-w-0">
-            <h1 className="text-lg font-bold">{k ? <>{k.step_label} · {k.campaign_name}</> : 'Campaign card'}</h1>
-            {k && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              For {k.sender_name} · {k.day} · {CARD[k.status] ?? k.status}
-              {k.status === 'pending' ? ` · expires ${timeUntil(k.expires_at)}` : ''} ·{' '}
-              <Link href={`/campaigns/${k.campaign_id}`} className="underline">open the campaign</Link>
-            </p>}
-          </div>
-          {k?.can_decide && k.status === 'pending' && pending.length > 0 && (
-            <div className="flex gap-2 shrink-0">
-              <button type="button" disabled={busy !== null} className="text-sm px-4 py-2 rounded-full" style={{ border: '1px solid var(--border)' }}
-                onClick={() => post('skip', `/api/campaigns/cards/${id}`, { decision: 'skip' })}>Skip</button>
-              <button type="button" disabled={busy !== null || Object.keys(edits).length > 0} className="z-btn text-sm"
+        <div className="sticky top-0 z-10" style={{ background: 'var(--bg)' }}>
+          <PageHeader back={k ? { href: `/campaigns/${k.campaign_id}`, label: 'Open the campaign' } : undefined}
+            title={k ? <>{k.step_label} · {k.campaign_name}</> : 'Campaign card'}
+            subtitle={k ? <>For {k.sender_name} · {k.day} · {CARD[k.status] ?? k.status}{k.status === 'pending' ? ` · expires ${timeUntil(k.expires_at)}` : ''}</> : null}
+            actions={k?.can_decide && k.status === 'pending' && pending.length > 0 ? <>
+              <Button disabled={busy !== null} onClick={() => post('skip', `/api/campaigns/cards/${id}`, { decision: 'skip' })}>Skip</Button>
+              <Button variant="primary" disabled={busy !== null || Object.keys(edits).length > 0}
                 title={Object.keys(edits).length ? 'Save or undo your edits first' : undefined}
                 onClick={() => { if (confirm(`Approve ${pending.length}? They go out ${where}.`)) void post('approve', `/api/campaigns/cards/${id}`, { decision: 'approve' }); }}>
                 {busy === 'approve' ? 'Approving…' : `Approve all ${pending.length}`}
-              </button>
-            </div>
-          )}
+              </Button>
+            </> : null} />
         </div>
-        <div className="p-4 grid gap-3 max-w-3xl">
+        <div className="p-4 grid gap-3 max-w-4xl">
           {error && <div className="rounded-lg px-3 py-2 text-sm" role="alert" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>{error}</div>}
           {note && <div className="rounded-lg px-3 py-2 text-sm" style={{ background: 'color-mix(in srgb, var(--green) 10%, transparent)', color: 'var(--green)' }}>{note}</div>}
           {k && k.status === 'pending' && !k.can_decide && (
@@ -103,7 +96,7 @@ export default function CampaignCardPage() {
             const editable = d.status === 'pending' && k.status === 'pending';
             const val = edits[d.id];
             return (
-              <div key={d.id} className="z-card p-4 grid gap-2" style={{ background: 'var(--bg-card)', opacity: d.status === 'rejected' ? 0.55 : 1 }}>
+              <div key={d.id} className="rounded-xl p-4 grid gap-2" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', opacity: d.status === 'rejected' ? 0.55 : 1 }}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="text-sm"><b>{d.full_name}</b>
                     <span style={{ color: 'var(--text-muted)' }}>{[d.title, d.company].filter(Boolean).map((x) => ` · ${x}`).join('')}</span></div>
@@ -127,7 +120,7 @@ export default function CampaignCardPage() {
                       <div className="flex gap-2 justify-end">
                         <button type="button" className="text-xs px-3 py-1 rounded-lg" style={{ border: '1px solid var(--border)' }}
                           onClick={() => setEdits((m) => { const n = { ...m }; delete n[d.id]; return n; })}>Undo</button>
-                        <button type="button" className="z-btn text-xs" disabled={busy !== null}
+                        <button type="button" className="px-2.5 py-1 rounded-lg text-xs font-medium disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }} disabled={busy !== null}
                           onClick={() => post(d.id, `/api/drafts/${d.id}`, { action: 'edit', text: val })}>{busy === d.id ? 'Saving…' : 'Save'}</button>
                       </div>
                     )}

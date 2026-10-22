@@ -2189,6 +2189,53 @@ credits/day, one tap per wave. Phases: 1 firms + research (this), 2 people at th
   - Not built: an email-only-to-firm-inbox lane (people with an email only), the bot persona's guidance for waves,
     service-MCP exposure of the wave tools, open/click tracking (deliberately none).
 
+### 5.bf Campaign wizard + /campaigns and /brand in the house style (2026-10-22, feat/campaign-wizard, no migration)
+
+Amir, after the first try: the dialog opened an EMPTY canvas with a red "sends nothing" error, there was no email /
+LinkedIn choice, and /campaigns + /brand looked unlike the other pages ("you copied Guhan; it is an inspiration").
+- **Wizard** `/campaigns/new` (`components/campaigns/CampaignWizard.tsx`, the ICP builder's shape): 1 what it is for
+  (name, goal, hook, language, product) · 2 who (lists + sales-lead sources with people / with email / on LinkedIn) ·
+  3 channel (Email only · LinkedIn only · LinkedIn first, then email) · 4 what we send (connection note + acceptance
+  wait, how many messages 1–4, days to wait for a reply after each, how the first and the follow-ups are written) ·
+  5 when they reply (hand to whom, note, drafts per step per day — default 10). Sticky right column: the sequence as
+  lines (`lib/campaigns.ts::describeSpec`), "Sent from" with each list owner's Gmail / LinkedIn state, what is still
+  missing, Create campaign. "Or draw it yourself on an empty canvas" stays as a link.
+- **Kernel** `policy/campaigns.py::normalize_spec` + `graph_from_spec` (pure, laid out top to bottom; every answer
+  combination validates — test matrix) and `create_campaign(spec=, daily_max_per_step=)`; the answers are kept in
+  `campaigns.settings.wizard` (`update_campaign` now MERGES settings). `launch_check` blocks an email-only campaign
+  when nobody who would send it has Gmail (it only warned before). The TS side only describes the plan; the graph is
+  built once, in Python.
+- **Canvas**: the campaign opens with "Your sequence is drawn from your answers…"; an empty canvas shows a neutral
+  how-to instead of the red error; a palette click attaches the new step to the selected step or the last open exit
+  ("then", a wait's "no / timed out", an If's "yes").
+- **House style**: shared `components/panel/PageHeader.tsx` (+ `Pill`) and `components/panel/Button.tsx`; `.z-panel`
+  in globals.css (the flat bordered 12px card of /icp). /campaigns, /campaigns/[id], /campaigns/cards/[id] and /brand
+  use them; z-btn pills and uppercase eyebrows are gone from those pages. Use PageHeader/Button for new pages.
+- Tested: 624 core / 347 ring tests, build; the wizard clicked through in Chrome (email-only VC example → drawn,
+  valid, "Ready to run"). Not tested live: nothing new is sent by this change.
+
+### 5.bg One Google connection (2026-10-22, feat/campaign-wizard, app-only)
+
+Amir: "Connect Gmail for sending" (Profile → Email) and "Connect Google" (Profile → Imports) "should be one thing". Also
+the same day SalesBrain moved to a NEW Google Cloud project under the heyyazz.com / zeami.io Workspace (client
+469029590871-…; the old one was 587155655985-…) — GitHub secrets GOOGLE_CLIENT_ID / _SECRET replaced, deploy rerun.
+- **One consent, one row**: `GOOGLE_SCOPES` = userinfo.email + contacts.readonly + gmail.readonly + gmail.send, stored
+  as oauth_tokens provider `google`; `scopes` now holds what Google REALLY granted (`grantedScopes(tokens.scope)` — a
+  person can untick a box). `storeGoogleTokens(userId, code)` registers `email_senders` only when gmail.send was granted
+  (else revokes it) and deletes any old `gmail_send` row; `disconnectGoogle` drops both. `lib/gmail-send.ts` sends and
+  reads threads with the `google` token. `/api/email/connect|disconnect` are kept as aliases.
+- **Dead connections say so**: `getValidAccessToken` forgets a refresh token Google refuses for good (400/401 with
+  invalid_grant / unauthorized_client / invalid_client — revoked, or issued by the old project) so every screen shows
+  "Reconnect" instead of "Connected". `/api/integrations/status` returns `google.needs_reconnect` (checked with the
+  same refresh the syncs use) and `google.can {contacts, read_mail, send}`; `connected_at` = `created_at`, reset on
+  every (re)connect.
+- **UI**: Profile tab "Email" → **Google** (`components/profile/GooglePanel.tsx`: account, permission pills, sync
+  buttons, Reconnect / Disconnect, the sending settings — From name, signature, daily cap — and team mailboxes);
+  `?tab=email` lands there; the Imports tab's Google card is a link to it. EmailSendingPanel is gone. Every
+  "Profile → Email" text (wave/campaign errors, tool descriptions) now says Profile → Google.
+- After deploy: amir@chipchip.social's connection (from the old project) shows "Needs reconnecting"; with Audience
+  Internal only Workspace accounts (zeami.io / heyyazz.com) can connect.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

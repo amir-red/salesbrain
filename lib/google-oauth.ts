@@ -13,19 +13,23 @@
 
 import pool from './db';
 
+// ONE Google connection per person (2026-10-22, Amir: "they should be one thing"): contacts, reading Gmail (sync +
+// replies to what we sent) and sending email waves / campaign emails, all from one consent, stored as oauth_tokens
+// provider 'google'. Google lets the person untick a permission on the consent screen, so what was really granted is
+// stored from the token response (`scopes`) and read with grantedScopes().
 export const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/contacts.readonly',
   'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.send',
 ];
 
-// A SENDING mailbox (email waves, core 076) is a separate consent: send + read (to see replies on the threads we
-// sent), stored as oauth_tokens provider 'gmail_send' so the read-only import connection is never widened silently.
-export const GMAIL_SEND_SCOPES = [
-  'https://www.googleapis.com/auth/userinfo.email',
-  'https://www.googleapis.com/auth/gmail.send',
-  'https://www.googleapis.com/auth/gmail.readonly',
-];
+/** Short names of what a token may do, from Google's space-separated `scope` string. */
+export function grantedScopes(scope: string | undefined | null): string[] {
+  return (scope || '').split(/\s+/).filter(Boolean)
+    .map((s) => s.replace('https://www.googleapis.com/auth/', '').replace(/^userinfo\.email$/, 'email'))
+    .filter((s) => s !== 'openid');
+}
 
 export function getGoogleAuthUrl(state: string, scopes: string[] = GOOGLE_SCOPES): string {
   const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -49,6 +53,7 @@ export async function exchangeCodeForToken(code: string): Promise<{
   refresh_token?: string;
   expires_in: number;
   id_token?: string;
+  scope?: string;
 }> {
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
@@ -121,6 +126,13 @@ export async function getValidAccessToken(userId: string, provider: 'google' | '
     return { accessToken: refreshed.access_token, email: row.account_email };
   } catch (err) {
     console.error('[Google OAuth] Refresh failed:', err);
+    // Google said no for good (access revoked, or the token came from another Google project — the 2026-10-22 move
+    // to the zeami.io project): forget the dead refresh token so every screen says "Reconnect" instead of
+    // "Connected". A network error or a 5xx keeps it for the next try.
+    const msg = err instanceof Error ? err.message : '';
+    if (/refresh failed: (400|401)\b/.test(msg) && /invalid_grant|unauthorized_client|invalid_client/.test(msg)) {
+      await pool.query(`UPDATE oauth_tokens SET refresh_token = NULL, updated_at = now() WHERE id = $1`, [row.id]);
+    }
     return null;
   }
 }

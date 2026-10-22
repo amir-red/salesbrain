@@ -120,7 +120,7 @@ export default function EmailOutreachSection({ icpId }: { icpId: string }) {
           )}
           <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
             Placeholders: {placeholders.map((p) => `{${p}}`).join(' ')} · {'{hook}'} is the researched opening line for that firm.
-            Your signature (Profile → Email) and this line are added under every email: “{optOut}”
+            Your signature (Profile → Google) and this line are added under every email: “{optOut}”
           </p>
           <div className="flex gap-2 justify-end">
             <button type="button" onClick={() => setEditing(false)} className="text-xs px-3 py-1.5 rounded-lg" style={{ border: '1px solid var(--border)' }}>Cancel</button>
@@ -141,10 +141,10 @@ export default function EmailOutreachSection({ icpId }: { icpId: string }) {
         </label>
         <button type="button" onClick={queue} disabled={busy || !saved || !sender} className="px-2.5 py-1 rounded-lg font-medium disabled:opacity-40"
           style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
-          title={!saved ? 'Write the email sequence first' : !sender ? 'Connect a Gmail for sending on Profile → Email' : 'Draft the next 20 first emails (one person per Go firm) for the sender to approve'}>
+          title={!saved ? 'Write the email sequence first' : !sender ? 'Connect Google with sending allowed on Profile → Google' : 'Draft the next 20 first emails (one person per Go firm) for the sender to approve'}>
           {busy ? 'Working…' : 'Queue next 20 for approval'}
         </button>
-        {!boxes.length && <Link href="/profile?tab=email" className="underline" style={{ color: 'var(--accent)' }}>Connect Gmail for sending</Link>}
+        {!boxes.length && <Link href="/profile?tab=google" className="underline" style={{ color: 'var(--accent)' }}>Connect Gmail for sending</Link>}
         {box && sender !== me && <span style={{ color: 'var(--text-muted)' }}>The card goes to {box.name || box.address}; they approve it.</span>}
       </div>
       {note && <div className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>{note}</div>}
