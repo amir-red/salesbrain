@@ -354,7 +354,7 @@ export default function CampaignWizard() {
               );
             })}
             {senders.some((o) => (usesEmail && !o.has_gmail) || (usesLinkedIn && !o.has_linkedin)) && (
-              <p className="text-[11px]" style={muted}>They connect it on Profile → Email or Profile → LinkedIn. You can create the campaign now;
+              <p className="text-[11px]" style={muted}>They connect it on Profile → Google or Profile → LinkedIn. You can create the campaign now;
                 until it is connected, their people wait at those steps (and a campaign nobody can send cannot launch).</p>
             )}
           </div>

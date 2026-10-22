@@ -16,11 +16,7 @@ export default function ImportsPanel() {
 function IntegrationsPageInner() {
   const searchParams = useSearchParams();
   const urlError = searchParams.get('error');
-  const urlConnected = searchParams.get('connected');
 
-  const [connected, setConnected] = useState<{ google?: { account_email: string | null } }>({});
-  const [syncing, setSyncing] = useState(false);
-  const [syncStats, setSyncStats] = useState<Record<string, unknown> | null>(null);
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [selectedContact, setSelectedContact] = useState<string>('');
@@ -35,46 +31,15 @@ function IntegrationsPageInner() {
 
   const refresh = useCallback(async () => {
     try {
-      // Check actual connection state from the DB so it persists across refreshes.
-      const statusRes = await fetch('/api/integrations/status');
-      if (statusRes.ok) {
-        const { providers } = await statusRes.json();
-        setConnected(providers || {});
-      } else if (urlConnected === 'google') {
-        // Fallback: we just came back from OAuth callback but status call failed;
-        // show as connected optimistically.
-        setConnected((c) => ({ ...c, google: { account_email: null } }));
-      }
-
       const res = await fetch('/api/contacts');
       if (res.ok) {
         const data = await res.json();
         setContacts(data.slice(0, 100));
       }
     } catch { /* ignore */ }
-  }, [urlConnected]);
+  }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
-
-  const runSync = async (mode: 'contacts' | 'messages' | 'both') => {
-    setSyncing(true);
-    setSyncStats(null);
-    try {
-      const res = await fetch('/api/integrations/google/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode }),
-      });
-      const data = await res.json();
-      setSyncStats(data);
-      refresh();
-    } finally { setSyncing(false); }
-  };
-
-  const disconnectGoogle = async () => {
-    await fetch('/api/integrations/google/disconnect', { method: 'POST' });
-    setConnected({});
-  };
 
   const importMessages = async () => {
     if (!selectedContact || !importText.trim()) return;
@@ -126,47 +91,13 @@ function IntegrationsPageInner() {
         )}
 
         <div className="p-4 grid grid-cols-2 gap-4">
-          {/* Google */}
-          <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-semibold">Google (Gmail + Contacts)</h2>
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Import contacts from Google + sync recent emails</p>
-              </div>
-              {connected.google && (
-                <span className="text-[10px] px-2 py-1 rounded" style={{ background: `var(--green)20`, color: 'var(--green)' }}>
-                  Connected{connected.google.account_email ? ` · ${connected.google.account_email}` : ''}
-                </span>
-              )}
-            </div>
-            {!connected.google ? (
-              <a href="/api/integrations/google/connect" className="block px-3 py-2 rounded-lg text-sm text-center font-medium" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
-                Connect Google
-              </a>
-            ) : (
-              <>
-                <div className="flex gap-2 flex-wrap">
-                  <button onClick={() => runSync('contacts')} disabled={syncing} className="px-3 py-1.5 rounded-lg text-xs" style={{ background: 'var(--bg-input)', color: 'var(--text)', border: '1px solid var(--border)' }}>
-                    Sync contacts
-                  </button>
-                  <button onClick={() => runSync('messages')} disabled={syncing} className="px-3 py-1.5 rounded-lg text-xs" style={{ background: 'var(--bg-input)', color: 'var(--text)', border: '1px solid var(--border)' }}>
-                    Sync recent emails
-                  </button>
-                  <button onClick={() => runSync('both')} disabled={syncing} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
-                    {syncing ? 'Syncing...' : 'Full sync'}
-                  </button>
-                  <button onClick={disconnectGoogle} className="px-3 py-1.5 rounded-lg text-xs" style={{ color: 'var(--red)', border: '1px solid var(--border)' }}>
-                    Disconnect
-                  </button>
-                </div>
-                {syncStats && (
-                  <pre className="text-xs p-2 rounded mt-2" style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>{JSON.stringify(syncStats, null, 2)}</pre>
-                )}
-              </>
-            )}
-            <p className="text-[10px] mt-2" style={{ color: 'var(--text-muted)' }}>
-              Requires GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI set in server env. Set up in Google Cloud Console.
+          {/* Google moved to its own tab: one connection for contacts, Gmail sync and sending. */}
+          <div className="rounded-xl p-4 space-y-2" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+            <h2 className="text-sm font-semibold">Google (Gmail + Contacts)</h2>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              Connecting Google, syncing contacts and emails, and sending email from your address are all on the Google tab now.
             </p>
+            <a href="/profile?tab=google" className="inline-block px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>Open the Google tab →</a>
           </div>
 
           {/* LinkedIn CSV upload */}

@@ -2214,6 +2214,28 @@ LinkedIn choice, and /campaigns + /brand looked unlike the other pages ("you cop
 - Tested: 624 core / 347 ring tests, build; the wizard clicked through in Chrome (email-only VC example → drawn,
   valid, "Ready to run"). Not tested live: nothing new is sent by this change.
 
+### 5.bg One Google connection (2026-10-22, feat/campaign-wizard, app-only)
+
+Amir: "Connect Gmail for sending" (Profile → Email) and "Connect Google" (Profile → Imports) "should be one thing". Also
+the same day SalesBrain moved to a NEW Google Cloud project under the heyyazz.com / zeami.io Workspace (client
+469029590871-…; the old one was 587155655985-…) — GitHub secrets GOOGLE_CLIENT_ID / _SECRET replaced, deploy rerun.
+- **One consent, one row**: `GOOGLE_SCOPES` = userinfo.email + contacts.readonly + gmail.readonly + gmail.send, stored
+  as oauth_tokens provider `google`; `scopes` now holds what Google REALLY granted (`grantedScopes(tokens.scope)` — a
+  person can untick a box). `storeGoogleTokens(userId, code)` registers `email_senders` only when gmail.send was granted
+  (else revokes it) and deletes any old `gmail_send` row; `disconnectGoogle` drops both. `lib/gmail-send.ts` sends and
+  reads threads with the `google` token. `/api/email/connect|disconnect` are kept as aliases.
+- **Dead connections say so**: `getValidAccessToken` forgets a refresh token Google refuses for good (400/401 with
+  invalid_grant / unauthorized_client / invalid_client — revoked, or issued by the old project) so every screen shows
+  "Reconnect" instead of "Connected". `/api/integrations/status` returns `google.needs_reconnect` (checked with the
+  same refresh the syncs use) and `google.can {contacts, read_mail, send}`; `connected_at` = `created_at`, reset on
+  every (re)connect.
+- **UI**: Profile tab "Email" → **Google** (`components/profile/GooglePanel.tsx`: account, permission pills, sync
+  buttons, Reconnect / Disconnect, the sending settings — From name, signature, daily cap — and team mailboxes);
+  `?tab=email` lands there; the Imports tab's Google card is a link to it. EmailSendingPanel is gone. Every
+  "Profile → Email" text (wave/campaign errors, tool descriptions) now says Profile → Google.
+- After deploy: amir@chipchip.social's connection (from the old project) shows "Needs reconnecting"; with Audience
+  Internal only Workspace accounts (zeami.io / heyyazz.com) can connect.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

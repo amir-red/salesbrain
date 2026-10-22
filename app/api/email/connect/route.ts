@@ -1,18 +1,7 @@
-import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
-import { GMAIL_SEND_SCOPES, getGoogleAuthUrl } from '@/lib/google-oauth';
-import { signState } from '@/lib/signed-state';
+import { NextRequest, NextResponse } from 'next/server';
+import { publicUrl } from '@/lib/public-url';
 
-/**
- * GET /api/email/connect — connect YOUR Gmail as a sending mailbox for email waves (core 076): Google's consent screen
- * with send + read permission. Same callback as the import connection; the signed state says which one this is.
- */
-export async function GET() {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  try {
-    return NextResponse.redirect(getGoogleAuthUrl(signState({ uid: session.userId, p: 'send' }), GMAIL_SEND_SCOPES));
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'OAuth not configured' }, { status: 500 });
-  }
+/** GET /api/email/connect — kept for old links: sending is part of the one Google connection now (Profile → Google). */
+export async function GET(req: NextRequest) {
+  return NextResponse.redirect(publicUrl(req, '/api/integrations/google/connect'));
 }
