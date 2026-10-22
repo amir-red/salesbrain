@@ -2238,6 +2238,24 @@ the same day SalesBrain moved to a NEW Google Cloud project under the heyyazz.co
 - After deploy: amir@chipchip.social's connection (from the old project) shows "Needs reconnecting"; with Audience
   Internal only Workspace accounts (zeami.io / heyyazz.com) can connect.
 
+### 5.bh Test run writes the real drafts; messages on the canvas; campaign emails signed (2026-10-22, feat/campaign-preview)
+
+Amir: "what does the test run do? show the drafted message in the test run and on the canvas, and make it editable."
+- **Test run** (campaign page): pick who — the sample person or anyone in the campaign / on its lists
+  (`campaigns.candidates`); the path is instant; **Write the drafts** = app-only RPC `campaign_preview` (180 s class in
+  `kernel-rpc.ts`) → kernel `preview_plan` (the to-draft items along that person's path, same fields `campaign_tick`
+  hands the ring, nothing filed) → ring `campaign_runner.preview` (the live `draft()` per step, each follow-up given the
+  previous draft as `previous_text`). ~25 s for an email sequence of 3. Each draft is editable; **Use as this step's
+  text** switches the step to exact text with the person's name / company / title turned back into placeholders
+  (`lib/campaigns.ts::toTemplate`).
+- **Canvas**: a message step shows the start of its text — its own exact text, or the latest sample ("sample · …",
+  `messageOf`); the step panel shows the full sample with "Edit it and use it as this step's text". Wizard layout
+  spacing 165 px for the taller steps.
+- **Fixed on the way**: campaign emails went out WITHOUT the signature and opt-out line (only waves composed them) —
+  `campaigns.compose_email` now appends the sender's signature (else their name) and `outreach.email.opt_out_line`
+  in `file_step_draft`; the drafter is told not to sign off itself. The draft prompt forbids inventing numbers,
+  results, customers, offers or claims (a live test had invented "15 hours per employee per month").
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

@@ -11,7 +11,8 @@ import StepInspector from '@/components/campaigns/StepInspector';
 import type { StepStats } from '@/components/campaigns/SequenceCanvas';
 import { timeUntil } from '@/lib/time';
 import {
-  ENROLLMENT_STYLE, STATUS_STYLE, nodeLabel,
+  ENROLLMENT_STYLE, STATUS_STYLE, nodeLabel, toTemplate,
+  type PreviewDraft, type PreviewPerson, type Sample,
   type Campaign, type CampaignList, type Graph, type Validation,
 } from '@/lib/campaigns';
 
@@ -72,6 +73,7 @@ export default function CampaignPage() {
   const [check, setCheck] = useState<Check | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
+  const [samples, setSamples] = useState<Record<string, Sample>>({});   // the last Test run's drafts, per step
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pending = useRef<Graph | null>(null);
 
@@ -145,7 +147,7 @@ export default function CampaignPage() {
             )}
           </> : null}
           actions={c?.can_edit ? <>
-            {tab === 'sequence' && <Button onClick={() => setTesting(true)}>Test run</Button>}
+            {tab === 'sequence' && <Button onClick={async () => { if (timer.current) { clearTimeout(timer.current); await flush(); } setTesting(true); }}>Test run</Button>}
             {(c.status === 'paused' || c.status === 'draft') && unpublished && (
               <Button disabled={busy !== null} onClick={() => act('discard', 'Throw away the edits and go back to the published sequence?')}>Discard edits</Button>
             )}
@@ -193,12 +195,13 @@ export default function CampaignPage() {
           ) : tab === 'sequence' && graph ? (
             <div className="flex h-full min-h-0">
               <div className="flex-1 min-w-0">
-                <SequenceCanvas graph={graph} validation={validation} editable={c.can_edit} stats={stats}
+                <SequenceCanvas graph={graph} validation={validation} editable={c.can_edit} stats={stats} samples={samples}
                   selected={selected} onSelect={setSelected} onChange={onGraph} />
               </div>
               <aside className="w-80 shrink-0 border-l p-4 overflow-y-auto" style={{ borderColor: 'var(--border)' }} aria-label="Step settings">
                 {sel ? (
                   <StepInspector key={sel.id} node={sel} editable={c.can_edit} blockers={problems('blockers')} warnings={problems('warnings')}
+                    sample={samples[sel.id]} onTestRun={() => setTesting(true)}
                     onChange={(config) => onGraph({ ...graph, nodes: graph.nodes.map((n) => (n.id === sel.id ? { ...n, config } : n)) })}
                     onRemove={() => { onGraph({ nodes: graph.nodes.filter((n) => n.id !== sel.id), edges: graph.edges.filter((e) => e.source !== sel.id && e.target !== sel.id) }); setSelected(null); }} />
                 ) : (
@@ -232,12 +235,18 @@ export default function CampaignPage() {
         <LaunchDialog check={check} status={c.status} busy={busy} onClose={() => setCheck(null)}
           onGo={() => act(c.status === 'draft' ? 'launch' : 'resume')} />
       )}
-      {testing && graph && <TestRunDialog id={id} graph={graph} onClose={() => setTesting(false)} />}
+      {testing && graph && c && (
+        <TestRunDialog id={id} graph={graph} editable={c.can_edit} onClose={() => setTesting(false)}
+          onSamples={(m) => setSamples((cur) => ({ ...cur, ...m }))}
+          onUseText={(nodeId, text, subject) => onGraph({ ...graph, nodes: graph.nodes.map((n) => (n.id !== nodeId ? n
+            : n.type === 'linkedin_connect' ? { ...n, config: { ...n.config, note_mode: 'fixed', text } }
+              : { ...n, config: { ...n.config, mode: 'fixed', text, ...(subject && n.type === 'email' ? { subject } : {}) } })) })} />
+      )}
     </div>
   );
 }
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -246,7 +255,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center p-4" style={{ background: 'color-mix(in srgb, black 45%, transparent)' }}
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div role="dialog" aria-modal="true" aria-label={title} className="z-panel w-full max-w-lg max-h-[85vh] overflow-y-auto p-5 grid gap-3" style={{ background: 'var(--bg-card)' }}>
+      <div role="dialog" aria-modal="true" aria-label={title} className={`z-panel w-full ${wide ? 'max-w-2xl' : 'max-w-lg'} max-h-[85vh] overflow-y-auto p-5 grid gap-3`} style={{ background: 'var(--bg-card)' }}>
         <div className="flex items-center justify-between">
           <h2 className="font-bold">{title}</h2>
           <button type="button" aria-label="Close" onClick={onClose} className="text-lg leading-none" style={{ color: 'var(--text-muted)' }}>×</button>
@@ -286,38 +295,123 @@ function LaunchDialog({ check, status, busy, onClose, onGo }: { check: Check; st
   );
 }
 
-function TestRunDialog({ id, graph, onClose }: { id: string; graph: Graph; onClose: () => void }) {
+interface PreviewStep extends TestStep { draft?: PreviewDraft }
+
+/**
+ * Test run: one person (the sample, or anyone on the campaign's lists) walks the sequence being edited. "Write the
+ * drafts" has the ring write every message on that path exactly as the live campaign would (same prompt, voice and
+ * rules; nothing filed or sent). A draft can be edited here and kept as that step's own text.
+ */
+function TestRunDialog({ id, graph, editable, onClose, onSamples, onUseText }: {
+  id: string; graph: Graph; editable: boolean; onClose: () => void;
+  onSamples: (s: Record<string, Sample>) => void;
+  onUseText: (nodeId: string, text: string, subject: string | null) => void;
+}) {
+  const [people, setPeople] = useState<{ prospect_id: string; full_name: string; company: string | null; has_email: boolean }[]>([]);
+  const [who, setWho] = useState('');
   const [choices, setChoices] = useState<Record<string, string>>({});
-  const [path, setPath] = useState<TestStep[] | null>(null);
+  const [path, setPath] = useState<PreviewStep[] | null>(null);
+  const [person, setPerson] = useState<PreviewPerson | null>(null);
+  const [drafted, setDrafted] = useState(false);
+  const [edits, setEdits] = useState<Record<string, { text: string; subject: string }>>({});
+  const [busy, setBusy] = useState(false);
+  const [used, setUsed] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
+    api<{ people: typeof people }>(`/api/campaigns/${id}`, json('POST', { action: 'people' })).then((o) => setPeople(o.people || [])).catch(() => setPeople([]));
+  }, [id]);
+  useEffect(() => {       // the path alone is instant; drafts are written on request
     let off = false;
-    api<{ path: TestStep[] }>(`/api/campaigns/${id}`, json('POST', { action: 'test', choices }))
-      .then((o) => { if (!off) setPath(o.path); }).catch((e) => setError(e instanceof Error ? e.message : 'Test run failed.'));
+    setDrafted(false); setEdits({}); setUsed({});
+    api<{ path: TestStep[]; facts: PreviewPerson }>(`/api/campaigns/${id}`, json('POST', { action: 'test', choices, ...(who ? { prospect_id: who } : {}) }))
+      .then((o) => { if (!off) { setPath(o.path); setPerson(o.facts); } }).catch((e) => setError(e instanceof Error ? e.message : 'Test run failed.'));
     return () => { off = true; };
-  }, [id, choices]);
+  }, [id, choices, who]);
+
+  const write = async () => {
+    setBusy(true); setError(null);
+    try {
+      const o = await api<{ path: PreviewStep[]; person: PreviewPerson }>(`/api/campaigns/${id}`, json('POST', { action: 'preview', choices, ...(who ? { prospect_id: who } : {}) }));
+      setPath(o.path); setPerson(o.person); setDrafted(true);
+      const e: Record<string, { text: string; subject: string }> = {};
+      const samples: Record<string, Sample> = {};
+      for (const s of o.path) {
+        if (s.draft?.text) {
+          e[s.node] = { text: s.draft.text, subject: s.draft.subject ?? '' };
+          samples[s.node] = { text: s.draft.text, subject: s.draft.subject, person: o.person };
+        }
+      }
+      setEdits(e); onSamples(samples);
+    } catch (err) { setError(err instanceof Error ? err.message : 'Could not write the drafts.'); }
+    finally { setBusy(false); }
+  };
   const flip = (s: TestStep) => {
     const n = graph.nodes.find((x) => x.id === s.node);
     if (!n || (n.type !== 'wait_for' && n.type !== 'branch')) return;
     const yes = n.type === 'wait_for' ? s.outcome.endsWith(': yes') : s.outcome === 'yes';
     setChoices((m) => ({ ...m, [s.node]: yes ? (n.type === 'wait_for' ? 'timeout' : 'no') : 'yes' }));
   };
+  const name = person?.full_name || 'the sample person';
+  const muted = { color: 'var(--text-muted)' };
+
   return (
-    <Modal title="Test run — Anna Beispiel, Geschäftsführerin at Beispiel GmbH" onClose={onClose}>
-      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>A sample person walks the sequence you are editing. Click a wait or an “If” to take the other way. Nothing is drafted or sent.</p>
+    <Modal title="Test run" wide onClose={onClose}>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span style={muted}>Test with</span>
+        <select className="z-input text-sm" style={{ width: 'auto', maxWidth: 360 }} value={who} onChange={(e) => setWho(e.target.value)}>
+          <option value="">Anna Beispiel (a sample person)</option>
+          {people.map((p) => <option key={p.prospect_id} value={p.prospect_id}>{p.full_name}{p.company ? ` · ${p.company}` : ''}{p.has_email ? '' : ' · no email'}</option>)}
+        </select>
+        <Button variant="primary" disabled={busy || !path} onClick={write}>{busy ? 'Writing the drafts…' : drafted ? 'Write them again' : 'Write the drafts'}</Button>
+      </div>
+      <p className="text-xs" style={muted}>
+        {name} walks the sequence you are editing. Click a wait or an “If” to take the other way.
+        {drafted ? ' These are the messages as the campaign would write them for this person — nothing is sent.'
+          : ' “Write the drafts” shows each message as the campaign would write it (takes up to half a minute). Nothing is sent.'}
+      </p>
       {error && <Alert>{error}</Alert>}
       <ol className="grid gap-1.5">
         {(path ?? []).map((s, i) => {
           const clickable = s.type === 'wait_for' || s.type === 'branch';
+          const d = s.draft;
+          const e = edits[s.node];
+          const isMsg = s.type === 'linkedin_connect' || s.type === 'linkedin_message' || s.type === 'email';
           return (
-            <li key={`${s.node}-${i}`} className="text-sm rounded-lg px-3 py-2" style={{ border: '1px solid var(--border)' }}>
+            <li key={`${s.node}-${i}`} className="text-sm rounded-lg px-3 py-2 grid gap-2" style={{ border: '1px solid var(--border)' }}>
               <div className="flex justify-between gap-2">
                 <span className="font-medium">{i + 1}. {s.label}</span>
                 {clickable
                   ? <button type="button" className="text-xs underline" onClick={() => flip(s)}>{s.outcome} ↺</button>
-                  : <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{s.outcome}</span>}
+                  : <span className="text-xs" style={muted}>{s.outcome}</span>}
               </div>
-              {s.preview && <div className="text-xs mt-1 whitespace-pre-wrap" style={{ color: 'var(--text-muted)' }}>{s.preview}</div>}
+              {isMsg && !drafted && s.preview && <div className="text-xs whitespace-pre-wrap" style={muted}>{s.preview}</div>}
+              {isMsg && drafted && d && !d.text && (
+                <div className="text-xs" style={muted}>{d.mode === 'none' ? 'A plain connection request, no note.' : `No draft: ${d.why}`}</div>
+              )}
+              {isMsg && drafted && d?.text && e && (
+                <div className="grid gap-1.5">
+                  {s.type === 'email' && (e.subject || d.subject) && (
+                    <input className="z-input text-sm" aria-label="Subject" value={e.subject} readOnly={!editable}
+                      onChange={(ev) => setEdits((m) => ({ ...m, [s.node]: { ...m[s.node], subject: ev.target.value } }))} />
+                  )}
+                  <textarea className="z-input text-sm" aria-label={`${s.label} for ${name}`} readOnly={!editable}
+                    rows={Math.min(14, Math.max(3, e.text.split('\n').reduce((n, l) => n + Math.ceil((l.length || 1) / 78), 0) + 1))} value={e.text}
+                    onChange={(ev) => setEdits((m) => ({ ...m, [s.node]: { ...m[s.node], text: ev.target.value } }))} />
+                  {editable && (
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-[11px]" style={muted}>
+                        {used[s.node] ? '✓ This step now uses this text.' : `Keep it: everyone gets this text with their own name and company filled in.`}
+                        {s.type === 'email' ? ' Your signature and the opt-out line are added under it when it is sent.' : ''}
+                      </span>
+                      <Button size="sm" variant={used[s.node] ? 'secondary' : 'primary'}
+                        onClick={() => { onUseText(s.node, toTemplate(e.text, person), s.type === 'email' && e.subject ? toTemplate(e.subject, person) : null); setUsed((m) => ({ ...m, [s.node]: true })); }}>
+                        {used[s.node] ? 'Use again' : 'Use as this step’s text'}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
             </li>
           );
         })}

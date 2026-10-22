@@ -8,8 +8,8 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
-  HANDLES, HANDLE_LABELS, LABELS, PALETTE, defaultConfig, nodeLabel, nodeSummary,
-  type Graph, type GraphNode, type Handle as Exit, type NodeType, type Validation,
+  HANDLES, HANDLE_LABELS, LABELS, PALETTE, defaultConfig, messageOf, nodeLabel, nodeSummary,
+  type Graph, type Sample, type GraphNode, type Handle as Exit, type NodeType, type Validation,
 } from '@/lib/campaigns';
 
 /**
@@ -21,7 +21,7 @@ import {
 export interface StepStats { here_now?: number; sent?: number; reply_rate?: number | null }
 
 interface StepData extends Record<string, unknown> {
-  node: GraphNode; blockers: string[]; warnings: string[]; stats?: StepStats; selected: boolean;
+  node: GraphNode; blockers: string[]; warnings: string[]; stats?: StepStats; selected: boolean; sample?: Sample;
 }
 
 const TONE: Partial<Record<NodeType, string>> = {
@@ -58,6 +58,16 @@ function StepNode({ data }: NodeProps) {
           {warn && <span className="ml-auto text-[11px] font-bold" style={{ color: 'var(--orange)' }} aria-label="has a warning">!</span>}
         </div>
         {nodeSummary(n) && <div className="text-[11px] truncate" style={{ color: 'var(--text-muted)' }}>{nodeSummary(n)}</div>}
+        {(() => {
+          const m = messageOf(n, d.sample);
+          return m ? (
+            <div className="text-[11px] leading-snug rounded-md px-2 py-1 mt-0.5 whitespace-pre-line"
+              style={{ background: 'var(--bg-input)', color: 'var(--text)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+              title={m.text}>
+              {m.sample && <span className="font-medium" style={{ color: 'var(--text-muted)' }}>sample · </span>}{m.text}
+            </div>
+          ) : null;
+        })()}
         {bad && <div className="text-[11px] leading-snug" style={{ color: 'var(--red)' }}>{d.blockers[0]}</div>}
         {d.stats && (d.stats.here_now || d.stats.sent) ? (
           <div className="text-[11px] flex gap-2 tabular-nums" style={{ color: 'var(--text-muted)' }}>
@@ -107,7 +117,7 @@ function newId(g: Graph, t: NodeType): string {
 }
 
 interface Props {
-  graph: Graph; validation: Validation | null; editable: boolean; stats?: Record<string, StepStats>;
+  graph: Graph; validation: Validation | null; editable: boolean; stats?: Record<string, StepStats>; samples?: Record<string, Sample>;
   selected: string | null; onSelect: (id: string | null) => void; onChange: (g: Graph) => void;
 }
 
@@ -124,7 +134,7 @@ function useAppTheme(): 'light' | 'dark' {
   return mode;
 }
 
-function Canvas({ graph, validation, editable, stats, selected, onSelect, onChange }: Props) {
+function Canvas({ graph, validation, editable, stats, samples, selected, onSelect, onChange }: Props) {
   const rf = useReactFlow();
   const theme = useAppTheme();
   // A controlled flow must hand measured sizes back to its nodes, or the minimap has nothing to draw.
@@ -143,8 +153,8 @@ function Canvas({ graph, validation, editable, stats, selected, onSelect, onChan
     measured: dims[n.id],
     draggable: editable, selected: n.id === selected,
     data: { node: n, blockers: problems.b[n.id] ?? [], warnings: problems.w[n.id] ?? [], stats: stats?.[n.id],
-      selected: n.id === selected } satisfies StepData,
-  })), [graph.nodes, problems, stats, editable, selected, dims]);
+      selected: n.id === selected, sample: samples?.[n.id] } satisfies StepData,
+  })), [graph.nodes, problems, stats, samples, editable, selected, dims]);
 
   const edges: Edge[] = useMemo(() => graph.edges.map((e) => ({
     id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, deletable: editable,
