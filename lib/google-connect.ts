@@ -7,6 +7,7 @@
  */
 import pool from '@/lib/db';
 import { exchangeCodeForToken, getGoogleUserEmail, grantedScopes } from '@/lib/google-oauth';
+import { watchMailbox } from '@/lib/gmail-send';
 
 export async function storeGoogleTokens(userId: string, code: string): Promise<{ email: string | null; scopes: string[] }> {
   const tokens = await exchangeCodeForToken(code);
@@ -37,6 +38,8 @@ export async function storeGoogleTokens(userId: string, code: string): Promise<{
          updated_at = now()`,
       [userId, email.toLowerCase()],
     );
+    // Replies to what this person sends are noticed in seconds (Gmail push) from now on, not at the next check.
+    void watchMailbox(userId).catch(() => undefined);
   } else {
     await pool.query(`UPDATE email_senders SET revoked_at = now(), updated_at = now() WHERE user_id = $1 AND revoked_at IS NULL`, [userId]);
   }

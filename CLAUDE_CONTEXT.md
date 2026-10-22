@@ -2300,6 +2300,28 @@ to the theme script), the supplied H12 wordmark (`components/ZeamiLogo.tsx`, `Ze
   states), the cytoscape canvases (`NetworkGraph`, `RouteGraph` still use literal dark-theme colours); `LeadsTable` + `ApprovalsPanel` were left
   untouched for ws-linkedin-connect.
 
+### 5.bj Gmail push — replies within seconds (2026-10-22, feat/gmail-push, no migration)
+
+Amir: "can't we have a webhook listening to the inbox?" Before, replies to wave / campaign emails were found by the
+`email-replies` cron (`20,50 7-23` Addis), so up to 30 minutes late and not at night. Now Gmail tells us.
+- **Google side** (project `salesbrain-512414`, done by Amir 2026-10-22): Pub/Sub topic
+  `projects/salesbrain-512414/topics/salesbrain-gmail-replies`, `gmail-api-push@system.gserviceaccount.com` = Pub/Sub
+  Publisher on it (the zeami.io org's Domain Restricted Sharing policy blocks that grant: override it on the PROJECT,
+  grant, then set it back to "Inherit parent's policy"), a push subscription to `https://salescrm.chipchip.social/api/gmail/push`
+  with authentication = a service account of the project (audience = that URL).
+- **App**: `lib/gmail-send.ts::watchMailbox(userId)` = Gmail `users.watch` (INBOX) on `GMAIL_PUSH_TOPIC` (skipped when
+  unset); called after a sender connects (`lib/google-connect.ts`) and by bridge tool `gmail_watch`. `POST /api/gmail/push`
+  (whitelisted in middleware) verifies the OIDC token (`lib/google-oidc.ts`: Google's JWKs, RS256, issuer, audience
+  `GMAIL_PUSH_AUDIENCE` or `<APP_URL>/api/gmail/push`, AND email = `GMAIL_PUSH_SA` — any Google service account can mint a
+  token, so the account check is what makes it ours), answers 204 at once, then runs app-only RPC `email_replies_check`
+  for that mailbox (one run at a time per mailbox, one more if a notice came in during it). Env `GMAIL_PUSH_TOPIC`,
+  `GMAIL_PUSH_SA` (GitHub secrets → deploy.yml).
+- **Ring**: the cron's logic moved to `salesbrain_hermes/email_replies.py` (`check(only_sender)`, `renew_watches()`); the
+  cron stays as the safety net and renews every mailbox's watch each run (Google ends a watch after 7 days).
+  `record_email_inbound` is idempotent on the Gmail message id, so push + cron never double-count.
+- Tests: `scripts/test-google-oidc.mts` (12 checks, throwaway RSA key), `salesbrain-hermes/tests/test_email_replies.py`.
+- Not built: opens / clicks (emails stay plain text on purpose), a campaign Activity tab, out-of-office filtering.
+
 ### 5.bd Brand & Voice, and learning from every correction (2026-10-21, feat/brand-voice, migration 079)
 
 **LIVE 2026-10-21 20:25 Addis (0.58.0)**: 079 applied, ring deployed (crm_brand on telegram, api_server, cron; smoke OK), app on Production.

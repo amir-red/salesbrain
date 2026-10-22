@@ -110,3 +110,22 @@ export async function readThreads(userId: string, threadIds: string[]): Promise<
   }
   return { threads: out };
 }
+
+/**
+ * Ask Gmail to tell us (Cloud Pub/Sub topic GMAIL_PUSH_TOPIC) whenever this mailbox's inbox changes — near-instant reply
+ * detection (/api/gmail/push). Google ends a watch after 7 days; calling again renews it, so the reply job and a new
+ * Google connection simply call this. `{ skipped }` when no topic is configured.
+ */
+export async function watchMailbox(userId: string): Promise<{ history_id?: string; expires_at?: string; skipped?: string } | { error: string }> {
+  const topic = process.env.GMAIL_PUSH_TOPIC;
+  if (!topic) return { skipped: 'GMAIL_PUSH_TOPIC is not set' };
+  const tok = await getValidAccessToken(userId);
+  if (!tok) return { error: 'Google is not connected (or the connection stopped working). Reconnect on Profile → Google.' };
+  const res = await fetch(`${GMAIL}/watch`, {
+    method: 'POST', headers: { Authorization: `Bearer ${tok.accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topicName: topic, labelIds: ['INBOX'], labelFilterBehavior: 'INCLUDE' }),
+  });
+  if (!res.ok) return { error: `Gmail refused the watch (${res.status}): ${(await res.text()).replace(/\s+/g, ' ').slice(0, 200)}` };
+  const out = await res.json() as { historyId?: string; expiration?: string };
+  return { history_id: out.historyId, expires_at: out.expiration ? new Date(Number(out.expiration)).toISOString() : undefined };
+}

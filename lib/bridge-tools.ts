@@ -14,7 +14,7 @@ import { EXPORT_KINDS, exportUrl, signExport, type ExportKind } from '@/lib/expo
 import { listUserTokens, revokeToken } from '@/lib/mcp/tokens';
 import { sendTelegram } from '@/lib/tg-notify';
 import { syncZeamiDealEvents } from '@/lib/zeami-sync';
-import { readThreads, sendGmail } from '@/lib/gmail-send';
+import { readThreads, sendGmail, watchMailbox } from '@/lib/gmail-send';
 
 export interface Who { userId: string; role: string }
 const MAX_XLSX_BYTES = 20 * 1024 * 1024;
@@ -93,6 +93,11 @@ async function gmailThreadsTool(who: Who, args: Args) {
   return readThreads(who.userId, ids);
 }
 
+/** Start / renew Gmail push for this person's mailbox (the reply job calls it for every sender). */
+async function gmailWatchTool(who: Who) {
+  return watchMailbox(who.userId);
+}
+
 const TOOLS: Record<string, (who: Who, args: Args) => Promise<Record<string, unknown>>> = {
   google_sync: googleSync,
   import_contacts: importContacts,
@@ -101,6 +106,7 @@ const TOOLS: Record<string, (who: Who, args: Args) => Promise<Record<string, unk
   zeami_deal_sync: zeamiDealSync,
   gmail_send: gmailSendTool,
   gmail_threads: gmailThreadsTool,
+  gmail_watch: gmailWatchTool,
 };
 
 export async function runBridgeTool(tool: string, args: Args, userId: string): Promise<Record<string, unknown>> {
