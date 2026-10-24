@@ -2327,6 +2327,29 @@ Amir: "can't we have a webhook listening to the inbox?" Before, replies to wave 
 - Tests: `scripts/test-google-oidc.mts` (12 checks, throwaway RSA key), `salesbrain-hermes/tests/test_email_replies.py`.
 - Not built: opens / clicks (emails stay plain text on purpose), a campaign Activity tab, out-of-office filtering.
 
+### 5.bk /discovery retired; paste a list and add people to one prospect list (2026-10-24, feat/discovery-merge, no migration)
+
+Amir: "what does /discovery do — is it up to date — it doesn't need its own menu." It was the April 2026 paste box: rows went
+straight into SQL as P0 prospects with no ICP, no score, no /sales-leads card (so the Lead Conductor never saw them), weak
+dedup and a comma-split CSV parser; its footer promised guards that do not exist. Its jobs now live on existing pages.
+- **Gone**: `app/discovery/`, `app/api/discovery/bulk-import`. The Sidebar line (`components/Sidebar.tsx`, owned by ws-inbox)
+  is removed at merge time. `exec_create_or_import_prospect` stays (`POST /api/prospects` uses it).
+- **/sales-leads → Import a list** has a **Paste rows** tab next to the file upload: rows copied from Excel / Sheets
+  (tab), or comma / semicolon text, go through the same column matching, Check and kernel import
+  (`POST /api/sales-leads/import` multipart field `text`).
+- **/icp/[id] → Leads → Add people** opens the same dialog bound to the list: kernel `import_sales_leads(icp_id=)` checks
+  owner-or-admin and an active list, uses the list's name as `list_name`, the list owner as default back office and as owner
+  of the new prospects, which land on that list (`conductor.ensure_prospect_for_lead(icp_id=)`) and are scored against it.
+  A person who is already a prospect stays on their list (`added_to_list` counts only the new ones). Ring
+  `crm_sales_leads_import` + service MCP take `icp_id`. `GET /api/sales-leads/import` = the teammate pickers
+  (`TEAM_USERS_SQL` in `lib/sales-leads-sql.ts`, shared with the list route).
+- **Two bugs fixed on the way (both live before this)**: a UTF-8 CSV upload came out as Latin-1 ("JÃ¶rg MÃ¼ller") because
+  SheetJS got bytes — .csv/.txt/.tsv and pasted text are now decoded as UTF-8 first (BOM stripped); and the dialog treated
+  the summary's `error` COUNT as a failure, so any file with one unimportable row showed "1" and could not be imported.
+- Tested: core 629 (scratch Postgres via the `@embedded-postgres/darwin-arm64` npm binaries in the scratchpad: no Postgres
+  server is installed on Amir's Mac), ring 357, tsc + build, and the dialog clicked through on 127.0.0.1:3003 against that
+  database (paste → map → check → import into a colleague's list as admin). Not done: bulk "Enrich selected" on /sales-leads.
+
 ### 5.bd Brand & Voice, and learning from every correction (2026-10-21, feat/brand-voice, migration 079)
 
 **LIVE 2026-10-21 20:25 Addis (0.58.0)**: 079 applied, ring deployed (crm_brand on telegram, api_server, cron; smoke OK), app on Production.

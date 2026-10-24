@@ -8,6 +8,12 @@ export const SORTS: Record<LeadSort, string> = {
   newest: 'l.created_at DESC',
 };
 
+/** Teammates for the back / front office pickers: real logins, no service stubs. */
+export const TEAM_USERS_SQL = `SELECT id, name, email FROM users
+  WHERE email NOT LIKE '%.service.salesbrain' AND email NOT LIKE '%@salesbrain.internal'
+    AND email NOT LIKE '%@example.com' AND name NOT ILIKE 'HAW %'
+  ORDER BY name`;
+
 export const OPEN = "l.status NOT IN ('converted', 'archived')";
 /** Leads where a person must act (the Lead Conductor's verdict, core 068). Mirrors commands/conductor.needs_you. */
 export const NEEDS_YOU = `${OPEN} AND l.lifecycle_actor = 'you' AND COALESCE(l.lifecycle_stage, '') NOT IN ('paused', 'in_conversation', 'call_set')`;
