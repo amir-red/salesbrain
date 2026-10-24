@@ -2281,6 +2281,8 @@ full message on hover; the canvas is hard to see."
 
 ### 5.bk Side menu cleanup: Clients retired, People off the menu, Prospects fixed (2026-10-24, feat/menu-cleanup, app-only)
 
+**LIVE 2026-10-24 (0.64.0)** with §5.bk–§5.bm: 082 applied (5 sent emails backfilled), ring deployed (smoke 0.64.0), app on Production (run 40109339138). Sidebar notes of both other branches applied at merge (Clients, People, Discovery off the menu).
+
 Amir: "what do /relationships, /prospecting and Clients do — do they need their own menu entry and page?"
 - **Clients retired**: deals grouped by company name, everything on it already on Deals / Pipeline, its "View deals" link never
   filtered anything. `/clients` redirects to `/pipeline`; `/api/clients` deleted; the /network mobile stub lost its wrong
@@ -2348,6 +2350,8 @@ Amir: "can't we have a webhook listening to the inbox?" Before, replies to wave 
 
 ### 5.bl The Inbox — every outreach conversation, email + LinkedIn, answered in one place (2026-10-24, feat/inbox, migration 082)
 
+**LIVE 2026-10-24 (0.64.0)** with §5.bk–§5.bm: 082 applied (5 sent emails backfilled), ring deployed (smoke 0.64.0), app on Production (run 40109339138). Sidebar notes of both other branches applied at merge (Clients, People, Discovery off the menu).
+
 Amir (after Guhan's Inbox): "sync the inbox in our sequencing activities — email and LinkedIn". Decisions: replying from
 the Inbox SENDS (pressing Send is the sender's decision, like the follow-up Send button); email = only threads a
 SalesBrain email started (no general Gmail).
@@ -2383,6 +2387,8 @@ SalesBrain email started (no general Gmail).
   attachments, a per-message read state, drafting a reply with the model from the Inbox.
 
 ### 5.bm /discovery retired; paste a list and add people to one prospect list (2026-10-24, feat/discovery-merge, no migration)
+
+**LIVE 2026-10-24 (0.64.0)** with §5.bk–§5.bm: 082 applied (5 sent emails backfilled), ring deployed (smoke 0.64.0), app on Production (run 40109339138). Sidebar notes of both other branches applied at merge (Clients, People, Discovery off the menu).
 
 Amir: "what does /discovery do — is it up to date — it doesn't need its own menu." It was the April 2026 paste box: rows went
 straight into SQL as P0 prospects with no ICP, no score, no /sales-leads card (so the Lead Conductor never saw them), weak
