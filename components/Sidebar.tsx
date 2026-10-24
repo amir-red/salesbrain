@@ -244,7 +244,7 @@ const NAV_ITEMS: NavItem[] = [
 const GROUPS: { label: string; hrefs: string[]; foldable?: boolean }[] = [
   // Deals (`/`) holds the list and the pipeline board since 2026-10-24; /pipeline redirects to it.
   { label: 'Pipeline', hrefs: ['/', '/inbox', '/followups', '/sales-leads'] },
-  { label: 'Prospecting', hrefs: ['/icp', '/brand', '/prospecting', '/campaigns', '/agents'] },
+  { label: 'Prospecting', hrefs: ['/icp', '/campaigns', '/brand', '/prospecting', '/agents'] },
   { label: 'Marketing', hrefs: ['/marketing'] },
   { label: 'Relationships', hrefs: ['/network'] },
   { label: 'Funding', foldable: true, hrefs: ['/grants', '/credits'] },
