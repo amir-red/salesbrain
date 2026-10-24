@@ -30,15 +30,6 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    href: '/pipeline',
-    label: 'Pipeline',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
-      </svg>
-    ),
-  },
-  {
     href: '/reports',
     label: 'Reports',
     icon: (
@@ -249,7 +240,8 @@ const NAV_ITEMS: NavItem[] = [
 // The nav is grouped by the job being done, in the order work flows:
 // find people → work the deal → keep the relationship → fund it → learn from it.
 const GROUPS: { label: string; hrefs: string[] }[] = [
-  { label: 'Pipeline', hrefs: ['/', '/inbox', '/pipeline', '/followups', '/sales-leads'] },
+  // Deals (`/`) holds the list and the pipeline board since 2026-10-24; /pipeline redirects to it.
+  { label: 'Pipeline', hrefs: ['/', '/inbox', '/followups', '/sales-leads'] },
   { label: 'Prospecting', hrefs: ['/icp', '/brand', '/prospecting', '/campaigns', '/agents'] },
   { label: 'Marketing', hrefs: ['/marketing'] },
   { label: 'Relationships', hrefs: ['/network'] },

@@ -2,8 +2,8 @@
 
 /**
  * Deals — list and board in one page (app/page.tsx). Every choice lives in the URL (view, type, scope, status, flag,
- * q), so a view can be shared and the back button works. Defaults: List = my deals across all types; Board = everyone's
- * sales deals. Rules for won / overdue / in delivery / vote open: lib/deals-view.ts.
+ * q), so a view can be shared and the back button works. Defaults: List = my deals across all types; Pipeline (the board) =
+ * everyone's sales deals. Rules for won / overdue / in delivery / vote open: lib/deals-view.ts.
  */
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -28,7 +28,8 @@ export default function DealsView({ deals, userId }: { deals: DealItem[]; userId
   const pathname = usePathname();
   const sp = useSearchParams();
 
-  const view: View = sp.get('view') === 'board' ? 'board' : 'list';
+  // ?view=pipeline (older links: ?view=board) = the board by gate; anything else = the list.
+  const view: View = sp.get('view') === 'pipeline' || sp.get('view') === 'board' ? 'board' : 'list';
   const typeParam = sp.get('type') as DealType | 'all' | null;
   const type: DealType | 'all' = view === 'board'
     ? (typeParam && typeParam !== 'all' ? typeParam : 'sales')
@@ -73,23 +74,28 @@ export default function DealsView({ deals, userId }: { deals: DealItem[]; userId
       <PageHeader
         title="Deals"
         subtitle={`${shown.length} shown · ${scope === 'mine' ? 'deals you created or lead' : 'everyone’s deals'}`}
-        actions={<Button variant="primary" onClick={() => setShowNew((v) => !v)}>+ New deal</Button>}
+        actions={
+          <>
+            <div className="flex rounded-lg overflow-hidden text-sm" style={{ border: '1px solid var(--border)' }} role="tablist" aria-label="View">
+              {([['list', 'List', <IconList key="i" />], ['board', 'Pipeline', <IconBoard key="i" />]] as const).map(([v, label, icon]) => (
+                <button key={v} role="tab" aria-selected={view === v}
+                  onClick={() => set({ view: v === 'list' ? null : 'pipeline', type: null, scope: null, grants: null })}
+                  className="px-3 py-1.5 font-medium flex items-center gap-1.5"
+                  title={v === 'list' ? 'Deals as a list' : 'Deals on the pipeline board, by gate'}
+                  style={{ background: view === v ? 'var(--accent)' : 'transparent', color: view === v ? 'var(--accent-fg)' : 'var(--text-muted)' }}>
+                  {icon}{label}
+                </button>
+              ))}
+            </div>
+            <Button variant="primary" onClick={() => setShowNew((v) => !v)}>+ New deal</Button>
+          </>
+        }
       />
       {showNew && <NewDeal onClose={() => setShowNew(false)} />}
 
       {/* Controls */}
       <div className="px-4 py-3 border-b flex flex-wrap items-center gap-2" style={{ borderColor: 'var(--border)' }}>
-        <div className="flex rounded-lg overflow-hidden text-xs" style={{ border: '1px solid var(--border)' }}>
-          {(['list', 'board'] as const).map((v) => (
-            <button key={v} onClick={() => set({ view: v === 'list' ? null : v, type: null, scope: null, grants: null })}
-              className="px-3 py-1.5 font-medium capitalize"
-              style={{ background: view === v ? 'var(--bg-input)' : 'transparent', color: view === v ? 'var(--text)' : 'var(--text-muted)' }}>
-              {v}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex gap-1.5 ml-1">
+        <div className="flex gap-1.5">
           {view === 'list' && (
             <button onClick={() => set({ type: null })} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={chip(type === 'all')}>
               All ({countFor('all')})
@@ -159,6 +165,23 @@ export default function DealsView({ deals, userId }: { deals: DealItem[]; userId
         )}
       </div>
     </div>
+  );
+}
+
+function IconList() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+      <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
+      <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+    </svg>
+  );
+}
+
+function IconBoard() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+      <rect x="3" y="3" width="5" height="18" rx="1" /><rect x="10" y="3" width="5" height="12" rx="1" /><rect x="17" y="3" width="4" height="8" rx="1" />
+    </svg>
   );
 }
 

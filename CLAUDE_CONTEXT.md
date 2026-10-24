@@ -2310,7 +2310,8 @@ Amir: "are /deals and /pipeline up to date with our sales process, and merge the
   creator or lead, board default Everyone); status Open & won / Won / Lost / Cancelled / All; flags Overdue / Board vote open /
   In delivery; search; grants board keeps the Stages / Gates toggle; a summary strip (open, weighted, won, in delivery, votes
   open, overdue, lost) whose tiles set the filter; + New deal (all three types) opens the new deal's chat. Every choice is in the
-  URL. `/pipeline` → `/?view=board`; old `/?deal=<id>[&prefill=]` links → `/deals/<id>?tab=chat[&prefill=]`.
+  URL. The board is called **Pipeline**: a **List | Pipeline** switch at the top right of Deals (`?view=pipeline`;
+  `?view=board` still works); `/pipeline` → `/?view=pipeline`; old `/?deal=<id>[&prefill=]` links → `/deals/<id>?tab=chat[&prefill=]`.
 - **Rules in one place** (`lib/deals-view.ts`, client-safe): won = status 'won' (grants) OR a sales deal at G9; in delivery =
   confirmed PMI link 'in-pilot' ('paused' = stalled) — same values as core `domain/delivery`; the gate SLA clock applies only to
   an open deal still in sales (`hasClock`: not won, not in/paused delivery, not a signed grant); vote open = a PENDING
@@ -2326,7 +2327,7 @@ Amir: "are /deals and /pipeline up to date with our sales process, and merge the
   the one in delivery). 083 backfills `won_at = gate_entered_at` for sales deals already at G9. Grants still close via
   mark_grant_won. Test: `tests/test_sales_won_db.py` (real Postgres, opt-in).
 - `lib/gates.ts` G9 text no longer promises the retired onboarding form.
-- **Sidebar not touched** (ws-inbox owns it): at merge, drop the Pipeline entry and its href in the Pipeline group.
+- **Sidebar**: the separate Pipeline entry is gone; Deals (`/`) is the one entry (the menu group heading is still "Pipeline").
 
 
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
