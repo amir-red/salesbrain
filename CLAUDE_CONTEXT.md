@@ -35,7 +35,7 @@ Long-term plan history lives in `~/.claude/plans/lazy-orbiting-sky.md` — every
 | Styling | **Tailwind v4** + CSS variables for dark theme | Vars: `--bg`, `--bg-card`, `--bg-input`, `--border`, `--text`, `--text-muted`, `--accent`, `--accent-glow`. Defined in `app/globals.css`. **Note:** old code may use `var(--card)` — the correct var is `var(--bg-card)`. |
 | Process mgr | **PM2** | `ecosystem.config.cjs` runs port 3002 |
 | Reverse proxy | **Caddy** | Adds `X-Forwarded-Host` / `X-Forwarded-Proto` |
-| Deploy | **GitHub Actions** on push to `Production` branch | `.github/workflows/deploy.yml` SSHes to the server, writes `.env.production` from secrets, runs `npm install && npm run build && pm2 restart`. |
+| Deploy | **GitHub Actions** on push to `Production` branch | `.github/workflows/deploy.yml` SSHes to the server, writes `.env.production` from secrets, runs `npm install && npm run build && pm2 restart`. Kernel + ring: `salesbrain-hermes/scripts/deploy-server.sh` ONLY — core/hermes have no `Production` branch and no deploy workflow (retired 2026-10-24: their branches were frozen at 2026-09-08, so a stray run would have rolled the box back ~30 versions). |
 | Excel | **`xlsx` (SheetJS) + `hyperformula`** | For pricing tool. Server-side only. |
 | Graph viz | **`cytoscape` + `cytoscape-fcose` + `react-cytoscapejs`** | For `/network` page. Lazy-loaded. |
 
