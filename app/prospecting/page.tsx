@@ -47,11 +47,19 @@ function FitBadge({ score, label }: { score: number | null; label: string | null
   );
 }
 
+const PAGE = 100;
+
 export default function ProspectingPage() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
+  const [total, setTotal] = useState(0);
+  const [counts, setCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [stageFilter, setStageFilter] = useState<string | null>(null);
   const [mineOnly, setMineOnly] = useState(false);
+  const [search, setSearch] = useState('');
+  const [query, setQuery] = useState('');
   const [showNew, setShowNew] = useState(false);
 
   const [newCompany, setNewCompany] = useState('');
@@ -61,19 +69,47 @@ export default function ProspectingPage() {
   const [newTitle, setNewTitle] = useState('');
   const [newSource, setNewSource] = useState('manual');
 
+  // Search waits for a pause in typing.
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const load = useCallback(async (offset: number) => {
+    const params = new URLSearchParams({ limit: String(PAGE), offset: String(offset) });
+    if (stageFilter) params.set('stage', stageFilter);
+    if (mineOnly) params.set('mine', 'true');
+    if (query) params.set('q', query);
+    const res = await fetch(`/api/prospects?${params.toString()}`);
+    if (!res.ok) throw new Error(`Could not load prospects (${res.status})`);
+    return res.json() as Promise<{ rows: Prospect[]; total: number; counts: Record<string, number> }>;
+  }, [stageFilter, mineOnly, query]);
+
   const fetchProspects = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
-      const params = new URLSearchParams();
-      if (stageFilter) params.set('stage', stageFilter);
-      if (mineOnly) params.set('mine', 'true');
-      const res = await fetch(`/api/prospects?${params.toString()}`);
-      if (res.ok) setProspects(await res.json());
-    } catch { /* ignore */ }
-    finally { setLoading(false); }
-  }, [stageFilter, mineOnly]);
+      const data = await load(0);
+      setProspects(data.rows);
+      setTotal(data.total);
+      setCounts(data.counts);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load prospects');
+    } finally { setLoading(false); }
+  }, [load]);
 
   useEffect(() => { fetchProspects(); }, [fetchProspects]);
+
+  const loadMore = async () => {
+    setLoadingMore(true);
+    try {
+      const data = await load(prospects.length);
+      setProspects((prev) => [...prev, ...data.rows]);
+      setTotal(data.total);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load more');
+    } finally { setLoadingMore(false); }
+  };
 
   const createProspect = async () => {
     if (!newCompany.trim() || !newFullName.trim()) return;
@@ -96,9 +132,7 @@ export default function ProspectingPage() {
     }
   };
 
-  const stageCounts: Record<string, number> = {};
-  for (const s of PROSPECT_STAGES) stageCounts[s.stage] = 0;
-  for (const p of prospects) stageCounts[p.stage] = (stageCounts[p.stage] || 0) + 1;
+  const allCount = Object.values(counts).reduce((s, n) => s + n, 0);
 
   return (
     <div className="flex h-screen">
@@ -106,14 +140,16 @@ export default function ProspectingPage() {
       <div className="flex-1 overflow-y-auto">
         <div className="p-4 border-b flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
           <div>
-            <h1 className="text-lg font-bold">Prospecting</h1>
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{prospects.length} prospects</p>
+            <h1 className="text-lg font-bold">Prospects</h1>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {allCount.toLocaleString()} prospects across every list{query ? ` matching “${query}”` : ''}
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <Link href="/icp" className="text-xs underline" style={{ color: 'var(--text-muted)' }}>ICP profiles →</Link>
             <ExportButton
               href={`/api/export/prospects?${new URLSearchParams({ ...(stageFilter ? { stage: stageFilter } : {}), ...(mineOnly ? { mine: '1' } : {}) })}`}
-              title="Download these prospects (current stage and Mine filter) as Excel" />
+              title="Download these prospects (current stage and Mine filter; the search is not applied) as Excel" />
             <button
               onClick={() => setShowNew(!showNew)}
               className="px-3 py-1.5 rounded-lg text-sm font-medium"
@@ -151,7 +187,7 @@ export default function ProspectingPage() {
             className="px-2.5 py-1 rounded text-xs"
             style={{ background: stageFilter === null ? 'var(--accent)' : 'var(--bg-input)', color: stageFilter === null ? 'var(--accent-fg)' : 'var(--text-muted)' }}
           >
-            All ({prospects.length})
+            All ({allCount.toLocaleString()})
           </button>
           {PROSPECT_STAGES.map((s) => (
             <button
@@ -165,22 +201,30 @@ export default function ProspectingPage() {
               }}
               title={s.description}
             >
-              {s.stage.replace('_', '·').slice(0, 12)} ({stageCounts[s.stage] || 0})
+              {s.stage.replace('_', '·').slice(0, 12)} ({(counts[s.stage] || 0).toLocaleString()})
             </button>
           ))}
           <label className="text-xs flex items-center gap-1 ml-2" style={{ color: 'var(--text-muted)' }}>
             <input type="checkbox" checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} />
             Mine only
           </label>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search name, company, email, title"
+            className="ml-auto px-3 py-1.5 rounded-lg text-xs outline-none w-64"
+            style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }}
+          />
         </div>
 
         {/* Table */}
         <div className="p-4">
           {loading && <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading...</p>}
-          {!loading && prospects.length === 0 && (
+          {error && <p className="text-sm mb-2" style={{ color: 'var(--red)' }}>{error}</p>}
+          {!loading && !error && prospects.length === 0 && (
             <div className="text-center py-12" style={{ color: 'var(--text-muted)' }}>
-              <p>No prospects yet</p>
-              <p className="text-xs mt-1">Create one above or import from the chat.</p>
+              <p>{query || stageFilter || mineOnly ? 'No prospects match these filters' : 'No prospects yet'}</p>
+              {!query && !stageFilter && !mineOnly && <p className="text-xs mt-1">Create one above or import from the chat.</p>}
             </div>
           )}
           {!loading && prospects.length > 0 && (
@@ -210,7 +254,7 @@ export default function ProspectingPage() {
                         <div>{p.company_name || '—'}</div>
                       </td>
                       <td className="p-2">
-                        <span className="text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ background: `${STAGE_COLORS[p.stage]}20`, color: STAGE_COLORS[p.stage] }}>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ background: `color-mix(in srgb, ${STAGE_COLORS[p.stage] ?? 'var(--text-muted)'} 14%, transparent)`, color: STAGE_COLORS[p.stage] }}>
                           {p.stage}
                         </span>
                         {p.converted_deal_id && (
@@ -231,6 +275,17 @@ export default function ProspectingPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+          {!loading && prospects.length > 0 && (
+            <div className="flex items-center justify-between mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+              <span>Showing {prospects.length.toLocaleString()} of {total.toLocaleString()}</span>
+              {prospects.length < total && (
+                <button onClick={loadMore} disabled={loadingMore} className="px-3 py-1.5 rounded-lg"
+                        style={{ border: '1px solid var(--border)', color: 'var(--text)', opacity: loadingMore ? 0.6 : 1 }}>
+                  {loadingMore ? 'Loading…' : `Show ${Math.min(PAGE, total - prospects.length)} more`}
+                </button>
+              )}
             </div>
           )}
         </div>

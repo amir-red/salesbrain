@@ -68,11 +68,16 @@ export default function RelationshipsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [stage, setStage] = useState<'all' | Stage>('all');
   const [scope, setScope] = useState<'mine' | 'everyone'>('mine');
   const [selected, setSelected] = useState<string | null>(null);
   const [dossier, setDossier] = useState<Dossier | null>(null);
   const [dossierLoading, setDossierLoading] = useState(false);
+
+  // Opened from Network or a lead card: /relationships?person=<id> shows that person's dossier directly.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('person');
+    if (id) { setSelected(id); setScope('everyone'); }
+  }, []);
 
   useEffect(() => {
     fetch('/api/relationships')
@@ -102,7 +107,6 @@ export default function RelationshipsPage() {
   const filtered = people.filter(
     (p) =>
       (scope === 'everyone' || p.mine) &&
-      (stage === 'all' || p.stage === stage) &&
       (!q ||
         p.full_name.toLowerCase().includes(q) ||
         (p.organization || '').toLowerCase().includes(q) ||
@@ -114,7 +118,7 @@ export default function RelationshipsPage() {
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="p-4 border-b" style={{ borderColor: 'var(--border)' }}>
-          <h1 className="text-lg font-bold">Relationships</h1>
+          <h1 className="text-lg font-bold">People</h1>
           <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
             The relationship graph — what the agent knows, remembers, and owes. Written only by the
             agent runtime (conversations, distilled facts, policy-gated outreach); read-only here.
@@ -123,7 +127,7 @@ export default function RelationshipsPage() {
 
         <div className="flex-1 flex overflow-hidden">
           {/* ── List pane ─────────────────────────────────────────────── */}
-          <div className="w-full md:w-[380px] flex-shrink-0 flex flex-col border-r overflow-hidden"
+          <div className={`${selected ? 'hidden md:flex' : 'flex'} w-full md:w-[380px] flex-shrink-0 flex-col border-r overflow-hidden`}
                style={{ borderColor: 'var(--border)' }}>
             <div className="p-3 space-y-2 border-b" style={{ borderColor: 'var(--border)' }}>
               <input
@@ -149,22 +153,6 @@ export default function RelationshipsPage() {
                   </button>
                 ))}
               </div>
-              <div className="flex gap-1.5 flex-wrap">
-                {(['all', 'stranger', 'acquaintance', 'engaged', 'trusted', 'advocate'] as const).map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => setStage(s)}
-                    className="px-2 py-1 rounded-md text-[11px] font-medium transition-colors"
-                    style={{
-                      background: stage === s ? 'var(--accent)' : 'var(--bg-input)',
-                      color: stage === s ? 'var(--accent-fg)' : 'var(--text-muted)',
-                      border: `1px solid ${stage === s ? 'var(--accent)' : 'var(--border)'}`,
-                    }}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
@@ -174,7 +162,7 @@ export default function RelationshipsPage() {
                 <p className="text-sm p-2" style={{ color: 'var(--red)' }}>{error}</p>
               ) : filtered.length === 0 ? (
                 <p className="text-sm p-2" style={{ color: 'var(--text-muted)' }}>
-                  {scope === 'mine' && !q && stage === 'all'
+                  {scope === 'mine' && !q
                     ? 'No relationships of your own yet — switch to Everyone to see the company-wide graph.'
                     : 'No people match.'}
                 </p>
@@ -191,10 +179,12 @@ export default function RelationshipsPage() {
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm font-semibold truncate">{p.full_name}</span>
-                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full flex-shrink-0"
-                            style={{ color: STAGE_COLOR[p.stage], border: `1px solid ${STAGE_COLOR[p.stage]}` }}>
-                        {p.stage}
-                      </span>
+                      {p.stage !== 'stranger' && (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full flex-shrink-0"
+                              style={{ color: STAGE_COLOR[p.stage], border: `1px solid ${STAGE_COLOR[p.stage]}` }}>
+                          {p.stage}
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>
                       {p.organization || '—'}
@@ -213,7 +203,12 @@ export default function RelationshipsPage() {
           </div>
 
           {/* ── Dossier pane ──────────────────────────────────────────── */}
-          <div className="hidden md:block flex-1 overflow-y-auto p-4">
+          <div className={`${selected ? 'block' : 'hidden md:block'} flex-1 overflow-y-auto p-4`}>
+            {selected && (
+              <button onClick={() => setSelected(null)} className="md:hidden text-sm mb-3" style={{ color: 'var(--accent)' }}>
+                ← All people
+              </button>
+            )}
             {!selected ? (
               <div className="h-full flex items-center justify-center">
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
@@ -229,10 +224,12 @@ export default function RelationshipsPage() {
                 <div>
                   <div className="flex items-center gap-3 flex-wrap">
                     <h2 className="text-xl font-bold">{dossier.person.full_name}</h2>
-                    <span className="text-xs font-medium px-2 py-0.5 rounded-full"
-                          style={{ color: STAGE_COLOR[dossier.person.stage], border: `1px solid ${STAGE_COLOR[dossier.person.stage]}` }}>
-                      {dossier.person.stage}
-                    </span>
+                    {dossier.person.stage !== 'stranger' && (
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full"
+                            style={{ color: STAGE_COLOR[dossier.person.stage], border: `1px solid ${STAGE_COLOR[dossier.person.stage]}` }}>
+                        {dossier.person.stage}
+                      </span>
+                    )}
                   </div>
                   <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>
                     {dossier.person.organization || 'No organization'} · preferred channel:{' '}

@@ -148,6 +148,12 @@ export default function NetworkDetailPanel({ node, onClose, onUpdate }: Props) {
                 <ActionButton onClick={() => {}} disabled label="LinkedIn" />
               )}
             </ActionRow>
+            <ActionRow>
+              <ActionLink
+                href={meta.person_id ? `/relationships?person=${meta.person_id}` : null}
+                label="Dossier"
+              />
+            </ActionRow>
           </div>
         )}
 

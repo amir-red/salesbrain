@@ -462,6 +462,7 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
             {lead.booking_status === 'scheduled' && lead.meet_link && <a href={lead.meet_link} target="_blank" rel="noopener noreferrer" className="font-medium" style={{ color: 'var(--green)' }}>Join the booked demo →</a>}
             {lead.converted_deal_id && <div>Deal: <Link href={`/deals/${lead.converted_deal_id}`} className="hover:underline" style={{ color: 'var(--accent)' }}>{lead.converted_deal_name || 'open'} (G{lead.converted_deal_gate ?? '?'})</Link></div>}
             {lead.prospect_id && <Link href={`/prospects/${lead.prospect_id}`} className="block hover:underline" style={{ color: 'var(--accent)' }}>Lead journey →</Link>}
+            {lead.person_id && <Link href={`/relationships?person=${lead.person_id}`} className="block hover:underline" style={{ color: 'var(--accent)' }}>Dossier: what the agent knows →</Link>}
             <div style={{ color: 'var(--text-muted)' }}>{lead.source.replace(/[:_-]/g, ' ')} · added {new Date(lead.created_at).toLocaleDateString()}</div>
           </div>
 

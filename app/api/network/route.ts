@@ -29,7 +29,7 @@ export async function GET() {
 
   // 1. Contacts (team-wide), with the holder's name
   const contactsSql = `SELECT c.id, c.account_id, c.full_name, c.first_name, c.last_name, c.email, c.title, c.seniority,
-              c.persona_type, c.phone, c.linkedin_url, c.notes, c.source, c.owner_user_id,
+              c.persona_type, c.phone, c.linkedin_url, c.notes, c.source, c.owner_user_id, c.person_id,
               u.name AS owner_name, c.communication_profile, c.created_at, c.updated_at
        FROM contacts c LEFT JOIN users u ON u.id = c.owner_user_id ORDER BY c.updated_at DESC`;
   const contactsValues: unknown[] = [];
