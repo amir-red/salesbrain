@@ -59,10 +59,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       `SELECT l.*, to_char(l.next_contact_at, 'YYYY-MM-DD') AS next_contact_at,
               r.name AS responsible_name, f.name AS front_name,
               EXTRACT(day FROM now() - COALESCE(l.last_contact_at, l.created_at))::int AS days_since_contact,
-              l.raw_payload->>'prospect_id' AS prospect_id
+              l.raw_payload->>'prospect_id' AS prospect_id,
+              COALESCE(pr.person_id, ct.person_id) AS person_id
          FROM sales_leads l
          LEFT JOIN users r ON r.id = l.responsible_user_id
          LEFT JOIN users f ON f.id = l.front_user_id
+         LEFT JOIN prospects pr ON pr.id = l.prospect_id
+         LEFT JOIN contacts ct ON ct.id = pr.contact_id
         WHERE l.id = $1`, [id]);
     if (!rows[0]) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const { rows: events } = await client.query(

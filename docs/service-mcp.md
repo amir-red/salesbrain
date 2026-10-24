@@ -921,6 +921,11 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 
 ## 12. Changelog
 
+### 2026-10-24 — import into one prospect list
+`crm_sales_leads_import` takes `icp_id` (from `crm_icp_list`): the new prospects land on that list and are scored against
+it, the list's owner is the default back office, and the response adds `list_name` and `added_to_list` (a person who is
+already a prospect stays on the list they are on). The employee must own the list.
+
 ### 2026-10-21 — Brand & Voice: draft in the employee's own voice, and learn from their ratings
 **Call `crm_voice_context` before you draft any message to a prospect** and put its `context` in front of your drafting:
 who we are, what the list pitches (product, proof, free resources, objection answers), the tone, the team's rules and the

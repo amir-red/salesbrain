@@ -475,11 +475,12 @@ export const SERVICE_TOOLS: ToolDef[] = [
       "Import a list into sales-leads (≤500 rows per call): rows of {full_name or first_name + last_name, company, title, " +
       "email, phone, linkedin_url, website, met_at, notes, priority, must_talk}; list_name, met_at, priority, responsible, " +
       "front fill empty fields. Duplicates are skipped and reported. Call with dry_run=true first, show the counts, then " +
-      "dry_run=false. Every created lead gets its prospect.",
+      "dry_run=false. Every created lead gets its prospect. icp_id (from crm_icp_list) puts the new prospects on that " +
+      "list, scored against it.",
     inputSchema: obj(
       {
         rows: { type: 'array', items: { type: 'object' } },
-        list_name: { type: 'string' }, met_at: { type: 'string' }, priority: { type: 'integer' },
+        list_name: { type: 'string' }, met_at: { type: 'string' }, priority: { type: 'integer' }, icp_id: { type: 'string' },
         responsible: { type: 'string' }, front: { type: 'string' }, dry_run: { type: 'boolean', default: true },
       },
       ['rows'],

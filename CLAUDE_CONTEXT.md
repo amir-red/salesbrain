@@ -2279,7 +2279,28 @@ full message on hover; the canvas is hard to see."
 - **Drafts**: email drafts lose a closing the model wrote anyway (`_strip_signoff`: "Best regards, Amir Redwan" — the
   signature is added at send); a draft opening with "hope this … finds you well" is dropped.
 
-### 5.bl Deals = one page: list + board, the deal page holds the chat (2026-10-24, feat/deals-merge, core 083)
+### 5.bk Side menu cleanup: Clients retired, People off the menu, Prospects fixed (2026-10-24, feat/menu-cleanup, app-only)
+
+**LIVE 2026-10-24 (0.64.0)** with §5.bk–§5.bm: 082 applied (5 sent emails backfilled), ring deployed (smoke 0.64.0), app on Production (run 40109339138). Sidebar notes of both other branches applied at merge (Clients, People, Discovery off the menu).
+
+Amir: "what do /relationships, /prospecting and Clients do — do they need their own menu entry and page?"
+- **Clients retired**: deals grouped by company name, everything on it already on Deals / Pipeline, its "View deals" link never
+  filtered anything. `/clients` redirects to `/pipeline`; `/api/clients` deleted; the /network mobile stub lost its wrong
+  "Open contacts list → /clients" link.
+- **People (`/relationships`) = a dossier you open from a person**, not a menu page: "Dossier" on the /network detail panel
+  (`metadata.person_id` from `contacts.person_id`, 4,727 of 5,563 contacts) and "Dossier: what the agent knows →" on the
+  /sales-leads card (`person_id` = prospect's, else its contact's, on `GET /api/sales-leads/[id]`). `?person=<id>` opens one
+  dossier (list switches to Everyone; on a phone the dossier replaces the list). `GET /api/relationships/[id]` now answers
+  for ANY person (LEFT JOIN relationships, no row = stranger; was 404 for 5,100 of 5,784 people) and runs its 7 queries on
+  one client in sequence. Stage chips removed (all 649 rows are "stranger"); the stage badge shows only when it is not.
+- **Prospects (`/prospecting`) fixed**: `GET /api/prospects` returns `{rows, total, counts, limit, offset}` (counts per stage
+  over every filter but stage, from one GROUP BY; limit ≤500, default 100; `q` searches name / company / email / title,
+  LIKE wildcards escaped; one client, sequential). The page shows true counts (was: counts of the 200 rows loaded), a search
+  box and "Show N more". Its only caller is the page. Heading "Prospects" like the menu.
+- **Sidebar not touched in this branch** (ws-inbox owns `components/Sidebar.tsx`): remove `/relationships` and `/clients`
+  from the Relationships group (and their NAV_ITEMS) when merging, after ws-inbox.
+
+### 5.bn Deals = one page: list + board, the deal page holds the chat (2026-10-24, feat/deals-merge, core 083)
 
 Amir: "are /deals and /pipeline up to date with our sales process, and merge them into one" → "as it is now, and develop it"
 (the list shows MY deals like the old home page, the board shows EVERYONE's like the old /pipeline).
@@ -2306,6 +2327,7 @@ Amir: "are /deals and /pipeline up to date with our sales process, and merge the
   mark_grant_won. Test: `tests/test_sales_won_db.py` (real Postgres, opt-in).
 - `lib/gates.ts` G9 text no longer promises the retired onboarding form.
 - **Sidebar not touched** (ws-inbox owns it): at merge, drop the Pipeline entry and its href in the Pipeline group.
+
 
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
@@ -2354,6 +2376,69 @@ Amir: "can't we have a webhook listening to the inbox?" Before, replies to wave 
   `record_email_inbound` is idempotent on the Gmail message id, so push + cron never double-count.
 - Tests: `scripts/test-google-oidc.mts` (12 checks, throwaway RSA key), `salesbrain-hermes/tests/test_email_replies.py`.
 - Not built: opens / clicks (emails stay plain text on purpose), a campaign Activity tab, out-of-office filtering.
+
+### 5.bl The Inbox — every outreach conversation, email + LinkedIn, answered in one place (2026-10-24, feat/inbox, migration 082)
+
+**LIVE 2026-10-24 (0.64.0)** with §5.bk–§5.bm: 082 applied (5 sent emails backfilled), ring deployed (smoke 0.64.0), app on Production (run 40109339138). Sidebar notes of both other branches applied at merge (Clients, People, Discovery off the menu).
+
+Amir (after Guhan's Inbox): "sync the inbox in our sequencing activities — email and LinkedIn". Decisions: replying from
+the Inbox SENDS (pressing Send is the sender's decision, like the follow-up Send button); email = only threads a
+SalesBrain email started (no general Gmail).
+- **Core 082**: `email_threads` (one per mailbox + Gmail thread: prospect, person, counterpart, subject, last message,
+  `last_from_them`, `state` needs_reply | waiting | done, `inbox_seen_at`) + `email_messages` (every message, ours and
+  theirs, plain-text body with the quoted history cut off; unique on the Gmail id); `linkedin_threads.inbox_seen_at`;
+  backfill of every email already sent. LinkedIn needs no new store (the 024 mirror).
+- **Kernel** `commands/inbox.py`: `store_email_thread` (idempotent; returns `new_inbound` = Gmail ids seen for the
+  first time; a message from them reopens a thread marked done, our own does not), `prepare_reply` (ONLY the
+  mailbox / LinkedIn account owner; files an APPROVED `followup` approval, `drafted_by='inbox'`, expires the person's
+  pending drafts on that channel, email = same thread + `Re:` + In-Reply-To + the sender's signature),
+  `pending_replies`, `mark`. `waves.record_email_sent` stores our message; `waves.threads_to_check` now keeps reading
+  a thread after the first reply (activity in the last 45 days, inbox replies included) — the reply notice and
+  stage logic only run for messages seen for the first time.
+- **Ring**: `email_replies.check` reads threads with `full: true` and stores every message; `inbox_reply.py`
+  (`reply` = prepare → send gate → Unipile / Gmail bridge → `mark_approval_result`; a LinkedIn send re-reads that chat
+  so the message shows at once; a gate hold — quiet hours, a cap — leaves the approval approved and
+  `send_pending` in the email-outbox cron sends it at the next window). App-only RPCs `inbox_reply`, `inbox_refresh`
+  (180 s class).
+- **App**: `/inbox` (`components/inbox/{ConversationList,ConversationView,ChannelIcon}.tsx`): search, All / Email /
+  LinkedIn, All · Needs reply · Unread · Done, "Outreach only | All LinkedIn chats", admin "Mine | Whole team" (read-only
+  for other people's accounts), bubbles by day, Mark done / Reopen / Refresh / Open lead / Profile, a reply box
+  (⌘/Ctrl+Enter), polled every minute. Reads are direct SQL (`lib/inbox-server.ts`, one client): a LinkedIn chat is
+  "outreach" when its member id or its person's slug matches a prospect, or a SalesBrain message went into it.
+  `GET /api/inbox`, `/api/inbox/count` (sidebar badge), `GET|POST /api/inbox/{email|linkedin}/{id}`. Gmail bodies:
+  `lib/gmail-send.ts::readThreads(…, {full})` + `lib/email-text.ts` (`stripQuoted`, tested by
+  `scripts/test-email-text.mts`). `/sales-leads?q=<name>&open=<lead id>` opens a lead's card. Sidebar: an Inbox entry
+  under Pipeline with the needs-reply count (a smaller sidebar was tried and reverted on Amir's word — size unchanged). Ad connectors left the sidebar (Amir): reached from the Marketing page's "Ad connectors" settings button; `/marketing/connectors` has a ← back to Marketing.
+- Tests: `salesbrain-core/tests/test_inbox_db.py` (6, real Postgres), `salesbrain-hermes/tests/test_inbox_reply.py`,
+  `test_email_replies.py`; the API was walked on a scratch database through a real login (lists, team view, open marks
+  seen, a reply on someone else's account refused through the real ring process, done / reopen, 401).
+- Not seen live yet: a real reply sent from the Inbox (LinkedIn and Gmail), the page in a browser. Not built: WhatsApp,
+  attachments, a per-message read state, drafting a reply with the model from the Inbox.
+
+### 5.bm /discovery retired; paste a list and add people to one prospect list (2026-10-24, feat/discovery-merge, no migration)
+
+**LIVE 2026-10-24 (0.64.0)** with §5.bk–§5.bm: 082 applied (5 sent emails backfilled), ring deployed (smoke 0.64.0), app on Production (run 40109339138). Sidebar notes of both other branches applied at merge (Clients, People, Discovery off the menu).
+
+Amir: "what does /discovery do — is it up to date — it doesn't need its own menu." It was the April 2026 paste box: rows went
+straight into SQL as P0 prospects with no ICP, no score, no /sales-leads card (so the Lead Conductor never saw them), weak
+dedup and a comma-split CSV parser; its footer promised guards that do not exist. Its jobs now live on existing pages.
+- **Gone**: `app/discovery/`, `app/api/discovery/bulk-import`. The Sidebar line (`components/Sidebar.tsx`, owned by ws-inbox)
+  is removed at merge time. `exec_create_or_import_prospect` stays (`POST /api/prospects` uses it).
+- **/sales-leads → Import a list** has a **Paste rows** tab next to the file upload: rows copied from Excel / Sheets
+  (tab), or comma / semicolon text, go through the same column matching, Check and kernel import
+  (`POST /api/sales-leads/import` multipart field `text`).
+- **/icp/[id] → Leads → Add people** opens the same dialog bound to the list: kernel `import_sales_leads(icp_id=)` checks
+  owner-or-admin and an active list, uses the list's name as `list_name`, the list owner as default back office and as owner
+  of the new prospects, which land on that list (`conductor.ensure_prospect_for_lead(icp_id=)`) and are scored against it.
+  A person who is already a prospect stays on their list (`added_to_list` counts only the new ones). Ring
+  `crm_sales_leads_import` + service MCP take `icp_id`. `GET /api/sales-leads/import` = the teammate pickers
+  (`TEAM_USERS_SQL` in `lib/sales-leads-sql.ts`, shared with the list route).
+- **Two bugs fixed on the way (both live before this)**: a UTF-8 CSV upload came out as Latin-1 ("JÃ¶rg MÃ¼ller") because
+  SheetJS got bytes — .csv/.txt/.tsv and pasted text are now decoded as UTF-8 first (BOM stripped); and the dialog treated
+  the summary's `error` COUNT as a failure, so any file with one unimportable row showed "1" and could not be imported.
+- Tested: core 629 (scratch Postgres via the `@embedded-postgres/darwin-arm64` npm binaries in the scratchpad: no Postgres
+  server is installed on Amir's Mac), ring 357, tsc + build, and the dialog clicked through on 127.0.0.1:3003 against that
+  database (paste → map → check → import into a colleague's list as admin). Not done: bulk "Enrich selected" on /sales-leads.
 
 ### 5.bd Brand & Voice, and learning from every correction (2026-10-21, feat/brand-voice, migration 079)
 

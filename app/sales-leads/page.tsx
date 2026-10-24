@@ -87,6 +87,9 @@ export default function SalesLeadsPage() {
     if (sp.get('mine') === '1') setRole(sp.get('role') === 'responsible' ? 'responsible' : sp.get('role') === 'front' ? 'front' : 'any');
     else if (v === 'needs_you' && sp.get('mine') !== '0') setRole('any');   // "Needs you" is a personal queue
     const li = sp.get('list'); if (li) setList(li);
+    // From the Inbox: /sales-leads?q=<name>&open=<lead id> finds the lead and opens its card.
+    const qq = sp.get('q'); if (qq) setQ(qq);
+    const op = sp.get('open'); if (op) setOpen(new Set([op]));
   }, []);
 
   useEffect(() => { const t = setTimeout(() => load(), q ? 250 : 0); return () => clearTimeout(t); }, [load, q]);

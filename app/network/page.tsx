@@ -107,9 +107,6 @@ export default function NetworkPage() {
         <div className="flex-1 flex items-center justify-center p-6 text-center">
           <div>
             <p style={{ color: 'var(--text)' }}>Network view works best on desktop.</p>
-            <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>
-              <a href="/clients" style={{ color: 'var(--accent)' }}>Open contacts list →</a>
-            </p>
           </div>
         </div>
       </div>
