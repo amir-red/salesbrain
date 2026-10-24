@@ -2279,6 +2279,34 @@ full message on hover; the canvas is hard to see."
 - **Drafts**: email drafts lose a closing the model wrote anyway (`_strip_signoff`: "Best regards, Amir Redwan" — the
   signature is added at send); a draft opening with "hope this … finds you well" is dropped.
 
+### 5.bl Deals = one page: list + board, the deal page holds the chat (2026-10-24, feat/deals-merge, core 083)
+
+Amir: "are /deals and /pipeline up to date with our sales process, and merge them into one" → "as it is now, and develop it"
+(the list shows MY deals like the old home page, the board shows EVERYONE's like the old /pipeline).
+- **`/` = Deals** (`app/page.tsx`, server; `components/deals/DealsView.tsx`; data `lib/deals-board.ts::loadDeals`, ONE query with
+  laterals: lead, creator, sales rep (`lib/zeami` SALES_REP_JOIN), confirmed `delivery_links`, the pending `board_decisions` row
+  + vote tally). List / Board switch; tabs All (list only) / Sales / Grants / Credits; Mine / Everyone (list default Mine =
+  creator or lead, board default Everyone); status Open & won / Won / Lost / Cancelled / All; flags Overdue / Board vote open /
+  In delivery; search; grants board keeps the Stages / Gates toggle; a summary strip (open, weighted, won, in delivery, votes
+  open, overdue, lost) whose tiles set the filter; + New deal (all three types) opens the new deal's chat. Every choice is in the
+  URL. `/pipeline` → `/?view=board`; old `/?deal=<id>[&prefill=]` links → `/deals/<id>?tab=chat[&prefill=]`.
+- **Rules in one place** (`lib/deals-view.ts`, client-safe): won = status 'won' (grants) OR a sales deal at G9; in delivery =
+  confirmed PMI link 'in-pilot' ('paused' = stalled) — same values as core `domain/delivery`; the gate SLA clock applies only to
+  an open deal still in sales (`hasClock`: not won, not in/paused delivery, not a signed grant); vote open = a PENDING
+  board_decisions row (the old "Board pending" meant "sits at G3/G7" and showed 2 deals with 0 open votes).
+- **`/deals/[id]`**: Overview | Chat tabs (`?tab=chat`; Chat takes `prefill`); chat for creator / lead / admin (was creator /
+  admin); `components/deals/LeadPicker.tsx` (moved from the deleted `components/DealPanel.tsx`) to change the lead; sales rep;
+  Won / Cancelled / In delivery badges; "Board vote open" card (tally, thresholds) and "Delivery (PMI)" card (status, step, health
+  + reasons, PM, last contact); **Mark won** for grants (existing kernel checks, blockers shown) and **Cancel deal** for any
+  active or won deal (both routes existed with no button); back link ← Deals; `decay_` flag styling removed.
+  `GET /api/deals/[id]` adds `rep_name/rep_email`, `delivery`, `board_vote`.
+- **Core 083 + `update_deal`**: a sales deal reaching the final gate records `won_at` (cleared if it moves back); status stays
+  'active' ON PURPOSE (pmi_sync auto-links, the attention digest and pipeline_overview read active deals, and a won sales deal is
+  the one in delivery). 083 backfills `won_at = gate_entered_at` for sales deals already at G9. Grants still close via
+  mark_grant_won. Test: `tests/test_sales_won_db.py` (real Postgres, opt-in).
+- `lib/gates.ts` G9 text no longer promises the retired onboarding form.
+- **Sidebar not touched** (ws-inbox owns it): at merge, drop the Pipeline entry and its href in the Pipeline group.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

@@ -26,6 +26,8 @@ interface ChatProps {
   dealId: string | null;
   deal?: DealInfo | null;
   onDealUpdate?: () => void;
+  /** Text to start the message box with (links like "draft a first-touch email" open the chat with it). */
+  prefill?: string;
 }
 
 function getSuggestions(deal: DealInfo | null | undefined, messageCount: number): string[] {
@@ -142,9 +144,9 @@ interface PendingAttachment {
   size_bytes: number;
 }
 
-export default function Chat({ dealId, deal, onDealUpdate }: ChatProps) {
+export default function Chat({ dealId, deal, onDealUpdate, prefill }: ChatProps) {
   const [messages, setMessages] = useState<MessageData[]>([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(prefill ?? '');
   const [isStreaming, setIsStreaming] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
