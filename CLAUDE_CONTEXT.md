@@ -2356,7 +2356,7 @@ SalesBrain email started (no general Gmail); the sidebar a little SMALLER (not b
   `GET /api/inbox`, `/api/inbox/count` (sidebar badge), `GET|POST /api/inbox/{email|linkedin}/{id}`. Gmail bodies:
   `lib/gmail-send.ts::readThreads(…, {full})` + `lib/email-text.ts` (`stripQuoted`, tested by
   `scripts/test-email-text.mts`). `/sales-leads?q=<name>&open=<lead id>` opens a lead's card. Sidebar: 208 px,
-  32 px rows, 13 px text, 16 px icons, an Inbox entry under Pipeline with the needs-reply count.
+  32 px rows, 13 px text, 16 px icons, an Inbox entry under Pipeline with the needs-reply count. Ad connectors left the sidebar (Amir): reached from the Marketing page's "Ad connectors" settings button; `/marketing/connectors` has a ← back to Marketing.
 - Tests: `salesbrain-core/tests/test_inbox_db.py` (6, real Postgres), `salesbrain-hermes/tests/test_inbox_reply.py`,
   `test_email_replies.py`; the API was walked on a scratch database through a real login (lists, team view, open marks
   seen, a reply on someone else's account refused through the real ring process, done / reopen, 401).

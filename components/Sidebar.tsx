@@ -202,16 +202,6 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    href: '/marketing/connectors',
-    label: 'Ad Connectors',
-    icon: (
-      // Plug — the Google Ads / LinkedIn Ads accounts this CRM reads from
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 22v-5" /><path d="M9 8V2" /><path d="M15 8V2" /><path d="M18 8v5a6 6 0 0 1-12 0V8z" />
-      </svg>
-    ),
-  },
-  {
     href: '/campaigns',
     label: 'Campaigns',
     icon: (
@@ -290,7 +280,7 @@ const NAV_ITEMS: NavItem[] = [
 const GROUPS: { label: string; hrefs: string[] }[] = [
   { label: 'Pipeline', hrefs: ['/', '/inbox', '/pipeline', '/followups', '/sales-leads'] },
   { label: 'Prospecting', hrefs: ['/icp', '/brand', '/prospecting', '/discovery', '/campaigns', '/agents'] },
-  { label: 'Marketing', hrefs: ['/marketing', '/marketing/connectors'] },
+  { label: 'Marketing', hrefs: ['/marketing'] },
   { label: 'Relationships', hrefs: ['/relationships', '/network', '/clients'] },
   { label: 'Funding', hrefs: ['/grants', '/credits'] },
   { label: 'Insights', hrefs: ['/reports', '/lessons', '/pricing'] },
