@@ -21,6 +21,7 @@ import type { PanelPayload } from '@/lib/icp-panel';
 import { usePoll } from '@/lib/use-poll';
 import { relativeTime } from '@/lib/time';
 import ExportButton from '@/components/ExportButton';
+import ImportLeadsModal from '@/components/sales-leads/ImportLeadsModal';
 
 /**
  * /icp/[id] — the control panel for one ICP: the lead's journey, section by
@@ -37,6 +38,7 @@ export default function IcpPanelPage() {
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState<RunMode | 'state' | 'archive' | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [addingPeople, setAddingPeople] = useState(false);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/icp/${id}/panel`);
@@ -154,9 +156,17 @@ export default function IcpPanelPage() {
             </div>
             <div id="outreach"><OutreachSection data={data} onChanged={refresh} /></div>
 
-            <SectionCard title="Leads" subtitle="priority rank first, then best fit · coverage: E employer · R research · @ email · 🔥 warm angle · ↝ warm route">
+            <SectionCard title="Leads" subtitle="priority rank first, then best fit · coverage: E employer · R research · @ email · 🔥 warm angle · ↝ warm route"
+              right={<button type="button" onClick={() => setAddingPeople(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium"
+                style={{ border: '1px solid var(--accent)', color: 'var(--accent)' }}
+                title="Paste rows or upload a CSV / Excel file; new people land on this list, scored against it">Add people</button>}>
               <LeadsTable icpId={id} tick={tick} />
             </SectionCard>
+            {addingPeople && (
+              <ImportLeadsModal list={{ id, name: data.icp.name, ownerName: data.is_owner ? 'You' : data.icp.owner_name }}
+                onClose={() => { setAddingPeople(false); void refresh(); }}
+                onImported={(n) => { setNote(`${n} ${n === 1 ? 'person' : 'people'} added. The agents now look up their LinkedIn profiles and enrich them.`); void refresh(); }} />
+            )}
 
             <SectionCard title="Activity" subtitle="every agent tick that touched this ICP, plus the owner's enricher and graph syncs and the outreach routine">
               <ActivityList runs={data.activity} showIcp />

@@ -22,7 +22,7 @@ import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
 import { LIFECYCLE_FUNNEL, type LeadCounts, type LeadSort, type LeadView } from '@/lib/sales-leads';
-import { DUE, NEEDS_YOU, OPEN, SORTS } from '@/lib/sales-leads-sql';
+import { DUE, NEEDS_YOU, OPEN, SORTS, TEAM_USERS_SQL } from '@/lib/sales-leads-sql';
 
 const VIEWS = new Set<LeadView>(['working', 'due', 'must', 'needs_you', 'new', 'contacted', 'replied', 'converted', 'archived', 'all']);
 export async function GET(req: NextRequest) {
@@ -144,13 +144,7 @@ export async function GET(req: NextRequest) {
         GROUP BY 1 HAVING count(*) > 0 ORDER BY 2 DESC`,
     );
 
-    // Teammates for the responsible / front pickers: real logins, no service stubs.
-    const { rows: users } = await client.query(
-      `SELECT id, name, email FROM users
-        WHERE email NOT LIKE '%.service.salesbrain' AND email NOT LIKE '%@salesbrain.internal'
-          AND email NOT LIKE '%@example.com' AND name NOT ILIKE 'HAW %'
-        ORDER BY name`,
-    );
+    const { rows: users } = await client.query(TEAM_USERS_SQL);
 
     return NextResponse.json({ viewer_id: session.userId, viewer_is_admin: session.role === 'admin', leads, counts, funnel, users, lists, view, sort });
   } finally {

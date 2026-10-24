@@ -81,4 +81,6 @@ export interface ImportResult {
 export interface ImportSummary {
   dry_run: boolean; rows: number; new: number; created: number; duplicate: number; error: number;
   prospects_linked: number; source: string; results: ImportResult[];
+  /** Only for an import into one prospect list (icp_id). */
+  list_name?: string; added_to_list?: number;
 }
