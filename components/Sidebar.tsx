@@ -20,6 +20,16 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    href: '/inbox',
+    label: 'Inbox',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+        <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+      </svg>
+    ),
+  },
+  {
     href: '/pipeline',
     label: 'Pipeline',
     icon: (
@@ -192,16 +202,6 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    href: '/marketing/connectors',
-    label: 'Ad Connectors',
-    icon: (
-      // Plug — the Google Ads / LinkedIn Ads accounts this CRM reads from
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 22v-5" /><path d="M9 8V2" /><path d="M15 8V2" /><path d="M18 8v5a6 6 0 0 1-12 0V8z" />
-      </svg>
-    ),
-  },
-  {
     href: '/campaigns',
     label: 'Campaigns',
     icon: (
@@ -278,9 +278,9 @@ const NAV_ITEMS: NavItem[] = [
 // The nav is grouped by the job being done, in the order work flows:
 // find people → work the deal → keep the relationship → fund it → learn from it.
 const GROUPS: { label: string; hrefs: string[] }[] = [
-  { label: 'Pipeline', hrefs: ['/', '/pipeline', '/followups', '/sales-leads'] },
+  { label: 'Pipeline', hrefs: ['/', '/inbox', '/pipeline', '/followups', '/sales-leads'] },
   { label: 'Prospecting', hrefs: ['/icp', '/brand', '/prospecting', '/discovery', '/campaigns', '/agents'] },
-  { label: 'Marketing', hrefs: ['/marketing', '/marketing/connectors'] },
+  { label: 'Marketing', hrefs: ['/marketing'] },
   { label: 'Relationships', hrefs: ['/relationships', '/network', '/clients'] },
   { label: 'Funding', hrefs: ['/grants', '/credits'] },
   { label: 'Insights', hrefs: ['/reports', '/lessons', '/pricing'] },
@@ -299,6 +299,14 @@ export default function Sidebar() {
   useEffect(() => {
     fetch('/api/auth/me').then((r) => (r.ok ? r.json() : null)).then((d) => setRole(d?.role ?? null)).catch(() => {});
     try { setCollapsed(localStorage.getItem(COLLAPSE_KEY) === '1'); } catch { /* private mode */ }
+  }, []);
+  // Conversations waiting for my answer (the Inbox badge); looked at again every two minutes.
+  const [inboxCount, setInboxCount] = useState(0);
+  useEffect(() => {
+    const get = () => fetch('/api/inbox/count').then((r) => (r.ok ? r.json() : null)).then((d) => setInboxCount(d?.needs_reply ?? 0)).catch(() => {});
+    get();
+    const t = setInterval(() => { if (document.visibilityState === 'visible') get(); }, 120_000);
+    return () => clearInterval(t);
   }, []);
   const [loggingOut, setLoggingOut] = useState(false);
   const logOut = async () => {
@@ -342,8 +350,19 @@ export default function Sidebar() {
           fontWeight: active ? 600 : 400,
         }}
       >
-        <span className="flex-shrink-0">{item.icon}</span>
+        <span className="flex-shrink-0 relative">
+          {item.icon}
+          {item.href === '/inbox' && inboxCount > 0 && (
+            <span className={`${narrow} absolute -top-1 -right-1 w-2 h-2 rounded-full`} style={{ background: 'var(--accent)' }} />
+          )}
+        </span>
         <span className={`${wide} truncate`}>{item.label}</span>
+        {item.href === '/inbox' && inboxCount > 0 && (
+          <span className={`${wide} ml-auto text-[10px] font-semibold tabular-nums px-1.5 rounded-full`}
+            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }} title={`${inboxCount} conversation(s) waiting for your reply`}>
+            {inboxCount}
+          </span>
+        )}
       </Link>
     );
   };

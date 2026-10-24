@@ -2327,6 +2327,42 @@ Amir: "can't we have a webhook listening to the inbox?" Before, replies to wave 
 - Tests: `scripts/test-google-oidc.mts` (12 checks, throwaway RSA key), `salesbrain-hermes/tests/test_email_replies.py`.
 - Not built: opens / clicks (emails stay plain text on purpose), a campaign Activity tab, out-of-office filtering.
 
+### 5.bk The Inbox — every outreach conversation, email + LinkedIn, answered in one place (2026-10-24, feat/inbox, migration 082)
+
+Amir (after Guhan's Inbox): "sync the inbox in our sequencing activities — email and LinkedIn". Decisions: replying from
+the Inbox SENDS (pressing Send is the sender's decision, like the follow-up Send button); email = only threads a
+SalesBrain email started (no general Gmail).
+- **Core 082**: `email_threads` (one per mailbox + Gmail thread: prospect, person, counterpart, subject, last message,
+  `last_from_them`, `state` needs_reply | waiting | done, `inbox_seen_at`) + `email_messages` (every message, ours and
+  theirs, plain-text body with the quoted history cut off; unique on the Gmail id); `linkedin_threads.inbox_seen_at`;
+  backfill of every email already sent. LinkedIn needs no new store (the 024 mirror).
+- **Kernel** `commands/inbox.py`: `store_email_thread` (idempotent; returns `new_inbound` = Gmail ids seen for the
+  first time; a message from them reopens a thread marked done, our own does not), `prepare_reply` (ONLY the
+  mailbox / LinkedIn account owner; files an APPROVED `followup` approval, `drafted_by='inbox'`, expires the person's
+  pending drafts on that channel, email = same thread + `Re:` + In-Reply-To + the sender's signature),
+  `pending_replies`, `mark`. `waves.record_email_sent` stores our message; `waves.threads_to_check` now keeps reading
+  a thread after the first reply (activity in the last 45 days, inbox replies included) — the reply notice and
+  stage logic only run for messages seen for the first time.
+- **Ring**: `email_replies.check` reads threads with `full: true` and stores every message; `inbox_reply.py`
+  (`reply` = prepare → send gate → Unipile / Gmail bridge → `mark_approval_result`; a LinkedIn send re-reads that chat
+  so the message shows at once; a gate hold — quiet hours, a cap — leaves the approval approved and
+  `send_pending` in the email-outbox cron sends it at the next window). App-only RPCs `inbox_reply`, `inbox_refresh`
+  (180 s class).
+- **App**: `/inbox` (`components/inbox/{ConversationList,ConversationView,ChannelIcon}.tsx`): search, All / Email /
+  LinkedIn, All · Needs reply · Unread · Done, "Outreach only | All LinkedIn chats", admin "Mine | Whole team" (read-only
+  for other people's accounts), bubbles by day, Mark done / Reopen / Refresh / Open lead / Profile, a reply box
+  (⌘/Ctrl+Enter), polled every minute. Reads are direct SQL (`lib/inbox-server.ts`, one client): a LinkedIn chat is
+  "outreach" when its member id or its person's slug matches a prospect, or a SalesBrain message went into it.
+  `GET /api/inbox`, `/api/inbox/count` (sidebar badge), `GET|POST /api/inbox/{email|linkedin}/{id}`. Gmail bodies:
+  `lib/gmail-send.ts::readThreads(…, {full})` + `lib/email-text.ts` (`stripQuoted`, tested by
+  `scripts/test-email-text.mts`). `/sales-leads?q=<name>&open=<lead id>` opens a lead's card. Sidebar: an Inbox entry
+  under Pipeline with the needs-reply count (a smaller sidebar was tried and reverted on Amir's word — size unchanged). Ad connectors left the sidebar (Amir): reached from the Marketing page's "Ad connectors" settings button; `/marketing/connectors` has a ← back to Marketing.
+- Tests: `salesbrain-core/tests/test_inbox_db.py` (6, real Postgres), `salesbrain-hermes/tests/test_inbox_reply.py`,
+  `test_email_replies.py`; the API was walked on a scratch database through a real login (lists, team view, open marks
+  seen, a reply on someone else's account refused through the real ring process, done / reopen, 401).
+- Not seen live yet: a real reply sent from the Inbox (LinkedIn and Gmail), the page in a browser. Not built: WhatsApp,
+  attachments, a per-message read state, drafting a reply with the model from the Inbox.
+
 ### 5.bd Brand & Voice, and learning from every correction (2026-10-21, feat/brand-voice, migration 079)
 
 **LIVE 2026-10-21 20:25 Addis (0.58.0)**: 079 applied, ring deployed (crm_brand on telegram, api_server, cron; smoke OK), app on Production.

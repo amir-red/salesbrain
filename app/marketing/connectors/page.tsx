@@ -9,6 +9,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import { AD_PROVIDERS, PROVIDER_META, type ConnectorStatus } from '@/lib/marketing';
 
@@ -69,9 +70,12 @@ function Connectors() {
       <Sidebar />
       <div className="flex-1 overflow-y-auto">
         <div className="p-4 border-b" style={{ borderColor: 'var(--border)' }}>
-          <h1 className="text-lg font-bold">Ad Connectors</h1>
+          <h1 className="text-lg font-bold flex items-center gap-2">
+            <Link href="/marketing" className="text-sm" style={{ color: 'var(--text-muted)' }} title="Back to Marketing" aria-label="Back to Marketing">←</Link>
+            Ad connectors
+          </h1>
           <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-            Read-only access to ad accounts. Each person connects their own login; the CRM never creates or edits ads.
+            Marketing settings · read-only access to ad accounts. Each person connects their own login; the CRM never creates or edits ads.
           </p>
         </div>
 

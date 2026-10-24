@@ -90,7 +90,7 @@ async function gmailSendTool(who: Who, args: Args) {
 async function gmailThreadsTool(who: Who, args: Args) {
   const ids = Array.isArray(args.thread_ids) ? args.thread_ids.map(String).filter(Boolean) : [];
   if (!ids.length) return { threads: [] };
-  return readThreads(who.userId, ids);
+  return readThreads(who.userId, ids, { full: args.full === true });
 }
 
 /** Start / renew Gmail push for this person's mailbox (the reply job calls it for every sender). */
