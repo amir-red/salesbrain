@@ -14,8 +14,18 @@ const NAV_ITEMS: NavItem[] = [
     href: '/',
     label: 'Deals',
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      </svg>
+    ),
+  },
+  {
+    href: '/inbox',
+    label: 'Inbox',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+        <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
       </svg>
     ),
   },
@@ -23,7 +33,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/pipeline',
     label: 'Pipeline',
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
       </svg>
     ),
@@ -32,7 +42,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/reports',
     label: 'Reports',
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" />
       </svg>
     ),
@@ -41,7 +51,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/followups',
     label: 'Followups',
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
       </svg>
     ),
@@ -51,7 +61,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Grants',
     icon: (
       // Award ribbon — Stage-2 utilization dashboard
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="8" r="6" /><polyline points="8.21 13.89 7 22 12 19 17 22 15.79 13.88" />
       </svg>
     ),
@@ -61,7 +71,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Credits',
     icon: (
       // Lightning bolt — AI/cloud credits (Google, AWS, Anthropic, etc.)
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
       </svg>
     ),
@@ -70,7 +80,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/clients',
     label: 'Clients',
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
       </svg>
     ),
@@ -80,7 +90,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'People',
     icon: (
       // Linked nodes — the relationship graph
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="5" cy="6" r="3" /><circle cx="19" cy="6" r="3" /><circle cx="12" cy="18" r="3" />
         <line x1="7.2" y1="7.8" x2="10" y2="16" /><line x1="16.8" y1="7.8" x2="14" y2="16" /><line x1="8" y1="6" x2="16" y2="6" />
       </svg>
@@ -90,7 +100,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/discovery',
     label: 'Discovery',
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
       </svg>
     ),
@@ -99,7 +109,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/prospecting',
     label: 'Prospects',
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
       </svg>
     ),
@@ -109,7 +119,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'ICP',
     icon: (
       // Target — the ideal-customer profile that sourcing and scoring aim at
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" />
       </svg>
     ),
@@ -119,7 +129,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Brand & Voice',
     icon: (
       // Speech bubble — how we write to prospects (Brand & Voice, 079)
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><line x1="8" y1="9" x2="16" y2="9" /><line x1="8" y1="13" x2="13" y2="13" />
       </svg>
     ),
@@ -129,7 +139,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Agents',
     icon: (
       // Bot face — background agents (Leads Finder, Outreach)
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="8" width="18" height="12" rx="2" /><circle cx="9" cy="14" r="1.5" /><circle cx="15" cy="14" r="1.5" /><line x1="12" y1="8" x2="12" y2="4" /><circle cx="12" cy="3" r="1" />
       </svg>
     ),
@@ -140,7 +150,7 @@ const NAV_ITEMS: NavItem[] = [
     admin: true,
     icon: (
       // Dollar sign — what the system costs to run (LLM, Unipile, credits, infra)
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
       </svg>
     ),
@@ -151,7 +161,7 @@ const NAV_ITEMS: NavItem[] = [
     admin: true,
     icon: (
       // Open book with a spark — what the agents learned and staged for review
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <path d="M2 4h6a4 4 0 0 1 4 4v12a3 3 0 0 0-3-3H2z" /><path d="M22 4h-6a4 4 0 0 0-4 4v12a3 3 0 0 1 3-3h7z" />
       </svg>
     ),
@@ -162,7 +172,7 @@ const NAV_ITEMS: NavItem[] = [
     admin: true,
     icon: (
       // Two people — every person the agents act for, with the per-person switches
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
         <path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
       </svg>
@@ -173,7 +183,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Sales Leads',
     icon: (
       // Inbox-tray icon — signals "inbound submissions land here"
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
         <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z" />
         <line x1="12" y1="4" x2="12" y2="10" />
@@ -186,7 +196,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Marketing',
     icon: (
       // Megaphone — paid acquisition: ads performance across channels
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 10v4a1 1 0 0 0 1 1h3l5 4V5L7 9H4a1 1 0 0 0-1 1z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M18.5 5.5a9 9 0 0 1 0 13" />
       </svg>
     ),
@@ -196,7 +206,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Ad Connectors',
     icon: (
       // Plug — the Google Ads / LinkedIn Ads accounts this CRM reads from
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 22v-5" /><path d="M9 8V2" /><path d="M15 8V2" /><path d="M18 8v5a6 6 0 0 1-12 0V8z" />
       </svg>
     ),
@@ -205,7 +215,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/campaigns',
     label: 'Campaigns',
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 11l18-8v18l-18-8v-2z" /><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
       </svg>
     ),
@@ -215,7 +225,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Lessons',
     icon: (
       // Lightbulb — signals "what we learned"
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <path d="M9 18h6" />
         <path d="M10 22h4" />
         <path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14" />
@@ -233,7 +243,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/pricing',
     label: 'Pricing',
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <rect x="4" y="3" width="16" height="18" rx="2" />
         <line x1="8" y1="7" x2="16" y2="7" />
         <line x1="8" y1="11" x2="10" y2="11" />
@@ -249,7 +259,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/network',
     label: 'Network',
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="2.5" />
         <circle cx="4" cy="5" r="1.8" />
         <circle cx="20" cy="5" r="1.8" />
@@ -267,7 +277,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Profile',
     icon: (
       // Person in a circle — account, and the channels attached to it
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="8" r="4" />
         <path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1" />
       </svg>
@@ -278,7 +288,7 @@ const NAV_ITEMS: NavItem[] = [
 // The nav is grouped by the job being done, in the order work flows:
 // find people → work the deal → keep the relationship → fund it → learn from it.
 const GROUPS: { label: string; hrefs: string[] }[] = [
-  { label: 'Pipeline', hrefs: ['/', '/pipeline', '/followups', '/sales-leads'] },
+  { label: 'Pipeline', hrefs: ['/', '/inbox', '/pipeline', '/followups', '/sales-leads'] },
   { label: 'Prospecting', hrefs: ['/icp', '/brand', '/prospecting', '/discovery', '/campaigns', '/agents'] },
   { label: 'Marketing', hrefs: ['/marketing', '/marketing/connectors'] },
   { label: 'Relationships', hrefs: ['/relationships', '/network', '/clients'] },
@@ -299,6 +309,14 @@ export default function Sidebar() {
   useEffect(() => {
     fetch('/api/auth/me').then((r) => (r.ok ? r.json() : null)).then((d) => setRole(d?.role ?? null)).catch(() => {});
     try { setCollapsed(localStorage.getItem(COLLAPSE_KEY) === '1'); } catch { /* private mode */ }
+  }, []);
+  // Conversations waiting for my answer (the Inbox badge); looked at again every two minutes.
+  const [inboxCount, setInboxCount] = useState(0);
+  useEffect(() => {
+    const get = () => fetch('/api/inbox/count').then((r) => (r.ok ? r.json() : null)).then((d) => setInboxCount(d?.needs_reply ?? 0)).catch(() => {});
+    get();
+    const t = setInterval(() => { if (document.visibilityState === 'visible') get(); }, 120_000);
+    return () => clearInterval(t);
   }, []);
   const [loggingOut, setLoggingOut] = useState(false);
   const logOut = async () => {
@@ -335,15 +353,26 @@ export default function Sidebar() {
         href={item.href}
         title={item.label}
         aria-current={active ? 'page' : undefined}
-        className={`h-9 rounded-xl flex items-center gap-3 text-sm transition-colors hover:bg-[var(--accent-glow)] ${collapsed ? 'justify-center' : 'justify-center lg:justify-start lg:px-3'}`}
+        className={`h-8 rounded-lg flex items-center gap-2.5 text-[13px] transition-colors hover:bg-[var(--accent-glow)] ${collapsed ? 'justify-center' : 'justify-center lg:justify-start lg:px-2.5'}`}
         style={{
           background: active ? 'var(--accent-glow)' : undefined,
           color: active ? 'var(--accent)' : 'var(--text-muted)',
           fontWeight: active ? 600 : 400,
         }}
       >
-        <span className="flex-shrink-0">{item.icon}</span>
+        <span className="flex-shrink-0 relative">
+          {item.icon}
+          {item.href === '/inbox' && inboxCount > 0 && (
+            <span className={`${narrow} absolute -top-1 -right-1 w-2 h-2 rounded-full`} style={{ background: 'var(--accent)' }} />
+          )}
+        </span>
         <span className={`${wide} truncate`}>{item.label}</span>
+        {item.href === '/inbox' && inboxCount > 0 && (
+          <span className={`${wide} ml-auto text-[10px] font-semibold tabular-nums px-1.5 rounded-full`}
+            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }} title={`${inboxCount} conversation(s) waiting for your reply`}>
+            {inboxCount}
+          </span>
+        )}
       </Link>
     );
   };
@@ -351,20 +380,20 @@ export default function Sidebar() {
   return (
     <nav
       aria-label="Main"
-      className={`flex-shrink-0 flex flex-col border-r h-screen sticky top-0 w-16 ${collapsed ? '' : 'lg:w-56'}`}
+      className={`flex-shrink-0 flex flex-col border-r h-screen sticky top-0 w-14 ${collapsed ? '' : 'lg:w-52'}`}
       style={{ background: 'var(--bg-card)', borderColor: 'var(--border)' }}
     >
       <Link
         href="/"
         title="SalesBrain — home"
-        className={`h-14 flex-shrink-0 flex items-center ${collapsed ? 'justify-center' : 'justify-center lg:justify-start lg:px-5'}`}
+        className={`h-12 flex-shrink-0 flex items-center ${collapsed ? 'justify-center' : 'justify-center lg:justify-start lg:px-4'}`}
         style={{ color: 'var(--logo)' }}
       >
         <span className={wide}>
-          <ZeamiLogo height={26} />
+          <ZeamiLogo height={22} />
         </span>
         <span className={narrow}>
-          <ZeamiStar size={24} />
+          <ZeamiStar size={22} />
         </span>
       </Link>
 
@@ -375,8 +404,8 @@ export default function Sidebar() {
             .filter((i): i is NavItem => !!i && (!i.admin || role === 'admin'));
           if (!items.length) return null;
           return (
-            <div key={group.label} className={gi === 0 ? '' : 'mt-3'}>
-              <p className={`${wide} z-eyebrow px-3 mb-1`}>{group.label}</p>
+            <div key={group.label} className={gi === 0 ? '' : 'mt-2.5'}>
+              <p className={`${wide} z-eyebrow px-2.5 mb-0.5`} style={{ fontSize: 10 }}>{group.label}</p>
               {gi > 0 && <div className={`${narrow} mx-3 mb-2 border-t`} style={{ borderColor: 'var(--border)' }} />}
               <div className="flex flex-col gap-0.5">{items.map(link)}</div>
             </div>
@@ -391,12 +420,12 @@ export default function Sidebar() {
           onClick={logOut}
           disabled={loggingOut}
           title="Log out"
-          className={`h-9 rounded-xl flex items-center gap-3 text-sm transition-colors hover:bg-[var(--accent-glow)] disabled:opacity-60 ${collapsed ? 'justify-center' : 'justify-center lg:justify-start lg:px-3'}`}
+          className={`h-8 rounded-lg flex items-center gap-2.5 text-[13px] transition-colors hover:bg-[var(--accent-glow)] disabled:opacity-60 ${collapsed ? 'justify-center' : 'justify-center lg:justify-start lg:px-2.5'}`}
           style={{ color: 'var(--text-muted)' }}
         >
           <span className="flex-shrink-0">
             {/* Door with an arrow leaving it */}
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
             </svg>
           </span>
@@ -413,7 +442,7 @@ export default function Sidebar() {
             aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
             aria-expanded={!collapsed}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={{ transform: collapsed ? 'rotate(180deg)' : undefined }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={{ transform: collapsed ? 'rotate(180deg)' : undefined }}>
               <rect x="3" y="4" width="18" height="16" rx="2" /><line x1="9" y1="4" x2="9" y2="20" /><polyline points="16 9 13 12 16 15" />
             </svg>
           </button>

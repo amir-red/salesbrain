@@ -67,6 +67,9 @@ export async function fetchRingCatalog(): Promise<RingToolDef[]> {
 const LONG_RUNNING_TOOLS = new Set<string>([
   // A Gmail push: reads every open thread of one mailbox (one Gmail call each) and records what came back.
   'email_replies_check',
+  // The Inbox: a reply goes out at once (LinkedIn send + re-read of the chat, or a Gmail send); a refresh re-reads.
+  'inbox_reply',
+  'inbox_refresh',
   // Campaign Test run that writes: one model draft per message on the path (up to ~8).
   'campaign_preview',
   'crm_leads_finder_run',

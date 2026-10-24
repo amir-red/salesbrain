@@ -80,31 +80,73 @@ function unescapeHtml(s: string): string {
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 }
 
-export interface ThreadMessage { id: string; from: string; subject: string; snippet: string; date: string | null; from_me: boolean }
+export interface ThreadMessage {
+  id: string; from: string; subject: string; snippet: string; date: string | null; from_me: boolean;
+  /** with `full`: the plain-text body (quoted history cut off), To and the Message-ID header */
+  body?: string; to?: string; rfc_id?: string | null;
+}
 
-/** The messages of the given threads (metadata + snippet only), marked whether this mailbox sent them. */
-export async function readThreads(userId: string, threadIds: string[]): Promise<{ threads: { thread_id: string; messages: ThreadMessage[] }[] } | { error: string }> {
+import { htmlToText, stripQuoted } from '@/lib/email-text';
+
+type GmailPart = { mimeType?: string; body?: { data?: string }; parts?: GmailPart[] };
+
+function decodePart(data: string): string {
+  return Buffer.from(data, 'base64url').toString('utf8');
+}
+
+function findPart(p: GmailPart | undefined, mime: string): string | null {
+  if (!p) return null;
+  if (p.mimeType === mime && p.body?.data) return decodePart(p.body.data);
+  for (const c of p.parts || []) {
+    const hit = findPart(c, mime);
+    if (hit != null) return hit;
+  }
+  return null;
+}
+
+type GmailMessage = {
+  id: string; labelIds?: string[]; snippet?: string; internalDate?: string;
+  payload?: GmailPart & { headers?: { name: string; value: string }[] };
+};
+
+/**
+ * The messages of the given threads, marked whether this mailbox sent them. Metadata + snippet by default; with
+ * `full` also the plain-text body (from text/plain, else the HTML part flattened), To and Message-ID — what the
+ * Inbox stores (core 082).
+ */
+export async function readThreads(userId: string, threadIds: string[], opts: { full?: boolean } = {}):
+  Promise<{ threads: { thread_id: string; messages: ThreadMessage[] }[] } | { error: string }> {
   const tok = await getValidAccessToken(userId);
   if (!tok) return { error: 'The Google connection stopped working (permission revoked or expired). Reconnect on Profile → Google.' };
   const s = await sender(userId);
   const me = (s?.address || tok.email || '').toLowerCase();
   const out: { thread_id: string; messages: ThreadMessage[] }[] = [];
+  const q = opts.full ? 'format=full'
+    : 'format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date';
   for (const id of threadIds.slice(0, 50)) {   // sequential: no fan-out against Gmail's per-user rate limit
-    const r = await fetch(`${GMAIL}/threads/${encodeURIComponent(id)}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
+    const r = await fetch(`${GMAIL}/threads/${encodeURIComponent(id)}?${q}`,
       { headers: { Authorization: `Bearer ${tok.accessToken}` } });
     if (r.status === 404) { out.push({ thread_id: id, messages: [] }); continue; }
     if (!r.ok) return { error: `Gmail refused reading a thread (${r.status})` };
-    const t = await r.json() as { messages?: { id: string; labelIds?: string[]; snippet?: string; internalDate?: string; payload?: { headers?: { name: string; value: string }[] } }[] };
+    const t = await r.json() as { messages?: GmailMessage[] };
     out.push({
       thread_id: id,
       messages: (t.messages || []).map((m) => {
         const h = (n: string) => m.payload?.headers?.find((x) => x.name.toLowerCase() === n)?.value ?? '';
         const from = h('from');
-        return {
+        const msg: ThreadMessage = {
           id: m.id, from, subject: h('subject'), snippet: unescapeHtml(m.snippet || '').slice(0, 500),
           date: m.internalDate ? new Date(Number(m.internalDate)).toISOString() : null,
           from_me: (m.labelIds || []).includes('SENT') || (!!me && from.toLowerCase().includes(me)),
         };
+        if (opts.full) {
+          const plain = findPart(m.payload, 'text/plain');
+          const html = plain == null ? findPart(m.payload, 'text/html') : null;
+          msg.body = stripQuoted(plain ?? (html != null ? htmlToText(html) : msg.snippet)).slice(0, 20000);
+          msg.to = h('to');
+          msg.rfc_id = h('message-id') || null;
+        }
+        return msg;
       }),
     });
   }
