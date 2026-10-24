@@ -239,15 +239,17 @@ const NAV_ITEMS: NavItem[] = [
 
 // The nav is grouped by the job being done, in the order work flows:
 // find people → work the deal → keep the relationship → fund it → learn from it.
-const GROUPS: { label: string; hrefs: string[] }[] = [
+// `foldable` groups start folded on every page (Amir 2026-10-24) and open by a click on their label — or by themselves
+// while one of their pages is the page you are on. The icon rail always shows every item.
+const GROUPS: { label: string; hrefs: string[]; foldable?: boolean }[] = [
   // Deals (`/`) holds the list and the pipeline board since 2026-10-24; /pipeline redirects to it.
   { label: 'Pipeline', hrefs: ['/', '/inbox', '/followups', '/sales-leads'] },
   { label: 'Prospecting', hrefs: ['/icp', '/brand', '/prospecting', '/campaigns', '/agents'] },
   { label: 'Marketing', hrefs: ['/marketing'] },
   { label: 'Relationships', hrefs: ['/network'] },
-  { label: 'Funding', hrefs: ['/grants', '/credits'] },
-  { label: 'Insights', hrefs: ['/reports', '/lessons', '/pricing'] },
-  { label: 'Admin', hrefs: ['/admin/costs', '/admin/users', '/admin/learning'] },
+  { label: 'Funding', foldable: true, hrefs: ['/grants', '/credits'] },
+  { label: 'Insights', foldable: true, hrefs: ['/reports', '/lessons', '/pricing'] },
+  { label: 'Admin', foldable: true, hrefs: ['/admin/costs', '/admin/users', '/admin/learning'] },
 ];
 const BY_HREF = new Map(NAV_ITEMS.map((i) => [i.href, i]));
 const PROFILE = BY_HREF.get('/profile')!;
@@ -297,6 +299,8 @@ export default function Sidebar() {
     return best;
   })();
   const isActive = (href: string) => href === activeHref;
+  // A click on a foldable group's label opens / closes it; untouched, it is open only while it holds the current page.
+  const [folds, setFolds] = useState<Record<string, boolean>>({});
 
   const link = (item: NavItem) => {
     const active = isActive(item.href);
@@ -356,11 +360,29 @@ export default function Sidebar() {
             .map((h) => BY_HREF.get(h))
             .filter((i): i is NavItem => !!i && (!i.admin || role === 'admin'));
           if (!items.length) return null;
+          const open = !group.foldable || (folds[group.label] ?? items.some((i) => i.href === activeHref));
           return (
             <div key={group.label} className={gi === 0 ? '' : 'mt-3'}>
-              <p className={`${wide} z-eyebrow px-3 mb-1`}>{group.label}</p>
+              {group.foldable ? (
+                <button
+                  type="button"
+                  onClick={() => setFolds((f) => ({ ...f, [group.label]: !open }))}
+                  aria-expanded={open}
+                  className={`${collapsed ? 'hidden' : 'hidden lg:flex'} w-full items-center justify-between z-eyebrow px-3 mb-1 hover:opacity-80`}
+                  title={open ? `Fold ${group.label}` : `Show ${group.label}`}
+                >
+                  {group.label}
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round"
+                    style={{ transform: open ? 'rotate(90deg)' : undefined, transition: 'transform 120ms' }} aria-hidden="true">
+                    <polyline points="9 6 15 12 9 18" />
+                  </svg>
+                </button>
+              ) : (
+                <p className={`${wide} z-eyebrow px-3 mb-1`}>{group.label}</p>
+              )}
               {gi > 0 && <div className={`${narrow} mx-3 mb-2 border-t`} style={{ borderColor: 'var(--border)' }} />}
-              <div className="flex flex-col gap-0.5">{items.map(link)}</div>
+              {/* folded: hidden in the wide nav, still listed in the icon rail */}
+              <div className={`${open ? 'flex' : collapsed ? 'flex' : 'flex lg:hidden'} flex-col gap-0.5`}>{items.map(link)}</div>
             </div>
           );
         })}
