@@ -2302,6 +2302,10 @@ Amir: "what do /relationships, /prospecting and Clients do — do they need thei
 
 ### 5.bn Deals = one page: list + board, the deal page holds the chat (2026-10-24, feat/deals-merge, core 083)
 
+**LIVE 2026-10-24 (0.65.0)**: 083 applied (Kabana won_at 2026-07-17, ChipChip Pilot 2026-05-07, both still active), app on
+Production (run 40110352501), ring deployed (smoke 0.65.0). Deploy note: this Mac's DNS was failing for pypi.org that day, so
+`deploy-server.sh` ran with `UV_OFFLINE=1` (the local wheel build uses uv's cache; the box installs over its own network).
+
 Amir: "are /deals and /pipeline up to date with our sales process, and merge them into one" → "as it is now, and develop it"
 (the list shows MY deals like the old home page, the board shows EVERYONE's like the old /pipeline).
 - **`/` = Deals** (`app/page.tsx`, server; `components/deals/DealsView.tsx`; data `lib/deals-board.ts::loadDeals`, ONE query with
