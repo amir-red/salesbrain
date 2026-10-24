@@ -2279,6 +2279,25 @@ full message on hover; the canvas is hard to see."
 - **Drafts**: email drafts lose a closing the model wrote anyway (`_strip_signoff`: "Best regards, Amir Redwan" — the
   signature is added at send); a draft opening with "hope this … finds you well" is dropped.
 
+### 5.bk Side menu cleanup: Clients retired, People off the menu, Prospects fixed (2026-10-24, feat/menu-cleanup, app-only)
+
+Amir: "what do /relationships, /prospecting and Clients do — do they need their own menu entry and page?"
+- **Clients retired**: deals grouped by company name, everything on it already on Deals / Pipeline, its "View deals" link never
+  filtered anything. `/clients` redirects to `/pipeline`; `/api/clients` deleted; the /network mobile stub lost its wrong
+  "Open contacts list → /clients" link.
+- **People (`/relationships`) = a dossier you open from a person**, not a menu page: "Dossier" on the /network detail panel
+  (`metadata.person_id` from `contacts.person_id`, 4,727 of 5,563 contacts) and "Dossier: what the agent knows →" on the
+  /sales-leads card (`person_id` = prospect's, else its contact's, on `GET /api/sales-leads/[id]`). `?person=<id>` opens one
+  dossier (list switches to Everyone; on a phone the dossier replaces the list). `GET /api/relationships/[id]` now answers
+  for ANY person (LEFT JOIN relationships, no row = stranger; was 404 for 5,100 of 5,784 people) and runs its 7 queries on
+  one client in sequence. Stage chips removed (all 649 rows are "stranger"); the stage badge shows only when it is not.
+- **Prospects (`/prospecting`) fixed**: `GET /api/prospects` returns `{rows, total, counts, limit, offset}` (counts per stage
+  over every filter but stage, from one GROUP BY; limit ≤500, default 100; `q` searches name / company / email / title,
+  LIKE wildcards escaped; one client, sequential). The page shows true counts (was: counts of the 200 rows loaded), a search
+  box and "Show N more". Its only caller is the page. Heading "Prospects" like the menu.
+- **Sidebar not touched in this branch** (ws-inbox owns `components/Sidebar.tsx`): remove `/relationships` and `/clients`
+  from the Relationships group (and their NAV_ITEMS) when merging, after ws-inbox.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

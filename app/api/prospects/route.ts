@@ -16,6 +16,13 @@ const CreateProspectSchema = z.object({
   notes: z.string().optional(),
 });
 
+/**
+ * GET /api/prospects — one page of the prospects list for /prospecting.
+ * Query: stage, mine=true, campaign_id, reply_status, q (name / company / email / title), limit (≤500, default 100), offset.
+ * Answers { rows, total, counts, limit, offset }: `total` matches every filter, `counts` is per stage over every
+ * filter EXCEPT stage (so the stage chips stay right while one is selected). Visibility: regular users see their own
+ * prospects and unowned ones; admins see all. One checked-out client, queries in sequence (pooler rule).
+ */
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -25,50 +32,54 @@ export async function GET(req: NextRequest) {
   const ownerOnly = params.get('mine') === 'true';
   const campaignId = params.get('campaign_id');
   const replyStatus = params.get('reply_status');
+  const q = (params.get('q') || '').trim().slice(0, 100);
+  const limit = Math.min(Math.max(Math.floor(Number(params.get('limit'))) || 100, 1), 500);
+  const offset = Math.max(Math.floor(Number(params.get('offset'))) || 0, 0);
   const isAdmin = session.role === 'admin';
 
   const filters: string[] = [];
   const values: unknown[] = [];
-  let i = 1;
+  const add = (sql: (n: number) => string, v: unknown) => { values.push(v); filters.push(sql(values.length)); };
 
-  // Default visibility: regular users see only their own prospects (or legacy ones
-  // with no owner). Admins see all. Explicit `?mine=true` still works as a further filter.
-  if (!isAdmin && !ownerOnly) {
-    filters.push(`(p.owner_user_id = $${i++} OR p.owner_user_id IS NULL)`);
-    values.push(session.userId);
-  } else if (ownerOnly) {
-    filters.push(`p.owner_user_id = $${i++}`);
-    values.push(session.userId);
-  }
+  if (ownerOnly) add((n) => `p.owner_user_id = $${n}`, session.userId);
+  else if (!isAdmin) add((n) => `(p.owner_user_id = $${n} OR p.owner_user_id IS NULL)`, session.userId);
+  if (campaignId) add((n) => `p.campaign_id = $${n}`, campaignId);
+  if (replyStatus) add((n) => `p.reply_status = $${n}`, replyStatus);
+  if (q) add((n) => `(c.full_name ILIKE $${n} OR a.name ILIKE $${n} OR c.email ILIKE $${n} OR c.title ILIKE $${n})`,
+             `%${q.replace(/[%_\\]/g, '\\$&')}%`);
 
-  if (stage) {
-    filters.push(`p.stage = $${i++}`);
-    values.push(stage);
-  }
-  if (campaignId) {
-    filters.push(`p.campaign_id = $${i++}`);
-    values.push(campaignId);
-  }
-  if (replyStatus) {
-    filters.push(`p.reply_status = $${i++}`);
-    values.push(replyStatus);
-  }
-
-  const where = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
-
-  const { rows } = await pool.query(
-    `SELECT p.*, a.name as company_name, a.domain, a.industry, a.company_size,
-            c.full_name, c.email, c.title, c.seniority,
-            u.name as owner_name
-     FROM prospects p
+  const from = `FROM prospects p
      LEFT JOIN accounts a ON a.id = p.account_id
-     LEFT JOIN contacts c ON c.id = p.contact_id
-     LEFT JOIN users u ON u.id = p.owner_user_id
-     ${where}
-     ORDER BY p.updated_at DESC LIMIT 200`,
-    values
-  );
-  return NextResponse.json(rows);
+     LEFT JOIN contacts c ON c.id = p.contact_id`;
+  const baseWhere = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+  const listFilters = [...filters];
+  const listValues = [...values];
+  if (stage) { listValues.push(stage); listFilters.push(`p.stage = $${listValues.length}`); }
+  const listWhere = listFilters.length ? `WHERE ${listFilters.join(' AND ')}` : '';
+
+  const client = await pool.connect();
+  try {
+    const counts: Record<string, number> = {};
+    const c = await client.query<{ stage: string; n: number }>(
+      `SELECT p.stage, count(*)::int AS n ${from} ${baseWhere} GROUP BY p.stage`, values);
+    for (const r of c.rows) counts[r.stage] = r.n;
+    const total = stage ? (counts[stage] ?? 0) : Object.values(counts).reduce((s, n) => s + n, 0);
+
+    const { rows } = await client.query(
+      `SELECT p.*, a.name as company_name, a.domain, a.industry, a.company_size,
+              c.full_name, c.email, c.title, c.seniority,
+              u.name as owner_name
+       ${from}
+       LEFT JOIN users u ON u.id = p.owner_user_id
+       ${listWhere}
+       ORDER BY p.updated_at DESC, p.id
+       LIMIT ${limit} OFFSET ${offset}`,
+      listValues
+    );
+    return NextResponse.json({ rows, total, counts, limit, offset });
+  } finally {
+    client.release();
+  }
 }
 
 export async function POST(req: NextRequest) {

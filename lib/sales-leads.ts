@@ -162,6 +162,8 @@ export interface Lead {
   converted_deal_name: string | null;
   converted_deal_gate: number | null;
   prospect_id: string | null;
+  /** The person node behind the lead (prospect's, else its contact's) — opens the dossier. Detail route only. */
+  person_id?: string | null;
   icp_name: string | null;
   cards_pending: number;               // approval cards awaiting the owner's 👍
   booking_status: 'scheduled' | 'canceled' | 'no_show' | null;

@@ -39,6 +39,7 @@ export interface ContactRow {
   notes: string | null;
   source: string | null;
   owner_user_id: string | null;
+  person_id?: string | null;
   owner_name?: string | null;
   communication_profile: unknown;
   created_at: string;
@@ -174,6 +175,7 @@ export function buildGraphFromData(input: BuildGraphInput): BuildGraphOutput {
       size,
       metadata: {
         contact_id: c.id,
+        person_id: c.person_id ?? null,
         full_name: c.full_name,
         first_name: c.first_name,
         last_name: c.last_name,
