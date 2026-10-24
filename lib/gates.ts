@@ -96,7 +96,7 @@ export const SALES_GATES: Gate[] = [
     name: 'Project Handover',
     slaDays: 5,
     isBoard: false,
-    description: 'Won. Auto-creates the onboarding row at Stage 1, sends the welcome email to the client with the Stage-2 contacts form, fires the "DEAL WON" Telegram notification. Hand off to the delivery team.',
+    description: 'Won. Reaching G9 records the win date and fires the "DEAL WON" Telegram notice; within the hour Zeami is told (deal.won with the sales rep) and the client is set up in the Zeami platform, where onboarding and delivery are tracked (PMI). Hand off to the delivery team.',
   },
 ];
 

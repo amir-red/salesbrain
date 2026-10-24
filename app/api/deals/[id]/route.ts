@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { SALES_REP_JOIN } from '@/lib/zeami';
 
 export async function GET(
   req: NextRequest,
@@ -17,14 +18,33 @@ export async function GET(
     // Detail page is org-wide so cards on /pipeline stay clickable.
     // Write/edit operations on the deal still gate on creator/lead/admin
     // in their respective endpoints.
+    // + the sales rep Zeami is told about (lib/zeami), the CONFIRMED delivery link (PMI) and an open board vote.
     const { rows } = await pool.query(
       `SELECT d.*, u.name as lead_name, u.email as lead_email,
               del_u.name as deleted_by_name,
-              lp.full_name as linked_contact_name, lp.organization as linked_contact_org
+              lp.full_name as linked_contact_name, lp.organization as linked_contact_org,
+              rep.name AS rep_name, rep.email AS rep_email,
+              CASE WHEN dl.status IS NULL THEN NULL ELSE json_build_object(
+                'status', dl.status, 'step', dl.step_num, 'step_title', dl.step_title, 'health', dl.health_level,
+                'health_reasons', dl.health_reasons, 'pm', dl.pm, 'name', dl.pmi_name,
+                'last_contact_at', dl.last_contact_at, 'synced_at', dl.synced_at) END AS delivery,
+              CASE WHEN bd.id IS NULL THEN NULL ELSE json_build_object(
+                'gate', bd.gate, 'opened_at', bd.created_at, 'votes_required', bd.votes_required,
+                'votes_to_block', bd.votes_to_block,
+                'proceed', (SELECT count(*) FROM board_votes v WHERE v.board_decision_id = bd.id AND v.vote = 'proceed'),
+                'stop', (SELECT count(*) FROM board_votes v WHERE v.board_decision_id = bd.id AND v.vote = 'stop'),
+                'amend', (SELECT count(*) FROM board_votes v WHERE v.board_decision_id = bd.id AND v.vote = 'amend')) END AS board_vote
        FROM deals d
        LEFT JOIN users u ON u.id = d.lead_id
        LEFT JOIN users del_u ON del_u.id = d.deleted_by
        LEFT JOIN people lp ON lp.id = d.relationship_person_id
+       ${SALES_REP_JOIN}
+       LEFT JOIN LATERAL (
+         SELECT * FROM delivery_links x WHERE x.deal_id = d.id AND x.confirmed_at IS NOT NULL
+          ORDER BY x.synced_at DESC NULLS LAST LIMIT 1) dl ON true
+       LEFT JOIN LATERAL (
+         SELECT * FROM board_decisions b WHERE b.deal_id = d.id AND b.status = 'pending'
+          ORDER BY b.created_at DESC LIMIT 1) bd ON true
        WHERE d.id = $1 ${includeDeleted ? '' : 'AND d.deleted_at IS NULL'}`,
       [params.id]
     );

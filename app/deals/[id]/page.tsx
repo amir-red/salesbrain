@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import Timeline from '@/components/Timeline';
@@ -10,7 +10,10 @@ import MarkAsLostModal from '@/components/MarkAsLostModal';
 import GrantStage2Panels from '@/components/GrantStage2Panels';
 import AiCreditPanel from '@/components/AiCreditPanel';
 import ZeamiOnboardingPanel from '@/components/ZeamiOnboardingPanel';
+import Chat from '@/components/Chat';
+import LeadPicker from '@/components/deals/LeadPicker';
 import { getPipeline, SALES_GATES } from '@/lib/gates';
+import { HEALTH_COLOR } from '@/lib/deals-view';
 
 interface Deal {
   id: string;
@@ -46,6 +49,15 @@ interface Deal {
   deleted_by_name?: string | null;
   created_at: string;
   updated_at: string;
+  /** The sales rep Zeami is told about: the lead, else the creator (lib/zeami SALES_REP_JOIN). */
+  rep_name?: string | null;
+  rep_email?: string | null;
+  /** The CONFIRMED delivery link (PMI); 'in-pilot' = in delivery, 'paused' = delivery stalled. */
+  delivery?: { status: string; step: number | null; step_title: string | null; health: string | null; health_reasons: string[] | null;
+               pm: string | null; name: string | null; last_contact_at: string | null; synced_at: string | null } | null;
+  /** A board review waiting for votes (board_decisions.status = 'pending'). */
+  board_vote?: { gate: number; opened_at: string; votes_required: number; votes_to_block: number;
+                 proceed: number; stop: number; amend: number } | null;
 }
 
 interface UserRow { id: string; name: string; email: string }
@@ -100,7 +112,15 @@ function Badge({ label, color }: { label: string; color: string }) {
 export default function DealViewPage() {
   const params = useParams();
   const router = useRouter();
+  const sp = useSearchParams();
   const dealId = params.id as string;
+  // Overview | Chat. /deals/<id>?tab=chat[&prefill=…] opens the chat (old /?deal=<id> links land here).
+  const [tab, setTab] = useState<'overview' | 'chat'>(sp.get('tab') === 'chat' ? 'chat' : 'overview');
+  const prefill = sp.get('prefill') || undefined;
+  const openTab = (t: 'overview' | 'chat') => {
+    setTab(t);
+    router.replace(`/deals/${dealId}${t === 'chat' ? '?tab=chat' : ''}`, { scroll: false });
+  };
   const [deal, setDeal] = useState<Deal | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -136,8 +156,32 @@ export default function DealViewPage() {
     setBusy(true);
     const res = await fetch(`/api/deals/${dealId}`, { method: 'DELETE' });
     setBusy(false);
-    if (res.ok) router.push('/pipeline');
+    if (res.ok) router.push('/');
     else alert('Delete failed: ' + (await res.text()));
+  }
+
+  async function handleMarkWon() {
+    if (!deal) return;
+    if (!window.confirm(`Close "${deal.name}" as won?`)) return;
+    setBusy(true);
+    const res = await fetch(`/api/deals/${dealId}/mark-won`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    setBusy(false);
+    if (res.ok) { reload(); return; }
+    const body = await res.json().catch(() => ({}));
+    const blockers = Array.isArray(body.blockers) ? body.blockers.map((b: { reason?: string; kind?: string }) => `• ${b.reason || b.kind}`).join('\n') : '';
+    alert(`Not closed: ${body.error || res.status}${blockers ? `\n\n${blockers}` : ''}`);
+  }
+
+  async function handleCancel() {
+    if (!deal) return;
+    const reason = window.prompt(`Cancel "${deal.name}"? Cancelled = stopped after it was won or committed (not lost).\n\nReason:`);
+    if (!reason?.trim()) return;
+    setBusy(true);
+    const res = await fetch(`/api/deals/${dealId}/mark-cancelled`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: reason.trim() }) });
+    setBusy(false);
+    if (res.ok) reload();
+    else alert('Cancel failed: ' + ((await res.json().catch(() => ({}))).error || res.status));
   }
 
   async function handleRestore() {
@@ -168,15 +212,18 @@ export default function DealViewPage() {
   }
 
   const isAdmin = currentUser?.role === 'admin';
-  const isOwner = currentUser?.userId === deal.user_id || isAdmin;
-  // Wider than `isOwner` — the lead can also mark lost / chat. Matches the
-  // POST /api/deals/:id/mark-lost permission rule.
+  // Creator, lead or admin may change the deal and chat about it (§5.14) — the POST /api/deals/:id/mark-lost rule.
   const canMutate =
     isAdmin ||
     currentUser?.userId === deal.user_id ||
     currentUser?.userId === deal.lead_id;
   const isLost = deal.status === 'lost';
+  const isCancelled = deal.status === 'cancelled';
   const isDeleted = !!deal.deleted_at;
+  // Sales are won at the final gate (status stays 'active', won_at is recorded); grants close with Mark won.
+  const isWonDeal = deal.status === 'won' || (deal.deal_type === 'sales' && deal.status === 'active' && deal.gate === SALES_GATES.length);
+  const inDelivery = deal.delivery?.status === 'in-pilot';
+  const deliveryPaused = deal.delivery?.status === 'paused';
   // Pipeline-aware gate lookup — was hardcoded to SALES_GATES via the GATES
   // alias, silently mislabelling grant deals with sales gate names.
   const pipeline = getPipeline(deal.deal_type);
@@ -208,16 +255,16 @@ export default function DealViewPage() {
   return (
     <div className="flex h-screen">
       <Sidebar />
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Header */}
         <div className="p-6 border-b flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center gap-4">
             <Link
-              href="/pipeline"
+              href="/"
               className="px-3 py-1.5 rounded-lg text-xs"
               style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}
             >
-              ← Pipeline
+              ← Deals
             </Link>
             <div>
               <div className="flex items-center gap-2">
@@ -229,6 +276,26 @@ export default function DealViewPage() {
                     title="This deal was marked lost — see /lessons for the captured lesson"
                   >
                     Lost
+                  </span>
+                )}
+                {isWonDeal && (
+                  <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded font-semibold"
+                    style={{ background: 'color-mix(in srgb, var(--green) 15%, transparent)', color: 'var(--green)' }}
+                    title={deal.won_at ? `Won on ${new Date(deal.won_at).toLocaleDateString()}` : 'Won'}>
+                    Won{deal.won_at ? ` · ${new Date(deal.won_at).toLocaleDateString()}` : ''}
+                  </span>
+                )}
+                {isCancelled && (
+                  <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded font-semibold"
+                    style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }} title={deal.cancelled_reason || undefined}>
+                    Cancelled
+                  </span>
+                )}
+                {(inDelivery || deliveryPaused) && (
+                  <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded font-semibold flex items-center gap-1"
+                    style={{ background: 'color-mix(in srgb, var(--green) 12%, transparent)', color: deliveryPaused ? 'var(--yellow)' : 'var(--green)' }}>
+                    {deal.delivery?.health && <span className="w-1.5 h-1.5 rounded-full" style={{ background: HEALTH_COLOR[deal.delivery.health] ?? 'var(--text-muted)' }} />}
+                    {deliveryPaused ? 'Delivery paused' : 'In delivery'}
                   </span>
                 )}
                 {isDeleted && (
@@ -287,18 +354,47 @@ export default function DealViewPage() {
                 Restore
               </button>
             )}
-            {isOwner && (
-              <Link
-                href={`/?deal=${deal.id}`}
-                className="px-4 py-2 rounded-lg text-sm font-medium"
-                style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
-              >
-                Open Chat →
-              </Link>
+            {deal.deal_type === 'grant' && deal.status === 'active' && !isDeleted && canMutate && (
+              <button onClick={handleMarkWon} disabled={busy}
+                className="px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                style={{ background: 'var(--green)', color: 'var(--accent-fg)' }}
+                title="Close this grant as won — needs a signed contract, every resource settled and every report accepted">
+                Mark won
+              </button>
+            )}
+            {(deal.status === 'active' || deal.status === 'won') && !isDeleted && canMutate && (
+              <button onClick={handleCancel} disabled={busy}
+                className="px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+                title="Stopped after it was won or committed (different from lost)">
+                Cancel deal
+              </button>
             )}
           </div>
         </div>
 
+        {/* Overview | Chat */}
+        <div className="px-6 border-b flex gap-4 text-sm" style={{ borderColor: 'var(--border)' }}>
+          {(['overview', 'chat'] as const).map((t) => (
+            <button key={t} onClick={() => openTab(t)} className="py-2.5 -mb-px font-medium capitalize"
+              style={{ color: tab === t ? 'var(--text)' : 'var(--text-muted)', borderBottom: `2px solid ${tab === t ? 'var(--accent)' : 'transparent'}` }}>
+              {t === 'chat' ? 'Chat with the agent' : 'Overview'}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'chat' ? (
+          <div className="flex-1 min-h-0 flex flex-col">
+            {canMutate && !isDeleted ? (
+              <Chat dealId={deal.id} deal={{ ...deal, value: deal.value ? Number(deal.value) : null }} onDealUpdate={reload} prefill={prefill} />
+            ) : (
+              <div className="flex-1 flex items-center justify-center p-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+                {isDeleted ? 'This deal is deleted.' : 'Only the deal’s creator, its lead or an admin can chat with the agent about it.'}
+              </div>
+            )}
+          </div>
+        ) : (
+        <div className="flex-1 overflow-y-auto">
         {/* Money-fields-missing banner for grants */}
         {isGrant && missingMoney.length > 0 && (
           <div
@@ -328,13 +424,15 @@ export default function DealViewPage() {
                   </span>
                 ))}
               </div>
-              <Link
-                href={`/?deal=${deal.id}`}
-                className="inline-block mt-3 px-3 py-1.5 rounded-lg text-xs font-medium"
-                style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
-              >
-                Open chat to fill →
-              </Link>
+              {canMutate && (
+                <button
+                  onClick={() => openTab('chat')}
+                  className="inline-block mt-3 px-3 py-1.5 rounded-lg text-xs font-medium"
+                  style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+                >
+                  Open chat to fill →
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -376,6 +474,9 @@ export default function DealViewPage() {
 
             {/* Lead + Contact */}
             <div className="rounded-xl p-4 space-y-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+              {canMutate ? (
+                <LeadPicker deal={deal} onUpdate={reload} />
+              ) : (
               <div>
                 <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>Project Lead</p>
                 {deal.lead_name ? (
@@ -392,6 +493,15 @@ export default function DealViewPage() {
                   <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Unassigned</span>
                 )}
               </div>
+              )}
+              {deal.deal_type === 'sales' && (
+                <div>
+                  <p className="text-xs mb-1" style={{ color: 'var(--text-muted)' }}>Sales rep</p>
+                  <p className="text-sm" title="Sent to Zeami as the client's sales person: the lead, else whoever created the deal">
+                    {deal.rep_name || <span className="text-xs" style={{ color: 'var(--text-muted)' }}>None Zeami can match</span>}
+                  </p>
+                </div>
+              )}
               <div>
                 <p className="text-xs mb-1" style={{ color: 'var(--text-muted)' }}>Contact</p>
                 <p className="text-sm">{deal.contact_name || deal.linked_contact_name || 'Unknown'}</p>
@@ -425,6 +535,48 @@ export default function DealViewPage() {
               ))}
             </div>
           </div>
+
+          {/* Board vote waiting (board_decisions pending) and delivery (confirmed PMI link) */}
+          {(deal.board_vote || deal.delivery) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {deal.board_vote && (
+                <div className="rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid color-mix(in srgb, var(--cat-violet) 45%, var(--border))' }}>
+                  <h3 className="text-xs font-medium uppercase tracking-wider mb-2" style={{ color: 'var(--cat-violet)' }}>
+                    Board vote open · G{deal.board_vote.gate}
+                  </h3>
+                  <p className="text-sm">
+                    {deal.board_vote.proceed} proceed · {deal.board_vote.stop} stop{deal.board_vote.amend ? ` · ${deal.board_vote.amend} amend` : ''}
+                  </p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                    {deal.board_vote.votes_required} proceed votes pass it, {deal.board_vote.votes_to_block} stop votes block it ·
+                    opened {new Date(deal.board_vote.opened_at).toLocaleDateString()} · votes are cast in the board Telegram group
+                  </p>
+                </div>
+              )}
+              {deal.delivery && (
+                <div className="rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                  <h3 className="text-xs font-medium uppercase tracking-wider mb-2 flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
+                    Delivery (PMI){deal.delivery.name ? ` · ${deal.delivery.name}` : ''}
+                    {deal.delivery.health && <span className="w-2 h-2 rounded-full" style={{ background: HEALTH_COLOR[deal.delivery.health] ?? 'var(--text-muted)' }} title={`Health: ${deal.delivery.health}`} />}
+                  </h3>
+                  <p className="text-sm">
+                    {deal.delivery.status === 'in-pilot' ? 'In pilot' : deal.delivery.status}
+                    {deal.delivery.step_title ? ` · step ${deal.delivery.step ?? ''} ${deal.delivery.step_title}` : ''}
+                  </p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                    {deal.delivery.pm ? `PM ${deal.delivery.pm} · ` : ''}
+                    {deal.delivery.last_contact_at ? `last contact ${new Date(deal.delivery.last_contact_at).toLocaleDateString()} · ` : ''}
+                    {deal.delivery.synced_at ? `synced ${new Date(deal.delivery.synced_at).toLocaleDateString()}` : ''}
+                  </p>
+                  {deal.delivery.health_reasons && deal.delivery.health_reasons.length > 0 && (
+                    <ul className="text-xs mt-1 list-disc ml-4" style={{ color: 'var(--text-muted)' }}>
+                      {deal.delivery.health_reasons.slice(0, 3).map((r, i) => <li key={i}>{r}</li>)}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Field completion */}
           <div className="rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
@@ -464,9 +616,9 @@ export default function DealViewPage() {
                     key={i}
                     className="px-2 py-0.5 rounded text-xs"
                     style={{
-                      background: f.startsWith('sla_') || f.startsWith('decay_') ? 'var(--red)' : 'var(--bg-input)',
-                      color: f.startsWith('sla_') || f.startsWith('decay_') ? 'var(--accent-fg)' : 'var(--text-muted)',
-                      border: `1px solid ${f.startsWith('sla_') || f.startsWith('decay_') ? 'var(--red)' : 'var(--border)'}`,
+                      background: f.startsWith('sla_') ? 'var(--red)' : 'var(--bg-input)',
+                      color: f.startsWith('sla_') ? 'var(--accent-fg)' : 'var(--text-muted)',
+                      border: `1px solid ${f.startsWith('sla_') ? 'var(--red)' : 'var(--border)'}`,
                     }}
                   >
                     {f}
@@ -545,6 +697,8 @@ export default function DealViewPage() {
             </div>
           </div>
         </div>
+        </div>
+        )}
       </div>
 
       {/* Mount the Mark-as-Lost modal once at the page root so it can overlay
