@@ -2331,7 +2331,7 @@ Amir: "can't we have a webhook listening to the inbox?" Before, replies to wave 
 
 Amir (after Guhan's Inbox): "sync the inbox in our sequencing activities — email and LinkedIn". Decisions: replying from
 the Inbox SENDS (pressing Send is the sender's decision, like the follow-up Send button); email = only threads a
-SalesBrain email started (no general Gmail); the sidebar a little SMALLER (not bigger).
+SalesBrain email started (no general Gmail).
 - **Core 082**: `email_threads` (one per mailbox + Gmail thread: prospect, person, counterpart, subject, last message,
   `last_from_them`, `state` needs_reply | waiting | done, `inbox_seen_at`) + `email_messages` (every message, ours and
   theirs, plain-text body with the quoted history cut off; unique on the Gmail id); `linkedin_threads.inbox_seen_at`;
@@ -2355,8 +2355,8 @@ SalesBrain email started (no general Gmail); the sidebar a little SMALLER (not b
   "outreach" when its member id or its person's slug matches a prospect, or a SalesBrain message went into it.
   `GET /api/inbox`, `/api/inbox/count` (sidebar badge), `GET|POST /api/inbox/{email|linkedin}/{id}`. Gmail bodies:
   `lib/gmail-send.ts::readThreads(…, {full})` + `lib/email-text.ts` (`stripQuoted`, tested by
-  `scripts/test-email-text.mts`). `/sales-leads?q=<name>&open=<lead id>` opens a lead's card. Sidebar: 208 px,
-  32 px rows, 13 px text, 16 px icons, an Inbox entry under Pipeline with the needs-reply count. Ad connectors left the sidebar (Amir): reached from the Marketing page's "Ad connectors" settings button; `/marketing/connectors` has a ← back to Marketing.
+  `scripts/test-email-text.mts`). `/sales-leads?q=<name>&open=<lead id>` opens a lead's card. Sidebar: an Inbox entry
+  under Pipeline with the needs-reply count (a smaller sidebar was tried and reverted on Amir's word — size unchanged). Ad connectors left the sidebar (Amir): reached from the Marketing page's "Ad connectors" settings button; `/marketing/connectors` has a ← back to Marketing.
 - Tests: `salesbrain-core/tests/test_inbox_db.py` (6, real Postgres), `salesbrain-hermes/tests/test_inbox_reply.py`,
   `test_email_replies.py`; the API was walked on a scratch database through a real login (lists, team view, open marks
   seen, a reply on someone else's account refused through the real ring process, done / reopen, 401).
