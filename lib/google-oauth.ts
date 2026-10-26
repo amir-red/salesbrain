@@ -22,6 +22,8 @@ export const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/contacts.readonly',
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.send',
+  // meetings with leads (2026-10-26): read only, matched to leads by attendee email (lib/google-calendar.ts)
+  'https://www.googleapis.com/auth/calendar.readonly',
 ];
 
 /** Short names of what a token may do, from Google's space-separated `scope` string. */

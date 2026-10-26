@@ -2515,6 +2515,38 @@ talk to recently and how warm" (Mateo), and "this is what you proposed, this is 
   `warm`: sheets Warm people · Relationships · About), button on `/warm`. Company falls back to the prospect's account,
   the lead card, then the LinkedIn headline. **087 still waits for the deploy.**
 
+### 5.bu One row per person, WhatsApp, Calendar meetings, Monday note, list tuning (2026-10-26, feat/funnel)
+
+- **Twins cleaned (data, Amir's decisions)**: 40 people had two rows. Esmail+Hannes / Hannes+Osman / Amir+Hannes → keep
+  Hannes; Mateo+Osman → keep Mateo; Bruk+Yasin and Esmail+Yasin → both deleted; Ralf Schwirten (Matthias twice) → one.
+  52 rows deleted (8 cards, 51 unused contacts), 3 history records (approvals / invitation / email thread / enrollment)
+  moved to the kept row. Backup `~/.cache/salesbrain/backups/twins-cleanup-20261026182122.json`, audit
+  `twin_rows_cleanup`. Detlef / Mark Ehl were NOT twins (Mark imported with Detlef's address): Mark split into his own
+  person (audit `person_split`). Esmail's 11 opportunities were NOT touched (needs an explicit yes).
+- **No new twins**: `prospecting.upsert_candidate` returns a teammate's existing row (`held_by`, nothing created) when
+  the LinkedIn slug or member id is already theirs (test in `test_one_table_db.py`).
+- **WhatsApp import** (`policy/whatsapp.py` parser: iPhone + Android, day/month order from the file, continuation lines,
+  media, system lines; `commands/whatsapp.py`: one-to-one only, person by id / name / file name ("WhatsApp Chat with X"),
+  created when unknown, candidates when ambiguous; messages → `interactions` channel whatsapp inbound/outbound, dedup
+  on (time, direction); warmth refreshed). Bot: `crm_whatsapp_import {file_path, contact?, my_name?}` (document-cache
+  guard now takes .txt/.zip). App: "Import a WhatsApp chat" on `/warm` → `POST /api/warm/whatsapp` (file to
+  tmpdir/salesbrain-uploads → internal RPC `whatsapp_import`, which accepts only that folder; file deleted after).
+- **Meetings from Google Calendar**: `calendar.readonly` added to the ONE Google consent (existing connections must
+  RECONNECT; the **Google Calendar API must be enabled in Cloud project salesbrain-512414**). `lib/google-calendar.ts`
+  (events with other attendees, 14 d back / 30 d ahead) → bridge tool `calendar_events` → Hermes cron
+  **`calendar-meetings`** (35 7-21) → `commands/meetings.record_calendar_meetings`: attendee email on a lead card → past =
+  `meeting` track-record line (once per event, `ref.calendar_event_id`), future = card booked (booked_at, scheduled, Meet
+  link); known person → `interactions` channel meeting (warmth "met"). Profile → Google shows "Calendar meetings".
+- **Monday funnel note**: Hermes cron **`funnel-digest`** (15 8 * * 1) → `funnel.weekly_digest`: per teammate their warmest
+  people nobody works (top 5 + reason), their last-7-days outreach and answers, the team's clearest 30-day learning; own
+  DM or nothing (source `funnel-digest`, mutable); nobody gets a note with nothing personal in it.
+- **List tuning** (`policy/icp_tuning.py`): per fit criterion, answer rate when matched vs not (outreach only); lift ≤ 0.8 →
+  half weight, ≥ 1.5 → 1.5× (cap 60), rescaled to the same total; needs ≥ 8 per side, ≥ 3 answers, ≥ 2 on the better side.
+  `commands/icp_tuning` (`icp_tuning` read for all, `apply_icp_tuning` owner/admin → weights + rescore, audited); tools
+  `crm_icp_tuning`, `crm_icp_apply_tuning` (mcp None); `/api/icp/[id]/tuning`; `components/icp/TuningPanel.tsx` on
+  `/icp/[id]`. NRW today: company size 7/109 vs 3/108 → size 15 → 20, title 40 → 35 (not applied).
+- Warm people Excel: kind `warm` export + button on `/warm`.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

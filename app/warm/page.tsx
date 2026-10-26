@@ -13,6 +13,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import PageHeader from '@/components/panel/PageHeader';
 import ExportButton from '@/components/ExportButton';
+import WhatsAppImport from '@/components/warm/WhatsAppImport';
 import { FUNNEL_LABELS, type FunnelStage } from '@/lib/funnel';
 import { WARMTH_BANDS, WARMTH_COLOR, linkedinUrl, type WarmPeople, type WarmPerson } from '@/lib/warm';
 
@@ -125,8 +126,11 @@ function WarmPage() {
       <div className="flex-1 overflow-y-auto">
         <PageHeader title="Warm people"
           subtitle="Who we already talk to and nobody is working yet, warmest first. Start here before any cold list."
-          actions={<ExportButton href={`/api/export/warm?${new URLSearchParams({ band, ...(owner ? { owner } : {}), ...(worked ? { worked: '1' } : {}) })}`}
-            title="Download these people as Excel (current band, teammate and filter), plus every teammate × person relationship" />} />
+          actions={<>
+            <WhatsAppImport onDone={(n) => { setNote(n); void load(); }} />
+            <ExportButton href={`/api/export/warm?${new URLSearchParams({ band, ...(owner ? { owner } : {}), ...(worked ? { worked: '1' } : {}) })}`}
+              title="Download these people as Excel (current band, teammate and filter), plus every teammate × person relationship" />
+          </>} />
         <div className="p-4 space-y-3 max-w-[1400px]">
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <select value={band} onChange={(e) => set('band', e.target.value === 'warm' ? '' : e.target.value)}

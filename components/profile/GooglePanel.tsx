@@ -14,7 +14,7 @@ import { relativeTime } from '@/lib/time';
  */
 interface GoogleState {
   account_email: string | null; connected_at: string | null; needs_reconnect: boolean;
-  can: { contacts: boolean; read_mail: boolean; send: boolean };
+  can: { contacts: boolean; read_mail: boolean; send: boolean; calendar?: boolean };
 }
 interface Mine { address: string; display_name: string | null; signature: string | null; daily_cap: number;
   connected_at: string; revoked_at: string | null; last_sent_at: string | null; last_error: string | null;
@@ -96,7 +96,7 @@ export default function GooglePanel() {
   };
 
   const works = !!g && !g.needs_reconnect;
-  const perms = g ? [['Contacts', g.can.contacts], ['Read Gmail', g.can.read_mail], ['Send email', g.can.send]] as const : [];
+  const perms = g ? [['Contacts', g.can.contacts], ['Read Gmail', g.can.read_mail], ['Send email', g.can.send], ['Calendar meetings', !!g.can.calendar]] as const : [];
   const missing = perms.filter(([, ok]) => !ok).map(([k]) => k);
   const me = boxes.find((b) => mine && b.address === mine.address);
 

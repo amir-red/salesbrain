@@ -2,6 +2,7 @@
 
 import OwnerControl from '@/components/icp/OwnerControl';
 import SeatsControl from '@/components/icp/SeatsControl';
+import TuningPanel from '@/components/icp/TuningPanel';
 import FunnelStrip from '@/components/panel/FunnelStrip';
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
@@ -141,6 +142,7 @@ export default function IcpPanelPage() {
         {data && !editing && (
           <div className="p-4 space-y-4">
             <FunnelStrip compact query={{ icp_id: id }} title="This list's funnel" href={`/funnel?icp_id=${id}`} />
+            <TuningPanel icpId={id} onApplied={(n) => { setNote(n); void refresh(); }} />
             {data.blockers.length > 0 && (
               <div className="rounded-xl px-4 py-3 text-xs space-y-0.5" style={{ background: 'color-mix(in srgb, var(--yellow) 8%, transparent)', border: '1px solid var(--yellow)' }}>
                 <div className="font-medium" style={{ color: 'var(--yellow)' }}>The Leads Finder will not run for this ICP right now</div>
