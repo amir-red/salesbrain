@@ -2451,6 +2451,35 @@ Amir's answers to the open questions (plan §13):
   Chat starters, Zeami sync final stage, funnel SQL (`final_gate("sales")`), sales pipeline skill, KPI note.
 - **Menu without numbers**: Overview · Target · Reach · Prospects · Leads · Opportunities · Funding / Insights / Admin.
 
+### 5.bs ONE table: `leads` replaces `prospects` + `sales_leads` (2026-10-26, feat/funnel, migration 088)
+
+Amir chose "replace both tables with a single new one". **`prospects` is renamed `leads`** (ids and the 12 FKs follow)
+and the lead-card columns live on the same row (`card_id` = the old sales_leads.id, `card_created_at`, `lead_source`,
+`lead_status`, `lead_payload`; `converted_deal_id` shared; the rest keep their names; card CHECKs + a "card fields
+required when card_id is set" CHECK; card indexes recreated as partial indexes). **`prospects` and `sales_leads` are now
+VIEWS with exactly the old columns**, so all existing code works unchanged:
+- `prospects` = plain updatable view (INSERT … ON CONFLICT on the owner+LinkedIn index works through it, tested).
+- `sales_leads` = view `WHERE card_id IS NOT NULL` + INSTEAD OF triggers (`sales_leads_view_insert/update/delete`):
+  INSERT puts the card on its prospect's row (`raw_payload.prospect_id`; a second card on one prospect = unique
+  violation), else on a **placeholder** row (`source_type='lead_card'`, no contact); UPDATE writes the card columns and,
+  when `raw_payload.prospect_id` names another card-less row, **moves the card there** (card id kept, history and campaign
+  links follow, placeholder deleted); DELETE removes the card and its track record (and a placeholder row), the prospect
+  stays. `sales_leads.prospect_id` is never NULL any more; the Lead Conductor treats a placeholder as "no prospect yet"
+  (conductor `_FACTS_SQL` join) and links / lands it exactly as before, which moves the card onto the real row.
+- `sales_lead_events.lead_id` and `campaign_enrollments.sales_lead_id` reference `leads(card_id)` (DEFERRABLE, for the
+  move). The old card table stays as `sales_leads_pre088` for one release (drop in 089).
+- Runs once (data move skipped when `leads` exists; views / functions / triggers re-created on every run).
+- Rehearsed on live data (rolled back, ~5 s): 902 cards → 902, **0 differing in any column**, 0 relinked, 17 placeholders
+  (the cards that had no prospect), 0 orphaned history rows. **088 is backward-compatible with the code on main**
+  (the views keep the old names), but it is NOT applied: ship it with the deploy.
+- Tests: `tests/test_one_table_db.py` (form card → placeholder, card on its prospect + second card refused, UPDATE …
+  RETURNING / rowcount, card move keeps id + history, deletes, ON CONFLICT through the view); the whole DB suite runs on
+  the views (700 pass; the 3 campaigns_r2 failures are the known clock bug on main).
+- **Not done (Amir to decide): one row per person.** 41 people still have 2–6 rows (one per teammate who holds them).
+  Merging them needs a person × list × owner membership table and changes ~90 list-scoped and ~124 owner-scoped queries
+  in 43 files (visibility, whose LinkedIn sends, budgets). Moving code off the views onto `leads` directly is optional
+  cleanup.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
