@@ -11,7 +11,7 @@ import FillableText from '@/components/campaigns/FillableText';
 import { relativeTime } from '@/lib/time';
 import {
   ACTIONS, HANDLES, HANDLE_LABELS, LABELS, PALETTE, defaultConfig, messageOf, nodeLabel, nodeSummary, summaryOf,
-  type Graph, type GraphNode, type Handle as Exit, type NodeType, type SavedSample, type Validation,
+  type Graph, type GraphNode, type Handle as Exit, type NodeType, type SavedSample, type Validation, sampleSlots, variantsOf,
 } from '@/lib/campaigns';
 
 /**
@@ -110,6 +110,12 @@ function MessageCard({ d, n }: { d: StepData; n: GraphNode }) {
             style={{ color: tone, background: `color-mix(in srgb, ${tone} 14%, transparent)` }}>{GLYPH[n.type]}</span>
           <span className="text-[13px] font-semibold truncate">{nodeLabel(n)}</span>
           <span className="text-[10px] shrink-0" style={{ color: 'var(--text-muted)' }}>· {nodeSummary(n)}</span>
+          {variantsOf(n.config).length > 0 && (
+            <span className="text-[10px] font-semibold shrink-0 rounded px-1" title="A/B test: each person gets one variant"
+              style={{ color: 'var(--accent)', background: 'var(--accent-soft)' }}>
+              A/B · {typeof n.config?.winner === 'string' ? String(n.config.winner).toUpperCase() : variantsOf(n.config).length}
+            </span>
+          )}
           <Badge d={d} />
         </div>
         <div className="text-[11.5px] leading-snug rounded-lg px-2 py-1.5"
@@ -350,7 +356,7 @@ function Canvas({ graph, validation, editable, stats, samples, sampleStates, sel
     measured: dims[n.id],
     draggable: editable, selected: n.id === selected,
     data: { node: n, blockers: problems.b[n.id] ?? [], warnings: problems.w[n.id] ?? [], stats: stats?.[n.id],
-      selected: n.id === selected, sample: samples?.[n.id], sampleState: sampleStates?.[n.id], onHover,
+      selected: n.id === selected, sample: samples?.[sampleSlots(n)[0].key], sampleState: sampleStates?.[sampleSlots(n)[0].key], onHover,
       onDelete: editable ? (id: string) => remove([id]) : undefined } satisfies StepData,
   })), [graph.nodes, problems, stats, samples, sampleStates, editable, selected, dims, remove, onHover]);
 
@@ -539,7 +545,7 @@ function Canvas({ graph, validation, editable, stats, samples, sampleStates, sel
             nodeColor={(n) => ((n.data as StepData)?.blockers?.length ? '#d93a3a' : theme === 'dark' ? '#5c5470' : '#c9bfd3')} />
         </ReactFlow>
       </div>
-      {hovered && hover && <HoverMessage node={hovered} sample={samples?.[hovered.id]} rect={hover.rect} />}
+      {hovered && hover && <HoverMessage node={hovered} sample={samples?.[sampleSlots(hovered)[0].key]} rect={hover.rect} />}
     </div>
   );
 }

@@ -45,17 +45,19 @@ const ACTIONS: Record<string, string> = {
   check: 'campaign_launch_check', launch: 'campaign_launch', pause: 'crm_campaign_pause', resume: 'crm_campaign_resume',
   archive: 'campaign_archive', discard: 'campaign_discard_draft', test: 'campaign_test_run',
   preview: 'campaign_preview', people: 'campaign_candidates', samples: 'campaign_preview',
+  trust: 'campaign_trust', winner: 'campaign_variant_winner', pause_auto: 'campaign_pause_auto',
 };
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  let body: { action?: string; prospect_id?: string; choices?: Record<string, string> } = {};
+  let body: { action?: string; prospect_id?: string; choices?: Record<string, string>; node_id?: string; variant_id?: string | null } = {};
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
   const tool = ACTIONS[body.action ?? ''];
   if (!tool) return NextResponse.json({ error: `action must be one of ${Object.keys(ACTIONS).join(', ')}` }, { status: 400 });
   const args: Record<string, unknown> = { campaign_id: params.id };
   if (body.action === 'samples') { args.all_steps = true; args.save = true; }
+  if (body.action === 'winner') { args.node_id = body.node_id; args.variant_id = body.variant_id ?? null; }
   if (body.action === 'test' || body.action === 'preview') {
     if (body.prospect_id) args.prospect_id = body.prospect_id;
     if (body.choices && typeof body.choices === 'object') args.choices = body.choices;

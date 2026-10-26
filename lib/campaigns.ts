@@ -23,9 +23,32 @@ export interface Campaign {
   id: string; name: string; status: CampaignStatus; goal: string | null; writing_context: string | null;
   language: string | null; product_id: string | null; owner_user_id: string | null; graph: Graph;
   draft_graph: Graph | null; editing_graph: Graph; graph_version: number; validation: Validation; can_edit: boolean;
-  lists: CampaignList[]; settings: { daily_max_per_step?: number; samples?: Record<string, SavedSample> }; launched_at: string | null;
+  lists: CampaignList[];
+  settings: { daily_max_per_step?: number; samples?: Record<string, SavedSample>; auto_send?: AutoSend; allow_unverified?: boolean };
+  launched_at: string | null;
   paused_at: string | null; updated_at: string;
 }
+
+/** Trusted auto-send (084): after `trust_after` cards of a step approved unchanged, the step sends without a tap. */
+export interface AutoSend { enabled: boolean; trust_after: number }
+export interface StepTrust { node_id: string; sender_user_id: string; sender_name: string | null; enabled: boolean;
+  trusted: boolean; human_approvals: number; needed: number; reset_at: string | null }
+
+/** A/B (084): a message step may carry 2–3 variants; each inherits what it does not set from the step itself. */
+export interface Variant { id: 'a' | 'b' | 'c'; label?: string; mode?: string; note_mode?: string; text?: string; subject?: string; instructions?: string }
+export const VARIANT_IDS = ['a', 'b', 'c'] as const;
+export function variantsOf(c: Record<string, unknown> | undefined): Variant[] {
+  return Array.isArray(c?.variants) ? (c!.variants as Variant[]).filter((v) => v && typeof v === 'object' && v.id) : [];
+}
+/** The effective config of one variant: the step's keys, with the variant's own on top. */
+export function variantConfig(c: Record<string, unknown>, id: string | null): Record<string, unknown> {
+  const v = variantsOf(c).find((x) => x.id === id);
+  if (!v) return c;
+  const out: Record<string, unknown> = { ...c };
+  for (const k of ['mode', 'note_mode', 'text', 'subject', 'instructions'] as const) if (v[k] != null && v[k] !== '') out[k] = v[k];
+  return out;
+}
+export function sampleKey(nodeId: string, variantId: string | null): string { return variantId ? `${nodeId}:${variantId}` : nodeId; }
 
 export interface CampaignRow {
   id: string; name: string; status: CampaignStatus; goal: string | null; owner_name: string | null;
@@ -301,9 +324,13 @@ export function toTemplate(text: string, p: PreviewPerson | null): string {
   return out;
 }
 
-/** What a message step says on the canvas: its own text when written by you, else the latest sample draft. */
-export function messageOf(n: Pick<GraphNode, 'type' | 'config'>, sample?: Sample): { text: string; sample: boolean } | null {
-  const c = n.config || {};
+/** What a message step says on the canvas: its own text when written by you, else the latest sample draft.
+ *  With variants, the first variant (or the winner) speaks for the card. */
+export function messageOf(n: Pick<GraphNode, 'type' | 'config'>, sample?: Sample, variantId?: string | null): { text: string; sample: boolean } | null {
+  const base = n.config || {};
+  const vs = variantsOf(base);
+  const vid = variantId ?? (vs.length ? (typeof base.winner === 'string' && vs.some((v) => v.id === base.winner) ? base.winner as string : vs[0].id) : null);
+  const c = vid ? variantConfig(base, vid) : base;
   const mode = String(n.type === 'linkedin_connect' ? c.note_mode || 'none' : c.mode || 'auto');
   if (mode === 'fixed' && typeof c.text === 'string' && c.text.trim()) return { text: c.text, sample: false };
   // A sample was written for one person; the canvas speaks for everyone, so show it with the fillable fields.
@@ -332,16 +359,22 @@ export interface SavedSample extends Sample { cfg?: Record<string, unknown>; at?
 const SAMPLE_KEYS = ['mode', 'note_mode', 'instructions', 'text', 'subject'] as const;
 
 /** A message step whose words are written per person (so a sample shows what that looks like). */
-export function needsSample(n: Pick<GraphNode, 'type' | 'config'>): boolean {
-  const c = n.config || {};
+export function needsSample(n: Pick<GraphNode, 'type' | 'config'>, variantId?: string | null): boolean {
+  const c = variantId ? variantConfig(n.config || {}, variantId) : (n.config || {});
   if (n.type === 'linkedin_connect') return ['auto', 'guided'].includes(String(c.note_mode || 'none'));
   return (n.type === 'linkedin_message' || n.type === 'email') && ['auto', 'guided'].includes(String(c.mode || 'auto'));
 }
 
+/** Every (step, variant) a sample can be written for: [node id, variant id | null, sample key]. */
+export function sampleSlots(n: Pick<GraphNode, 'id' | 'type' | 'config'>): { variant: string | null; key: string }[] {
+  const vs = variantsOf(n.config || {});
+  return (vs.length ? vs.map((v) => v.id as string) : [null]).map((v) => ({ variant: v, key: sampleKey(n.id, v) }));
+}
+
 /** True when the step was changed (how it is written, its instructions) after its sample was written. */
-export function sampleIsStale(n: Pick<GraphNode, 'config'>, s?: SavedSample): boolean {
+export function sampleIsStale(n: Pick<GraphNode, 'config'>, s?: SavedSample, variantId?: string | null): boolean {
   if (!s?.cfg) return false;
-  const c = n.config || {};
+  const c = variantId ? variantConfig(n.config || {}, variantId) : (n.config || {});
   return SAMPLE_KEYS.some((k) => (c[k] ?? null) !== (s.cfg?.[k] ?? null) && !(c[k] == null && s.cfg?.[k] == null));
 }
 

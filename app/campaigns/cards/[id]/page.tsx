@@ -21,6 +21,7 @@ interface Card {
   id: string; campaign_id: string; campaign_name: string; step_label: string; step_type: string; kind: string;
   status: string; sender_name: string; day: string; expires_at: string; waiting: number; drafts: Draft[];
   can_decide: boolean; result: { sent?: number; failed?: number; errors?: string[] } | null;
+  decided_by?: 'human' | 'auto' | null;
 }
 const DRAFT: Record<string, { label: string; color: string }> = {
   pending: { label: 'waiting', color: 'var(--orange)' }, approved: { label: 'approved', color: 'var(--blue)' },
@@ -69,7 +70,8 @@ export default function CampaignCardPage() {
         <div className="sticky top-0 z-10" style={{ background: 'var(--bg)' }}>
           <PageHeader back={k ? { href: `/campaigns/${k.campaign_id}`, label: 'Open the campaign' } : undefined}
             title={k ? <>{k.step_label} · {k.campaign_name}</> : 'Campaign card'}
-            subtitle={k ? <>For {k.sender_name} · {k.day} · {CARD[k.status] ?? k.status}{k.status === 'pending' ? ` · expires ${timeUntil(k.expires_at)}` : ''}</> : null}
+            subtitle={k ? <>For {k.sender_name} · {k.day} · {CARD[k.status] ?? k.status}{k.status === 'pending' ? ` · expires ${timeUntil(k.expires_at)}` : ''}
+              {k.decided_by === 'auto' && <span className="ml-2 text-[11px] font-medium px-2 py-0.5 rounded-full" style={{ color: 'var(--blue)', background: 'color-mix(in srgb, var(--blue) 14%, transparent)' }}>auto-approved · trusted step</span>}</> : null}
             actions={k?.can_decide && k.status === 'pending' && pending.length > 0 ? <>
               <Button disabled={busy !== null} onClick={() => post('skip', `/api/campaigns/cards/${id}`, { decision: 'skip' })}>Skip</Button>
               <Button variant="primary" disabled={busy !== null || Object.keys(edits).length > 0}

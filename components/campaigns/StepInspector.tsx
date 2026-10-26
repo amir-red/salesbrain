@@ -2,8 +2,8 @@
 
 import FillableText from '@/components/campaigns/FillableText';
 import {
-  BRANCH_FIELDS, BRANCH_OPS, END_REASONS, EVENTS, HANDOFF_TO, LABELS, MODES, NOTE_MODES, PLACEHOLDERS, nodeLabel, toTemplate,
-  type GraphNode, type Sample,
+  BRANCH_FIELDS, BRANCH_OPS, END_REASONS, EVENTS, HANDOFF_TO, LABELS, MODES, NOTE_MODES, PLACEHOLDERS, VARIANT_IDS, nodeLabel,
+  sampleKey, toTemplate, variantsOf, type GraphNode, type Sample, type Variant,
 } from '@/lib/campaigns';
 
 /**
@@ -14,6 +14,8 @@ interface Rule { field: string; op: string; value?: string | number }
 
 interface Props {
   node: GraphNode; editable: boolean; blockers: string[]; warnings: string[]; sample?: Sample; onTestRun?: () => void;
+  /** samples by key (`<node>` or `<node>:<variant>`), for the variants' own sample lines */
+  samples?: Record<string, Sample>;
   onChange: (config: Record<string, unknown>) => void; onRemove: () => void;
 }
 
@@ -27,9 +29,17 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-export default function StepInspector({ node, editable, blockers, warnings, sample, onTestRun, onChange, onRemove }: Props) {
+export default function StepInspector({ node, editable, blockers, warnings, sample, samples, onTestRun, onChange, onRemove }: Props) {
   const c = node.config || {};
   const set = (patch: Record<string, unknown>) => onChange({ ...c, ...patch });
+  const variants = variantsOf(c);
+  const setVariants = (vs: Variant[]) => {
+    const next: Record<string, unknown> = { ...c, variants: vs };
+    if (!vs.length) { delete next.variants; delete next.winner; }
+    else if (typeof next.winner === 'string' && !vs.some((v) => v.id === next.winner)) delete next.winner;
+    onChange(next);
+  };
+  const setVariant = (id: string, p: Partial<Variant>) => setVariants(variants.map((v) => (v.id === id ? { ...v, ...p } : v)));
   const str = (k: string) => (typeof c[k] === 'string' ? (c[k] as string) : '');
   const num = (k: string, d = 0) => (c[k] == null || c[k] === '' ? d : Number(c[k]));
   const t = node.type;
@@ -128,6 +138,64 @@ export default function StepInspector({ node, editable, blockers, warnings, samp
               <button type="button" className="text-xs underline justify-self-start" onClick={onTestRun}>See a draft of this message (Test run)</button>
             ) : null
           )}
+          {/* A/B (084): 2–3 variants of this message, split evenly; the Results tab shows each one's reply rate. */}
+          <div className="grid gap-2 rounded-lg p-2.5" style={{ border: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium">A/B test{variants.length ? ` · ${variants.length} variants` : ''}</span>
+              {editable && variants.length < VARIANT_IDS.length && (
+                <button type="button" className="text-xs underline" onClick={() => {
+                  const used = new Set(variants.map((v) => v.id));
+                  const free = VARIANT_IDS.filter((v) => !used.has(v));
+                  const add: Variant[] = variants.length ? [{ id: free[0] }] : [{ id: 'a' }, { id: 'b' }];
+                  setVariants([...variants, ...add]);
+                }}>{variants.length ? '+ another variant' : 'Split into A/B'}</button>
+              )}
+            </div>
+            {variants.length === 0 ? (
+              <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Try two wordings: each person gets one at random, and you see which gets more replies.</span>
+            ) : variants.map((v) => {
+              const vmode = String(v.mode ?? v.note_mode ?? mode);
+              const vsample = samples?.[sampleKey(node.id, v.id)];
+              const isWinner = c.winner === v.id;
+              return (
+                <div key={v.id} className="grid gap-1.5 rounded-lg p-2" style={{ background: isWinner ? 'var(--accent-soft)' : 'var(--bg-input)' }}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold rounded px-1.5" style={{ background: 'var(--bg-card)' }}>{v.id.toUpperCase()}</span>
+                    <input className="z-input text-xs flex-1" disabled={dis} value={v.label ?? ''} placeholder="label (optional)"
+                      onChange={(e) => setVariant(v.id, { label: e.target.value })} />
+                    {isWinner && <span className="text-[10px]" style={{ color: 'var(--accent)' }}>winner</span>}
+                    {editable && <button type="button" className="text-[11px] underline" style={{ color: 'var(--text-muted)' }}
+                      onClick={() => setVariants(variants.filter((x) => x.id !== v.id))}>remove</button>}
+                  </div>
+                  <select className="z-input text-xs" disabled={dis} value={vmode}
+                    onChange={(e) => setVariant(v.id, { [modeKey]: e.target.value })}>
+                    {modes.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+                  </select>
+                  {vmode === 'guided' && (
+                    <textarea className="z-input text-xs" rows={2} disabled={dis} value={v.instructions ?? ''} placeholder={`Instructions for ${v.id.toUpperCase()} (else the step's)`}
+                      onChange={(e) => setVariant(v.id, { instructions: e.target.value })} />
+                  )}
+                  {vmode === 'fixed' && (
+                    <>
+                      {t === 'email' && <input className="z-input text-xs" disabled={dis} value={v.subject ?? ''} placeholder={`Subject for ${v.id.toUpperCase()} (else the step's)`}
+                        onChange={(e) => setVariant(v.id, { subject: e.target.value })} />}
+                      <textarea className="z-input text-xs" rows={4} disabled={dis} value={v.text ?? ''} placeholder={`Text for ${v.id.toUpperCase()} (else the step's)`}
+                        onChange={(e) => setVariant(v.id, { text: e.target.value })} />
+                    </>
+                  )}
+                  {vmode !== 'fixed' && vsample?.text && (
+                    <p className="text-[11px] whitespace-pre-wrap" style={{ color: 'var(--text-muted)' }}><FillableText text={toTemplate(vsample.text, vsample.person)} /></p>
+                  )}
+                </div>
+              );
+            })}
+            {variants.length > 0 && (
+              <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                {typeof c.winner === 'string' ? `Only ${String(c.winner).toUpperCase()} is sent now. ` : 'Split evenly, the same person always gets the same one. '}
+                Pick the winner on the Results tab once the numbers say something.
+              </span>
+            )}
+          </div>
           <p className="text-[11px] leading-snug" style={{ color: 'var(--text-muted)' }}>
             {t === 'linkedin_connect' && 'Skipped for anyone already connected or with a request already pending. '}
             {t === 'linkedin_message' && 'A first message once connected; a follow-up when a conversation exists. '}
