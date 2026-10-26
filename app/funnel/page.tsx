@@ -83,7 +83,7 @@ function Breakdown({ data }: { data: FunnelSummary }) {
         })}
       </Card>
 
-      <Card title="Who left, and where" hint="Counted at the furthest stage the person reached.">
+      <Card title="Who left or is resting, and where" hint="Counted at the furthest stage the person reached. Resting people come back by themselves at the next touch or reply.">
         {exitsAt.length === 0 ? <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Nobody left in this slice.</p> : (
           <table className="w-full text-xs">
             <thead>
@@ -120,9 +120,10 @@ function Breakdown({ data }: { data: FunnelSummary }) {
             </div>
           ))}
           <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-            A found profile or a drafted message does not make a lead. An accepted connection request is still
-            “Contacted” until they answer. Opportunities created directly count in Opportunity and Client but not in any
-            conversion rate.
+            Someone becomes a lead only when contact happens. A found profile, a hand-picked list or a drafted message
+            does not count. An accepted connection request is still “Contacted” until they answer. Resting = in
+            contact but quiet for 30 days with nothing planned: kept for a later touch, not lost. Opportunities created
+            directly count in Opportunity and Client but not in any conversion rate.
           </p>
         </div>
       </Card>

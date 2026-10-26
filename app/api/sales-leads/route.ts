@@ -22,7 +22,7 @@ import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
 import { LIFECYCLE_FUNNEL, type LeadCounts, type LeadSort, type LeadView } from '@/lib/sales-leads';
-import { AGENT_FIND, DUE, NEEDS_YOU, OPEN, SORTS, TEAM_USERS_SQL, funnelStored } from '@/lib/sales-leads-sql';
+import { NOT_CONTACTED, DUE, NEEDS_YOU, OPEN, SORTS, TEAM_USERS_SQL, funnelStored } from '@/lib/sales-leads-sql';
 
 const VIEWS = new Set<LeadView>(['working', 'due', 'must', 'needs_you', 'new', 'contacted', 'replied', 'converted', 'archived', 'all']);
 export async function GET(req: NextRequest) {
@@ -63,11 +63,11 @@ export async function GET(req: NextRequest) {
       : view === 'needs_you' ? `(l.responsible_user_id = ${me} OR l.front_user_id = ${me} OR ${sender})`
       : `(l.responsible_user_id = ${me} OR l.front_user_id = ${me})`);
   }
-  // Agent finds nobody has reached out to are prospects, not leads: hidden unless asked for (finds=1).
+  // People nobody has contacted yet are prospects, not leads: hidden unless asked for (finds=1).
   // Without migration 086 (no stored funnel yet) nothing is hidden.
   const finds = url.searchParams.get('finds') === '1';
   const hasStore = await funnelStored();
-  const leadsOnly = finds || !hasStore ? 'true' : `NOT ${AGENT_FIND}`;
+  const leadsOnly = finds || !hasStore ? 'true' : `NOT ${NOT_CONTACTED}`;
   if (leadsOnly !== 'true') where.push(leadsOnly);
   const list = url.searchParams.get('list') || '';
   if (list) { vals.push(list); where.push(`l.source = $${vals.length}`); }
@@ -137,7 +137,7 @@ export async function GET(req: NextRequest) {
     );
     const counts = c[0] as LeadCounts;
     const agentFinds: number = hasStore ? (await client.query(
-      `SELECT count(*)::int AS n FROM sales_leads l WHERE ${OPEN} AND ${AGENT_FIND}`)).rows[0]?.n ?? 0 : 0;
+      `SELECT count(*)::int AS n FROM sales_leads l WHERE ${OPEN} AND ${NOT_CONTACTED}`)).rows[0]?.n ?? 0 : 0;
 
     // The funnel strip: open leads per lifecycle stage (the conductor stores the stage; null = not evaluated yet).
     const { rows: stageRows } = await client.query(

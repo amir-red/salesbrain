@@ -252,12 +252,12 @@ const NAV_ITEMS: NavItem[] = [
 // while one of their pages is the page you are on. The icon rail always shows every item.
 const GROUPS: { label: string; hrefs: string[]; foldable?: boolean }[] = [
   { label: 'Overview', hrefs: ['/funnel', '/inbox'] },
-  { label: '1 · Target', hrefs: ['/icp', '/brand'] },
-  { label: '2 · Reach', hrefs: ['/campaigns', '/marketing', '/network'] },
-  { label: '3 · Prospects', hrefs: ['/prospecting', '/agents'] },
-  { label: '4 · Leads', hrefs: ['/sales-leads', '/followups'] },
+  { label: 'Target', hrefs: ['/icp', '/brand'] },
+  { label: 'Reach', hrefs: ['/campaigns', '/marketing', '/network'] },
+  { label: 'Prospects', hrefs: ['/prospecting', '/agents'] },
+  { label: 'Leads', hrefs: ['/sales-leads', '/followups'] },
   // Opportunities (`/`) holds the list and the pipeline board since 2026-10-24; /pipeline redirects to it.
-  { label: '5 · Opportunities', hrefs: ['/'] },
+  { label: 'Opportunities', hrefs: ['/'] },
   { label: 'Funding', foldable: true, hrefs: ['/grants', '/credits'] },
   { label: 'Insights', foldable: true, hrefs: ['/reports', '/lessons', '/pricing'] },
   { label: 'Admin', foldable: true, hrefs: ['/admin/costs', '/admin/users', '/admin/learning'] },

@@ -24,12 +24,11 @@ export const DUE = `${OPEN} AND (l.next_contact_at <= current_date OR (l.next_co
 
 
 /**
- * A card whose person is still a PROSPECT in the stored funnel (person_funnel, core 086): an agent found them (Leads
- * Finder, firm research) and made a card, but nobody has reached out yet. They are not leads (funnel definitions,
- * 2026-10-26), so /sales-leads hides them unless the viewer asks for them. A card the funnel has not evaluated yet
- * shows (no person_funnel row → not hidden).
+ * A card whose person is still a PROSPECT in the stored funnel (person_funnel, core 086): nobody has contacted them
+ * yet — an agent find, a hand-picked import, an exhibitor list. A lead starts only at contact (Amir 2026-10-26), so
+ * /sales-leads hides these unless the viewer asks for them. A card the funnel has not evaluated yet shows.
  */
-export const AGENT_FIND = `EXISTS (SELECT 1 FROM person_funnel pf WHERE pf.lead_id = l.id AND pf.stage LIKE 'prospect\\_%')`;
+export const NOT_CONTACTED = `EXISTS (SELECT 1 FROM person_funnel pf WHERE pf.lead_id = l.id AND pf.stage LIKE 'prospect\\_%')`;
 
 let storedAt = 0;
 let stored = false;

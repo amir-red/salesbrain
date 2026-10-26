@@ -2428,6 +2428,29 @@ with views was rejected (~60 writers, ~260 readers, ON CONFLICT upserts a view c
 - 085 was applied to the shared DB on 2026-10-26 (Amir). **086 is NOT applied** (file only): apply it before or with the
   deploy, then the first refresh backfills the history.
 
+### 5.br Funnel decisions applied: lead = contact, Resting, six sales stages (2026-10-26, feat/funnel, migration 087)
+
+Amir's answers to the open questions (plan §13):
+- **Lead only at contact.** `lead_new` is gone from `policy/funnel.py` STAGES (and `lib/funnel.ts`): hand-picked imports
+  and exhibitor lists nobody contacted are `prospect_ready`. Contacted = request / message / email / intro ask; engaged =
+  they answered, OR met in person (`sales_leads.met_at`), OR came to us (inbound sources). /sales-leads now hides EVERY
+  card nobody contacted (`NOT_CONTACTED`, was `AGENT_FIND`), switch "Show not contacted yet (N)", remembered per browser
+  (`localStorage salesleads.showNotContacted`) — Fakuma's untouched priority list sits behind that switch.
+- **Resting (nurture)** = exit `nurture`: contacted or engaged, `last_activity_at` older than `NURTURE_DAYS` (30) and
+  nothing planned (`followup_planned`: prospect next_followup_at, card next_contact_at today or later, a pending
+  approval, an active campaign enrollment). Not lost; the next touch or reply clears it at the next refresh.
+- **086 APPLIED** to the shared DB 2026-10-26 and refreshed: 214 contacted + 14 resting, 141 engaged + 45 resting, 1 meeting.
+- **Six sales stages** (`domain/gates.py` + `lib/gates.ts`, parity-tested): 1 Discovery (old G1+G2, carries the demand
+  fields, 13 d) · 2 Board review 1 (old G3) · 3 Offer (old G4+G5+G6, 26 d) · 4 Negotiation & board review 2 (old G7,
+  deployment_plan) · 5 Close (old G8) · 6 Won · handover (old G9). Grants and credits unchanged. **Migration 087 moves the
+  live data** (deals.gate, gate_events from/to with the old numbers kept in `reason`, board_decisions.gate,
+  `board_sent_g<N>` flags, cached `missing`, the seed knowledge entry "Deals and gates" if untouched) and runs ONCE
+  (`data_migrations` key `087_sales_six_stages`). Dry run on live (rolled back): 48 deals, 86 gate events, 29 board
+  decisions, 15 flag sets. **087 is NOT applied: apply it in the same step as the deploy** — production code before this
+  branch reads nine gates. Hard-coded nines fixed: reports (open / overdue per pipeline SLA / won this month, sales only),
+  Chat starters, Zeami sync final stage, funnel SQL (`final_gate("sales")`), sales pipeline skill, KPI note.
+- **Menu without numbers**: Overview · Target · Reach · Prospects · Leads · Opportunities · Funding / Insights / Admin.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

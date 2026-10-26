@@ -43,8 +43,11 @@ export default function SalesLeadsPage() {
   const [role, setRole] = useState<RoleFilter>('');   // '' everyone · any = mine · responsible / front = mine in that seat
   const [list, setList] = useState('');               // one list (sales_leads.source); order numbers only compare inside a list
   const [lists, setLists] = useState<{ source: string; n: number }[]>([]);
-  // Agent finds nobody has reached out to are prospects, not leads (funnel definitions): hidden unless asked for.
-  const [finds, setFinds] = useState(false);
+  // People nobody has contacted are prospects, not leads (funnel definitions): hidden unless asked for. The choice
+  // is remembered per browser.
+  const [finds, setFindsState] = useState(false);
+  useEffect(() => { try { setFindsState(localStorage.getItem('salesleads.showNotContacted') === '1'); } catch { /* private mode */ } }, []);
+  const setFinds = (v: boolean) => { setFindsState(v); try { localStorage.setItem('salesleads.showNotContacted', v ? '1' : '0'); } catch { /* private mode */ } };
   const [agentFinds, setAgentFinds] = useState(0);
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [viewerIsAdmin, setViewerIsAdmin] = useState(false);
@@ -160,7 +163,7 @@ export default function SalesLeadsPage() {
           {/* ── Header ───────────────────────────────────────────── */}
           <div className="flex flex-wrap items-end justify-between gap-6 mb-6">
             <div>
-              <div className="z-eyebrow mb-1">4 · Leads</div>
+              <div className="z-eyebrow mb-1">Leads</div>
               <h1 className="text-2xl font-semibold tracking-tight">Leads</h1>
               <p className="text-sm mt-1 max-w-2xl" style={{ color: 'var(--text-muted)' }}>
                 Everyone we are working, best first. The counter is days since we last talked.
@@ -229,9 +232,9 @@ export default function SalesLeadsPage() {
             </select>
             {(agentFinds > 0 || finds) && (
               <label className="text-xs inline-flex items-center gap-1.5 cursor-pointer" style={{ color: 'var(--text-muted)' }}
-                title="People an agent found and gave a card, whom nobody has reached out to yet. In the funnel they are prospects, not leads.">
+                title="Cards for people nobody has contacted yet (agent finds, hand-picked lists, exhibitor lists). In the funnel they are prospects; they become leads at the first contact.">
                 <input type="checkbox" checked={finds} onChange={(e) => setFinds(e.target.checked)} />
-                Show agent finds not yet contacted ({agentFinds})
+                Show not contacted yet ({agentFinds})
               </label>
             )}
             <ExportButton

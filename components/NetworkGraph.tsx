@@ -388,7 +388,7 @@ function runLeadStageLayout(cy: CyInstance) {
       const prefix = stage.split('_')[0];
       if (stageOrder.includes(prefix)) bucket = prefix;
     } else if (dealGate) {
-      // Map gate 1..9 → P-buckets 0..8
+      // Map the deal's stage onto the P-buckets (clamped: sales has 6 stages, grants 10)
       bucket = stageOrder[Math.min(stageOrder.length - 1, Math.max(0, dealGate - 1))];
     }
     if (!buckets.has(bucket)) buckets.set(bucket, []);
