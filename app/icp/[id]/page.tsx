@@ -1,5 +1,6 @@
 'use client';
 
+import OwnerControl from '@/components/icp/OwnerControl';
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -101,25 +102,26 @@ export default function IcpPanelPage() {
               {data?.icp.paused_at && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>⏸ paused</span>}
             </h1>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              {data ? <>{data.is_owner ? 'Your ICP' : `${data.icp.owner_name}’s ICP`} · {lastAt ? `updated ${relativeTime(lastAt.toISOString())}` : ''} · <button onClick={() => refresh()} className="underline">refresh</button></> : 'The whole journey for this list, and what the machinery is doing at each step.'}
+              {data ? <><OwnerControl icpId={id} ownerId={data.icp.owner_user_id} ownerName={data.icp.owner_name} isOwner={data.is_owner}
+                  canEdit={data.can_edit} onChanged={(n) => { setNote(n); void refresh(); }} /> · {lastAt ? `updated ${relativeTime(lastAt.toISOString())}` : ''} · <button onClick={() => refresh()} className="underline">refresh</button></> : 'The whole journey for this list, and what the machinery is doing at each step.'}
             </p>
           </div>
           {data && !editing && (
             <div className="flex flex-wrap gap-2 justify-end shrink-0">
               <ExportButton href={`/api/export/icp?icp_id=${id}`} label="Export Excel"
                 title="The whole ICP as Excel: definition, every lead with all details, funnel and agent runs" />
-              {data.icp.paused_at
+              {data.can_edit && (data.icp.paused_at
                 ? <button onClick={() => setState('running')} disabled={busy === 'state'} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ border: '1px solid var(--accent)', color: 'var(--accent)' }}>Resume</button>
-                : <button onClick={() => setState('paused')} disabled={busy === 'state'} className="px-3 py-1.5 rounded-lg text-xs disabled:opacity-40" style={{ border: '1px solid var(--border)', color: 'var(--text-muted)' }} title="Hold this ICP only — reversible">Pause</button>}
-              {data.is_owner && <button onClick={() => setEditing(true)} className="px-3 py-1.5 rounded-lg text-xs" style={{ border: '1px solid var(--border)', color: 'var(--text)' }}>Edit</button>}
-              {data.is_owner && <button onClick={archive} disabled={busy === 'archive'} className="px-3 py-1.5 rounded-lg text-xs disabled:opacity-40" style={{ color: 'var(--text-muted)' }}>Archive</button>}
+                : <button onClick={() => setState('paused')} disabled={busy === 'state'} className="px-3 py-1.5 rounded-lg text-xs disabled:opacity-40" style={{ border: '1px solid var(--border)', color: 'var(--text-muted)' }} title="Hold this ICP only — reversible">Pause</button>)}
+              {data.can_edit && <button onClick={() => setEditing(true)} className="px-3 py-1.5 rounded-lg text-xs" style={{ border: '1px solid var(--border)', color: 'var(--text)' }}>Edit</button>}
+              {data.can_edit && <button onClick={archive} disabled={busy === 'archive'} className="px-3 py-1.5 rounded-lg text-xs disabled:opacity-40" style={{ color: 'var(--text-muted)' }}>Archive</button>}
             </div>
           )}
         </div>
 
         {error && !data && (
           <div className="p-8 text-center text-sm space-y-2" style={{ color: 'var(--text-muted)' }}>
-            <p>{status === 404 ? 'This ICP does not exist, or it is not yours to see.' : error}</p>
+            <p>{status === 404 ? 'This ICP does not exist.' : error}</p>
             <Link href="/icp" className="underline">Back to ICPs</Link>
           </div>
         )}
@@ -144,12 +146,12 @@ export default function IcpPanelPage() {
             </SectionCard>
 
             {/* Firms first: on a firm list (e.g. VC funds) they are the work; on a people list the section is one slim line.
-                Only the owner or an admin can open this page, and the kernel enforces the same rule. */}
-            <div id="firms"><FirmsSection icpId={id} canEdit /></div>
+                Everyone may look; changing the list is its owner's or an admin's (the routes enforce it). */}
+            <div id="firms"><FirmsSection icpId={id} canEdit={data.can_edit} /></div>
             <div id="email"><EmailOutreachSection icpId={id} /></div>
 
             <div className="grid gap-4 xl:grid-cols-2">
-              <DefinitionSection data={data} onEdit={data.is_owner ? () => setEditing(true) : undefined} />
+              <DefinitionSection data={data} onEdit={data.can_edit ? () => setEditing(true) : undefined} />
               <FinderSection data={data} canAct={canAct} busy={runBusy} onRun={run} disabledReason={disabledReason} />
               <EnricherSection data={data} canAct={canAct} busy={runBusy} onRun={run} disabledReason={disabledReason} />
               <GraphSection data={data} onChanged={refresh} />
@@ -157,7 +159,7 @@ export default function IcpPanelPage() {
             <div id="outreach"><OutreachSection data={data} onChanged={refresh} /></div>
 
             <SectionCard title="Leads" subtitle="priority rank first, then best fit · coverage: E employer · R research · @ email · 🔥 warm angle · ↝ warm route"
-              right={<button type="button" onClick={() => setAddingPeople(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium"
+              right={data.can_edit && <button type="button" onClick={() => setAddingPeople(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium"
                 style={{ border: '1px solid var(--accent)', color: 'var(--accent)' }}
                 title="Paste rows or upload a CSV / Excel file; new people land on this list, scored against it">Add people</button>}>
               <LeadsTable icpId={id} tick={tick} />

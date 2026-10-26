@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { visibleIcp } from '@/lib/icp-server';
+import { guardEditable, visibleIcp } from '@/lib/icp-server';
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
 import { publicUrl } from '@/lib/public-url';
 
@@ -20,7 +20,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!(await visibleIcp(params.id, session))) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const guard = await guardEditable(params.id, session);
+  if (guard.denied) return guard.denied;
   let body: { limit?: number; step?: number; sender?: string; include_check?: boolean } = {};
   try { body = await req.json(); } catch { /* defaults */ }
   const args: Record<string, unknown> = { icp_id: params.id, base_url: publicUrl(req, '/').origin };

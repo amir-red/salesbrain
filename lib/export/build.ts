@@ -14,7 +14,7 @@ import type { ExportKind, ExportRequest } from '@/lib/export/sign';
  * Visibility is the screen's own rule, enforced here and not trusted from the caller:
  *   sales leads  — org-wide inbox (everyone sees it, like the page);
  *   prospects    — mine + unowned; admins see all (like /api/prospects);
- *   ICP          — its owner or an admin (visibleIcp).
+ *   ICP          — any teammate (every list is visible to everyone since 2026-10-26; visibleIcp).
  */
 
 export interface Who { userId: string; role: string }

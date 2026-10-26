@@ -20,8 +20,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const stage = req.nextUrl.searchParams.get('stage');
   const minScore = Number(req.nextUrl.searchParams.get('min_score') || 0);
   const warm = req.nextUrl.searchParams.get('warm') === '1';
-  const values: unknown[] = [params.id, icp.owner_user_id];
-  const filters: string[] = [`p.icp_profile_id = $1`, `(p.owner_user_id = $2 OR p.owner_user_id IS NULL)`];
+  // Every lead on the list, whoever holds it (a lead can sit with the account that sends to it).
+  const values: unknown[] = [params.id];
+  const filters: string[] = [`p.icp_profile_id = $1`];
   if (stage) { values.push(stage); filters.push(`p.stage = $${values.length}`); }
   if (minScore > 0) { values.push(minScore); filters.push(`p.icp_score >= $${values.length}`); }
   if (warm) filters.push(`(p.network_degree IN ('1','2') OR jsonb_array_length(COALESCE(p.warm_paths, '[]'::jsonb)) > 0)`);
@@ -80,8 +81,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
               count(*) FILTER (WHERE research_summary IS NOT NULL)::int AS researched,
               count(*) FILTER (WHERE engaged_at IS NOT NULL)::int AS engaged,
               count(*) FILTER (WHERE stage IN ('P8_DISQUALIFIED','P9_ARCHIVED'))::int AS archived
-       FROM prospects p WHERE p.icp_profile_id = $1 AND (p.owner_user_id = $2 OR p.owner_user_id IS NULL)`,
-      [params.id, icp.owner_user_id],
+       FROM prospects p WHERE p.icp_profile_id = $1`,
+      [params.id],
     ),
   ]);
   const pending = await pool.query(

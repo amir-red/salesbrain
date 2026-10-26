@@ -2334,6 +2334,30 @@ Amir: "are /deals and /pipeline up to date with our sales process, and merge the
 - **Sidebar**: the separate Pipeline entry is gone; Deals (`/`) is the one entry (the menu group heading is still "Pipeline").
 
 
+### 5.bo Lists (ICPs) are visible to everyone, with an owner who can hand them over (2026-10-26, feat/icp-sharing, no migration)
+
+Amir: "make all the ICPs visible for everyone, show who the owner is, and make it changeable." Decisions: the owner or an
+admin changes the owner; the leads the OLD owner holds on the list move with it, ALSO those already in a conversation;
+everyone views, only owner + admin edit.
+- **Read for all, write for owner + admin** (`lib/icp-server.ts`): `visibleIcp` answers any list for any signed-in teammate and
+  carries `can_edit`; `guardEditable(id, session)` gives write handlers 404 (missing) / 403 "Only the list's owner or an admin
+  can change this list." Applied to PUT/DELETE `/api/icp/[id]` (were owner-only, now owner OR admin; a rename's clash check and
+  the rescore run as the list's owner), and the POSTs of connect, find-linkedin, email/sequence, email/waves, firms (import),
+  firms/auto|brief|people|research. run / search stay owner-only (they spend the owner's LinkedIn budget).
+- **Leads are scoped by the LIST, not the owner**: `/api/icp/[id]/leads` used `owner = icp owner`, which hid leads held by the
+  sending account (Fakuma showed 8 of 76). Panel and export already scoped by list.
+- `/api/icp` + `/api/icp/overview`: `?scope=all` for everyone (was admin-only). `/icp` opens on **Everyone's lists** with a
+  Mine only switch; every row says "owner <name|you>"; Pause / Resume / Archive only for owner + admin.
+- **Hand-over**: kernel `commands/icp_owner.py::set_icp_owner(actor, icp_id, new_owner)` (owner or admin; new owner by id, name
+  or email via `kpis.resolve_owner`, several → candidates; refuses service accounts and a name clash with the new owner's lists):
+  moves the list, the old owner's leads on it (leads whose LinkedIn profile the new owner already holds stay — unique per owner),
+  their contacts when no other lead of the old owner uses them; audit `icp_owner_change`; DMs the new owner (and the old one when
+  an admin did it); reports `leads_moved`, `in_conversation` (their LinkedIn threads stay on the old account, and the Lead
+  Conductor hands leads it runs back to the account holding the conversation), `kept_duplicates`. Ring tool `crm_icp_set_owner`
+  (mcp=None). App `POST /api/icp/[id]/owner` + `components/icp/OwnerControl.tsx` ("Owner … · change owner") in the list header.
+  Test `salesbrain-core/tests/test_icp_owner_db.py` (real Postgres, opt-in).
+- Not built: the bot's `crm_icp_list` still lists only the asker's own lists; run / search for an admin as the owner.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

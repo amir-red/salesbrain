@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { visibleIcp } from '@/lib/icp-server';
+import { guardEditable } from '@/lib/icp-server';
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
 
 /**
@@ -11,7 +11,8 @@ import { kernelCall } from '@/lib/mcp/kernel-rpc';
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!(await visibleIcp(params.id, session))) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const guard = await guardEditable(params.id, session);
+  if (guard.denied) return guard.denied;
   let body: { limit?: number; refresh?: boolean; firm_ids?: string[] } = {};
   try { body = await req.json(); } catch { /* defaults */ }
   const limit = Math.max(1, Math.min(200, Math.floor(Number(body.limit) || 25)));

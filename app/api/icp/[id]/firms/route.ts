@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import { getSession } from '@/lib/auth';
-import { visibleIcp } from '@/lib/icp-server';
+import { guardEditable, visibleIcp } from '@/lib/icp-server';
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
 import { guessFirmField, type FirmImportResult, type FirmImportRow } from '@/lib/firms';
 
@@ -36,7 +36,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!(await visibleIcp(params.id, session))) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const guard = await guardEditable(params.id, session);
+  if (guard.denied) return guard.denied;
 
   if ((req.headers.get('content-type') || '').includes('multipart/form-data')) {
     const form = await req.formData();

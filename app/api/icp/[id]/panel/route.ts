@@ -193,6 +193,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       viewer: { user_id: session.userId, role: session.role },
       icp: { ...(icp as unknown as PanelPayload['icp']), criteria: normalizeCriteria(icp.criteria as never) },
       is_owner: owner === session.userId,
+      can_edit: Boolean(icp.can_edit),
       blockers: blockersFor(icp, quota, { kill_switch: killSwitch, leads_finder_enabled: enabled.leads_finder, user_hold: userHold }, finderState),
       quota,
       policy: { kill_switch: killSwitch, enabled, leads_finder: rule['agents.leads_finder'] ?? {}, enricher: rule['agents.enricher'] ?? {} },

@@ -19,12 +19,9 @@ export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const all = req.nextUrl.searchParams.get('all') === '1';
-  // scope=all is the ADMIN estate view: every employee's profile, not just
-  // mine. Deals have followed "regular users see their own, admins see all"
-  // since the May cleanup; ICPs never got it, so there was no way to see — let
-  // alone hold — the ~118 profiles a partner app files on behalf of people who
-  // never log in. Silently ignored for non-admins rather than erroring.
-  const estate = req.nextUrl.searchParams.get('scope') === 'all' && session.role === 'admin';
+  // scope=all = every teammate's lists, for everyone (2026-10-26: lists are visible to the whole team, with their
+  // owner; changing one stays with its owner or an admin). Without it: mine.
+  const estate = req.nextUrl.searchParams.get('scope') === 'all';
   // Each card carries its list size, the agent's last tick and queued requests,
   // so /icp can show "agent ran 2h ago · 48 analyzed · 9 matched" without N+1 calls.
   const { rows } = await pool.query(
