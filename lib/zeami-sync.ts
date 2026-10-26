@@ -14,6 +14,7 @@
  * the same way); other failures are retried next run. A 4xx rejection is not retried until the deal changes.
  */
 import pool from '@/lib/db';
+import { SALES_GATES } from '@/lib/gates';
 import { SALES_REP_JOIN, zeamiConfigured, zeamiFetch, zeamiProblem, type ZeamiDealEventType } from '@/lib/zeami';
 
 interface Candidate {
@@ -47,7 +48,8 @@ export interface SyncReport {
   error?: string;
 }
 
-const FINAL_SALES_GATE = 9;
+// Won = the last sales stage (6 since the six-stage pipeline of 2026-10-26; it was 9).
+const FINAL_SALES_GATE = SALES_GATES[SALES_GATES.length - 1].number;
 
 export async function syncZeamiDealEvents(opts: { dryRun?: boolean; dealId?: string } = {}): Promise<SyncReport> {
   const dryRun = Boolean(opts.dryRun);

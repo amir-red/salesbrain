@@ -2360,6 +2360,193 @@ everyone views, only owner + admin edit.
   Test `salesbrain-core/tests/test_icp_owner_db.py` (real Postgres, opt-in).
 - Not built: the bot's `crm_icp_list` still lists only the asker's own lists; run / search for an admin as the owner.
 
+### 5.bp One funnel, Phase A — definitions, /funnel, list seats, Opportunities (2026-10-26, feat/funnel, migration 085)
+
+Amir, after the team call with Mateo and Hannes: "redesign the whole flow as a funnel, one connected funnel; define when
+something is a prospect, a lead, an opportunity." Plan + open decisions: `~/.claude/plans/funnel-redesign.md` (Phase B =
+one row per person `funnel_leads`, Phase C = warm lane + outcome learning, Phase D = simpler gates — not built).
+- **The words** (kernel `policy/funnel.py`, app `lib/funnel.ts`, parity test `test_funnel_parity.py` — change both):
+  Prospect = on a list, nobody touched them (sourced → scored → ready to reach). Lead = the FIRST TOUCH OUT (connection
+  request sent, message, email, intro ask) or put in on purpose by a person (own network, event, demo request, hand-picked
+  import): new → contacted → engaged (answered) → meeting → qualified. Opportunity = a deal. Client = won. Exits: not a fit
+  / lost / archived, counted at the furthest stage reached. A found profile or a draft is NOT a lead; an accepted request
+  stays "contacted" until they answer. **An agent-sourced person (linkedin_search, sales_navigator, firm_team,
+  company_discovery) with a /sales-leads card but no touch is still a prospect** — the 591 VC partners firm research
+  carded as `manual:new` are prospects in the funnel. Channels are states, not stages (LinkedIn none/profile/pending/
+  connected/declined; email none/known/sent). Lanes: own network, event, came to us, hand-picked list, found by agents,
+  opportunity created directly.
+- **Read model, nothing stored**: `commands/funnel.py::funnel_summary(icp_id, owner, lane, deal_type)` = ONE query over
+  every prospect + every card without one (invitations by prospect / slug / member id, sent approvals, reply events,
+  card events, deals), classified in Python, ONE verdict per person (person id → slug → email; furthest stage wins).
+  Opportunities created directly are added to Opportunity/Client but never to a conversion rate. Aggregates only →
+  any user, any slice (KPIs rule). ~2.4 s SQL from a laptop over 5,660 rows. Ring `crm_funnel` (read, on MCP).
+  Live 2026-10-26: 378 ready to reach, 192 new, 255 contacted (155 request pending, 47 connected not messaged, 53
+  messaged), 26 engaged, 1 meeting, 19 open opportunities, 2 clients. **Meetings are almost never recorded** (only the
+  hand-set journey step 4 or a booking) — the Meeting stage reads ~0 until something writes it.
+- **Seats on lists (085)**: `icp_profiles.responsible_user_id / front_user_id / sender_user_id`. `apply_role_defaults` takes
+  the list's seats before the prospect owner; the Conductor's `sender_candidates` puts the list's sender right after the
+  account holding the conversation. `icp_owner.set_icp_seats` (owner or admin; names/emails/ids; "" clears;
+  `apply_to_leads` moves open leads that still had the list's previous default, never a seat set by hand; an `assign`
+  line each) = ring `crm_icp_set_seats` (mcp=None) = `GET/POST /api/icp/[id]/seats` + `components/icp/SeatsControl.tsx`
+  under the owner line on `/icp/[id]` (hidden when the read fails, e.g. before 085). 085 also adds **`deals.account_id`**
+  (backfilled from the converted lead's prospect, else a UNIQUE name match: 13 of 65 live) and `convert_lead_to_deal`
+  sets it.
+- **App**: `/funnel` (filters list / teammate / lane in the URL; full strip, lanes, channels, exits, definitions);
+  `components/panel/FunnelStrip.tsx` (`useFunnel`, `compact` row, or `data` passed in) on `/sales-leads`, `/prospecting`,
+  `/icp/[id]` (that list). **Sidebar in funnel order**: Overview (Funnel, Inbox) · 1 Target (Lists (ICP), Brand & Voice) ·
+  2 Reach (Campaigns, Marketing, Network) · 3 Prospects (Prospects, Agents) · 4 Leads (Leads, Follow-ups) · 5 Opportunities
+  · Funding / Insights / Admin folded. **"Deals" is "Opportunities" in the UI** (DealsView, deal page); table, routes and
+  `crm_*_deal` tools keep "deal" until Phase B.
+- Knowledge seed: "The funnel: prospect, lead, opportunity, client", "Opportunity (deal)", "Who works a list" (insert-only).
+- Tests: `test_funnel.py` (19 rules), `test_funnel_parity.py`, `test_funnel_db.py` (real Postgres: seats move defaults
+  and keep hand-set ones, new lead inherits list seats, owner/admin only, request = contacted, agent card = prospect,
+  twin rows count once). NOT done: `/sales-leads` still lists every card (agent-made ones included) — Phase B.
+
+### 5.bq One funnel, Phase B — one stored row per person + dated history (2026-10-26, feat/funnel, migration 086)
+
+Plan §12 ([funnel-redesign.md](~/.claude/plans/funnel-redesign.md)). Revised from §3: replacing `prospects` + `sales_leads`
+with views was rejected (~60 writers, ~260 readers, ON CONFLICT upserts a view cannot serve). Instead a projection ON TOP:
+- **086**: `person_funnel` (one row per person: person_key = person id → `li:<slug>` → `em:<email>` → row id; stage, exit,
+  substage, lane, channels, stage_entered_at, lead_id, prospect_id, deal_id, account_id, `icp_ids[]`, `user_ids[]`,
+  rows_merged) and `funnel_events` (person_key, from → to, exit, occurred_at, source backfill | refresh; one entry per
+  person per stage). Never edit by hand: fix the source, refresh.
+- **`commands/funnel.refresh()`**: facts query → classify → merge a person's rows (ids kept from whichever row has them,
+  earliest time per stage) → COPY into a temp table → upsert + delete gone keys; events for every stage passed, dated by the
+  ledgers (request sent, first message, first reply, booking, convert, deal created, won), else now. First run = backfill.
+  Advisory lock (one at a time). Live dry run (rolled back): 5,615 people, 16,789 history rows, 5.7 s from a laptop;
+  a no-change refresh 3.5 s, 0 events. Run by the hourly `lead_conductor.py` and on read when older than 10 min.
+- **`funnel_summary`** reads the stored rows (a list slice stays live: membership is per list); `period` (kpis periods)
+  adds `entered` per stage from the history; `view='companies'` = each account once at its furthest person (direct
+  opportunities deduped by account). **Without 086 everything falls back to the live Phase A compute** (`stored()`),
+  periods return an error, `refresh` skips.
+- **/sales-leads hides agent finds nobody contacted** (`AGENT_FIND` in `lib/sales-leads-sql.ts`: the card's person is still
+  `prospect_*` in person_funnel), in the list, counts, stage chips and list filter; a "Show agent finds not yet contacted
+  (N)" switch (`finds=1`) brings them back. `funnelStored()` (cached schema check) disables the filter until 086 exists.
+  The Excel export is unchanged (exports everything).
+- **/funnel**: period select ("+N in period" on each tile), People | Companies switch, "updated HH:MM".
+  `crm_funnel` takes `period` and `view`.
+- 085 was applied to the shared DB on 2026-10-26 (Amir). **086 is NOT applied** (file only): apply it before or with the
+  deploy, then the first refresh backfills the history.
+
+### 5.br Funnel decisions applied: lead = contact, Resting, six sales stages (2026-10-26, feat/funnel, migration 087)
+
+Amir's answers to the open questions (plan §13):
+- **Lead only at contact.** `lead_new` is gone from `policy/funnel.py` STAGES (and `lib/funnel.ts`): hand-picked imports
+  and exhibitor lists nobody contacted are `prospect_ready`. Contacted = request / message / email / intro ask; engaged =
+  they answered, OR met in person (`sales_leads.met_at`), OR came to us (inbound sources). /sales-leads now hides EVERY
+  card nobody contacted (`NOT_CONTACTED`, was `AGENT_FIND`), switch "Show not contacted yet (N)", remembered per browser
+  (`localStorage salesleads.showNotContacted`) — Fakuma's untouched priority list sits behind that switch.
+- **Resting (nurture)** = exit `nurture`: contacted or engaged, `last_activity_at` older than `NURTURE_DAYS` (30) and
+  nothing planned (`followup_planned`: prospect next_followup_at, card next_contact_at today or later, a pending
+  approval, an active campaign enrollment). Not lost; the next touch or reply clears it at the next refresh.
+- **086 APPLIED** to the shared DB 2026-10-26 and refreshed: 214 contacted + 14 resting, 141 engaged + 45 resting, 1 meeting.
+- **Six sales stages** (`domain/gates.py` + `lib/gates.ts`, parity-tested): 1 Discovery (old G1+G2, carries the demand
+  fields, 13 d) · 2 Board review 1 (old G3) · 3 Offer (old G4+G5+G6, 26 d) · 4 Negotiation & board review 2 (old G7,
+  deployment_plan) · 5 Close (old G8) · 6 Won · handover (old G9). Grants and credits unchanged. **Migration 087 moves the
+  live data** (deals.gate, gate_events from/to with the old numbers kept in `reason`, board_decisions.gate,
+  `board_sent_g<N>` flags, cached `missing`, the seed knowledge entry "Deals and gates" if untouched) and runs ONCE
+  (`data_migrations` key `087_sales_six_stages`). Dry run on live (rolled back): 48 deals, 86 gate events, 29 board
+  decisions, 15 flag sets. **087 is NOT applied: apply it in the same step as the deploy** — production code before this
+  branch reads nine gates. Hard-coded nines fixed: reports (open / overdue per pipeline SLA / won this month, sales only),
+  Chat starters, Zeami sync final stage, funnel SQL (`final_gate("sales")`), sales pipeline skill, KPI note.
+- **Menu without numbers**: Overview · Target · Reach · Prospects · Leads · Opportunities · Funding / Insights / Admin.
+
+### 5.bs ONE table: `leads` replaces `prospects` + `sales_leads` (2026-10-26, feat/funnel, migration 088)
+
+Amir chose "replace both tables with a single new one". **`prospects` is renamed `leads`** (ids and the 12 FKs follow)
+and the lead-card columns live on the same row (`card_id` = the old sales_leads.id, `card_created_at`, `lead_source`,
+`lead_status`, `lead_payload`; `converted_deal_id` shared; the rest keep their names; card CHECKs + a "card fields
+required when card_id is set" CHECK; card indexes recreated as partial indexes). **`prospects` and `sales_leads` are now
+VIEWS with exactly the old columns**, so all existing code works unchanged:
+- `prospects` = plain updatable view (INSERT … ON CONFLICT on the owner+LinkedIn index works through it, tested).
+- `sales_leads` = view `WHERE card_id IS NOT NULL` + INSTEAD OF triggers (`sales_leads_view_insert/update/delete`):
+  INSERT puts the card on its prospect's row (`raw_payload.prospect_id`; a second card on one prospect = unique
+  violation), else on a **placeholder** row (`source_type='lead_card'`, no contact); UPDATE writes the card columns and,
+  when `raw_payload.prospect_id` names another card-less row, **moves the card there** (card id kept, history and campaign
+  links follow, placeholder deleted); DELETE removes the card and its track record (and a placeholder row), the prospect
+  stays. `sales_leads.prospect_id` is never NULL any more; the Lead Conductor treats a placeholder as "no prospect yet"
+  (conductor `_FACTS_SQL` join) and links / lands it exactly as before, which moves the card onto the real row.
+- `sales_lead_events.lead_id` and `campaign_enrollments.sales_lead_id` reference `leads(card_id)` (DEFERRABLE, for the
+  move). The old card table stays as `sales_leads_pre088` for one release (drop in 089).
+- Runs once (data move skipped when `leads` exists; views / functions / triggers re-created on every run).
+- Rehearsed on live data (rolled back, ~5 s): 902 cards → 902, **0 differing in any column**, 0 relinked, 17 placeholders
+  (the cards that had no prospect), 0 orphaned history rows. **088 is backward-compatible with the code on main**
+  (the views keep the old names). APPLIED 2026-10-26 (see §5.bt).
+- Tests: `tests/test_one_table_db.py` (form card → placeholder, card on its prospect + second card refused, UPDATE …
+  RETURNING / rowcount, card move keeps id + history, deletes, ON CONFLICT through the view); the whole DB suite runs on
+  the views (700 pass; the 3 campaigns_r2 failures are the known clock bug on main).
+- **Not done (Amir to decide): one row per person.** 41 people still have 2–6 rows (one per teammate who holds them).
+  Merging them needs a person × list × owner membership table and changes ~90 list-scoped and ~124 owner-scoped queries
+  in 43 files (visibility, whose LinkedIn sends, budgets). Moving code off the views onto `leads` directly is optional
+  cleanup.
+
+### 5.bt Funnel Phase C — warmth, Warm people, what converts (2026-10-26, feat/funnel, migration 089)
+
+From the team call: "nobody opens cold outreach … everything that moved is people that are almost friends; who did I
+talk to recently and how warm" (Mateo), and "this is what you proposed, this is what happened".
+- **Warmth** (`policy/warmth.py`, pure, tested): per teammate × person, 0..1 = 1 − Π(1 − signal), each signal fading by
+  half-life: they wrote to us (LinkedIn, email, interactions incl. Mateo's logged WhatsApp; 0.85, 120 d, + volume), met /
+  call / meeting (0.9, 240 d), we wrote with no answer (0.15, 60 d), 1st-degree connection we did not request (0.25) or
+  that accepted our request (0.10), saved contact (0.2). Bands hot ≥ .7 / warm ≥ .4 / cool ≥ .15 / cold. Reasons in words.
+- **089**: `person_warmth (user_id, person_id, warmth, band, reasons, their/our_messages, last_two_way_at, last_touch_at)`
+  and `funnel_cohorts` (one snapshot per person at FIRST contact: channel, lane, fit, warmth, list, sender, title,
+  seniority, industry, size, location; `source` backfill | live). Both projections.
+- `commands/warmth.py`: `refresh_warmth()` (one query over threads/messages, email, interactions, card events,
+  relations, edges; ~6 s from a laptop, 1,309 pairs live: 78 hot, 137 warm), `warm_people()` (warm/hot, nobody working
+  them — an open moving card or an opportunity hides them — including people on NO list, the AMD case),
+  `add_warm_lead()` (card with source `warm:own-network` → lane "Own network", back office = warmest teammate),
+  `prior_warmth()` (signals dated BEFORE a moment; an accepted request of ours does not count).
+- **Funnel**: a two-way conversation anywhere (any teammate, any channel) = engaged; our messages = contacted; newest
+  conversation counts for "resting". `refresh()` runs warmth first and writes cohorts for everyone newly in contact, with
+  warmth rebuilt from before first contact (so a reply caused by the outreach never makes someone look warm before it).
+- **What converts** (`policy/funnel_insights.py`, `funnel.funnel_insights`): ONLY people we reached out to (LinkedIn request,
+  LinkedIn message, email — met in person / came to us / earlier conversations are left out and counted), per dimension
+  contacted / answered / meeting, findings (≥ 1.5× or ≤ 0.5× the slice, groups ≥ 8), suggestions (does the fit score
+  predict answers; warm vs cold). Nothing changes by itself. Live rehearsal: 251 reached out, 8 % answered; own network
+  5/10, met at an event 6/19, first touch a LinkedIn message 14/37 vs a bare request 7/214; fit 70+ 7/138 vs below 70
+  13/112 → "the fit score is not predicting answers". 0 meetings recorded (the meeting gap again).
+- Ring: `crm_warm_people`, `crm_warm_add_lead` (write), `crm_funnel_insights`; knowledge "Warmth and warm people",
+  "What converts". App: `/warm` (Reach → Warm people; band / teammate / include-worked filters, reasons, Add as lead),
+  `/api/warm` (GET, POST), `/api/funnel/insights`, `components/funnel/Insights.tsx` on `/funnel`, Leads rows get a warmth
+  chip and a "Warmest first" sort (`SORTS.warmth`; the export falls back to priority). Everything degrades to a clear
+  "needs migration 089" message before 089.
+- **088 + 089 APPLIED to the shared DB 2026-10-26** (Amir): 902 cards identical after the move; first refresh 18 s from a
+  laptop (1,309 pairs: 78 hot, 137 warm; 435 snapshots). Excel: `GET /api/export/warm?band=&owner=&worked=1` (kind
+  `warm`: sheets Warm people · Relationships · About), button on `/warm`. Company falls back to the prospect's account,
+  the lead card, then the LinkedIn headline. **087 still waits for the deploy.**
+
+### 5.bu One row per person, WhatsApp, Calendar meetings, Monday note, list tuning (2026-10-26, feat/funnel)
+
+- **Twins cleaned (data, Amir's decisions)**: 40 people had two rows. Esmail+Hannes / Hannes+Osman / Amir+Hannes → keep
+  Hannes; Mateo+Osman → keep Mateo; Bruk+Yasin and Esmail+Yasin → both deleted; Ralf Schwirten (Matthias twice) → one.
+  52 rows deleted (8 cards, 51 unused contacts), 3 history records (approvals / invitation / email thread / enrollment)
+  moved to the kept row. Backup `~/.cache/salesbrain/backups/twins-cleanup-20261026182122.json`, audit
+  `twin_rows_cleanup`. Detlef / Mark Ehl were NOT twins (Mark imported with Detlef's address): Mark split into his own
+  person (audit `person_split`). Esmail's 11 opportunities were NOT touched (needs an explicit yes).
+- **No new twins**: `prospecting.upsert_candidate` returns a teammate's existing row (`held_by`, nothing created) when
+  the LinkedIn slug or member id is already theirs (test in `test_one_table_db.py`).
+- **WhatsApp import** (`policy/whatsapp.py` parser: iPhone + Android, day/month order from the file, continuation lines,
+  media, system lines; `commands/whatsapp.py`: one-to-one only, person by id / name / file name ("WhatsApp Chat with X"),
+  created when unknown, candidates when ambiguous; messages → `interactions` channel whatsapp inbound/outbound, dedup
+  on (time, direction); warmth refreshed). Bot: `crm_whatsapp_import {file_path, contact?, my_name?}` (document-cache
+  guard now takes .txt/.zip). App: "Import a WhatsApp chat" on `/warm` → `POST /api/warm/whatsapp` (file to
+  tmpdir/salesbrain-uploads → internal RPC `whatsapp_import`, which accepts only that folder; file deleted after).
+- **Meetings from Google Calendar**: `calendar.readonly` added to the ONE Google consent (existing connections must
+  RECONNECT; the **Google Calendar API must be enabled in Cloud project salesbrain-512414**). `lib/google-calendar.ts`
+  (events with other attendees, 14 d back / 30 d ahead) → bridge tool `calendar_events` → Hermes cron
+  **`calendar-meetings`** (35 7-21) → `commands/meetings.record_calendar_meetings`: attendee email on a lead card → past =
+  `meeting` track-record line (once per event, `ref.calendar_event_id`), future = card booked (booked_at, scheduled, Meet
+  link); known person → `interactions` channel meeting (warmth "met"). Profile → Google shows "Calendar meetings".
+- **Monday funnel note**: Hermes cron **`funnel-digest`** (15 8 * * 1) → `funnel.weekly_digest`: per teammate their warmest
+  people nobody works (top 5 + reason), their last-7-days outreach and answers, the team's clearest 30-day learning; own
+  DM or nothing (source `funnel-digest`, mutable); nobody gets a note with nothing personal in it.
+- **List tuning** (`policy/icp_tuning.py`): per fit criterion, answer rate when matched vs not (outreach only); lift ≤ 0.8 →
+  half weight, ≥ 1.5 → 1.5× (cap 60), rescaled to the same total; needs ≥ 8 per side, ≥ 3 answers, ≥ 2 on the better side.
+  `commands/icp_tuning` (`icp_tuning` read for all, `apply_icp_tuning` owner/admin → weights + rescore, audited); tools
+  `crm_icp_tuning`, `crm_icp_apply_tuning` (mcp None); `/api/icp/[id]/tuning`; `components/icp/TuningPanel.tsx` on
+  `/icp/[id]`. NRW today: company size 7/109 vs 3/108 → size 15 → 20, title 40 → 35 (not applied).
+- Warm people Excel: kind `warm` export + button on `/warm`.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

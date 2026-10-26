@@ -4,6 +4,9 @@ import { JOURNEY_STAGES, LIFECYCLE_LABELS, type LeadSort, type LeadView, type Li
 import { DUE, NEEDS_YOU, OPEN, SORTS } from '@/lib/sales-leads-sql';
 import { visibleIcp } from '@/lib/icp-server';
 import type { ExportKind, ExportRequest } from '@/lib/export/sign';
+import { kernelCall } from '@/lib/mcp/kernel-rpc';
+import type { WarmPeople, WarmPerson } from '@/lib/warm';
+import { FUNNEL_LABELS, type FunnelStage } from '@/lib/funnel';
 
 /**
  * Excel exports — the data behind /sales-leads, the prospect lists and a full ICP. Server only (pg + SheetJS).
@@ -14,7 +17,8 @@ import type { ExportKind, ExportRequest } from '@/lib/export/sign';
  * Visibility is the screen's own rule, enforced here and not trusted from the caller:
  *   sales leads  — org-wide inbox (everyone sees it, like the page);
  *   prospects    — mine + unowned; admins see all (like /api/prospects);
- *   ICP          — any teammate (every list is visible to everyone since 2026-10-26; visibleIcp).
+ *   ICP          — any teammate (every list is visible to everyone since 2026-10-26; visibleIcp);
+ *   warm people  — team-wide, like the page (relationships the TEAM has, as on the shared /network map).
  */
 
 export interface Who { userId: string; role: string }
@@ -78,7 +82,8 @@ interface LeadRow {
 async function salesLeads(args: Record<string, string>, who: Who): Promise<Built> {
   const view = (args.view || 'working') as LeadView;
   if (!VIEWS.has(view)) throw new Error(`Invalid view: ${view}`);
-  const sort = (args.sort || 'priority') as LeadSort;
+  // the export does not select warmth: a 'warmest first' view exports in priority order
+  const sort = (args.sort === 'warmth' ? 'priority' : args.sort || 'priority') as LeadSort;
   if (!SORTS[sort]) throw new Error(`Invalid sort: ${sort}`);
   const role = args.role === 'responsible' ? 'responsible' : args.role === 'front' ? 'front' : 'any';
   const where: string[] = [];
@@ -371,6 +376,59 @@ async function icp(args: Record<string, string>, who: Who): Promise<Built> {
   } finally { client.release(); }
 }
 
+// ─── Warm people (funnel Phase C) ──────────────────────────────────
+
+async function warm(args: Record<string, string>, who: Who): Promise<Built> {
+  const band = ['hot', 'warm', 'cool'].includes(args.band) ? args.band : 'warm';
+  const kargs: Record<string, unknown> = { band, include_worked: args.worked === '1' || args.worked === 'true', limit: 500 };
+  if (args.owner) kargs.owner = args.owner;
+  const out = await kernelCall('crm_warm_people', kargs, who.userId) as unknown as WarmPeople & { error?: string };
+  if (out.error) throw new Error(out.error);
+  const li = (h: string | null) => (!h ? '' : h.startsWith('http') ? h : `https://www.linkedin.com/in/${h}`);
+  const peopleCols: Col<WarmPerson>[] = [
+    { h: 'Name', w: 26, v: (r) => r.name }, { h: 'Company', w: 26, v: (r) => r.company },
+    { h: 'Headline', w: 40, v: (r) => r.headline }, { h: 'Band', w: 7, v: (r) => r.band },
+    { h: 'Warmth (0-100)', w: 9, v: (r) => Math.round(r.warmth * 100) },
+    { h: 'Why', w: 60, v: (r) => r.reasons.join(' · ') }, { h: 'Warmest relationship', w: 20, v: (r) => r.via.name },
+    { h: 'They last wrote', w: 16, v: (r) => ts(r.last_two_way_at) }, { h: 'Last contact', w: 16, v: (r) => ts(r.last_touch_at) },
+    { h: 'LinkedIn', w: 40, v: (r) => li(r.linkedin) }, { h: 'Email', w: 28, v: (r) => r.email },
+    { h: 'On list', w: 28, v: (r) => r.list ?? 'not on any list' }, { h: 'Fit', w: 6, v: (r) => r.fit },
+    { h: 'Funnel stage', w: 14, v: (r) => (r.stage ? FUNNEL_LABELS[r.stage as FunnelStage] ?? r.stage : '') },
+    { h: 'Resting', w: 8, v: (r) => yn(r.resting) }, { h: 'Has lead card', w: 9, v: (r) => yn(r.has_card) },
+    { h: 'Being worked', w: 9, v: (r) => yn(r.being_worked) },
+  ];
+  const client = await pool.connect();
+  try {
+    // every teammate × person pair in the band (the page shows each person once, at their warmest relationship)
+    const bands = band === 'hot' ? ['hot'] : band === 'warm' ? ['hot', 'warm'] : ['hot', 'warm', 'cool'];
+    const { rows: pairs } = await client.query(
+      `SELECT pe.full_name, pe.organization, u.name AS teammate, w.band, round(w.warmth * 100)::int AS warmth,
+              w.reasons, w.their_messages, w.our_messages, w.last_two_way_at, w.last_touch_at
+         FROM person_warmth w JOIN people pe ON pe.id = w.person_id JOIN users u ON u.id = w.user_id
+        WHERE w.band = ANY($1) ORDER BY w.warmth DESC LIMIT ${SHEET_ROW_CAP}`, [bands]);
+    type P = (typeof pairs)[number];
+    const pairCols: Col<P>[] = [
+      { h: 'Name', w: 26, v: (r) => r.full_name }, { h: 'Company', w: 26, v: (r) => r.organization },
+      { h: 'Teammate', w: 20, v: (r) => r.teammate }, { h: 'Band', w: 7, v: (r) => r.band },
+      { h: 'Warmth (0-100)', w: 9, v: (r) => r.warmth }, { h: 'Why', w: 60, v: (r) => (r.reasons || []).join(' · ') },
+      { h: 'Their messages', w: 9, v: (r) => r.their_messages }, { h: 'Our messages', w: 9, v: (r) => r.our_messages },
+      { h: 'They last wrote', w: 16, v: (r) => ts(r.last_two_way_at) }, { h: 'Last contact', w: 16, v: (r) => ts(r.last_touch_at) },
+    ];
+    const about: [string, string | number | null][] = [
+      ['What this is', 'People we already talk to, warmest first (funnel Phase C). One row per person on “Warm people”; one row per teammate × person on “Relationships”.'],
+      ['Warmth', '0-100 from real signals that fade with time: they wrote to us (LinkedIn, email, logged WhatsApp or calls), we met, a LinkedIn connection, a saved contact. Hot ≥ 70, warm ≥ 40, cool ≥ 15.'],
+      ['Band shown', band === 'hot' ? 'hot only' : band === 'warm' ? 'hot and warm' : 'hot, warm and cool'],
+      ['People', out.people.length], ['Of them being worked already', out.people.filter((p) => p.being_worked).length],
+      ['Relationships (pairs)', pairs.length], ['Made', new Date().toISOString().slice(0, 16).replace('T', ' ')],
+    ];
+    return finish(`salesbrain-warm-people-${band}`, [
+      { name: 'Warm people', ws: sheetOf(peopleCols, out.people), rows: out.people.length },
+      { name: 'Relationships', ws: sheetOf(pairCols, pairs), rows: pairs.length },
+      { name: 'About', ws: pairsSheet(about), rows: about.length },
+    ], 0);
+  } finally { client.release(); }
+}
+
 // ─── Entry point ───────────────────────────────────────────────────
 
 export async function buildExport(req: ExportRequest, who: Who): Promise<Built> {
@@ -378,6 +436,7 @@ export async function buildExport(req: ExportRequest, who: Who): Promise<Built> 
   if (kind === 'sales-leads') return salesLeads(req.args, who);
   if (kind === 'prospects') return prospects(req.args, who);
   if (kind === 'icp') return icp(req.args, who);
+  if (kind === 'warm') return warm(req.args, who);
   throw new Error(`Unknown export: ${kind}`);
 }
 
@@ -387,6 +446,7 @@ export function cleanArgs(kind: ExportKind, raw: Record<string, unknown>): Recor
     'sales-leads': ['view', 'sort', 'q', 'mine', 'role', 'list'],
     prospects: ['stage', 'mine', 'icp_id', 'reply_status', 'q'],
     icp: ['icp_id'],
+    warm: ['band', 'owner', 'worked'],
   };
   const out: Record<string, string> = {};
   for (const k of allowed[kind]) {

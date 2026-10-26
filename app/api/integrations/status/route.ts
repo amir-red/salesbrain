@@ -32,6 +32,7 @@ export async function GET() {
       ...providers.google,
       needs_reconnect: !works,
       can: { contacts: scopes.includes('contacts.readonly'), read_mail: scopes.includes('gmail.readonly'),
+             calendar: scopes.includes('calendar.readonly'),
              send: scopes.includes('gmail.send') },
     };
   }

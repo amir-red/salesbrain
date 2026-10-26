@@ -15,6 +15,7 @@ import { listUserTokens, revokeToken } from '@/lib/mcp/tokens';
 import { sendTelegram } from '@/lib/tg-notify';
 import { syncZeamiDealEvents } from '@/lib/zeami-sync';
 import { readThreads, sendGmail, watchMailbox } from '@/lib/gmail-send';
+import { listMeetings } from '@/lib/google-calendar';
 
 export interface Who { userId: string; role: string }
 const MAX_XLSX_BYTES = 20 * 1024 * 1024;
@@ -98,6 +99,13 @@ async function gmailWatchTool(who: Who) {
   return watchMailbox(who.userId);
 }
 
+/** This person's calendar events with other attendees, for the hourly meetings job (commands/meetings.py). */
+async function calendarEventsTool(who: Who, args: Args) {
+  const back = Math.min(60, Math.max(1, Number(args.days_back) || 14));
+  const ahead = Math.min(90, Math.max(1, Number(args.days_ahead) || 30));
+  return listMeetings(who.userId, back, ahead);
+}
+
 const TOOLS: Record<string, (who: Who, args: Args) => Promise<Record<string, unknown>>> = {
   google_sync: googleSync,
   import_contacts: importContacts,
@@ -107,6 +115,7 @@ const TOOLS: Record<string, (who: Who, args: Args) => Promise<Record<string, unk
   gmail_send: gmailSendTool,
   gmail_threads: gmailThreadsTool,
   gmail_watch: gmailWatchTool,
+  calendar_events: calendarEventsTool,
 };
 
 export async function runBridgeTool(tool: string, args: Args, userId: string): Promise<Record<string, unknown>> {

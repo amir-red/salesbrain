@@ -11,11 +11,29 @@ type NavItem = { href: string; label: string; icon: ReactNode; admin?: boolean }
 
 const NAV_ITEMS: NavItem[] = [
   {
+    href: '/funnel',
+    label: 'Funnel',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 4h18l-7 8.5V19l-4 2v-8.5z" />
+      </svg>
+    ),
+  },
+  {
     href: '/',
-    label: 'Deals',
+    label: 'Opportunities',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      </svg>
+    ),
+  },
+  {
+    href: '/warm',
+    label: 'Warm people',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 21s-7-4.35-7-10a4 4 0 0 1 7-2.65A4 4 0 0 1 19 11c0 5.65-7 10-7 10z" />
       </svg>
     ),
   },
@@ -40,7 +58,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     href: '/followups',
-    label: 'Followups',
+    label: 'Follow-ups',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
@@ -78,7 +96,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     href: '/icp',
-    label: 'ICP',
+    label: 'Lists (ICP)',
     icon: (
       // Target — the ideal-customer profile that sourcing and scoring aim at
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -142,7 +160,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     href: '/sales-leads',
-    label: 'Sales Leads',
+    label: 'Leads',
     icon: (
       // Inbox-tray icon — signals "inbound submissions land here"
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -237,16 +255,18 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-// The nav is grouped by the job being done, in the order work flows:
-// find people → work the deal → keep the relationship → fund it → learn from it.
+// The nav follows the funnel (Mateo + Amir, 2026-10-26): first say whom you want and how you sound, then reach them,
+// then work prospects → leads → opportunities. Funnel + Inbox sit on top: what is happening, what needs an answer.
 // `foldable` groups start folded on every page (Amir 2026-10-24) and open by a click on their label — or by themselves
 // while one of their pages is the page you are on. The icon rail always shows every item.
 const GROUPS: { label: string; hrefs: string[]; foldable?: boolean }[] = [
-  // Deals (`/`) holds the list and the pipeline board since 2026-10-24; /pipeline redirects to it.
-  { label: 'Pipeline', hrefs: ['/', '/inbox', '/followups', '/sales-leads'] },
-  { label: 'Prospecting', hrefs: ['/icp', '/campaigns', '/brand', '/prospecting', '/agents'] },
-  { label: 'Marketing', hrefs: ['/marketing'] },
-  { label: 'Relationships', hrefs: ['/network'] },
+  { label: 'Overview', hrefs: ['/funnel', '/inbox'] },
+  { label: 'Target', hrefs: ['/icp', '/brand'] },
+  { label: 'Reach', hrefs: ['/warm', '/campaigns', '/marketing', '/network'] },
+  { label: 'Prospects', hrefs: ['/prospecting', '/agents'] },
+  { label: 'Leads', hrefs: ['/sales-leads', '/followups'] },
+  // Opportunities (`/`) holds the list and the pipeline board since 2026-10-24; /pipeline redirects to it.
+  { label: 'Opportunities', hrefs: ['/'] },
   { label: 'Funding', foldable: true, hrefs: ['/grants', '/credits'] },
   { label: 'Insights', foldable: true, hrefs: ['/reports', '/lessons', '/pricing'] },
   { label: 'Admin', foldable: true, hrefs: ['/admin/costs', '/admin/users', '/admin/learning'] },

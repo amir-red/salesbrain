@@ -33,7 +33,7 @@ interface ChatProps {
 function getSuggestions(deal: DealInfo | null | undefined, messageCount: number): string[] {
   if (!deal) return [];
 
-  // Pipeline-aware — sales gates and grant gates differ in count (9 vs 10)
+  // Pipeline-aware — sales stages and grant gates differ in count (6 vs 10)
   // and SLA values. GATES[i] for a grant G10 was undefined and crashed the
   // ratio calc below.
   const pipeline = getPipeline(deal.deal_type);
@@ -51,8 +51,6 @@ function getSuggestions(deal: DealInfo | null | undefined, messageCount: number)
     if (deal.gate === 1) {
       starters.push(`I just had a meeting with ${deal.company} — let me dump my notes`);
       starters.push(`Qualify this deal — what do you think of ${deal.company}?`);
-      starters.push('What information do you need to move this to G2?');
-    } else if (deal.gate === 2) {
       if (missing.length > 3) {
         starters.push(`I just got off a call with ${deal.company} — here's what I learned`);
         starters.push(`Let me paste my meeting notes from ${deal.company}`);
@@ -63,24 +61,21 @@ function getSuggestions(deal: DealInfo | null | undefined, messageCount: number)
         starters.push('Run a full demand analysis on this deal');
       } else {
         starters.push('Run a full demand analysis on this deal');
-        starters.push('Assess this deal — are we ready for G3?');
+        starters.push('Assess this deal — is it ready for the first board review?');
       }
+    } else if (gate.isBoard && deal.gate === 4) {
+      starters.push('The client wants a discount — how should we respond?');
+      starters.push('Prepare the board summary with the deployment plan');
     } else if (gate.isBoard) {
       starters.push('Send this deal to the review board');
       starters.push('Prepare a board summary for this deal');
-    } else if (deal.gate === 4) {
+    } else if (deal.gate === 3) {
       starters.push('Draft an offer strategy for this deal');
-      starters.push(`Prep me for the meeting with ${deal.company}`);
-    } else if (deal.gate === 6) {
-      starters.push('Draft a concept document for the client');
       starters.push(`Prep me for the presentation with ${deal.company}`);
-    } else if (deal.gate === 7) {
-      starters.push('The client wants a discount — how should we respond?');
-      starters.push('What are our negotiation levers here?');
-    } else if (deal.gate === 8) {
+    } else if (deal.gate === 5) {
       starters.push('We have verbal agreement — move to close');
       starters.push('What do we need to finalize the contract?');
-    } else if (deal.gate === 9) {
+    } else if (deal.gate === pipeline.length) {
       starters.push('Prepare the handover package');
       starters.push('What does the project team need to know?');
     }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Sidebar from '@/components/Sidebar';
+import FunnelStrip from '@/components/panel/FunnelStrip';
 import Link from 'next/link';
 import { PROSPECT_STAGES } from '@/lib/prospecting';
 import { relativeTime } from '@/lib/time';
@@ -142,7 +143,8 @@ export default function ProspectingPage() {
           <div>
             <h1 className="text-lg font-bold">Prospects</h1>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              {allCount.toLocaleString()} prospects across every list{query ? ` matching “${query}”` : ''}
+              {allCount.toLocaleString()} rows across every list{query ? ` matching “${query}”` : ''}. A prospect becomes a
+              lead at the first touch: a connection request, a message or an email.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -158,6 +160,10 @@ export default function ProspectingPage() {
               + New Prospect
             </button>
           </div>
+        </div>
+
+        <div className="px-4 pt-3">
+          <FunnelStrip compact title="Where everyone stands" href="/funnel" />
         </div>
 
         {/* New prospect form */}
