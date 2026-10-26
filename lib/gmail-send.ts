@@ -84,6 +84,8 @@ export interface ThreadMessage {
   id: string; from: string; subject: string; snippet: string; date: string | null; from_me: boolean;
   /** with `full`: the plain-text body (quoted history cut off), To and the Message-ID header */
   body?: string; to?: string; rfc_id?: string | null;
+  /** with `full`: the headers mail systems set on an automatic reply (out of office) — the kernel reads them */
+  auto_headers?: Record<string, string>;
 }
 
 import { htmlToText, stripQuoted } from '@/lib/email-text';
@@ -145,6 +147,12 @@ export async function readThreads(userId: string, threadIds: string[], opts: { f
           msg.body = stripQuoted(plain ?? (html != null ? htmlToText(html) : msg.snippet)).slice(0, 20000);
           msg.to = h('to');
           msg.rfc_id = h('message-id') || null;
+          const auto: Record<string, string> = {};
+          for (const name of ['auto-submitted', 'x-autoreply', 'x-autorespond', 'precedence', 'x-auto-response-suppress']) {
+            const v = h(name);
+            if (v) auto[name] = v;
+          }
+          msg.auto_headers = auto;
         }
         return msg;
       }),

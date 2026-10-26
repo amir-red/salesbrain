@@ -1125,3 +1125,12 @@ dimension, which is the usual reason a profile looks right and returns no strong
 `crm_linkedin_revoke` (disconnect + end the provider session) · `crm_icp_archive` and `crm_icp_rescore` ·
 run visibility (`get_run_status`, readiness pre-flight, refuse-early) · LinkedIn safe-rate guard on the
 spending tools (`crm_linkedin_quota`, deferral envelopes) · `suggest_icp` objective-scored candidates.
+
+### 2026-10-26 — campaigns round 2
+- `crm_campaign_results`: each step gains `variants[] {id, label, sent, replied_after, reply_rate, winner}` and
+  `trust[]` (trusted auto-send state per sender); `totals.replied` counts each person once.
+- `crm_email_mailboxes`: each mailbox gains `ramp {cap, until, active}`, `bounces {sent, bounced, rate, window_days}`,
+  `paused`; `cap` is the effective cap (own cap, team ceiling, ramp). `crm_email_mailbox_update` takes `ramp_skipped`
+  (admin). A mailbox over the bounce rate is paused by the outbox until a person resumes it (Profile → Google).
+- Outreach emails go only to verified addresses unless the campaign allows unverified ones; an out-of-office reply no
+  longer counts as a reply (the sequence waits until the return date).

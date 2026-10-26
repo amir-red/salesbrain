@@ -26,6 +26,9 @@ export async function GET(req: NextRequest) {
   // the owner can still choose "Send anyway").
   if (!all && !rate) where.push(`(oa.status = 'pending' OR (oa.status = 'failed' AND oa.company_conflict IS NOT NULL
                      AND oa.company_override_at IS NULL AND oa.consumed_at IS NULL AND oa.sent_at IS NULL))`);
+  // A campaign draft is one line on a daily card (/campaigns/cards/[id]); deciding it here alone would bypass the
+  // card and the step's trust count (084), so the pending list leaves them out.
+  if (!all && !rate) where.push('oa.campaign_card_id IS NULL');
   const { rows } = await pool.query(
     `SELECT oa.id, oa.status, oa.kind, oa.commercial, oa.channel, oa.subject, oa.message, oa.rationale,
             oa.created_at, oa.decided_at, oa.sent_at, oa.expires_at, oa.prospect_id, oa.person_id, oa.owner_user_id,

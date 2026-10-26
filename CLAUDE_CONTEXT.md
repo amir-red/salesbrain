@@ -2445,6 +2445,69 @@ dedup and a comma-split CSV parser; its footer promised guards that do not exist
   server is installed on Amir's Mac), ring 357, tsc + build, and the dialog clicked through on 127.0.0.1:3003 against that
   database (paste → map → check → import into a colleague's list as admin). Not done: bulk "Enrich selected" on /sales-leads.
 
+### 5.bo Campaigns round 2 — deliverability, A/B variants, trusted auto-send (2026-10-26, feat/campaigns-r2, migration 084)
+
+The 2026-10-26 audit against Lemlist / Smartlead / Instantly / Outreach / Apollo (plan `~/.claude/plans/delegated-toasting-cookie.md`):
+the approval model and one-person-per-company were ahead of the field; mailbox health, sequence design and four bugs
+were behind. Amir chose all of: ramp-up + bounce pause, verify at send + out-of-office, recipient-timezone window
+Mon–Fri + business-day waits, the bug fixes, A/B variants (manual winner), "trust after N approvals" per campaign.
+- **Trusted auto-send** (per campaign, OFF by default; `campaigns.settings.auto_send {enabled, trust_after 1..10}`,
+  Settings tab). `policy/campaigns.trust_state`: the step's cards for one sender, newest first — `trust_after`
+  consecutive HUMAN approvals with no skipped card, no edited draft, no dropped draft = trusted; any of those is a
+  reset; system-approved cards count as nothing. Kernel `auto_approve_cards` (service; runner calls it right after
+  filing, before posting): card → approved, `campaign_cards.decided_by='auto'` (084), email drafts decided for the
+  outbox, LinkedIn drafts sent in the same pass (`claim_card → send_card`); REFUSED when a draft has `check_flags`
+  or an un-overridden `company_conflict` (a person decides), or the kill switch is off. Telegram: the card is posted
+  as "🤖 sent without a tap" with ONE button `cg:<id>:pause` → `pause_auto_send` (owner / sender / admin). Results
+  tab: per step "trusted" / "2 of 3 approvals · reset <date>" chips (`campaign_trust`). **`decide_outreach` now
+  refuses a campaign-card draft unless `from_card=True`** (decide_card, auto_approve, send_card pass it): /agents and
+  `crm_outreach_decide` can no longer approve one line of a card and bypass the card + the trust count; `/api/agents/
+  approvals` leaves campaign drafts out of the pending list.
+- **A/B variants** on message steps: `config.variants [{id a|b|c, label?, mode?, text?, subject?, instructions?}]`
+  (2–3; each inherits what it does not set — `policy.variant_for`), `config.winner`. `validate` checks every variant
+  like a message ("variant B: …"). `pick_variant(enrollment, node)` = winner, else sha1 split (stable per person).
+  `outreach_approvals.campaign_variant` (084); `path` `sent` entries carry `variant`; `results()` gives
+  `variants[] {sent, replied_after, reply_rate, winner}` per step and the "reply anywhere" hand-off now credits the
+  last sent step (`outcome_kind: replied` + `after` + `variant`) — replies no longer vanish from the step counts;
+  `totals.replied` counts each person once. `set_variant_winner` (owner/admin; live + draft graph, no publish needed).
+  App: StepInspector "A/B test" section (Split into A/B, per-variant mode/text/subject/instructions, label, remove),
+  canvas badge "A/B · 2" / "A/B · B", Results rows per variant with **Make winner** / **split again**; samples are
+  keyed `<node>:<variant>` (`lib/campaigns.sampleSlots`); Test run writes one per variant.
+- **Mailbox ramp-up + bounce pause** (`policy/mailbox.py`; `email_senders.ramp_started_at / ramp_skipped / paused_at /
+  pause_reason`, `outreach_approvals.bounced_at`; `outreach.email.ramp [5,10,20]` per week, `bounce_pause_rate 0.05`,
+  `bounce_min_sends 20`, `bounce_window_days 7`). `waves._health`: cap = min(own cap, policy, ramp cap); `outbox()`
+  skips a paused mailbox and PAUSES one over the bounce rate (audit, DM `email-outbox`, `fallback=False`);
+  `sender_resume` (owner / admin), `sender_update(ramp_skipped, user_id)` (admin). Profile → Google: ramp line,
+  bounces (7 d), paused banner + Resume, admin "Skip the ramp"; team list shows ramping / bounced / paused.
+  amir@zeami.io (connected 2026-10-22) is inside the ramp after the deploy — skip it if that mailbox is warm.
+- **Verify at send** (`email_verifications` 084: deliverable | catch_all | invalid | unknown; seeded from verified
+  handles, replies and bounces). Writers: `enrichment.set_prospect_email` (provider verdict), `waves.record_verification`
+  (ring `email_verify.mx_check`: syntax + MX via dnspython or `dig`; no MX → invalid + suppression; a DNS error is
+  never invalid), a reply → deliverable, a bounce → invalid. Gate in `email_outbox.py` before the send gate:
+  `policy/waves.verification_verdict(status, allow_unverified, outreach.email.unverified)` → send / hold
+  (`hold_unverified`: approval stays approved, enrollment "email not verified", looked at again tomorrow) / fail.
+  Per campaign: `settings.allow_unverified` (Settings tab). Inbox replies are exempt (they answer someone who wrote).
+- **Out-of-office** (`policy/replies.py`: RFC 3834 / X-Autoreply / Precedence headers — `gmail-send.ts` returns them
+  as `auto_headers` on a full read — then EN/DE subject + body phrases, `return_date`). `record_email_inbound`:
+  an auto-reply is stored (`email_messages.auto_reply`, the Inbox keeps the thread `waiting`), never `record_reply`;
+  campaign enrollments are parked (`hold_for_auto_reply`, due = the day after the return date, else +7 d) and a wave
+  cadence timer is pushed the same way.
+- **Send window** (`policy/timezone.py`: `zone_for` over prospect location / account HQ — countries, US states/cities,
+  DE cities and LinkedIn metro labels; `person_zone`; `send_window_ok`; `add_business_days`; `outreach.quiet_hours`
+  + `recipient_local true`, `weekdays [1..5]`; `agents.campaigns.business_days true`). `check_quiet_hours(conn, now,
+  zone)` is called with `policy/outreach.person_zone(person_id)` from `check_outreach`; campaign `wait` steps count
+  business days (a `wait_for` "give up after N days" stays calendar days — the weekday window holds the next send
+  until Monday) and the email-outbox follow-up hour uses the policy zone; the `email-outbox` cron now
+  runs `*/10 5-23` so a Berlin or US-East morning is reachable from Addis (the kernel window decides).
+- **Bugs fixed**: campaign email follow-ups carry `Re: <first subject>` (`_reply_subject`; were sent with an empty
+  subject, unthreaded); email drafts keep their paragraphs (`lead_drafts.clean(keep_paragraphs)`); `wants_out` =
+  word boundary, ≤160 chars, bare "stop" only as the request itself; free-account connect caps 15/75 everywhere
+  (084 seed + `policy/invitations.DEFAULTS`, the 073 comment was right and the code wrong).
+- Tests: `test_campaigns_r2_policy.py` (14), `test_campaigns_r2_db.py` (9, real Postgres), ring
+  `test_campaigns_r2_ring.py` (6); all suites green. Not seen live: a real auto-approved card, a real OOO, a real
+  held-unverified email, the pages in a browser. Not built: a People-tab "next send: Mon 09:00 Berlin" line, A/B
+  auto-winner, warm-up, List-Unsubscribe, domain health, reply sentiment.
+
 ### 5.bd Brand & Voice, and learning from every correction (2026-10-21, feat/brand-voice, migration 079)
 
 **LIVE 2026-10-21 20:25 Addis (0.58.0)**: 079 applied, ring deployed (crm_brand on telegram, api_server, cron; smoke OK), app on Production.

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -14,8 +14,7 @@ import {
   ENROLLMENT_STYLE, STATUS_STYLE, nodeLabel, toTemplate,
   needsSample, sampleIsStale,
   type PreviewDraft, type PreviewPerson, type Sample, type SavedSample,
-  type Campaign, type CampaignList, type Graph, type Validation,
-} from '@/lib/campaigns';
+  type Campaign, type CampaignList, type Graph, type Validation, sampleSlots, type AutoSend, type StepTrust } from '@/lib/campaigns';
 
 const SequenceCanvas = dynamic(() => import('@/components/campaigns/SequenceCanvas'), {
   ssr: false, loading: () => <div className="p-6 text-sm" style={{ color: 'var(--text-muted)' }}>Loading the canvas…</div>,
@@ -33,9 +32,11 @@ interface Person {
   company: string | null; sender_name: string | null; blocked_reason: string | null; exit_reason: string | null;
   due_at: string; entered_node_at: string; draft_status: string | null; card_id: string | null; prospect_id: string;
 }
+interface VariantResult { id: string; label: string; sent: number; replied_after: number; reply_rate: number | null; winner: boolean }
 interface Results {
   steps: { node_id: string; type: string; label: string; reached: number; here_now: number; sent: number;
-    replied_after: number; reply_rate: number | null; accepted: number }[];
+    replied_after: number; reply_rate: number | null; accepted: number; variants?: VariantResult[]; winner?: string | null;
+    trust?: StepTrust[] }[];
   totals: Record<string, number>; activity: { day: string; sent: number }[];
 }
 interface TestStep { node: string; type: string; label: string; outcome: string; preview?: string | null }
@@ -192,10 +193,12 @@ export default function CampaignPage() {
   const sampleStates = useMemo<Record<string, SampleState>>(() => {
     const out: Record<string, SampleState> = {};
     for (const n of graph?.nodes ?? []) {
-      if (!needsSample(n)) continue;
-      const smp = samples[n.id];
-      const stale = !!smp && sampleIsStale(n, smp);
-      out[n.id] = writingSamples && (!smp || stale) ? 'writing' : !smp ? 'none' : stale ? 'stale' : 'ready';
+      for (const slot of sampleSlots(n)) {           // one sample per variant (084)
+        if (!needsSample(n, slot.variant)) continue;
+        const smp = samples[slot.key];
+        const stale = !!smp && sampleIsStale(n, smp, slot.variant);
+        out[slot.key] = writingSamples && (!smp || stale) ? 'writing' : !smp ? 'none' : stale ? 'stale' : 'ready';
+      }
     }
     return out;
   }, [graph, samples, writingSamples]);
@@ -303,7 +306,7 @@ export default function CampaignPage() {
                   <button type="button" aria-label="Close" title="Close (or click the canvas)" onClick={() => setSelected(null)}
                     className="absolute top-3 right-3 text-lg leading-none" style={{ color: 'var(--text-muted)' }}>×</button>
                   <StepInspector key={sel.id} node={sel} editable={c.can_edit} blockers={problems('blockers')} warnings={problems('warnings')}
-                    sample={samples[sel.id]} onTestRun={() => setTesting(true)}
+                    sample={samples[sampleSlots(sel)[0].key]} samples={samples} onTestRun={() => setTesting(true)}
                     onChange={(config) => onGraph({ ...graph, nodes: graph.nodes.map((n) => (n.id === sel.id ? { ...n, config } : n)) }, 'edit')}
                     onRemove={() => { onGraph({ nodes: graph.nodes.filter((n) => n.id !== sel.id), edges: graph.edges.filter((e) => e.source !== sel.id && e.target !== sel.id) }); removed([nodeLabel(sel)]); setSelected(null); }} />
                 </aside>
@@ -312,7 +315,11 @@ export default function CampaignPage() {
           ) : tab === 'people' ? (
             <PeopleTab id={id} />
           ) : tab === 'results' ? (
-            <ResultsTab results={results} draft={c.status === 'draft'} />
+            <ResultsTab results={results} draft={c.status === 'draft'} canEdit={c.can_edit} autoSend={c.settings?.auto_send}
+              onWinner={async (nodeId, variantId) => {
+                await api(`/api/campaigns/${id}`, json('POST', { action: 'winner', node_id: nodeId, variant_id: variantId }));
+                await load();
+              }} />
           ) : tab === 'settings' ? (
             <SettingsTab c={c} onSaved={load} />
           ) : null}
@@ -564,11 +571,24 @@ function PeopleTab({ id }: { id: string }) {
   );
 }
 
-function ResultsTab({ results, draft }: { results: Results | null; draft: boolean }) {
+function TrustChip({ t }: { t: StepTrust }) {
+  if (!t.enabled) return null;
+  const text = t.trusted ? `trusted · sends without ${t.sender_name?.split(' ')[0] ?? 'a'} tap`
+    : `${t.human_approvals} of ${t.needed} approvals${t.reset_at ? ` · reset ${String(t.reset_at).slice(0, 10)}` : ''}`;
+  const color = t.trusted ? 'var(--green)' : 'var(--text-muted)';
+  return <span className="text-[10px] px-1.5 py-0.5 rounded-full whitespace-nowrap" title={`Trusted auto-send for ${t.sender_name ?? 'the sender'}`}
+    style={{ color, background: `color-mix(in srgb, ${color} 14%, transparent)` }}>{text}</span>;
+}
+
+function ResultsTab({ results, draft, canEdit, autoSend, onWinner }: {
+  results: Results | null; draft: boolean; canEdit: boolean; autoSend?: AutoSend;
+  onWinner: (nodeId: string, variantId: string | null) => Promise<void>;
+}) {
   if (draft) return <div className="p-6 text-sm" style={{ color: 'var(--text-muted)' }}>Results appear once the campaign is live.</div>;
   if (!results) return <div className="p-6 text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</div>;
   const t = results.totals;
   const steps = results.steps.filter((s) => s.type !== 'start' && (s.reached || s.sent));
+  const pct = (r: number | null | undefined) => `${Math.round((r ?? 0) * 100)}%`;
   return (
     <div className="p-4 grid gap-4 overflow-y-auto h-full content-start">
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
@@ -588,11 +608,36 @@ function ResultsTab({ results, draft }: { results: Results | null; draft: boolea
           <tbody>
             {steps.length === 0 && <tr><td className="p-3 text-sm" colSpan={6} style={{ color: 'var(--text-muted)' }}>Nobody has reached a step yet.</td></tr>}
             {steps.map((s) => (
-              <tr key={s.node_id} className="border-t tabular-nums" style={{ borderColor: 'var(--border)' }}>
-                <td className="p-2">{s.label}</td><td className="p-2 text-right">{s.reached}</td><td className="p-2 text-right">{s.here_now}</td>
-                <td className="p-2 text-right">{s.sent || '—'}</td><td className="p-2 text-right">{s.accepted || '—'}</td>
-                <td className="p-2 text-right">{s.sent ? `${s.replied_after} (${Math.round((s.reply_rate ?? 0) * 100)}%)` : '—'}</td>
-              </tr>
+              <Fragment key={s.node_id}>
+                <tr className="border-t tabular-nums" style={{ borderColor: 'var(--border)' }}>
+                  <td className="p-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span>{s.label}</span>
+                      {(s.trust ?? []).map((tr) => <TrustChip key={tr.sender_user_id} t={tr} />)}
+                    </div>
+                  </td>
+                  <td className="p-2 text-right">{s.reached}</td><td className="p-2 text-right">{s.here_now}</td>
+                  <td className="p-2 text-right">{s.sent || '—'}</td><td className="p-2 text-right">{s.accepted || '—'}</td>
+                  <td className="p-2 text-right">{s.sent ? `${s.replied_after} (${pct(s.reply_rate)})` : '—'}</td>
+                </tr>
+                {(s.variants ?? []).map((v) => (
+                  <tr key={`${s.node_id}:${v.id}`} className="tabular-nums text-xs" style={{ color: 'var(--text-muted)' }}>
+                    <td className="py-1 pl-6 pr-2">
+                      <span className="font-semibold" style={{ color: 'var(--text)' }}>{v.id.toUpperCase()}</span>{v.label && v.label !== v.id.toUpperCase() ? ` · ${v.label}` : ''}
+                      {v.winner && <span className="ml-2 px-1.5 rounded-full" style={{ color: 'var(--accent)', background: 'var(--accent-soft)' }}>winner</span>}
+                      {canEdit && (
+                        v.winner
+                          ? <button type="button" className="ml-2 underline" onClick={() => { void onWinner(s.node_id, null); }}>split again</button>
+                          : <button type="button" className="ml-2 underline" title="From now on only this variant is sent at this step"
+                              onClick={() => { if (confirm(`Send only variant ${v.id.toUpperCase()} at “${s.label}” from now on?`)) void onWinner(s.node_id, v.id); }}>Make winner</button>
+                      )}
+                    </td>
+                    <td /><td />
+                    <td className="py-1 px-2 text-right">{v.sent || '—'}</td><td />
+                    <td className="py-1 px-2 text-right">{v.sent ? `${v.replied_after} (${pct(v.reply_rate)})` : '—'}</td>
+                  </tr>
+                ))}
+              </Fragment>
             ))}
           </tbody>
         </table>
@@ -600,6 +645,12 @@ function ResultsTab({ results, draft }: { results: Results | null; draft: boolea
       {results.activity.length > 0 && (
         <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
           Sent in the last 14 days: {results.activity.map((a) => `${a.day.slice(5)} · ${a.sent}`).join('  ')}
+        </div>
+      )}
+      {autoSend?.enabled && (
+        <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          Trusted auto-send is on: after {autoSend.trust_after} cards of a step approved unchanged, that step sends without a tap.
+          An edit, a skip or a dropped draft starts the count again. Switch it off on the Settings tab.
         </div>
       )}
     </div>
@@ -611,7 +662,9 @@ interface Options { icps: { id: string; name: string; owner_name: string | null;
 function SettingsTab({ c, onSaved }: { c: Campaign; onSaved: () => Promise<void> }) {
   const [opts, setOpts] = useState<Options | null>(null);
   const [f, setF] = useState({ name: c.name, goal: c.goal ?? '', writing_context: c.writing_context ?? '', language: c.language ?? '',
-    product_id: c.product_id ?? '', daily_max_per_step: c.settings?.daily_max_per_step ?? '' as number | '' });
+    product_id: c.product_id ?? '', daily_max_per_step: c.settings?.daily_max_per_step ?? '' as number | '',
+    auto_enabled: !!c.settings?.auto_send?.enabled, trust_after: c.settings?.auto_send?.trust_after ?? 3,
+    allow_unverified: !!c.settings?.allow_unverified });
   const [lists, setLists] = useState<CampaignList[]>(c.lists);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -623,7 +676,9 @@ function SettingsTab({ c, onSaved }: { c: Campaign; onSaved: () => Promise<void>
     try {
       await api(`/api/campaigns/${c.id}`, json('PATCH', {
         fields: { name: f.name, goal: f.goal, writing_context: f.writing_context, language: f.language, product_id: f.product_id || null,
-          settings: f.daily_max_per_step ? { daily_max_per_step: Number(f.daily_max_per_step) } : {} },
+          settings: { ...(f.daily_max_per_step ? { daily_max_per_step: Number(f.daily_max_per_step) } : {}),
+            auto_send: { enabled: f.auto_enabled, trust_after: Math.max(1, Math.min(10, Number(f.trust_after) || 3)) },
+            allow_unverified: f.allow_unverified } },
         lists: lists.map((l) => (l.icp_id ? { icp_id: l.icp_id, include: l.include } : { source: l.source, include: l.include })),
       }));
       setMsg({ ok: true, text: 'Saved.' }); await onSaved();
@@ -653,6 +708,29 @@ function SettingsTab({ c, onSaved }: { c: Campaign; onSaved: () => Promise<void>
           <input type="number" min={1} max={100} className="z-input" style={{ width: 128 }} disabled={dis} value={f.daily_max_per_step} placeholder="25"
             onChange={(e) => setF({ ...f, daily_max_per_step: e.target.value ? Number(e.target.value) : '' })} />
           <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>The LinkedIn and email caps of each sender still apply on top.</span></label>
+        <div className="grid gap-2 rounded-xl p-3" style={{ border: '1px solid var(--border)' }}>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-1" disabled={dis} checked={f.auto_enabled} onChange={(e) => setF({ ...f, auto_enabled: e.target.checked })} />
+            <span><b>Send without my tap once I have approved</b>{' '}
+              <input type="number" min={1} max={10} className="z-input inline-block mx-1 text-sm" style={{ width: 56 }} disabled={dis || !f.auto_enabled}
+                value={f.trust_after} onChange={(e) => setF({ ...f, trust_after: Number(e.target.value) || 3 })} />
+              <b>cards of a step unchanged</b>
+              <span className="block text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
+                Per step and per sender. The system then approves that step’s cards itself and tells you on Telegram, with a Pause button.
+                Any edit, skip or dropped draft starts the count again; a draft that fails a check or hits one-person-per-company always waits for you.
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-1" disabled={dis} checked={f.allow_unverified} onChange={(e) => setF({ ...f, allow_unverified: e.target.checked })} />
+            <span><b>Also email addresses that are not verified</b>
+              <span className="block text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
+                Off: an email goes only to an address a provider verified or that already wrote to us; catch-all and unchecked addresses wait
+                (an address with no mail server is never sent to). On: catch-all and unchecked addresses are sent to as well — more reach, more bounces.
+              </span>
+            </span>
+          </label>
+        </div>
         <div className="grid gap-2 text-sm">
           <span className="text-xs font-medium">Lists</span>
           {!opts ? <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Loading…</span> : (
