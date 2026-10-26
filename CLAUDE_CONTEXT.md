@@ -2336,6 +2336,8 @@ Amir: "are /deals and /pipeline up to date with our sales process, and merge the
 
 ### 5.bo Lists (ICPs) are visible to everyone, with an owner who can hand them over (2026-10-26, feat/icp-sharing, no migration)
 
+**LIVE 2026-10-26 (0.66.0)**: app on Production (run 40318035938), ring deployed (smoke 0.66.0). No hand-over made on live data yet.
+
 Amir: "make all the ICPs visible for everyone, show who the owner is, and make it changeable." Decisions: the owner or an
 admin changes the owner; the leads the OLD owner holds on the list move with it, ALSO those already in a conversation;
 everyone views, only owner + admin edit.
