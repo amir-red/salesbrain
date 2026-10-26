@@ -2471,7 +2471,7 @@ dedup and a comma-split CSV parser; its footer promised guards that do not exist
   server is installed on Amir's Mac), ring 357, tsc + build, and the dialog clicked through on 127.0.0.1:3003 against that
   database (paste → map → check → import into a colleague's list as admin). Not done: bulk "Enrich selected" on /sales-leads.
 
-### 5.bo Campaigns round 2 — deliverability, A/B variants, trusted auto-send (2026-10-26, feat/campaigns-r2, migration 084)
+### 5.bp Campaigns round 2 — deliverability, A/B variants, trusted auto-send (2026-10-26, feat/campaigns-r2, migration 084)
 
 The 2026-10-26 audit against Lemlist / Smartlead / Instantly / Outreach / Apollo (plan `~/.claude/plans/delegated-toasting-cookie.md`):
 the approval model and one-person-per-company were ahead of the field; mailbox health, sequence design and four bugs
