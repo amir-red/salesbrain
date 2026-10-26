@@ -5,8 +5,8 @@ import crypto from 'crypto';
  * who asked, what they asked for and an expiry, signed with SESSION_SECRET. Nothing is stored — the workbook is
  * built when the link is opened. Whoever holds the link can download it until it expires (15 minutes by default).
  */
-export type ExportKind = 'sales-leads' | 'prospects' | 'icp';
-export const EXPORT_KINDS: ExportKind[] = ['sales-leads', 'prospects', 'icp'];
+export type ExportKind = 'sales-leads' | 'prospects' | 'icp' | 'warm';
+export const EXPORT_KINDS: ExportKind[] = ['sales-leads', 'prospects', 'icp', 'warm'];
 
 export interface ExportRequest { kind: ExportKind; args: Record<string, string> }
 interface Payload { u: string; k: ExportKind; a: Record<string, string>; e: number }

@@ -2471,7 +2471,7 @@ VIEWS with exactly the old columns**, so all existing code works unchanged:
 - Runs once (data move skipped when `leads` exists; views / functions / triggers re-created on every run).
 - Rehearsed on live data (rolled back, ~5 s): 902 cards → 902, **0 differing in any column**, 0 relinked, 17 placeholders
   (the cards that had no prospect), 0 orphaned history rows. **088 is backward-compatible with the code on main**
-  (the views keep the old names), but it is NOT applied: ship it with the deploy.
+  (the views keep the old names). APPLIED 2026-10-26 (see §5.bt).
 - Tests: `tests/test_one_table_db.py` (form card → placeholder, card on its prospect + second card refused, UPDATE …
   RETURNING / rowcount, card move keeps id + history, deletes, ON CONFLICT through the view); the whole DB suite runs on
   the views (700 pass; the 3 campaigns_r2 failures are the known clock bug on main).
@@ -2510,8 +2510,10 @@ talk to recently and how warm" (Mateo), and "this is what you proposed, this is 
   `/api/warm` (GET, POST), `/api/funnel/insights`, `components/funnel/Insights.tsx` on `/funnel`, Leads rows get a warmth
   chip and a "Warmest first" sort (`SORTS.warmth`; the export falls back to priority). Everything degrades to a clear
   "needs migration 089" message before 089.
-- **089 NOT applied.** Rehearsed on live data (rolled back). The laptop → Supabase link swings 3–22 s per query; on the box
-  the refresh is seconds.
+- **088 + 089 APPLIED to the shared DB 2026-10-26** (Amir): 902 cards identical after the move; first refresh 18 s from a
+  laptop (1,309 pairs: 78 hot, 137 warm; 435 snapshots). Excel: `GET /api/export/warm?band=&owner=&worked=1` (kind
+  `warm`: sheets Warm people · Relationships · About), button on `/warm`. Company falls back to the prospect's account,
+  the lead card, then the LinkedIn headline. **087 still waits for the deploy.**
 
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
