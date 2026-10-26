@@ -11,7 +11,7 @@
 
 export type LeadStatus = 'new' | 'contacted' | 'replied' | 'converted' | 'archived';
 export type LeadView = 'working' | 'due' | 'must' | 'needs_you' | LeadStatus | 'all';
-export type LeadSort = 'priority' | 'contact' | 'newest';
+export type LeadSort = 'priority' | 'contact' | 'newest' | 'warmth';
 
 /**
  * The stored lifecycle of a lead (core 068, policy/lifecycle.py): where it is, who has to move next, and one
@@ -156,6 +156,8 @@ export interface Lead {
   last_contact_at: string | null;      // newest contact event; null = never
   next_contact_at: string | null;      // YYYY-MM-DD
   days_since_contact: number | null;   // from last_contact_at, else created_at
+  /** Team warmth 0..1 for this person (core 089: the warmest teammate's relationship); null = unknown. */
+  warmth?: number | null;
   created_at: string;
   converted_at: string | null;
   converted_deal_id: string | null;

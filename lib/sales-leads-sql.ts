@@ -7,6 +7,8 @@ export const SORTS: Record<LeadSort, string> = {
   priority: 'l.priority NULLS LAST, l.source NULLS LAST, l.rank NULLS LAST, l.must_talk DESC, l.next_contact_at NULLS LAST, l.last_contact_at DESC NULLS LAST, l.created_at DESC',
   contact: 'COALESCE(l.last_contact_at, l.created_at) ASC, l.priority NULLS LAST, l.rank NULLS LAST',
   newest: 'l.created_at DESC',
+  // needs the `warmth` output column (the /sales-leads list selects it; the export falls back to priority)
+  warmth: 'warmth DESC NULLS LAST, l.priority NULLS LAST, l.rank NULLS LAST, l.created_at DESC',
 };
 
 /** Teammates for the back / front office pickers: real logins, no service stubs. */
@@ -33,6 +35,20 @@ export const NOT_CONTACTED = `EXISTS (SELECT 1 FROM person_funnel pf WHERE pf.le
 let storedAt = 0;
 let stored = false;
 /** Is the stored funnel there (core migration 086)? Checked at most once a minute per process. */
+let warmAt = 0;
+let warm = false;
+/** Is person_warmth there (core migration 089)? Checked at most once a minute per process. */
+export async function warmthStored(): Promise<boolean> {
+  if (warm) return true;
+  if (Date.now() - warmAt < 60_000) return warm;
+  try {
+    const { rows } = await pool.query("SELECT to_regclass('public.person_warmth') IS NOT NULL AS ok");
+    warm = !!rows[0]?.ok;
+  } catch { warm = false; }
+  warmAt = Date.now();
+  return warm;
+}
+
 export async function funnelStored(): Promise<boolean> {
   if (stored) return true;
   if (Date.now() - storedAt < 60_000) return stored;

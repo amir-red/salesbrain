@@ -11,6 +11,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import PageHeader from '@/components/panel/PageHeader';
 import FunnelStrip, { GROUP_COLOR, useFunnel } from '@/components/panel/FunnelStrip';
+import Insights from '@/components/funnel/Insights';
 import {
   CHANNEL_LABELS, FUNNEL_EXITS, FUNNEL_GROUPS, FUNNEL_LANES, FUNNEL_PERIODS, FUNNEL_STAGES, FUNNEL_LABELS,
   type FunnelLane, type FunnelPeriod, type FunnelSummary,
@@ -212,6 +213,7 @@ function FunnelPage() {
           {error
             ? <div className="text-xs px-3 py-2 rounded-lg" style={{ color: 'var(--red)', background: 'color-mix(in srgb, var(--red) 10%, transparent)' }}>{error}</div>
             : <FunnelStrip data={data} />}
+          <Insights query={{ icp_id: icp || undefined, owner: owner || undefined, period: period || undefined }} />
           {data && <Breakdown data={data} />}
         </div>
       </div>

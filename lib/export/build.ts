@@ -78,7 +78,8 @@ interface LeadRow {
 async function salesLeads(args: Record<string, string>, who: Who): Promise<Built> {
   const view = (args.view || 'working') as LeadView;
   if (!VIEWS.has(view)) throw new Error(`Invalid view: ${view}`);
-  const sort = (args.sort || 'priority') as LeadSort;
+  // the export does not select warmth: a 'warmest first' view exports in priority order
+  const sort = (args.sort === 'warmth' ? 'priority' : args.sort || 'priority') as LeadSort;
   if (!SORTS[sort]) throw new Error(`Invalid sort: ${sort}`);
   const role = args.role === 'responsible' ? 'responsible' : args.role === 'front' ? 'front' : 'any';
   const where: string[] = [];

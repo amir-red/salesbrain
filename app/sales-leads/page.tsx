@@ -229,6 +229,7 @@ export default function SalesLeadsPage() {
               <option value="priority">Priority</option>
               <option value="contact">Longest since contact</option>
               <option value="newest">Newest</option>
+              <option value="warmth">Warmest first</option>
             </select>
             {(agentFinds > 0 || finds) && (
               <label className="text-xs inline-flex items-center gap-1.5 cursor-pointer" style={{ color: 'var(--text-muted)' }}

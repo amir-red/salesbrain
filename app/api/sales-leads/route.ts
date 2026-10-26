@@ -1,6 +1,6 @@
 /**
  * GET /api/sales-leads?view=working|due|must|needs_you|new|contacted|replied|converted|archived|all
- *                     &sort=priority|contact|newest &q=<name/company> &mine=1[&role=responsible|front]
+ *                     &sort=priority|contact|newest|warmth &q=<name/company> &mine=1[&role=responsible|front]
  *                     &stage=<lifecycle stage>
  *   → { leads, counts, funnel, users }
  *
@@ -22,7 +22,7 @@ import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
 import { LIFECYCLE_FUNNEL, type LeadCounts, type LeadSort, type LeadView } from '@/lib/sales-leads';
-import { NOT_CONTACTED, DUE, NEEDS_YOU, OPEN, SORTS, TEAM_USERS_SQL, funnelStored } from '@/lib/sales-leads-sql';
+import { NOT_CONTACTED, DUE, NEEDS_YOU, OPEN, SORTS, TEAM_USERS_SQL, funnelStored, warmthStored } from '@/lib/sales-leads-sql';
 
 const VIEWS = new Set<LeadView>(['working', 'due', 'must', 'needs_you', 'new', 'contacted', 'replied', 'converted', 'archived', 'all']);
 export async function GET(req: NextRequest) {
@@ -74,6 +74,9 @@ export async function GET(req: NextRequest) {
   if (q) { vals.push(`%${q}%`); where.push(`(l.full_name ILIKE $${vals.length} OR l.company ILIKE $${vals.length} OR l.title ILIKE $${vals.length} OR l.met_at ILIKE $${vals.length})`); }
   const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
+  const warmSel = (await warmthStored())
+    ? '(SELECT max(w.warmth) FROM person_warmth w WHERE w.person_id = p.person_id) AS warmth'
+    : 'NULL::real AS warmth';
   const client = await pool.connect();
   try {
     const { rows: leads } = await client.query(
@@ -93,7 +96,7 @@ export async function GET(req: NextRequest) {
               COALESCE((SELECT count(*)::int FROM outreach_approvals oa
                          WHERE oa.prospect_id = l.prospect_id AND oa.status = 'pending'
                            AND (oa.expires_at IS NULL OR oa.expires_at > now())), 0) AS cards_pending,
-              l.booking_status, l.booked_at, l.meet_link,
+              l.booking_status, l.booked_at, l.meet_link, ${warmSel},
               l.preferred_demo_date, l.preferred_demo_time, l.preferred_demo_timezone,
               (SELECT jsonb_build_object('kind', e.kind, 'text', left(e.text, 240), 'occurred_at', e.occurred_at)
                  FROM sales_lead_events e WHERE e.lead_id = l.id AND e.kind IN ('met', 'sent', 'reply', 'call', 'meeting', 'note')

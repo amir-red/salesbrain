@@ -29,6 +29,15 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    href: '/warm',
+    label: 'Warm people',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 21s-7-4.35-7-10a4 4 0 0 1 7-2.65A4 4 0 0 1 19 11c0 5.65-7 10-7 10z" />
+      </svg>
+    ),
+  },
+  {
     href: '/inbox',
     label: 'Inbox',
     icon: (
@@ -253,7 +262,7 @@ const NAV_ITEMS: NavItem[] = [
 const GROUPS: { label: string; hrefs: string[]; foldable?: boolean }[] = [
   { label: 'Overview', hrefs: ['/funnel', '/inbox'] },
   { label: 'Target', hrefs: ['/icp', '/brand'] },
-  { label: 'Reach', hrefs: ['/campaigns', '/marketing', '/network'] },
+  { label: 'Reach', hrefs: ['/warm', '/campaigns', '/marketing', '/network'] },
   { label: 'Prospects', hrefs: ['/prospecting', '/agents'] },
   { label: 'Leads', hrefs: ['/sales-leads', '/followups'] },
   // Opportunities (`/`) holds the list and the pipeline board since 2026-10-24; /pipeline redirects to it.

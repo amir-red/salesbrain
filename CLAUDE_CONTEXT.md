@@ -2480,6 +2480,39 @@ VIEWS with exactly the old columns**, so all existing code works unchanged:
   in 43 files (visibility, whose LinkedIn sends, budgets). Moving code off the views onto `leads` directly is optional
   cleanup.
 
+### 5.bt Funnel Phase C — warmth, Warm people, what converts (2026-10-26, feat/funnel, migration 089)
+
+From the team call: "nobody opens cold outreach … everything that moved is people that are almost friends; who did I
+talk to recently and how warm" (Mateo), and "this is what you proposed, this is what happened".
+- **Warmth** (`policy/warmth.py`, pure, tested): per teammate × person, 0..1 = 1 − Π(1 − signal), each signal fading by
+  half-life: they wrote to us (LinkedIn, email, interactions incl. Mateo's logged WhatsApp; 0.85, 120 d, + volume), met /
+  call / meeting (0.9, 240 d), we wrote with no answer (0.15, 60 d), 1st-degree connection we did not request (0.25) or
+  that accepted our request (0.10), saved contact (0.2). Bands hot ≥ .7 / warm ≥ .4 / cool ≥ .15 / cold. Reasons in words.
+- **089**: `person_warmth (user_id, person_id, warmth, band, reasons, their/our_messages, last_two_way_at, last_touch_at)`
+  and `funnel_cohorts` (one snapshot per person at FIRST contact: channel, lane, fit, warmth, list, sender, title,
+  seniority, industry, size, location; `source` backfill | live). Both projections.
+- `commands/warmth.py`: `refresh_warmth()` (one query over threads/messages, email, interactions, card events,
+  relations, edges; ~6 s from a laptop, 1,309 pairs live: 78 hot, 137 warm), `warm_people()` (warm/hot, nobody working
+  them — an open moving card or an opportunity hides them — including people on NO list, the AMD case),
+  `add_warm_lead()` (card with source `warm:own-network` → lane "Own network", back office = warmest teammate),
+  `prior_warmth()` (signals dated BEFORE a moment; an accepted request of ours does not count).
+- **Funnel**: a two-way conversation anywhere (any teammate, any channel) = engaged; our messages = contacted; newest
+  conversation counts for "resting". `refresh()` runs warmth first and writes cohorts for everyone newly in contact, with
+  warmth rebuilt from before first contact (so a reply caused by the outreach never makes someone look warm before it).
+- **What converts** (`policy/funnel_insights.py`, `funnel.funnel_insights`): ONLY people we reached out to (LinkedIn request,
+  LinkedIn message, email — met in person / came to us / earlier conversations are left out and counted), per dimension
+  contacted / answered / meeting, findings (≥ 1.5× or ≤ 0.5× the slice, groups ≥ 8), suggestions (does the fit score
+  predict answers; warm vs cold). Nothing changes by itself. Live rehearsal: 251 reached out, 8 % answered; own network
+  5/10, met at an event 6/19, first touch a LinkedIn message 14/37 vs a bare request 7/214; fit 70+ 7/138 vs below 70
+  13/112 → "the fit score is not predicting answers". 0 meetings recorded (the meeting gap again).
+- Ring: `crm_warm_people`, `crm_warm_add_lead` (write), `crm_funnel_insights`; knowledge "Warmth and warm people",
+  "What converts". App: `/warm` (Reach → Warm people; band / teammate / include-worked filters, reasons, Add as lead),
+  `/api/warm` (GET, POST), `/api/funnel/insights`, `components/funnel/Insights.tsx` on `/funnel`, Leads rows get a warmth
+  chip and a "Warmest first" sort (`SORTS.warmth`; the export falls back to priority). Everything degrades to a clear
+  "needs migration 089" message before 089.
+- **089 NOT applied.** Rehearsed on live data (rolled back). The laptop → Supabase link swings 3–22 s per query; on the box
+  the refresh is seconds.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
