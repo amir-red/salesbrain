@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
+import FunnelStrip from '@/components/panel/FunnelStrip';
 import LeadRow, { ROW_GRID } from '@/components/sales-leads/LeadRow';
 import LeadDetail from '@/components/sales-leads/LeadDetail';
 import { Search } from '@/components/sales-leads/icons';
@@ -154,8 +155,8 @@ export default function SalesLeadsPage() {
           {/* ── Header ───────────────────────────────────────────── */}
           <div className="flex flex-wrap items-end justify-between gap-6 mb-6">
             <div>
-              <div className="z-eyebrow mb-1">Pipeline</div>
-              <h1 className="text-2xl font-semibold tracking-tight">Sales leads</h1>
+              <div className="z-eyebrow mb-1">4 · Leads</div>
+              <h1 className="text-2xl font-semibold tracking-tight">Leads</h1>
               <p className="text-sm mt-1 max-w-2xl" style={{ color: 'var(--text-muted)' }}>
                 Everyone we are working, best first. The counter is days since we last talked.
               </p>
@@ -174,6 +175,10 @@ export default function SalesLeadsPage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="mb-4">
+            <FunnelStrip compact title="Where everyone stands" href="/funnel" />
           </div>
 
           {/* ── Toolbar ──────────────────────────────────────────── */}

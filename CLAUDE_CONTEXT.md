@@ -2360,6 +2360,48 @@ everyone views, only owner + admin edit.
   Test `salesbrain-core/tests/test_icp_owner_db.py` (real Postgres, opt-in).
 - Not built: the bot's `crm_icp_list` still lists only the asker's own lists; run / search for an admin as the owner.
 
+### 5.bp One funnel, Phase A — definitions, /funnel, list seats, Opportunities (2026-10-26, feat/funnel, migration 085)
+
+Amir, after the team call with Mateo and Hannes: "redesign the whole flow as a funnel, one connected funnel; define when
+something is a prospect, a lead, an opportunity." Plan + open decisions: `~/.claude/plans/funnel-redesign.md` (Phase B =
+one row per person `funnel_leads`, Phase C = warm lane + outcome learning, Phase D = simpler gates — not built).
+- **The words** (kernel `policy/funnel.py`, app `lib/funnel.ts`, parity test `test_funnel_parity.py` — change both):
+  Prospect = on a list, nobody touched them (sourced → scored → ready to reach). Lead = the FIRST TOUCH OUT (connection
+  request sent, message, email, intro ask) or put in on purpose by a person (own network, event, demo request, hand-picked
+  import): new → contacted → engaged (answered) → meeting → qualified. Opportunity = a deal. Client = won. Exits: not a fit
+  / lost / archived, counted at the furthest stage reached. A found profile or a draft is NOT a lead; an accepted request
+  stays "contacted" until they answer. **An agent-sourced person (linkedin_search, sales_navigator, firm_team,
+  company_discovery) with a /sales-leads card but no touch is still a prospect** — the 591 VC partners firm research
+  carded as `manual:new` are prospects in the funnel. Channels are states, not stages (LinkedIn none/profile/pending/
+  connected/declined; email none/known/sent). Lanes: own network, event, came to us, hand-picked list, found by agents,
+  opportunity created directly.
+- **Read model, nothing stored**: `commands/funnel.py::funnel_summary(icp_id, owner, lane, deal_type)` = ONE query over
+  every prospect + every card without one (invitations by prospect / slug / member id, sent approvals, reply events,
+  card events, deals), classified in Python, ONE verdict per person (person id → slug → email; furthest stage wins).
+  Opportunities created directly are added to Opportunity/Client but never to a conversion rate. Aggregates only →
+  any user, any slice (KPIs rule). ~2.4 s SQL from a laptop over 5,660 rows. Ring `crm_funnel` (read, on MCP).
+  Live 2026-10-26: 378 ready to reach, 192 new, 255 contacted (155 request pending, 47 connected not messaged, 53
+  messaged), 26 engaged, 1 meeting, 19 open opportunities, 2 clients. **Meetings are almost never recorded** (only the
+  hand-set journey step 4 or a booking) — the Meeting stage reads ~0 until something writes it.
+- **Seats on lists (085)**: `icp_profiles.responsible_user_id / front_user_id / sender_user_id`. `apply_role_defaults` takes
+  the list's seats before the prospect owner; the Conductor's `sender_candidates` puts the list's sender right after the
+  account holding the conversation. `icp_owner.set_icp_seats` (owner or admin; names/emails/ids; "" clears;
+  `apply_to_leads` moves open leads that still had the list's previous default, never a seat set by hand; an `assign`
+  line each) = ring `crm_icp_set_seats` (mcp=None) = `GET/POST /api/icp/[id]/seats` + `components/icp/SeatsControl.tsx`
+  under the owner line on `/icp/[id]` (hidden when the read fails, e.g. before 085). 085 also adds **`deals.account_id`**
+  (backfilled from the converted lead's prospect, else a UNIQUE name match: 13 of 65 live) and `convert_lead_to_deal`
+  sets it.
+- **App**: `/funnel` (filters list / teammate / lane in the URL; full strip, lanes, channels, exits, definitions);
+  `components/panel/FunnelStrip.tsx` (`useFunnel`, `compact` row, or `data` passed in) on `/sales-leads`, `/prospecting`,
+  `/icp/[id]` (that list). **Sidebar in funnel order**: Overview (Funnel, Inbox) · 1 Target (Lists (ICP), Brand & Voice) ·
+  2 Reach (Campaigns, Marketing, Network) · 3 Prospects (Prospects, Agents) · 4 Leads (Leads, Follow-ups) · 5 Opportunities
+  · Funding / Insights / Admin folded. **"Deals" is "Opportunities" in the UI** (DealsView, deal page); table, routes and
+  `crm_*_deal` tools keep "deal" until Phase B.
+- Knowledge seed: "The funnel: prospect, lead, opportunity, client", "Opportunity (deal)", "Who works a list" (insert-only).
+- Tests: `test_funnel.py` (19 rules), `test_funnel_parity.py`, `test_funnel_db.py` (real Postgres: seats move defaults
+  and keep hand-set ones, new lead inherits list seats, owner/admin only, request = contacted, agent card = prospect,
+  twin rows count once). NOT done: `/sales-leads` still lists every card (agent-made ones included) — Phase B.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

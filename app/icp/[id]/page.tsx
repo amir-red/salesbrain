@@ -1,6 +1,8 @@
 'use client';
 
 import OwnerControl from '@/components/icp/OwnerControl';
+import SeatsControl from '@/components/icp/SeatsControl';
+import FunnelStrip from '@/components/panel/FunnelStrip';
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -105,6 +107,11 @@ export default function IcpPanelPage() {
               {data ? <><OwnerControl icpId={id} ownerId={data.icp.owner_user_id} ownerName={data.icp.owner_name} isOwner={data.is_owner}
                   canEdit={data.can_edit} onChanged={(n) => { setNote(n); void refresh(); }} /> · {lastAt ? `updated ${relativeTime(lastAt.toISOString())}` : ''} · <button onClick={() => refresh()} className="underline">refresh</button></> : 'The whole journey for this list, and what the machinery is doing at each step.'}
             </p>
+            {data && (
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                <SeatsControl icpId={id} onChanged={(n) => setNote(n)} />
+              </p>
+            )}
           </div>
           {data && !editing && (
             <div className="flex flex-wrap gap-2 justify-end shrink-0">
@@ -133,6 +140,7 @@ export default function IcpPanelPage() {
 
         {data && !editing && (
           <div className="p-4 space-y-4">
+            <FunnelStrip compact query={{ icp_id: id }} title="This list's funnel" href={`/funnel?icp_id=${id}`} />
             {data.blockers.length > 0 && (
               <div className="rounded-xl px-4 py-3 text-xs space-y-0.5" style={{ background: 'color-mix(in srgb, var(--yellow) 8%, transparent)', border: '1px solid var(--yellow)' }}>
                 <div className="font-medium" style={{ color: 'var(--yellow)' }}>The Leads Finder will not run for this ICP right now</div>
