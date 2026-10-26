@@ -120,6 +120,8 @@ export interface PanelPayload {
   viewer: { user_id: string; role: string };
   icp: IcpProfile & { owner_user_id: string; owner_name: string };
   is_owner: boolean;
+  /** The viewer may change this list: its owner or an admin (every list is visible to everyone). */
+  can_edit: boolean;
   blockers: string[];
   quota: OwnerQuota;
   policy: {

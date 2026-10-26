@@ -31,6 +31,7 @@ export default function IcpRow({ icp, quota, viewerUserId, isAdmin, fleet, hold,
   const [note, setNote] = useState<string | null>(null);
   const [running, setRunning] = useState<RunMode | null>(null);
   const isOwner = icp.owner_user_id === viewerUserId;
+  const canEdit = isOwner || isAdmin;   // every list is visible to everyone; changing it is the owner's or an admin's
   const blockers = blockersFor(icp, quota, { ...fleet, user_hold: hold ?? null }, (icp.agent_state as IcpAgentState | null) ?? null);
   const cov = icp.coverage;
   const run = async (mode: RunMode) => {
@@ -68,7 +69,7 @@ export default function IcpRow({ icp, quota, viewerUserId, isAdmin, fleet, hold,
           <div className="text-[11px] flex items-center gap-1.5 flex-wrap" style={{ color: 'var(--text-muted)' }}>
             {PRODUCTS.find((p) => p.key === icp.product)?.label ?? icp.product ?? '—'}
             {icp.objective && <span>· ⌾ {OBJECTIVES.find((o) => o.key === icp.objective)?.label ?? icp.objective}</span>}
-            {!isOwner && <span>· <span style={{ color: 'var(--text)' }}>{icp.owner_name}</span>{icp.owner_can_source ? '' : ' · inert (no LinkedIn)'}</span>}
+            <span>· owner <span style={{ color: 'var(--text)' }}>{isOwner ? 'you' : icp.owner_name}</span>{icp.owner_can_source ? '' : ' · inert (no LinkedIn)'}</span>
             <span>· {summarizeCriteria(icp.criteria)}</span>
           </div>
         </div>
@@ -97,11 +98,10 @@ export default function IcpRow({ icp, quota, viewerUserId, isAdmin, fleet, hold,
         {btn('Find more now', 'now')}
         {btn('Queue a pass', 'queue')}
         {btn('Enrich now', 'enrich')}
-        {icp.paused_at
+        {canEdit && (icp.paused_at
           ? <button onClick={() => onState('running')} disabled={busy} className="px-2.5 py-1 rounded-lg text-[11px] disabled:opacity-40" style={{ border: '1px solid var(--accent)', color: 'var(--accent)' }}>Resume</button>
-          : <button onClick={() => onState('paused')} disabled={busy} className="px-2.5 py-1 rounded-lg text-[11px] disabled:opacity-40" style={{ border: '1px solid var(--border)', color: 'var(--text-muted)' }} title="Hold this ICP only — reversible">Pause</button>}
-        {isOwner && !isAdmin && null}
-        {isOwner && <button onClick={onArchive} disabled={busy} className="ml-auto px-2.5 py-1 rounded-lg text-[11px] disabled:opacity-40" style={{ color: 'var(--text-muted)' }}>Archive</button>}
+          : <button onClick={() => onState('paused')} disabled={busy} className="px-2.5 py-1 rounded-lg text-[11px] disabled:opacity-40" style={{ border: '1px solid var(--border)', color: 'var(--text-muted)' }} title="Hold this ICP only — reversible">Pause</button>)}
+        {canEdit && <button onClick={onArchive} disabled={busy} className="ml-auto px-2.5 py-1 rounded-lg text-[11px] disabled:opacity-40" style={{ color: 'var(--text-muted)' }}>Archive</button>}
         {note && <span className="w-full text-[11px]" style={{ color: note.toLowerCase().includes('error') || note.startsWith('Leads Finder can') ? 'var(--red)' : 'var(--text-muted)' }}>{note}</span>}
       </div>
     </div>

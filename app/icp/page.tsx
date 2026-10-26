@@ -26,7 +26,7 @@ export default function IcpPage() {
   const [fleet, setFleet] = useState<FleetPayload | null>(null);
   const [mode, setMode] = useState<Mode>({ kind: 'list' });
   const [busy, setBusy] = useState<string | null>(null);
-  const [estate, setEstate] = useState(false);       // admin: every employee's ICPs
+  const [estate, setEstate] = useState(true);        // every teammate's lists (visible to everyone); off = mine only
   const [filter, setFilter] = useState<IcpListFilter>(EMPTY_ICP_FILTER);
 
   const load = useCallback(async () => {
@@ -98,13 +98,15 @@ export default function IcpPage() {
           {mode.kind === 'list' && (
             <div className="flex items-center gap-3">
               <Link href="/prospecting" className="text-xs underline" style={{ color: 'var(--text-muted)' }}>Prospects →</Link>
-              {isAdmin && (
-                <button onClick={() => { setEstate((v) => !v); setFilter((f) => ({ ...f, owner: 'all' })); }} className="px-3 py-1.5 rounded-lg text-xs"
-                        style={{ border: '1px solid var(--border)', background: estate ? 'var(--accent)' : 'transparent', color: estate ? 'var(--accent-fg)' : 'var(--text-muted)' }}
-                        title="Admin: every employee's ICPs, including those filed by the partner app">
-                  {estate ? 'All employees' : 'Mine only'}
-                </button>
-              )}
+              <div className="flex rounded-lg overflow-hidden text-xs" style={{ border: '1px solid var(--border)' }}>
+                {([[true, 'Everyone’s lists'], [false, 'Mine only']] as const).map(([v, label]) => (
+                  <button key={label} onClick={() => { setEstate(v); setFilter((f) => ({ ...f, owner: 'all' })); }} className="px-3 py-1.5"
+                    style={{ background: estate === v ? 'var(--accent)' : 'transparent', color: estate === v ? 'var(--accent-fg)' : 'var(--text-muted)' }}
+                    title={v ? 'Every teammate’s lists, with their owner' : 'Only the lists you own'}>
+                    {label}
+                  </button>
+                ))}
+              </div>
               <button onClick={() => setMode({ kind: 'new' })} className="px-3 py-1.5 rounded-lg text-sm font-medium" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
                 + New ICP
               </button>
