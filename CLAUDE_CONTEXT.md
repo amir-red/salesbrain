@@ -2360,6 +2360,40 @@ everyone views, only owner + admin edit.
   Test `salesbrain-core/tests/test_icp_owner_db.py` (real Postgres, opt-in).
 - Not built: the bot's `crm_icp_list` still lists only the asker's own lists; run / search for an admin as the owner.
 
+### 5.bq Memory that carries over: agents that run, a shared chat MEMORY.md, a turn log that sees tools (2026-10-26, feat/agent-memory, no migration)
+
+Amir, after "how many people accepted my LinkedIn request" took three tools and a muddled answer: "can we use Hermes built-in
+memory? agents don't have memory which will use last run learnings." Plan `~/.claude/plans/glittery-watching-ember.md`.
+- **The agents had not been running.** `outreach`, `attention`, `supervisor` `run_queue.py` and all three `review_queue.py`
+  never loaded the env (a cron subprocess is sanitized), printed `{"error": "No database configured"}`, exited 0, and the
+  model answered `[SILENT]` → Hermes recorded **ok**: Outreach 7/7 runs, Attention 5/5, Supervisor 5/5, every weekly review,
+  2026-10-21..26. No agent profile had a MEMORY.md. Now every agent script's first call is `_cron.boot()` (profile `.env`,
+  then the main one; `--check` = prove the DB is reachable), errors go through `_cron.agent_fail` (exit 1 → Hermes hands the
+  model a "Script Error"), and `_shared/base-rules.md` says Script Error / `error` → `[CRON_FAILURE]`, never `[SILENT]`.
+  `render_agents.py` runs every agent script with `--check` under `env -i` after rendering and **fails the deploy** if one
+  cannot reach the database. Test `test_agent_scripts_load_env_first_and_fail_loudly` pins it.
+- **Agent memory**: Leads Finder (20:45) and Enricher (17:30) review DAILY; Outreach weekly; Attention (Sun 08:00) and
+  Supervisor (Sun 08:15) got memory + a review (`review_queue.py`: digest_state / commitments; proposals by action and
+  outcome). Every run's work list carries `your_last_runs` (kernel `agents.last_runs`, last 3 `agent_runs`). Run jobs read
+  MEMORY.md, only review jobs write it.
+- **Chat bot MEMORY.md ON** (default profile; `memory_enabled true`, `user_profile_enabled false`, `nudge_interval 4`,
+  `memory` in the telegram + api_server toolsets). ONE file for the whole team (Amir's decision): written only by Hermes'
+  after-turn review fork and by an admin in a private chat — `role_policy.memory_guard` refuses everyone else (→ their own
+  `crm_memory_save`), `target=user`, secrets (`refuse_shape`), entries > 600 chars and a teammate's personal preference
+  (first name + prefer/always/never…). Fork detection `in_review_fork()` = thread "bg-review" + Hermes' thread tool whitelist
+  (two Hermes internals; `test_contract_registry` asserts both). Every write audited `chat_memory_write`. `/admin/learning`
+  lists MEMORY.md entries with **Remove** (`POST /api/admin/learning/memory-remove` → RPC `memory_entry_remove` → Hermes'
+  own store). Deploy verify now REFUSES MEMORY.md off or USER.md on for the chat profile. MEMORY.md is frozen per session.
+- **Turn log saw no tools**: Hermes wraps calls in a meta-tool `tool_call` (`arguments.calls[].name`); `turn_log.turn_shape`
+  stored `["tool_call", …]` for every turn, so the nightly knowledge review could not see which tools a question took. Now
+  unwrapped. `review_material` hands each miss the entries it was `given` (title + tool_hint); the reviewer rewrites a weak
+  entry under the same title.
+- **The screenshot's cause**: two seed entries pointed the question at different tools ("Who accepted" → pending_followups,
+  "connection states" → connect_status). New entry **"How many accepted my requests" → `crm_outreach_kpis`** (`accepted` in
+  the period, `accepted_total` overall incl. hand-sent); the other two now say what they are NOT for. Seeds are insert-only:
+  the two edited bodies are updated by hand at deploy. Persona: one tool from the knowledge hint, a second only if its result
+  lacks the answer, number first; MEMORY.md is the team's shared notebook, personal → crm_memory.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

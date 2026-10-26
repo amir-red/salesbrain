@@ -7,7 +7,7 @@
 export type Subsystem = 'skills' | 'memory';
 export type Decision = 'approve' | 'reject';
 
-export type SurfaceStatus = { configured: boolean; skills: boolean; memory: boolean; toolsets: string[] };
+export type SurfaceStatus = { configured: boolean; skills: boolean; memory: boolean; builtin_memory?: boolean; toolsets: string[] };
 
 export type LoopStatus = {
   memory_enabled: boolean;
@@ -53,7 +53,7 @@ export type ProfileLearning = {
   status: LoopStatus;
   pending_skills: PendingWrite[];
   pending_memory: PendingWrite[];
-  memory: Record<'MEMORY.md' | 'USER.md', { text: string; chars: number; updated_at: number | null }>;
+  memory: Record<'MEMORY.md' | 'USER.md', { text: string; chars: number; entries?: string[]; updated_at: number | null }>;
   agent_skills: AgentSkill[];
   curator: Record<string, unknown> | null;
 };
@@ -81,16 +81,19 @@ export function originLabel(origin: string | null | undefined): string {
   return origin || 'unknown';
 }
 
-/** Every surface where the loop is wired = `skills` + `crm_memory` present, built-in memory off. */
+/** Every surface where the loop is wired = `skills` + `crm_memory` + Hermes' `memory` tool present. */
 /** Chat profiles serve people; every other SalesBrain profile is a rendered agent (salesbrain-hermes/agents/). */
 const CHAT_PROFILES = new Set(['default', 'crm']);
 
 export function loopHealth(st: LoopStatus, profile = 'default'): { ok: boolean; problems: string[] } {
   const problems: string[] = [];
-  // Hermes' built-in memory must stay OFF on the CHAT profiles: it is one file per profile, shared by every person.
-  // Per-person memory is crm_memory. An AGENT profile's MEMORY.md is its own job knowledge, written by its weekly
-  // review job — ON by design there.
-  if (st.memory_enabled && CHAT_PROFILES.has(profile)) problems.push('Hermes built-in memory is ON (memory.memory_enabled) — it shadows per-person memory');
+  // Chat profiles (2026-10-26): MEMORY.md ON = the bot's shared notebook of how the system behaves, written by the
+  // after-turn review (and an admin in a private chat). USER.md OFF: it is one file for every person; personal notes
+  // are crm_memory. An AGENT profile's MEMORY.md is its own job knowledge, written by its review job.
+  if (CHAT_PROFILES.has(profile)) {
+    if (!st.memory_enabled) problems.push('MEMORY.md is OFF (memory.memory_enabled) — the after-turn lessons are never written');
+    if (st.user_profile_enabled) problems.push('USER.md is ON (memory.user_profile_enabled) — one file shared by every teammate');
+  }
   if (!st.review_enabled) problems.push('background review disabled (auxiliary.background_review.enabled)');
   // Skill writes go live at once by decision (2026-10-17); role_policy guards the git-deployed skills and every write is audited.
   for (const key of ['telegram', 'api_server'] as const) {

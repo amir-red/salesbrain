@@ -81,6 +81,23 @@ export default function LearningAdminPage() {
     } finally { setBusy(null); }
   }, [load]);
 
+  const removeMemory = useCallback(async (profile: string, entry: string) => {
+    if (!window.confirm(`Remove this lesson from ${profile}'s MEMORY.md?\n\n${entry.slice(0, 300)}`)) return;
+    setBusy(`memory/${profile}/${entry.slice(0, 40)}`);
+    setNotice(null);
+    try {
+      const res = await fetch('/api/admin/learning/memory-remove', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile, entry }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.error) throw new Error(json.error || `Remove failed (${res.status})`);
+      setNotice(json.message || 'Removed');
+      await load();
+    } catch (e) {
+      setNotice(`Error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally { setBusy(null); }
+  }, [load]);
+
   const decideTeam = useCallback(async (id: string, approve: boolean) => {
     setBusy(`team/${id}`);
     setNotice(null);
@@ -137,7 +154,7 @@ export default function LearningAdminPage() {
           {team && <TeamMemorySection team={team} busy={busy} decide={decideTeam} />}
 
           {data?.profiles.map((p) => (
-            <ProfileSection key={p.profile} p={p} busy={busy} decide={decide} removeSkill={removeSkill} />
+            <ProfileSection key={p.profile} p={p} busy={busy} decide={decide} removeSkill={removeSkill} removeMemory={removeMemory} />
           ))}
 
           {data && total === 0 && (
@@ -200,10 +217,11 @@ function Banner({ tone, children }: { tone: 'red' | 'green'; children: React.Rea
   );
 }
 
-function ProfileSection({ p, busy, decide, removeSkill }: {
+function ProfileSection({ p, busy, decide, removeSkill, removeMemory }: {
   p: ProfileLearning; busy: string | null;
   decide: (profile: string, subsystem: Subsystem, id: string, decision: Decision) => Promise<void>;
   removeSkill: (profile: string, name: string) => Promise<void>;
+  removeMemory: (profile: string, entry: string) => Promise<void>;
 }) {
   const health = loopHealth(p.status, p.profile);
   const [showMemory, setShowMemory] = useState(false);
@@ -283,7 +301,18 @@ function ProfileSection({ p, busy, decide, removeSkill }: {
               {(['MEMORY.md', 'USER.md'] as const).map((f) => (
                 <div key={f} className="rounded-lg p-2" style={{ border: '1px solid var(--border)', background: 'var(--bg-input)' }}>
                   <div className="text-[11px] font-semibold mb-1">{f} <span style={{ color: 'var(--text-muted)' }}>· {p.memory[f].chars} chars</span></div>
-                  <pre className="text-[11px] whitespace-pre-wrap break-words max-h-64 overflow-y-auto">{p.memory[f].text || '(empty)'}</pre>
+                  {f === 'MEMORY.md' && p.memory[f].entries?.length ? (
+                    <ul className="text-[11px] space-y-1 max-h-64 overflow-y-auto">
+                      {p.memory[f].entries!.map((e) => (
+                        <li key={e} className="flex items-start justify-between gap-2">
+                          <span className="whitespace-pre-wrap break-words">{e}</span>
+                          <button disabled={busy === `memory/${p.profile}/${e.slice(0, 40)}`} onClick={() => removeMemory(p.profile, e)} className="shrink-0 rounded-full px-2 py-0.5 text-[11px]" style={{ border: '1px solid var(--border)', color: 'var(--red)' }}>Remove</button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <pre className="text-[11px] whitespace-pre-wrap break-words max-h-64 overflow-y-auto">{p.memory[f].text || '(empty)'}</pre>
+                  )}
                 </div>
               ))}
             </div>
