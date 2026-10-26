@@ -2473,6 +2473,11 @@ dedup and a comma-split CSV parser; its footer promised guards that do not exist
 
 ### 5.bp Campaigns round 2 — deliverability, A/B variants, trusted auto-send (2026-10-26, feat/campaigns-r2, migration 084)
 
+**LIVE 2026-10-26 (0.67.0)**: 084 applied (66 addresses seeded into `email_verifications`, connect caps 15/75), ring deployed
+(smoke 0.67.0), app on Production (run 40332524948). `deploy-server.sh` used to leave an EXISTING cron job on its old schedule
+(email-outbox stayed `*/10 8-19`); it now passes `--schedule` on every run, and email-outbox was edited to `*/10 5-23` by hand.
+Not yet seen live: an auto-approved card, an OOO reply parking a sequence, an email held as unverified, the new UI in a browser.
+
 The 2026-10-26 audit against Lemlist / Smartlead / Instantly / Outreach / Apollo (plan `~/.claude/plans/delegated-toasting-cookie.md`):
 the approval model and one-person-per-company were ahead of the field; mailbox health, sequence design and four bugs
 were behind. Amir chose all of: ramp-up + bounce pause, verify at send + out-of-office, recipient-timezone window
