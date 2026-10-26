@@ -10,15 +10,15 @@ import type { Coverage, OverviewIcp, OverviewPayload, StageCounts } from '@/lib/
  * with its stage funnel, coverage, queued work, pending approvals and the
  * owner's quota, in a handful of grouped queries (never per row).
  *
- * Visibility follows GET /api/icp: mine, or ?scope=all for admins (silently
- * ignored for everyone else). Direct SQL on purpose — this is polled every
+ * Visibility follows GET /api/icp: mine, or ?scope=all = every teammate's lists (open to everyone since
+ * 2026-10-26). Direct SQL on purpose — this is polled every
  * 45 s, and a kernel subprocess per poll would cost more than the queries.
  */
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const isAdmin = session.role === 'admin';
-  const estate = req.nextUrl.searchParams.get('scope') === 'all' && isAdmin;
+  const estate = req.nextUrl.searchParams.get('scope') === 'all';
 
   // One checked-out client, queries in sequence: the Supabase pooler is in
   // session mode (15 clients, shared with production), so a polled read must

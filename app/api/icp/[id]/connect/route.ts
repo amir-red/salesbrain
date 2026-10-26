@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
-import { auditBestEffort, visibleIcp } from '@/lib/icp-server';
+import { auditBestEffort, guardEditable } from '@/lib/icp-server';
 
 /**
  * File the next few LinkedIn connection requests for this list, for approval:
@@ -13,8 +13,9 @@ import { auditBestEffort, visibleIcp } from '@/lib/icp-server';
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const icp = await visibleIcp(params.id, session);
-  if (!icp) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const guard = await guardEditable(params.id, session);
+  if (guard.denied) return guard.denied;
+  const icp = guard.icp;
   let body: { limit?: number } = {};
   try { body = await req.json(); } catch { /* defaults */ }
   const limit = Number.isFinite(Number(body.limit)) && Number(body.limit) > 0 ? Math.min(Math.floor(Number(body.limit)), 20) : undefined;
