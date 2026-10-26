@@ -2360,6 +2360,20 @@ everyone views, only owner + admin edit.
   Test `salesbrain-core/tests/test_icp_owner_db.py` (real Postgres, opt-in).
 - Not built: the bot's `crm_icp_list` still lists only the asker's own lists; run / search for an admin as the owner.
 
+### 5.bv LIVE 2026-10-26 (0.68.0): the whole funnel release
+
+Merged feat/funnel (§5.bp–§5.bu) and deployed: app on Production (run 40351030168), kernel + ring by `deploy-server.sh`
+(core/hermes 0.68.0, gateway active, new crons `funnel-digest` Mon 08:15 and `calendar-meetings` hourly 07:35–21:35).
+Migrations 085, 086, 088, 089 were applied earlier the same day; **087 (six sales stages) applied right after the app
+deploy**: 48 deals, 86 gate events, 29 board decisions, 15 flag sets moved. Production RPC checks as Amir: funnel by
+company 190 contacted / 113 engaged / 12 open opportunities / 2 clients; 183 warm people; NRW tuning proposes company
+size 15 → 20 (not applied).
+**Still to do by people**: enable the Google Calendar API in Cloud project salesbrain-512414 and have teammates reconnect
+Google on Profile → Google (until then `calendar-meetings` finds nobody); decide whether to apply the NRW weights.
+**Later cleanup**: drop `sales_leads_pre088` after a week (≈ 2026-11-02) once nothing has needed it; moving code off the
+`prospects` / `sales_leads` views is optional. `ws-agent-memory` must re-run `./ws.sh sync agent-memory` (a
+CLAUDE_CONTEXT.md conflict; the attempted sync was aborted, its tree is untouched).
+
 ### 5.bp One funnel, Phase A — definitions, /funnel, list seats, Opportunities (2026-10-26, feat/funnel, migration 085)
 
 Amir, after the team call with Mateo and Hannes: "redesign the whole flow as a funnel, one connected funnel; define when
