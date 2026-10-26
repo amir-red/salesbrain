@@ -43,6 +43,9 @@ export default function SalesLeadsPage() {
   const [role, setRole] = useState<RoleFilter>('');   // '' everyone · any = mine · responsible / front = mine in that seat
   const [list, setList] = useState('');               // one list (sales_leads.source); order numbers only compare inside a list
   const [lists, setLists] = useState<{ source: string; n: number }[]>([]);
+  // Agent finds nobody has reached out to are prospects, not leads (funnel definitions): hidden unless asked for.
+  const [finds, setFinds] = useState(false);
+  const [agentFinds, setAgentFinds] = useState(0);
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [viewerIsAdmin, setViewerIsAdmin] = useState(false);
   const [open, setOpen] = useState<Set<string>>(new Set());
@@ -61,6 +64,7 @@ export default function SalesLeadsPage() {
       if (list) params.set('list', list);
       if (q.trim()) params.set('q', q.trim());
       if (role) { params.set('mine', '1'); if (role !== 'any') params.set('role', role); }
+      if (finds) params.set('finds', '1');
       const res = await fetch(`/api/sales-leads?${params}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load');
@@ -69,6 +73,7 @@ export default function SalesLeadsPage() {
       setFunnel(data.funnel || {});
       setUsers(data.users || []);
       setLists(data.lists || []);
+      setAgentFinds(data.agent_finds || 0);
       setViewerId(data.viewer_id || null);
       setViewerIsAdmin(!!data.viewer_is_admin);
     } catch (err) {
@@ -76,7 +81,7 @@ export default function SalesLeadsPage() {
     } finally {
       setLoading(false);
     }
-  }, [view, sort, q, role, stage, list]);
+  }, [view, sort, q, role, stage, list, finds]);
 
   // Deep links from the digest / chat: /sales-leads?view=due&mine=1[&role=responsible]
   useEffect(() => {
@@ -222,6 +227,13 @@ export default function SalesLeadsPage() {
               <option value="contact">Longest since contact</option>
               <option value="newest">Newest</option>
             </select>
+            {(agentFinds > 0 || finds) && (
+              <label className="text-xs inline-flex items-center gap-1.5 cursor-pointer" style={{ color: 'var(--text-muted)' }}
+                title="People an agent found and gave a card, whom nobody has reached out to yet. In the funnel they are prospects, not leads.">
+                <input type="checkbox" checked={finds} onChange={(e) => setFinds(e.target.checked)} />
+                Show agent finds not yet contacted ({agentFinds})
+              </label>
+            )}
             <ExportButton
               href={`/api/export/sales-leads?${new URLSearchParams({ view, sort, ...(q ? { q } : {}), ...(list ? { list } : {}), ...(role ? { mine: '1', ...(role !== 'any' ? { role } : {}) } : {}) })}`}
               title="Download what this list shows (current view, search and Mine filter) as Excel, with every track-record line" />

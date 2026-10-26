@@ -73,6 +73,12 @@ function Tile({ r, compact, next }: { r: FunnelStageRow; compact?: boolean; next
             reached {r.reached.toLocaleString()}
           </div>
         )}
+        {r.entered !== undefined && (
+          <div className="text-[10px] leading-tight tabular-nums font-medium" style={{ color: r.entered ? color : 'var(--text-muted)' }}
+            title="People who entered this stage in the chosen period">
+            +{r.entered.toLocaleString()} in period
+          </div>
+        )}
         {!compact && subs.length > 0 && (
           <div className="mt-1 space-y-0.5">
             {subs.map(([k, n]) => (

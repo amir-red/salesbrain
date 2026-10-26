@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
-import { FUNNEL_LANES } from '@/lib/funnel';
+import { FUNNEL_LANES, FUNNEL_PERIODS } from '@/lib/funnel';
 
 /**
- * GET /api/funnel?icp_id=&owner=&lane=&deal_type=  — the funnel strip (lib/funnel.ts FunnelSummary).
+ * GET /api/funnel?icp_id=&owner=&lane=&deal_type=&period=&view=  — the funnel strip (lib/funnel.ts FunnelSummary).
+ * `period` adds per stage how many people entered it in that period; `view=companies` counts each company once.
  *
  * The kernel (commands/funnel.py) counts every person once at the furthest stage they reached. Aggregates only, so
  * every signed-in teammate may read any slice (same rule as the KPIs: the team sees each other's pipeline).
@@ -26,6 +27,16 @@ export async function GET(req: NextRequest) {
   if (lane) {
     if (!(lane in FUNNEL_LANES)) return NextResponse.json({ error: 'unknown lane' }, { status: 400 });
     args.lane = lane;
+  }
+  const period = q.get('period');
+  if (period) {
+    if (!(period in FUNNEL_PERIODS)) return NextResponse.json({ error: 'unknown period' }, { status: 400 });
+    args.period = period;
+  }
+  const view = q.get('view');
+  if (view) {
+    if (view !== 'people' && view !== 'companies') return NextResponse.json({ error: 'view must be people or companies' }, { status: 400 });
+    args.view = view;
   }
   const dt = q.get('deal_type');
   if (dt) args.deal_type = dt;

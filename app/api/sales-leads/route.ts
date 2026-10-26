@@ -22,7 +22,7 @@ import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
 import { LIFECYCLE_FUNNEL, type LeadCounts, type LeadSort, type LeadView } from '@/lib/sales-leads';
-import { DUE, NEEDS_YOU, OPEN, SORTS, TEAM_USERS_SQL } from '@/lib/sales-leads-sql';
+import { AGENT_FIND, DUE, NEEDS_YOU, OPEN, SORTS, TEAM_USERS_SQL, funnelStored } from '@/lib/sales-leads-sql';
 
 const VIEWS = new Set<LeadView>(['working', 'due', 'must', 'needs_you', 'new', 'contacted', 'replied', 'converted', 'archived', 'all']);
 export async function GET(req: NextRequest) {
@@ -63,6 +63,12 @@ export async function GET(req: NextRequest) {
       : view === 'needs_you' ? `(l.responsible_user_id = ${me} OR l.front_user_id = ${me} OR ${sender})`
       : `(l.responsible_user_id = ${me} OR l.front_user_id = ${me})`);
   }
+  // Agent finds nobody has reached out to are prospects, not leads: hidden unless asked for (finds=1).
+  // Without migration 086 (no stored funnel yet) nothing is hidden.
+  const finds = url.searchParams.get('finds') === '1';
+  const hasStore = await funnelStored();
+  const leadsOnly = finds || !hasStore ? 'true' : `NOT ${AGENT_FIND}`;
+  if (leadsOnly !== 'true') where.push(leadsOnly);
   const list = url.searchParams.get('list') || '';
   if (list) { vals.push(list); where.push(`l.source = $${vals.length}`); }
   if (q) { vals.push(`%${q}%`); where.push(`(l.full_name ILIKE $${vals.length} OR l.company ILIKE $${vals.length} OR l.title ILIKE $${vals.length} OR l.met_at ILIKE $${vals.length})`); }
@@ -126,27 +132,29 @@ export async function GET(req: NextRequest) {
               count(*) FILTER (WHERE l.status = 'archived')::int AS archived,
               count(*)::int AS all,
               count(*) FILTER (WHERE l.booking_status = 'scheduled')::int AS booked
-         FROM sales_leads l`,
+         FROM sales_leads l WHERE ${leadsOnly}`,
       [session.userId],
     );
     const counts = c[0] as LeadCounts;
+    const agentFinds: number = hasStore ? (await client.query(
+      `SELECT count(*)::int AS n FROM sales_leads l WHERE ${OPEN} AND ${AGENT_FIND}`)).rows[0]?.n ?? 0 : 0;
 
     // The funnel strip: open leads per lifecycle stage (the conductor stores the stage; null = not evaluated yet).
     const { rows: stageRows } = await client.query(
       `SELECT COALESCE(l.lifecycle_stage, 'not_evaluated') AS stage, count(*)::int AS n
-         FROM sales_leads l WHERE ${OPEN} GROUP BY 1`,
+         FROM sales_leads l WHERE ${OPEN} AND ${leadsOnly} GROUP BY 1`,
     );
     const funnel: Record<string, number> = Object.fromEntries(stageRows.map((r) => [r.stage, r.n]));
 
     // The lists the leads came from (each import has its own order numbers), for the List filter.
     const { rows: lists } = await client.query(
-      `SELECT COALESCE(l.source, '') AS source, count(*)::int AS n FROM sales_leads l WHERE ${OPEN}
+      `SELECT COALESCE(l.source, '') AS source, count(*)::int AS n FROM sales_leads l WHERE ${OPEN} AND ${leadsOnly}
         GROUP BY 1 HAVING count(*) > 0 ORDER BY 2 DESC`,
     );
 
     const { rows: users } = await client.query(TEAM_USERS_SQL);
 
-    return NextResponse.json({ viewer_id: session.userId, viewer_is_admin: session.role === 'admin', leads, counts, funnel, users, lists, view, sort });
+    return NextResponse.json({ viewer_id: session.userId, viewer_is_admin: session.role === 'admin', leads, counts, funnel, users, lists, view, sort, agent_finds: agentFinds, finds });
   } finally {
     client.release();
   }

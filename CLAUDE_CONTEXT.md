@@ -2402,6 +2402,32 @@ one row per person `funnel_leads`, Phase C = warm lane + outcome learning, Phase
   and keep hand-set ones, new lead inherits list seats, owner/admin only, request = contacted, agent card = prospect,
   twin rows count once). NOT done: `/sales-leads` still lists every card (agent-made ones included) — Phase B.
 
+### 5.bq One funnel, Phase B — one stored row per person + dated history (2026-10-26, feat/funnel, migration 086)
+
+Plan §12 ([funnel-redesign.md](~/.claude/plans/funnel-redesign.md)). Revised from §3: replacing `prospects` + `sales_leads`
+with views was rejected (~60 writers, ~260 readers, ON CONFLICT upserts a view cannot serve). Instead a projection ON TOP:
+- **086**: `person_funnel` (one row per person: person_key = person id → `li:<slug>` → `em:<email>` → row id; stage, exit,
+  substage, lane, channels, stage_entered_at, lead_id, prospect_id, deal_id, account_id, `icp_ids[]`, `user_ids[]`,
+  rows_merged) and `funnel_events` (person_key, from → to, exit, occurred_at, source backfill | refresh; one entry per
+  person per stage). Never edit by hand: fix the source, refresh.
+- **`commands/funnel.refresh()`**: facts query → classify → merge a person's rows (ids kept from whichever row has them,
+  earliest time per stage) → COPY into a temp table → upsert + delete gone keys; events for every stage passed, dated by the
+  ledgers (request sent, first message, first reply, booking, convert, deal created, won), else now. First run = backfill.
+  Advisory lock (one at a time). Live dry run (rolled back): 5,615 people, 16,789 history rows, 5.7 s from a laptop;
+  a no-change refresh 3.5 s, 0 events. Run by the hourly `lead_conductor.py` and on read when older than 10 min.
+- **`funnel_summary`** reads the stored rows (a list slice stays live: membership is per list); `period` (kpis periods)
+  adds `entered` per stage from the history; `view='companies'` = each account once at its furthest person (direct
+  opportunities deduped by account). **Without 086 everything falls back to the live Phase A compute** (`stored()`),
+  periods return an error, `refresh` skips.
+- **/sales-leads hides agent finds nobody contacted** (`AGENT_FIND` in `lib/sales-leads-sql.ts`: the card's person is still
+  `prospect_*` in person_funnel), in the list, counts, stage chips and list filter; a "Show agent finds not yet contacted
+  (N)" switch (`finds=1`) brings them back. `funnelStored()` (cached schema check) disables the filter until 086 exists.
+  The Excel export is unchanged (exports everything).
+- **/funnel**: period select ("+N in period" on each tile), People | Companies switch, "updated HH:MM".
+  `crm_funnel` takes `period` and `view`.
+- 085 was applied to the shared DB on 2026-10-26 (Amir). **086 is NOT applied** (file only): apply it before or with the
+  deploy, then the first refresh backfills the history.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

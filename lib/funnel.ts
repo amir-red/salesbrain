@@ -44,6 +44,14 @@ export const FUNNEL_LANES = {
 } as const;
 export type FunnelLane = keyof typeof FUNNEL_LANES;
 
+export type FunnelView = 'people' | 'companies';
+
+export const FUNNEL_PERIODS = {
+  today: 'Today', yesterday: 'Yesterday', week: 'This week', last_week: 'Last week', month: 'This month',
+  '7d': 'Last 7 days', '30d': 'Last 30 days',
+} as const;
+export type FunnelPeriod = keyof typeof FUNNEL_PERIODS;
+
 export const FUNNEL_EXITS = { unfit: 'Not a fit', lost: 'Lost', archived: 'Archived' } as const;
 
 export const SUBSTAGE_LABELS: Record<string, string> = {
@@ -69,6 +77,8 @@ export interface FunnelStageRow {
   conversion: number | null;
   exits: Partial<Record<keyof typeof FUNNEL_EXITS, number>>;
   substages: Record<string, number>;
+  /** With a period: people who ENTERED this stage in it (from the dated history, core 086). */
+  entered?: number;
 }
 
 export interface FunnelSummary {
@@ -78,7 +88,10 @@ export interface FunnelSummary {
   channels: { linkedin: Record<string, number>; email: Record<string, number> };
   people: number;
   direct_opportunities: number;
-  slice: { icp: { id: string; name: string } | null; owner: { id: string; name: string } | null; lane: string | null; deal_type: string };
+  slice: { icp: { id: string; name: string } | null; owner: { id: string; name: string } | null; lane: string | null; deal_type: string; view: FunnelView };
+  period?: { key: FunnelPeriod; start: string; end: string };
+  /** When the stored funnel was last recomputed (it refreshes itself every 10 minutes on read and every hour). */
+  evaluated_at: string | null;
   definitions: { stages: Record<string, string>; exits: Record<string, string>; lanes: Record<string, string> };
 }
 

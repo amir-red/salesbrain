@@ -12,8 +12,8 @@ import Sidebar from '@/components/Sidebar';
 import PageHeader from '@/components/panel/PageHeader';
 import FunnelStrip, { GROUP_COLOR, useFunnel } from '@/components/panel/FunnelStrip';
 import {
-  CHANNEL_LABELS, FUNNEL_EXITS, FUNNEL_GROUPS, FUNNEL_LANES, FUNNEL_STAGES, FUNNEL_LABELS,
-  type FunnelLane, type FunnelSummary,
+  CHANNEL_LABELS, FUNNEL_EXITS, FUNNEL_GROUPS, FUNNEL_LANES, FUNNEL_PERIODS, FUNNEL_STAGES, FUNNEL_LABELS,
+  type FunnelLane, type FunnelPeriod, type FunnelSummary,
 } from '@/lib/funnel';
 
 interface Opt { id: string; name: string; email?: string }
@@ -137,6 +137,8 @@ function FunnelPage() {
   const icp = sp.get('icp_id') || '';
   const owner = sp.get('owner') || '';
   const lane = sp.get('lane') || '';
+  const period = (sp.get('period') || '') as FunnelPeriod | '';
+  const view = sp.get('view') === 'companies' ? 'companies' : '';
   const [lists, setLists] = useState<Opt[]>([]);
   const [users, setUsers] = useState<Opt[]>([]);
 
@@ -156,7 +158,8 @@ function FunnelPage() {
     if (v) q.set(k, v); else q.delete(k);
     router.replace(`${path}${q.toString() ? `?${q}` : ''}`);
   };
-  const query = { icp_id: icp || undefined, owner: owner || undefined, lane: lane || undefined };
+  const query = { icp_id: icp || undefined, owner: owner || undefined, lane: lane || undefined,
+    period: period || undefined, view: view || undefined };
   const { data, error } = useFunnel(query);
 
   return (
@@ -186,7 +189,24 @@ function FunnelPage() {
                 </button>
               ))}
             </div>
-            {data && <span style={{ color: 'var(--text-muted)' }}>{data.people.toLocaleString()} people</span>}
+            <select value={period} onChange={(e) => set('period', e.target.value)} className="px-2 py-1.5 rounded-lg outline-none" style={selectStyle}
+              title="Adds to each stage how many people entered it in the period">
+              <option value="">Any time</option>
+              {(Object.keys(FUNNEL_PERIODS) as FunnelPeriod[]).map((k) => <option key={k} value={k}>{FUNNEL_PERIODS[k]}</option>)}
+            </select>
+            <div className="inline-flex p-0.5 rounded-full" style={{ background: 'var(--bg-input)' }}>
+              {([['', 'People'], ['companies', 'Companies']] as const).map(([k, l]) => (
+                <button key={k} onClick={() => set('view', k)} className="px-2.5 py-1 rounded-full"
+                  title={k ? 'Each company once, at the furthest stage of any of its people' : 'Each person once'}
+                  style={{ background: view === k ? 'var(--bg-card)' : 'transparent', color: 'var(--text)' }}>{l}</button>
+              ))}
+            </div>
+            {data && (
+              <span style={{ color: 'var(--text-muted)' }}>
+                {data.people.toLocaleString()} {view ? 'companies' : 'people'}
+                {data.evaluated_at ? ` · updated ${new Date(data.evaluated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
+              </span>
+            )}
           </div>
           {error
             ? <div className="text-xs px-3 py-2 rounded-lg" style={{ color: 'var(--red)', background: 'color-mix(in srgb, var(--red) 10%, transparent)' }}>{error}</div>
