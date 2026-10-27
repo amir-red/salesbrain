@@ -2561,6 +2561,19 @@ talk to recently and how warm" (Mateo), and "this is what you proposed, this is 
   `/icp/[id]`. NRW today: company size 7/109 vs 3/108 → size 15 → 20, title 40 → 35 (not applied).
 - Warm people Excel: kind `warm` export + button on `/warm`.
 
+### 5.bw /icp = lists as funnels (2026-10-27, app-only, no migration)
+
+Amir: "rework the lists page: little text, really present the funnel results and conversion rates" → picked design E
+(canvas https://claude.ai/artifact/5FM5qwvdQnVQddNrSx1Rfu). `/icp` is now a short header (Everyone / Mine, New list,
+Agents link), a search + sort (most contacted / best answer rate / most people), a plum **All lists** card (each person
+once) and one card per list (`components/icp/ListFunnelCard.tsx`: owner, how most people came in, a small narrowing
+funnel Found → Ready → Contacted → Answered → Meeting → Opportunity, answer rate in orange when ≥30 contacted and
+<10% answered, "N to approve"; actions behind the ⋯ menu; lists with nobody on them are dashed cards at the end).
+Steps are CUMULATIVE (everyone who got at least that far) from `person_funnel` (086), square-root widths.
+`GET /api/icp/overview` returns `funnel` per list and `funnel_total` (two more queries on the same client).
+FleetStrip and IcpFilterBar are deleted (the kill switch, agent switches and paused accounts live on /agents).
+Local `npm run dev` shares the pooler's 15 session slots with production: expect occasional EMAXCONNSESSION 500s locally.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

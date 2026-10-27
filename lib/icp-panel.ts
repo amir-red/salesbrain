@@ -49,6 +49,36 @@ export interface OverviewIcp extends IcpProfile {
   coverage: Coverage;
   approvals: { pending: number; sent: number };
   queued: { leads_finder: number; enricher: number };
+  /** The list's funnel from person_funnel (086); null before that table exists. */
+  funnel?: ListFunnel | null;
+}
+
+/**
+ * One list's funnel, cumulative: each step counts everyone who got AT LEAST that far, so the shape always narrows.
+ * `lane` = how most people on the list came in (the funnel lane of those contacted, else of everyone).
+ */
+export interface ListFunnel {
+  found: number; ready: number; contacted: number; answered: number; meeting: number; opportunity: number;
+  unfit: number;
+  lane: string | null;
+}
+export const LIST_FUNNEL_STEPS = [
+  ['found', 'Found'], ['ready', 'Ready'], ['contacted', 'Contacted'],
+  ['answered', 'Answered'], ['meeting', 'Meeting'], ['opportunity', 'Opportunity'],
+] as const;
+/** Short lane labels for a list card. */
+export const LIST_LANE_LABELS: Record<string, string> = {
+  warm: 'Own network', event: 'Met at event', inbound: 'Came to us',
+  imported: 'Hand-picked', sourced: 'Found by agents', direct: 'Direct',
+};
+/** An answer rate worth flagging: enough people contacted, and fewer than one in ten answered. */
+export function lowAnswerRate(f: ListFunnel): boolean {
+  return f.contacted >= 30 && f.answered / f.contacted < 0.1;
+}
+export function rateLabel(n: number, d: number): string {
+  if (!d) return '—';
+  const r = (n * 100) / d;
+  return r > 0 && r < 10 ? `${r.toFixed(1)}%` : `${Math.round(r)}%`;
 }
 
 export interface OverviewPayload {
@@ -56,6 +86,8 @@ export interface OverviewPayload {
   scope: 'mine' | 'all';
   viewer_user_id: string;
   icps: OverviewIcp[];
+  /** Everyone on the visible lists, each person once (a person on two lists counts once). */
+  funnel_total?: ListFunnel | null;
   quota_by_owner: Record<string, OwnerQuota>;
   /** Per-person agent holds (migration 044), owner → agent → human label. Absent = running. */
   holds_by_owner?: Record<string, Record<string, string>>;

@@ -3,7 +3,23 @@ import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { normalizeCriteria } from '@/lib/icp';
 import { ownerQuotas } from '@/lib/quota-server';
-import type { Coverage, OverviewIcp, OverviewPayload, StageCounts } from '@/lib/icp-panel';
+import type { Coverage, ListFunnel, OverviewIcp, OverviewPayload, StageCounts } from '@/lib/icp-panel';
+
+// Cumulative funnel steps over person_funnel.stage (086): everyone who got AT LEAST that far.
+const READY = `('prospect_ready','lead_contacted','lead_engaged','lead_meeting','lead_qualified','opportunity','client')`;
+const CONTACTED = `('lead_contacted','lead_engaged','lead_meeting','lead_qualified','opportunity','client')`;
+const ANSWERED = `('lead_engaged','lead_meeting','lead_qualified','opportunity','client')`;
+const MEETING = `('lead_meeting','lead_qualified','opportunity','client')`;
+const OPPORTUNITY = `('opportunity','client')`;
+const FUNNEL_COUNTS = `count(*)::int AS found,
+       count(*) FILTER (WHERE stage IN ${READY})::int AS ready,
+       count(*) FILTER (WHERE stage IN ${CONTACTED})::int AS contacted,
+       count(*) FILTER (WHERE stage IN ${ANSWERED})::int AS answered,
+       count(*) FILTER (WHERE stage IN ${MEETING})::int AS meeting,
+       count(*) FILTER (WHERE stage IN ${OPPORTUNITY})::int AS opportunity,
+       count(*) FILTER (WHERE exit = 'unfit')::int AS unfit,
+       COALESCE(mode() WITHIN GROUP (ORDER BY lane) FILTER (WHERE stage IN ${CONTACTED}),
+                mode() WITHIN GROUP (ORDER BY lane)) AS lane`;
 
 /**
  * GET /api/icp/overview — the control panel's fleet view: every visible ICP
@@ -80,6 +96,20 @@ export async function GET(req: NextRequest) {
   const queued = ids.length === 0 ? none : await client.query(
         `SELECT icp_profile_id, agent, count(*)::int AS n FROM agent_runs
           WHERE icp_profile_id = ANY($1::uuid[]) AND status = 'requested' GROUP BY 1, 2`, [ids]);
+  // The list funnels come from the stored projection (086). Before it exists the cards fall back to "no funnel yet".
+  let funnelBy: Record<string, ListFunnel> = {};
+  let funnelTotal: ListFunnel | null = null;
+  if (ids.length > 0) {
+    try {
+      const per = await client.query(
+        `WITH f AS (SELECT unnest(icp_ids) AS icp, stage, exit, lane FROM person_funnel WHERE icp_ids && $1::uuid[])
+         SELECT icp, ${FUNNEL_COUNTS} FROM f WHERE icp = ANY($1::uuid[]) GROUP BY icp`, [ids]);
+      funnelBy = Object.fromEntries(per.rows.map((r) => [r.icp, { ...r, icp: undefined } as ListFunnel]));
+      const tot = await client.query(
+        `SELECT ${FUNNEL_COUNTS} FROM person_funnel WHERE icp_ids && $1::uuid[]`, [ids]);
+      funnelTotal = (tot.rows[0] as ListFunnel) ?? null;
+    } catch { funnelBy = {}; funnelTotal = null; }
+  }
   const ownerIds = Array.from(new Set(icps.rows.map((r) => r.owner_user_id as string)));
   const quota = await ownerQuotas(ownerIds, client);
   const holds = ownerIds.length === 0 ? none : await client.query(
@@ -118,8 +148,10 @@ export async function GET(req: NextRequest) {
         coverage: { ...zeroCoverage, ...cov, icp_profile_id: undefined } as Coverage,
         approvals: { pending: approvalsBy[r.id]?.pending ?? 0, sent: approvalsBy[r.id]?.sent ?? 0 },
         queued: queuedBy[r.id] ?? { leads_finder: 0, enricher: 0 },
+        funnel: funnelBy[r.id] ?? (funnelTotal ? { found: 0, ready: 0, contacted: 0, answered: 0, meeting: 0, opportunity: 0, unfit: 0, lane: null } : null),
       };
     }),
+    funnel_total: funnelTotal,
     quota_by_owner: quota,
     holds_by_owner: holdsBy,
   };
