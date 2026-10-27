@@ -237,7 +237,9 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
     } finally { setSaving(false); }
   };
 
-  const roleGroups = ROLE_GROUPS.map((g) => ({ group: g.group, items: g.titles }));
+  // An investor list shows the fund roles first; the rest stay below for angels and corporate VC.
+  const roleGroups = [...ROLE_GROUPS].sort((a, b) => (investors ? Number(b.group.startsWith('Investors')) - Number(a.group.startsWith('Investors')) : 0))
+    .map((g) => ({ group: g.group, items: g.titles }));
   const dist = preview?.distribution ?? {};
   const distOrder: { key: string; label: string; color: string }[] = [
     { key: 'strong_fit', label: 'Strong', color: 'var(--green)' },
