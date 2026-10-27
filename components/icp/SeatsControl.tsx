@@ -34,8 +34,10 @@ const EFFECTIVE: Record<Seat, 'back_office' | 'front_office' | 'sender'> = {
 
 const inputStyle = { background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' };
 
-export default function SeatsControl({ icpId, onChanged, variant = 'inline' }: {
+export default function SeatsControl({ icpId, onChanged, variant = 'inline', canEdit }: {
   icpId: string; onChanged?: (note: string) => void; variant?: 'inline' | 'card';
+  /** The page's own edit right (the same flag as "change owner"); falls back to the seats route's answer. */
+  canEdit?: boolean;
 }) {
   const [seats, setSeats] = useState<Seats | null>(null);
   const [editing, setEditing] = useState(false);
@@ -55,6 +57,7 @@ export default function SeatsControl({ icpId, onChanged, variant = 'inline' }: {
   }, [editing, users.length]);
 
   if (!seats) return null;
+  const editable = canEdit ?? seats.can_edit;
 
   const start = () => {
     setDraft({ responsible: seats.responsible?.id ?? '', front: seats.front?.id ?? '', sender: seats.sender?.id ?? '' });
@@ -86,15 +89,38 @@ export default function SeatsControl({ icpId, onChanged, variant = 'inline' }: {
     </select>
   );
 
-  if (variant === 'inline' && !editing) {
+  if (variant === 'inline') {
+    if (!editing) {
+      return (
+        <span className="inline-flex flex-wrap items-center gap-y-0.5">
+          {SEATS.map((k, i) => (
+            <span key={k} title={`${SEAT_TEXT[k].hint}${seats[k] ? '' : ' (default)'}`}>
+              {i > 0 && <span className="mx-1.5">·</span>}{SEAT_TEXT[k].label} <b style={{ color: 'var(--text)' }}>{seats.effective[EFFECTIVE[k]]?.name ?? '—'}</b>
+            </span>
+          ))}
+          {editable && <button onClick={start} className="underline ml-2">change</button>}
+        </span>
+      );
+    }
     return (
-      <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5">
-        {SEATS.map((k, i) => (
-          <span key={k} title={SEAT_TEXT[k].hint}>
-            {i > 0 && '· '}{SEAT_TEXT[k].label} <b style={{ color: 'var(--text)' }}>{seats.effective[EFFECTIVE[k]]?.name ?? '—'}</b>
-          </span>
+      <span className="inline-flex flex-wrap items-center gap-2">
+        {SEATS.map((k) => (
+          <label key={k} className="inline-flex items-center gap-1" title={SEAT_TEXT[k].hint}>
+            {SEAT_TEXT[k].label}
+            <select value={draft[k]} onChange={(e) => setDraft({ ...draft, [k]: e.target.value })}
+              className="px-1.5 py-0.5 rounded-md text-xs outline-none" style={inputStyle}>
+              <option value="">{SEAT_TEXT[k].empty}</option>
+              {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          </label>
         ))}
-        {seats.can_edit && <button onClick={start} className="underline">change</button>}
+        <label className="inline-flex items-center gap-1 cursor-pointer" title="Open leads that still have the previous person move to the new one; seats set by hand on a lead stay">
+          <input type="checkbox" checked={moveLeads} onChange={(e) => setMoveLeads(e.target.checked)} /> move open leads
+        </label>
+        <button onClick={save} disabled={busy} className="px-2 py-0.5 rounded-md text-xs font-medium disabled:opacity-40"
+          style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>{busy ? 'Saving…' : 'Save'}</button>
+        <button onClick={() => { setEditing(false); setError(null); }} disabled={busy} className="text-xs underline">cancel</button>
+        {error && <span style={{ color: 'var(--red)' }}>{error}</span>}
       </span>
     );
   }
@@ -108,7 +134,7 @@ export default function SeatsControl({ icpId, onChanged, variant = 'inline' }: {
             Every lead on this list gets these people. A seat set by hand on a lead wins.
           </p>
         </div>
-        {seats.can_edit && !editing && (
+        {editable && !editing && (
           <button onClick={start} className="px-3 py-1.5 rounded-lg text-xs font-medium"
             style={{ border: '1px solid var(--accent)', color: 'var(--accent)' }}>Change</button>
         )}
@@ -144,7 +170,7 @@ export default function SeatsControl({ icpId, onChanged, variant = 'inline' }: {
         </div>
       )}
       {error && <p className="text-xs" style={{ color: 'var(--red)' }}>{error}</p>}
-      {!seats.can_edit && (
+      {!editable && (
         <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Only the list’s owner or an admin can change these.</p>
       )}
     </section>
