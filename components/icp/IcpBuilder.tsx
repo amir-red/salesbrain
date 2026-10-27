@@ -168,7 +168,11 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error || 'Save failed'); return; }
+      if (!res.ok) {
+        const issue = (data.issues as { path?: (string | number)[]; message?: string }[] | undefined)?.[0];
+        setError(issue ? `${data.error}: ${(issue.path ?? []).join('.') || 'body'} — ${issue.message}` : (data.error || 'Save failed'));
+        return;
+      }
       const listId = (data as { id?: string; profile?: { id?: string } }).id ?? (data as { profile?: { id?: string } }).profile?.id ?? initial?.id;
       if (listId && JSON.stringify(listVoice) !== JSON.stringify(startVoice)) {
         const v = await fetch(`/api/icp/${listId}/voice`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(listVoice) });
@@ -207,7 +211,7 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
               {PRODUCTS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
             </select>
           </div>
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2}
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} maxLength={2000}
                     placeholder="What we sell and to whom (used by the agent when drafting outreach)"
                     className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y" style={inputStyle} />
           <ListVoiceFields brandKey="zeami" value={listVoice} onChange={setListVoice} inputStyle={inputStyle} />
