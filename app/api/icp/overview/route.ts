@@ -27,6 +27,10 @@ export async function GET(req: NextRequest) {
   try {
   const icps = await client.query(
       `SELECT i.*, u.name AS owner_name, u.email AS owner_email,
+              -- who works the list (085): back office = the seat, else the owner; front office = the seat, else back office
+              COALESCE((SELECT name FROM users WHERE id = i.responsible_user_id), u.name) AS back_office_name,
+              COALESCE((SELECT name FROM users WHERE id = i.front_user_id),
+                       (SELECT name FROM users WHERE id = i.responsible_user_id), u.name) AS front_office_name,
               (u.email LIKE '%.service.salesbrain') AS owner_is_external,
               EXISTS(SELECT 1 FROM linkedin_accounts la
                       WHERE la.owner_user_id = i.owner_user_id AND la.revoked_at IS NULL) AS owner_can_source,

@@ -70,6 +70,13 @@ export default function IcpRow({ icp, quota, viewerUserId, isAdmin, fleet, hold,
             {PRODUCTS.find((p) => p.key === icp.product)?.label ?? icp.product ?? '—'}
             {icp.objective && <span>· ⌾ {OBJECTIVES.find((o) => o.key === icp.objective)?.label ?? icp.objective}</span>}
             <span>· owner <span style={{ color: 'var(--text)' }}>{isOwner ? 'you' : icp.owner_name}</span>{icp.owner_can_source ? '' : ' · inert (no LinkedIn)'}</span>
+            {icp.back_office_name && (
+              <span title="Who works this list: back office drives the leads, front office takes the calls. Change it on the list page.">
+                · back office <span style={{ color: 'var(--text)' }}>{icp.back_office_name}</span>
+                {icp.front_office_name && icp.front_office_name !== icp.back_office_name
+                  ? <> · front office <span style={{ color: 'var(--text)' }}>{icp.front_office_name}</span></> : null}
+              </span>
+            )}
             <span>· {summarizeCriteria(icp.criteria)}</span>
           </div>
         </div>

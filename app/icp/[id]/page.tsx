@@ -108,11 +108,7 @@ export default function IcpPanelPage() {
               {data ? <><OwnerControl icpId={id} ownerId={data.icp.owner_user_id} ownerName={data.icp.owner_name} isOwner={data.is_owner}
                   canEdit={data.can_edit} onChanged={(n) => { setNote(n); void refresh(); }} /> · {lastAt ? `updated ${relativeTime(lastAt.toISOString())}` : ''} · <button onClick={() => refresh()} className="underline">refresh</button></> : 'The whole journey for this list, and what the machinery is doing at each step.'}
             </p>
-            {data && (
-              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                <SeatsControl icpId={id} onChanged={(n) => setNote(n)} />
-              </p>
-            )}
+
           </div>
           {data && !editing && (
             <div className="flex flex-wrap gap-2 justify-end shrink-0">
@@ -141,6 +137,7 @@ export default function IcpPanelPage() {
 
         {data && !editing && (
           <div className="p-4 space-y-4">
+            <SeatsControl variant="card" icpId={id} onChanged={(n) => { setNote(n); void refresh(); }} />
             <FunnelStrip compact query={{ icp_id: id }} title="This list's funnel" href={`/funnel?icp_id=${id}`} />
             <TuningPanel icpId={id} onApplied={(n) => { setNote(n); void refresh(); }} />
             {data.blockers.length > 0 && (
@@ -151,7 +148,7 @@ export default function IcpPanelPage() {
             )}
             {note && <div className="text-[11px]" style={{ color: note.toLowerCase().includes('error') || note.startsWith('Leads Finder can') ? 'var(--red)' : 'var(--text-muted)' }}>{note}</div>}
 
-            <SectionCard title="2 · The list" subtitle={`${data.coverage.total} leads · ${data.coverage.matched} matched · ${data.coverage.engaged} engaged · ${data.coverage.deals} became deals`}>
+            <SectionCard title="2 · The list" subtitle={`${data.coverage.total} leads · ${data.coverage.matched} matched · ${data.coverage.engaged} engaged · ${data.coverage.deals} became opportunities`}>
               <FunnelBar stages={data.stages} legend height={12} />
             </SectionCard>
 

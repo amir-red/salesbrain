@@ -41,6 +41,9 @@ export interface Coverage {
 export interface OverviewIcp extends IcpProfile {
   owner_user_id: string;
   owner_name: string;
+  /** Who works the list (085): the seat, else the owner / the back office. */
+  back_office_name?: string;
+  front_office_name?: string;
   owner_can_source: boolean;
   stages: StageCounts;
   coverage: Coverage;

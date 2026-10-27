@@ -144,7 +144,7 @@ export default function EmailOutreachSection({ icpId }: { icpId: string }) {
           title={!saved ? 'Write the email sequence first' : !sender ? 'Connect Google with sending allowed on Profile → Google' : 'Draft the next 20 first emails (one person per Go firm) for the sender to approve'}>
           {busy ? 'Working…' : 'Queue next 20 for approval'}
         </button>
-        {!boxes.length && <Link href="/profile?tab=google" className="underline" style={{ color: 'var(--accent)' }}>Connect Gmail for sending</Link>}
+        {!boxes.length && <Link href="/profile?tab=google" className="underline" style={{ color: 'var(--accent)' }}>Connect Google to send</Link>}
         {box && sender !== me && <span style={{ color: 'var(--text-muted)' }}>The card goes to {box.name || box.address}; they approve it.</span>}
       </div>
       {note && <div className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>{note}</div>}
