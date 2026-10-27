@@ -4,11 +4,13 @@
  * The lists overview as funnels (design E, 2026-10-27, Amir: "little text, really present the funnel results and
  * the conversion rates"). One card per list with its own small funnel; a plum summary card for all lists.
  * Steps are cumulative (everyone who got at least that far), so every funnel narrows. Widths use a square-root
- * scale so 10 answers stay visible next to 1,655 found; a step nobody reached is a dashed outline.
+ * scale so 10 answers stay visible next to 1,655 found; a step nobody reached is a dashed outline. Each step shows its
+ * conversion from the step before; the step that loses the most people is orange. The card's headline is the
+ * conversion rate: contacted people who became an opportunity.
  */
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { LIST_FUNNEL_STEPS, LIST_LANE_LABELS, blockersFor, lowAnswerRate, rateLabel } from '@/lib/icp-panel';
+import { LIST_FUNNEL_STEPS, LIST_LANE_LABELS, blockersFor, rateLabel, stepRates, weakestStep } from '@/lib/icp-panel';
 import type { ListFunnel, OverviewIcp, OwnerQuota } from '@/lib/icp-panel';
 import type { IcpAgentState } from '@/lib/icp';
 import type { RunMode } from '@/components/icp/IcpRow';
@@ -27,8 +29,11 @@ export function MiniFunnel({ f, label, inverse = false }: { f: ListFunnel; label
   const base = vals[0] || 1;
   const w = (v: number) => (v > 0 ? Math.max(minW, Math.sqrt(v / base) * maxW) : minW);
   const H = vals.length * (bandH + gap) - gap;
+  const rates = stepRates(f);
+  const weak = weakestStep(f);
+  const warn = inverse ? 'var(--accent-fg)' : 'var(--orange)';
   return (
-    <svg viewBox={`0 0 300 ${H}`} width="100%" role="img" style={{ display: 'block', fontFamily: 'inherit' }}
+    <svg viewBox={`0 0 350 ${H}`} width="100%" role="img" style={{ display: 'block', fontFamily: 'inherit' }}
          aria-label={`${label}: ${LIST_FUNNEL_STEPS.map(([k, l]) => `${l} ${f[k]}`).join(', ')}`}>
       {vals.map((v, i) => {
         const y = i * (bandH + gap);
@@ -42,7 +47,13 @@ export function MiniFunnel({ f, label, inverse = false }: { f: ListFunnel; label
               ? <polygon points={pts} style={{ fill: ink, fillOpacity: inverse ? OPACITY[i] * 0.9 : OPACITY[i] }} />
               : <polygon points={pts} style={{ fill: 'none', stroke: inverse ? 'var(--accent-fg)' : 'var(--border)', strokeOpacity: inverse ? 0.5 : 1, strokeDasharray: '3 3' }} />}
             <text x={176} y={y + bandH / 2 + 5} style={{ fontSize: 14, fontWeight: 600, fill: v === 0 ? muted : text, fillOpacity: inverse && v === 0 ? 0.7 : 1 }}>{fmt(v)}</text>
-            <text x={230} y={y + bandH / 2 + 5} style={{ fontSize: 12, fill: muted, fillOpacity: inverse ? 0.85 : 1 }}>{LIST_FUNNEL_STEPS[i][1]}</text>
+            <text x={222} y={y + bandH / 2 + 5} style={{ fontSize: 12, fill: muted, fillOpacity: inverse ? 0.85 : 1 }}>{LIST_FUNNEL_STEPS[i][1]}</text>
+            {rates[i] !== null && (
+              <text x={350} y={y + bandH / 2 + 5} textAnchor="end"
+                    style={{ fontSize: 12, fontWeight: i === weak ? 700 : 500, fill: i === weak ? warn : muted, fillOpacity: inverse && i !== weak ? 0.85 : 1 }}>
+                {rateLabel(vals[i], vals[i - 1])}
+              </text>
+            )}
           </g>
         );
       })}
@@ -59,14 +70,15 @@ export function AllListsCard({ f, lists }: { f: ListFunnel; lists: number }) {
         <p className="text-xs mt-1" style={{ opacity: 0.8 }}>{lists} {lists === 1 ? 'list' : 'lists'} · each person counted once</p>
       </div>
       <MiniFunnel f={f} label="All lists" inverse />
-      <p className="text-sm" style={{ opacity: 0.9 }}>
-        Answer rate <b className="text-lg tabular-nums">{rateLabel(f.answered, f.contacted)}</b>
+      <p className="text-sm" style={{ opacity: 0.9 }} title="Contacted people who became an opportunity">
+        Conversion rate <b className="text-lg tabular-nums">{rateLabel(f.opportunity, f.contacted)}</b>
+        <span className="text-xs ml-1.5" style={{ opacity: 0.8 }}>contacted → opportunity</span>
       </p>
     </article>
   );
 }
 
-/** One list. Name, owner and how people came in; its funnel; the answer rate. Actions sit behind a menu. */
+/** One list. Name, owner and how people came in; its funnel; the conversion rate. Actions sit behind a menu. */
 export default function ListFunnelCard({ icp, quota, viewerUserId, isAdmin, fleet, hold, busy, onRun, onState, onArchive }: {
   icp: OverviewIcp; quota: OwnerQuota | null; viewerUserId: string; isAdmin: boolean;
   fleet: { kill_switch: boolean; leads_finder_enabled: boolean };
@@ -98,7 +110,6 @@ export default function ListFunnelCard({ icp, quota, viewerUserId, isAdmin, flee
     : [];
   const canRun = isOwner && blockers.length === 0;
   const lane = f?.lane ? LIST_LANE_LABELS[f.lane] ?? null : null;
-  const low = f ? lowAnswerRate(f) : false;
   const empty = !f || f.found === 0;
 
   const run = async (mode: RunMode) => {
@@ -177,9 +188,9 @@ export default function ListFunnelCard({ icp, quota, viewerUserId, isAdmin, flee
       <MiniFunnel f={f} label={icp.name} />
 
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
-        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-          Answer rate{' '}
-          <b className="text-lg tabular-nums" style={{ color: low ? 'var(--orange)' : 'var(--text)' }}>{rateLabel(f.answered, f.contacted)}</b>
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }} title="Contacted people who became an opportunity">
+          Conversion rate{' '}
+          <b className="text-lg tabular-nums" style={{ color: 'var(--text)' }}>{rateLabel(f.opportunity, f.contacted)}</b>
         </p>
         {icp.approvals.pending > 0 && (
           <Link href={`/icp/${icp.id}#outreach`} className="text-xs font-medium px-2 py-0.5 rounded-full"

@@ -2565,10 +2565,11 @@ talk to recently and how warm" (Mateo), and "this is what you proposed, this is 
 
 Amir: "rework the lists page: little text, really present the funnel results and conversion rates" → picked design E
 (canvas https://claude.ai/artifact/5FM5qwvdQnVQddNrSx1Rfu). `/icp` is now a short header (Everyone / Mine, New list,
-Agents link), a search + sort (most contacted / best answer rate / most people), a plum **All lists** card (each person
+Agents link), a search + sort (most contacted / best conversion / most people), a plum **All lists** card (each person
 once) and one card per list (`components/icp/ListFunnelCard.tsx`: owner, how most people came in, a small narrowing
-funnel Found → Ready → Contacted → Answered → Meeting → Opportunity, answer rate in orange when ≥30 contacted and
-<10% answered, "N to approve"; actions behind the ⋯ menu; lists with nobody on them are dashed cards at the end).
+funnel Found → Ready → Contacted → Answered → Meeting → Opportunity with each step's conversion from the step before
+(the weakest step in orange), headline **conversion rate = contacted → opportunity** (Amir: "I need a conversion rate,
+not an answer rate"; `conversion`, `stepRates`, `weakestStep` in lib/icp-panel.ts), "N to approve"; actions behind the ⋯ menu; lists with nobody on them are dashed cards at the end).
 Steps are CUMULATIVE (everyone who got at least that far) from `person_funnel` (086), square-root widths.
 `GET /api/icp/overview` returns `funnel` per list and `funnel_total` (two more queries on the same client).
 FleetStrip and IcpFilterBar are deleted (the kill switch, agent switches and paused accounts live on /agents).

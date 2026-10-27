@@ -16,7 +16,7 @@ type Mode = { kind: 'list' } | { kind: 'new' } | { kind: 'edit'; profile: IcpPro
 
 /**
  * /icp — the lists overview as funnels (design E, 2026-10-27): a summary card for all lists, then one card per
- * list with its own small funnel and answer rate; actions sit behind each card's menu. Each card opens /icp/[id].
+ * list with its own small funnel, step conversions and conversion rate; actions sit behind each card's menu. Each card opens /icp/[id].
  * The agent fleet strip moved off this page (it lives on /agents). Polls every 45 s while visible.
  */
 export default function IcpPage() {
@@ -26,7 +26,7 @@ export default function IcpPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [estate, setEstate] = useState(true);        // every teammate's lists (visible to everyone); off = mine only
   const [filter, setFilter] = useState<IcpListFilter>(EMPTY_ICP_FILTER);
-  const [sort, setSort] = useState<'contacted' | 'answer' | 'found'>('contacted');
+  const [sort, setSort] = useState<'contacted' | 'conversion' | 'found'>('contacted');
 
   const load = useCallback(async () => {
     const [a, b] = await Promise.all([fetch(`/api/icp/overview${estate ? '?scope=all' : ''}`), fetch('/api/agents')]);
@@ -79,10 +79,12 @@ export default function IcpPage() {
     const fa = a.funnel, fb = b.funnel;
     const ea = !fa || fa.found === 0, eb = !fb || fb.found === 0;
     if (ea !== eb) return ea ? 1 : -1;                       // lists with nobody on them go last
-    if (sort === 'answer') {
-      const ra = fa && fa.contacted ? fa.answered / fa.contacted : -1;
-      const rb = fb && fb.contacted ? fb.answered / fb.contacted : -1;
-      if (rb !== ra) return rb - ra;
+    if (sort === 'conversion') {
+      // contacted → opportunity first; with no opportunities yet, the deepest step still separates lists
+      const key = (f: typeof fa) => (f && f.contacted
+        ? [f.opportunity / f.contacted, f.meeting / f.contacted, f.answered / f.contacted] : [-1, -1, -1]);
+      const ka = key(fa), kb = key(fb);
+      for (let i = 0; i < 3; i++) if (kb[i] !== ka[i]) return kb[i] - ka[i];
     }
     if (sort === 'found') return (fb?.found ?? 0) - (fa?.found ?? 0);
     return (fb?.contacted ?? 0) - (fa?.contacted ?? 0) || (fb?.found ?? 0) - (fa?.found ?? 0);
@@ -147,7 +149,7 @@ export default function IcpPage() {
                 <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Sort lists"
                         className="h-10 px-3 rounded-full text-sm outline-none" style={inputStyle}>
                   <option value="contacted">Most contacted</option>
-                  <option value="answer">Best answer rate</option>
+                  <option value="conversion">Best conversion</option>
                   <option value="found">Most people</option>
                 </select>
               </div>

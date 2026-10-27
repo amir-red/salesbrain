@@ -71,9 +71,24 @@ export const LIST_LANE_LABELS: Record<string, string> = {
   warm: 'Own network', event: 'Met at event', inbound: 'Came to us',
   imported: 'Hand-picked', sourced: 'Found by agents', direct: 'Direct',
 };
-/** An answer rate worth flagging: enough people contacted, and fewer than one in ten answered. */
-export function lowAnswerRate(f: ListFunnel): boolean {
-  return f.contacted >= 30 && f.answered / f.contacted < 0.1;
+/**
+ * Conversion rate of a list = contacted people who became an opportunity (lead-to-opportunity, the CRM standard).
+ * Found is not the base: it includes people who were never a fit and people nobody reached yet.
+ */
+export function conversion(f: ListFunnel): number | null {
+  return f.contacted ? f.opportunity / f.contacted : null;
+}
+/** Step-to-step conversion: each step as a share of the one before it (null for the first step or an empty one). */
+export function stepRates(f: ListFunnel): (number | null)[] {
+  const v = LIST_FUNNEL_STEPS.map(([k]) => f[k]);
+  return v.map((x, i) => (i === 0 || !v[i - 1] ? null : x / v[i - 1]));
+}
+/** The step that loses the most people: the lowest step rate after a step with people in it. */
+export function weakestStep(f: ListFunnel): number | null {
+  const r = stepRates(f);
+  let best: number | null = null;
+  r.forEach((x, i) => { if (x !== null && (best === null || x < (r[best] as number))) best = i; });
+  return best;
 }
 export function rateLabel(n: number, d: number): string {
   if (!d) return '—';
