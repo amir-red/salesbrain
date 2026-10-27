@@ -7,7 +7,10 @@ import {
   COMPANY_SIZES, DEFAULT_WEIGHTS, EXCLUDE_TITLE_PRESETS, INDUSTRIES, LOCATION_GROUPS, PRODUCTS,
   ROLE_GROUPS, SENIORITY_BANDS, WEIGHT_LABELS, buildSalesNavFilters, emptyCriteria,
   normalizeWeights, weightsTotal, OBJECTIVES,
+  INVESTOR_CURRENCIES, INVESTOR_EXCLUDES, INVESTOR_EXCLUDE_SECTORS, INVESTOR_INDUSTRIES, INVESTOR_REGIONS,
+  INVESTOR_SECTORS, INVESTOR_STAGES, INVESTOR_TITLES, isInvestorList,
 } from '@/lib/icp';
+import type { FirmBrief } from '@/lib/firms';
 import type { IcpCandidate, IcpCriteria, IcpProfile, ObjectiveKey, SeniorityBand, WeightKey } from '@/lib/icp';
 
 interface PreviewMatch {
@@ -29,6 +32,29 @@ interface Props {
 }
 
 const inputStyle = { background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' } as const;
+
+type ListKind = 'customers' | 'investors';
+/** The investor brief as the form edits it: numbers as text, so a half-typed value is not lost. */
+interface BriefForm {
+  stages: string[]; sectors: string[]; exclude_sectors: string[]; geographies: string[];
+  round_size: string; currency: string; entity_country: string; min_fund_year: string; pitch: string;
+}
+function briefForm(b: FirmBrief | null | undefined): BriefForm {
+  return {
+    stages: b?.stages ?? [], sectors: b?.sectors ?? [], exclude_sectors: b?.exclude_sectors ?? [], geographies: b?.geographies ?? [],
+    round_size: b?.round_size ? String(b.round_size) : '', currency: b?.currency || 'EUR', entity_country: b?.entity_country ?? '',
+    min_fund_year: b?.min_fund_year ? String(b.min_fund_year) : '', pitch: b?.pitch ?? '',
+  };
+}
+function briefBody(f: BriefForm): FirmBrief {
+  const num = (v: string) => { const n = Number(v.replace(/[^\d.]/g, '')); return Number.isFinite(n) && n > 0 ? n : undefined; };
+  return {
+    stages: f.stages, sectors: f.sectors, exclude_sectors: f.exclude_sectors, geographies: f.geographies,
+    round_size: num(f.round_size), currency: f.currency || undefined, entity_country: f.entity_country.trim() || undefined,
+    min_fund_year: num(f.min_fund_year), pitch: f.pitch.trim() || undefined,
+  };
+}
+const briefHasContent = (f: BriefForm) => Object.values(briefBody(f)).some((v) => (Array.isArray(v) ? v.length > 0 : v !== undefined && v !== 'EUR'));
 const sizeLabel = (k: string) => COMPANY_SIZES.find((s) => s.key === k)?.label ?? k;
 const bandLabel = (k: string) => SENIORITY_BANDS.find((b) => b.key === k)?.label ?? k;
 
@@ -68,6 +94,25 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
   const startVoice: ListVoice = { product_id: initVoice?.product_id ?? '', writing_context: initVoice?.writing_context ?? '', language: initVoice?.language ?? '' };
   const [listVoice, setListVoice] = useState<ListVoice>(startVoice);
   const [criteria, setCriteria] = useState<IcpCriteria>(initial?.criteria ?? emptyCriteria());
+  // Investor list (075): what every fund on it is judged against. Saved after the list (it needs the list's id).
+  const startBrief = briefForm(initial?.firm_brief as FirmBrief | undefined);
+  const [kind, setKind] = useState<ListKind>(isInvestorList(initial) ? 'investors' : 'customers');
+  const [brief, setBrief] = useState<BriefForm>(startBrief);
+  const investors = kind === 'investors';
+  const setB = <K extends keyof BriefForm>(k: K, v: BriefForm[K]) => setBrief((b) => ({ ...b, [k]: v }));
+
+  // Switching to Investors fills the empty parts with the usual VC answer; nothing typed is overwritten.
+  const chooseKind = (k: ListKind) => {
+    setKind(k);
+    if (k !== 'investors') return;
+    setCriteria((c) => ({
+      ...c,
+      titles: c.titles.length ? c.titles : INVESTOR_TITLES,
+      industries: c.industries.length ? c.industries : INVESTOR_INDUSTRIES,
+      exclude_titles: c.exclude_titles.length ? c.exclude_titles : INVESTOR_EXCLUDES,
+    }));
+    setCandidates([]);
+  };
 
   const [website, setWebsite] = useState('');
   const [suggesting, setSuggesting] = useState(false);
@@ -99,6 +144,8 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
   const total = weightsTotal(criteria.weights);
   const salesNav = useMemo(() => buildSalesNavFilters(criteria), [criteria]);
   const canSave = name.trim().length > 0 && (criteria.titles.length > 0 || criteria.seniority.length > 0 || criteria.industries.length > 0);
+  // Section numbers move by one when the investor brief is shown.
+  const sec = (n: number) => (investors && n >= 3 ? n + 1 : n);
 
   // Suggest scored ICP candidates from whatever the user has (website /
   // description / current chips) tuned to the chosen objective. Nothing saves.
@@ -178,6 +225,12 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
         const v = await fetch(`/api/icp/${listId}/voice`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(listVoice) });
         if (!v.ok) { const e = await v.json().catch(() => ({})); setError(`List saved, but what it pitches was not: ${e.error || v.status}`); return; }
       }
+      // An investor list keeps its brief; switching a list back to Customers leaves an existing brief alone.
+      if (listId && investors && JSON.stringify(brief) !== JSON.stringify(startBrief)) {
+        const r = await fetch(`/api/icp/${listId}/firms/brief`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ brief: briefBody(brief) }) });
+        const out = await r.json().catch(() => ({}));
+        if (!r.ok || out.error) { setError(`List saved, but what funds are judged against was not: ${out.error || r.status}`); return; }
+      }
       onSaved(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');
@@ -203,16 +256,34 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
           </div>
         )}
 
-        <Section n={1} title="About the product" sub="Name this profile and, optionally, let AI draft it from a website.">
+        <Section n={1} title={investors ? 'About the raise' : 'About the product'}
+                 sub={investors ? 'Name the list and say what we raise for.' : 'Name this profile and, optionally, let AI draft it from a website.'}>
+          <div>
+            <div className="text-xs font-medium mb-1">This list is for</div>
+            <div className="inline-flex rounded-full p-0.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }} role="radiogroup">
+              {([['customers', 'Customers'], ['investors', 'Investors']] as const).map(([k, label]) => (
+                <button key={k} type="button" role="radio" aria-checked={kind === k} onClick={() => chooseKind(k)}
+                        className="text-xs px-3 py-1 rounded-full"
+                        style={kind === k ? { background: 'var(--accent)', color: 'var(--accent-fg)' } : { color: 'var(--text-muted)' }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {investors && (
+              <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
+                People at funds (partners first), and every fund on the list judged Go, Check or Out against the rounds, focus and regions below.
+              </p>
+            )}
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-[1fr_160px] gap-2">
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Profile name, e.g. PE-backed mid-market ops leaders *"
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder={investors ? 'List name, e.g. Seed VCs Europe — B2B AI *' : 'Profile name, e.g. PE-backed mid-market ops leaders *'}
                    className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
             <select value={product} onChange={(e) => setProduct(e.target.value)} className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle}>
               {PRODUCTS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
             </select>
           </div>
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} maxLength={2000}
-                    placeholder="What we sell and to whom (used by the agent when drafting outreach)"
+                    placeholder={investors ? 'Who we are and what we raise (used by the agent when drafting outreach)' : 'What we sell and to whom (used by the agent when drafting outreach)'}
                     className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y" style={inputStyle} />
           <ListVoiceFields brandKey="zeami" value={listVoice} onChange={setListVoice} inputStyle={inputStyle} />
           <div>
@@ -224,7 +295,7 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
               Nothing is sent by itself: each acceptance becomes one approval card on Telegram and on the list page. Leave empty to only be told who accepted.
             </div>
           </div>
-          <div className="rounded-lg p-3 space-y-3" style={{ background: 'var(--bg-input)', border: '1px dashed var(--border)' }}>
+          {!investors && <div className="rounded-lg p-3 space-y-3" style={{ background: 'var(--bg-input)', border: '1px dashed var(--border)' }}>
             <div>
               <div className="text-xs font-medium mb-1">Optimize for <span style={{ color: 'var(--text-muted)' }}>(optional)</span></div>
               <div className="flex flex-wrap gap-1.5">
@@ -293,16 +364,54 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
                 ))}
               </div>
             )}
-          </div>
+          </div>}
         </Section>
 
-        <Section n={2} title="Who's your ideal customer?" sub="Titles are matched on whole words, so “VP Engineering” also catches “VP of Engineering”. Similar titles are not inferred — add the variants you care about.">
+        <Section n={2} title={investors ? 'Who at the fund?' : "Who's your ideal customer?"} sub="Titles are matched on whole words, so “VP Engineering” also catches “VP of Engineering”. Similar titles are not inferred — add the variants you care about.">
           <ChipSelect label="Job roles" options={roleGroups} selected={criteria.titles} onChange={(v) => set('titles', v)} placeholder="Add a title, e.g. Head of Automation" />
           <ChipSelect label="Seniority" hint="Scores the band even when the exact title isn't listed." options={SENIORITY_BANDS.map((b) => b.key)}
                       selected={criteria.seniority} onChange={(v) => set('seniority', v as SeniorityBand[])} allowCustom={false} labelOf={bandLabel} />
         </Section>
 
-        <Section n={3} title="What kind of companies are you targeting?" sub="Leave a group empty to mean “any”.">
+        {investors && (
+          <Section n={3} title="What should the fund invest in?" sub="Every researched fund is judged against this: Go, Check (needs a look) or Out, with the reason. Leave a group empty to mean “any”.">
+            <ChipSelect label="Rounds they invest in" hint="Our round. A fund that only writes later cheques is Out." options={INVESTOR_STAGES}
+                        selected={brief.stages} onChange={(v) => setB('stages', v)} placeholder="Add a round…" />
+            <ChipSelect label="Investment focus" hint="Their thesis should name at least one, e.g. B2B SaaS rather than consumer." options={INVESTOR_SECTORS}
+                        selected={brief.sectors} onChange={(v) => setB('sectors', v)} placeholder="Add a focus, e.g. vertical SaaS" />
+            <ChipSelect label="Out if they invest only in" tone="exclude" options={INVESTOR_EXCLUDE_SECTORS}
+                        selected={brief.exclude_sectors} onChange={(v) => setB('exclude_sectors', v)} placeholder="Add a sector…" />
+            <ChipSelect label="Regions the fund must cover" hint="Global funds always count." options={INVESTOR_REGIONS}
+                        selected={brief.geographies} onChange={(v) => setB('geographies', v)} placeholder="Add a region or country…" />
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_90px_1fr_1fr] gap-2">
+              <label className="grid gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>Round size
+                <input value={brief.round_size} onChange={(e) => setB('round_size', e.target.value)} inputMode="numeric" placeholder="1500000"
+                       className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+              </label>
+              <label className="grid gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>Currency
+                <select value={brief.currency} onChange={(e) => setB('currency', e.target.value)} className="px-2 py-2 rounded-lg text-sm outline-none" style={inputStyle}>
+                  {INVESTOR_CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </label>
+              <label className="grid gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>Our company is in
+                <input value={brief.entity_country} onChange={(e) => setB('entity_country', e.target.value)} placeholder="Germany"
+                       className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+              </label>
+              <label className="grid gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>Latest fund at least from
+                <input value={brief.min_fund_year} onChange={(e) => setB('min_fund_year', e.target.value)} inputMode="numeric" placeholder={String(new Date().getFullYear() - 4)}
+                       className="px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+              </label>
+            </div>
+            <p className="text-[11px] -mt-2" style={{ color: 'var(--text-muted)' }}>A minimum cheque above the round is Out; an older last fund is Check (may no longer be investing).</p>
+            <label className="grid gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>What we raise for (one sentence; research uses it to write each fund’s opening line)
+              <textarea value={brief.pitch} onChange={(e) => setB('pitch', e.target.value)} rows={2} maxLength={600}
+                        placeholder="Zeami: AI workflow software that maps how business teams work and automates the repeatable parts."
+                        className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y" style={inputStyle} />
+            </label>
+          </Section>
+        )}
+
+        <Section n={sec(3)} title={investors ? 'Which funds and where are their people?' : 'What kind of companies are you targeting?'} sub="Leave a group empty to mean “any”.">
           <ChipSelect label="Industries" options={INDUSTRIES} selected={criteria.industries} onChange={(v) => set('industries', v)} allLabel="All industries" placeholder="Add an industry…" />
           <ChipSelect label="Locations" hint="Person's own location, not company HQ. Regions and countries both work." options={LOCATION_GROUPS}
                       selected={criteria.locations} onChange={(v) => set('locations', v)} allLabel="All locations" placeholder="Add a country or city…" />
@@ -310,14 +419,14 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
                       allowCustom={false} labelOf={sizeLabel} allLabel="All sizes" />
         </Section>
 
-        <Section n={4} title="Who should we exclude?" sub="Hard disqualifications — a match scores 0 no matter what else fits.">
-          <ChipSelect label="Exclude these profiles" tone="exclude" options={EXCLUDE_TITLE_PRESETS} selected={criteria.exclude_titles}
+        <Section n={sec(4)} title="Who should we exclude?" sub="Hard disqualifications — a match scores 0 no matter what else fits.">
+          <ChipSelect label="Exclude these profiles" tone="exclude" options={investors ? INVESTOR_EXCLUDES : EXCLUDE_TITLE_PRESETS} selected={criteria.exclude_titles}
                       onChange={(v) => set('exclude_titles', v.map((s) => s.toLowerCase()))} placeholder="Add a title fragment, e.g. advisor" />
-          <ChipSelect label="Companies to avoid" tone="exclude" hint="Competitors, your own company, partners you don't want to cold-message."
+          <ChipSelect label={investors ? 'Funds to avoid' : 'Companies to avoid'} tone="exclude" hint={investors ? 'Funds already in the cap table, ones that passed, or competitors’ investors.' : "Competitors, your own company, partners you don't want to cold-message."}
                       options={[]} selected={criteria.exclude_companies} onChange={(v) => set('exclude_companies', v)} placeholder="e.g. UiPath, Workato" />
         </Section>
 
-        <Section n={5} title="How should we score a match?" sub="Points out of 100. Tuning is data, not a deploy — change it any time.">
+        <Section n={sec(5)} title="How should we score a match?" sub="Points out of 100. Tuning is data, not a deploy — change it any time.">
           <div className="space-y-2">
             {WEIGHT_LABELS.map(({ key, label, hint }) => {
               const disabled = key === 'size' && criteria.company_sizes.length === 0;
@@ -419,11 +528,14 @@ export default function IcpBuilder({ initial, onSaved, onCancel }: Props) {
         <div className="flex gap-2">
           <button type="button" onClick={save} disabled={!canSave || saving}
                   className="flex-1 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-40" style={{ background: 'var(--green)', color: 'var(--accent-fg)' }}>
-            {saving ? 'Saving…' : initial ? 'Save changes' : 'Save ICP'}
+            {saving ? 'Saving…' : initial ? 'Save changes' : investors ? 'Save list' : 'Save ICP'}
           </button>
           <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg text-sm" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Cancel</button>
         </div>
         {!canSave && <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Give it a name and at least one role, seniority band or industry.</p>}
+        {investors && canSave && !briefHasContent(brief) && (
+          <p className="text-[11px]" style={{ color: 'var(--orange)' }}>Add the rounds, focus or regions: funds are researched and judged only once the list says what it looks for.</p>
+        )}
       </aside>
     </div>
   );

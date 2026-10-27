@@ -2575,6 +2575,19 @@ Steps are CUMULATIVE (everyone who got at least that far) from `person_funnel` (
 FleetStrip and IcpFilterBar are deleted (the kill switch, agent switches and paused accounts live on /agents).
 Local `npm run dev` shares the pooler's 15 session slots with production: expect occasional EMAXCONNSESSION 500s locally.
 
+### 5.bx Investor lists in the ICP builder (2026-10-27, feat/investor-icp, app-only, no migration)
+
+A teammate on Telegram: "the ICP builder does not really work for investment — which rounds, what they target (SaaS or
+consumer), and VC job roles are missing." `lib/icp.ts` gains a role group **Investors (VC)** (General / Managing /
+Founding Partner, Partner, Venture Partner, Principal, Investment Director / Manager, VP, Associate, Analyst, Business
+Angel; no LinkedIn function on purpose) and the investor vocabulary (`INVESTOR_STAGES`, `_SECTORS`, `_EXCLUDE_SECTORS`,
+`_REGIONS`, `_TITLES`, `_INDUSTRIES`, `_EXCLUDES`, `isInvestorList` = the list has a `firm_brief`). `IcpBuilder` has a
+**This list is for: Customers | Investors** switch; Investors fills empty roles / industries / exclusions with the VC
+defaults, hides "Suggest ICPs", and adds section 3 **What should the fund invest in?** (rounds, investment focus, out if
+only, regions, round size + currency, our country, latest fund year, pitch) = the firm brief (§5.bc), saved after the
+list through `POST /api/icp/[id]/firms/brief` (re-judges every firm already on it). Opening a list with a brief shows it
+as Investors. The kernel brief rules are unchanged (`policy/firms.eligibility`).
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
