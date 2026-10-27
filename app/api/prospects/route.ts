@@ -41,8 +41,8 @@ export async function GET(req: NextRequest) {
   const values: unknown[] = [];
   const add = (sql: (n: number) => string, v: unknown) => { values.push(v); filters.push(sql(values.length)); };
 
+  // Prospects are shared with the whole team (2026-10-27); `mine=true` narrows to your own.
   if (ownerOnly) add((n) => `p.owner_user_id = $${n}`, session.userId);
-  else if (!isAdmin) add((n) => `(p.owner_user_id = $${n} OR p.owner_user_id IS NULL)`, session.userId);
   if (campaignId) add((n) => `p.campaign_id = $${n}`, campaignId);
   if (replyStatus) add((n) => `p.reply_status = $${n}`, replyStatus);
   if (q) add((n) => `(c.full_name ILIKE $${n} OR a.name ILIKE $${n} OR c.email ILIKE $${n} OR c.title ILIKE $${n})`,

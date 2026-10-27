@@ -16,7 +16,7 @@ import { FUNNEL_LABELS, type FunnelStage } from '@/lib/funnel';
  *
  * Visibility is the screen's own rule, enforced here and not trusted from the caller:
  *   sales leads  — org-wide inbox (everyone sees it, like the page);
- *   prospects    — mine + unowned; admins see all (like /api/prospects);
+ *   prospects    — the whole team's (like /api/prospects); mine=1 narrows to your own;
  *   ICP          — any teammate (every list is visible to everyone since 2026-10-26; visibleIcp);
  *   warm people  — team-wide, like the page (relationships the TEAM has, as on the shared /network map).
  */
@@ -263,11 +263,9 @@ function prospectCols(): Col<ProspectRow>[] {
 }
 
 async function prospects(args: Record<string, string>, who: Who): Promise<Built> {
-  const isAdmin = who.role === 'admin';
   const where: string[] = [];
   const vals: unknown[] = [];
   if (args.mine === '1' || args.mine === 'true') { vals.push(who.userId); where.push(`p.owner_user_id = $${vals.length}`); }
-  else if (!isAdmin) { vals.push(who.userId); where.push(`(p.owner_user_id = $${vals.length} OR p.owner_user_id IS NULL)`); }
   if (args.stage) { vals.push(args.stage); where.push(`p.stage = $${vals.length}`); }
   if (args.reply_status) { vals.push(args.reply_status); where.push(`p.reply_status = $${vals.length}`); }
   if (args.icp_id) { vals.push(args.icp_id); where.push(`p.icp_profile_id = $${vals.length}`); }
