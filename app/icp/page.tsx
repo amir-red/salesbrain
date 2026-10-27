@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
-import IcpBuilder from '@/components/icp/IcpBuilder';
+import IcpWizard from '@/components/icp/IcpWizard';
 import ListFunnelCard, { AllListsCard } from '@/components/icp/ListFunnelCard';
 import type { RunMode } from '@/components/icp/IcpRow';
 import type { IcpProfile } from '@/lib/icp';
@@ -103,7 +103,7 @@ export default function IcpPage() {
               <button onClick={() => setMode({ kind: 'list' })} className="text-sm" style={{ color: 'var(--text-muted)' }}>← Lists</button>
               <h1 className="text-2xl font-semibold">{mode.kind === 'new' ? 'New list' : `Edit · ${mode.profile.name}`}</h1>
             </div>
-            <IcpBuilder
+            <IcpWizard
               initial={mode.kind === 'edit' ? mode.profile : null}
               onSaved={() => { setMode({ kind: 'list' }); void refresh(); }}
               onCancel={() => setMode({ kind: 'list' })}

@@ -2574,6 +2574,15 @@ Steps are CUMULATIVE (everyone who got at least that far) from `person_funnel` (
 `GET /api/icp/overview` returns `funnel` per list and `funnel_total` (two more queries on the same client).
 FleetStrip and IcpFilterBar are deleted (the kill switch, agent switches and paused accounts live on /agents).
 Local `npm run dev` shares the pooler's 15 session slots with production: expect occasional EMAXCONNSESSION 500s locally.
+**New / edit list = a wizard (2026-10-27, Amir: "a bunch of forms; no one knows what to fill").** `components/icp/IcpWizard.tsx`
+replaced IcpBuilder: Purpose (Customers / Investors cards + optional "Draft it" from a website via `/api/icp/optimize`) → Who →
+Fund focus (investors) → Companies / Funds → Skip → Check and save (one line per step, tap to change; empty name = suggested).
+Common choices are one-tap chips, the rest of the vocabulary is found by typing; long explanations sit behind ⓘ. The side panel
+re-scores your contacts ~1.2 s after a change (`/api/icp/preview`). Edit opens on the last step; a hand-made list
+(objective 'list') or an investor list with a fund focus saves without roles. Only WHO belongs on the list is asked: description,
+pitch (product / hook / language), first message and scoring weights moved to the collapsible **Outreach settings** card on
+`/icp/[id]` (`components/icp/ListSettings.tsx`) and pass through a wizard save unchanged. Icons: one shared line set in
+`components/icons.tsx` (`components/sales-leads/icons.tsx` re-exports it).
 
 ### 5.bx Investor lists in the ICP builder (2026-10-27, feat/investor-icp, app-only, no migration)
 

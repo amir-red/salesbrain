@@ -3,12 +3,13 @@
 import OwnerControl from '@/components/icp/OwnerControl';
 import SeatsControl from '@/components/icp/SeatsControl';
 import TuningPanel from '@/components/icp/TuningPanel';
+import ListSettings from '@/components/icp/ListSettings';
 import FunnelStrip from '@/components/panel/FunnelStrip';
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
-import IcpBuilder from '@/components/icp/IcpBuilder';
+import IcpWizard from '@/components/icp/IcpWizard';
 import LeadsTable from '@/components/icp/LeadsTable';
 import FirmsSection from '@/components/firms/FirmsSection';
 import EmailOutreachSection from '@/components/email/EmailOutreachSection';
@@ -137,13 +138,14 @@ export default function IcpPanelPage() {
         {error && data && <div className="mx-4 mt-3 rounded-lg px-3 py-2 text-[11px]" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>Last refresh failed ({error}); showing the previous data.</div>}
 
         {data && editing && (
-          <IcpBuilder initial={data.icp} onSaved={() => { setEditing(false); void refresh(); }} onCancel={() => setEditing(false)} />
+          <IcpWizard initial={data.icp} onSaved={() => { setEditing(false); void refresh(); }} onCancel={() => setEditing(false)} />
         )}
 
         {data && !editing && (
           <div className="p-4 space-y-4">
             <FunnelStrip compact query={{ icp_id: id }} title="This list's funnel" href={`/funnel?icp_id=${id}`} />
             <TuningPanel icpId={id} onApplied={(n) => { setNote(n); void refresh(); }} />
+            <ListSettings icpId={id} onSaved={(n) => { setNote(n); void refresh(); }} />
             {data.blockers.length > 0 && (
               <div className="rounded-xl px-4 py-3 text-xs space-y-0.5" style={{ background: 'color-mix(in srgb, var(--yellow) 8%, transparent)', border: '1px solid var(--yellow)' }}>
                 <div className="font-medium" style={{ color: 'var(--yellow)' }}>The Leads Finder will not run for this ICP right now</div>
