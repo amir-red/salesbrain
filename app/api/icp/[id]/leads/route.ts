@@ -72,7 +72,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
                 'rung', lk.detail->>'rung', 'discovered', COALESCE(lk.detail->'discovered', '[]'::jsonb),
                 'possible', COALESCE(lk.detail->'possible', '[]'::jsonb),
                 'queries', COALESCE(lk.detail->'queries', '[]'::jsonb)) END AS profile_lookup
-       FROM prospects p
+       FROM leads p -- the one table (088): the prospects view lacks the card columns such as priority
        LEFT JOIN contacts c ON c.id = p.contact_id
        LEFT JOIN accounts a ON a.id = p.account_id
        -- the newest connection request to this person, sent by us or by hand
@@ -105,7 +105,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
               count(*) FILTER (WHERE research_summary IS NOT NULL)::int AS researched,
               count(*) FILTER (WHERE engaged_at IS NOT NULL)::int AS engaged,
               count(*) FILTER (WHERE stage IN ('P8_DISQUALIFIED','P9_ARCHIVED'))::int AS archived
-       FROM prospects p WHERE p.icp_profile_id = $1`,
+       FROM leads p WHERE p.icp_profile_id = $1`,
       [params.id],
     ),
   ]);

@@ -31,7 +31,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       `SELECT p.*, a.name as company_name, a.domain, a.industry, a.company_size, a.hq_location, a.website,
               c.full_name, c.email, c.title, c.seniority, c.persona_type, c.phone, c.linkedin_url,
               u.name as owner_name, i.name AS list_name ${cohortCols}
-       FROM prospects p
+       FROM leads p -- the one table (088): the prospects view lacks the card columns such as priority
        LEFT JOIN accounts a ON a.id = p.account_id
        LEFT JOIN contacts c ON c.id = p.contact_id
        LEFT JOIN users u ON u.id = p.owner_user_id

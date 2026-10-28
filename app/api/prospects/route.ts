@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
   if (q) add((n) => `(c.full_name ILIKE $${n} OR a.name ILIKE $${n} OR c.email ILIKE $${n} OR c.title ILIKE $${n})`,
              `%${q.replace(/[%_\\]/g, '\\$&')}%`);
 
-  const from = `FROM prospects p
+  const from = `FROM leads p -- the one table (088): the prospects view lacks the card columns such as priority
      LEFT JOIN accounts a ON a.id = p.account_id
      LEFT JOIN contacts c ON c.id = p.contact_id`;
   const baseWhere = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
