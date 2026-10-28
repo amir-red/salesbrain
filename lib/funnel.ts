@@ -108,3 +108,55 @@ export function pct(v: number | null | undefined): string {
   const p = v * 100;
   return p >= 10 || p === 0 ? `${Math.round(p)}%` : `${p.toFixed(1)}%`;
 }
+
+/**
+ * The funnel as drawn on /dashboard (2026-10-28): six steps, each one or more kernel stages. Scored folds into
+ * Sourced and Meeting / Qualified into Engaged — they are chips on the step, not steps of their own, so the shape
+ * narrows the way the team reads it. `reached` of a merged step = the first member's (the widest), `current` = the
+ * members' sum, conversion = the next step's reached over this one's.
+ */
+export const DRAWN_STEPS: { key: string; label: string; members: FunnelStage[]; group: FunnelGroup }[] = [
+  { key: 'sourced', label: 'Sourced', members: ['prospect_sourced', 'prospect_scored'], group: 'prospect' },
+  { key: 'ready', label: 'Ready to reach', members: ['prospect_ready'], group: 'prospect' },
+  { key: 'contacted', label: 'Contacted', members: ['lead_contacted'], group: 'lead' },
+  { key: 'engaged', label: 'Engaged', members: ['lead_engaged', 'lead_meeting', 'lead_qualified'], group: 'lead' },
+  { key: 'opportunity', label: 'Opportunity', members: ['opportunity'], group: 'opportunity' },
+  { key: 'client', label: 'Client', members: ['client'], group: 'client' },
+];
+
+export interface DrawnStep {
+  key: string; label: string; group: FunnelGroup; meaning: string;
+  reached: number; current: number; direct: number;
+  /** Share of this step's reached that reached the next drawn step; null on the last step. */
+  conversion: number | null;
+  /** Sub-counts worth a chip: member stages after the first (their current) and the first member's substages. */
+  chips: { n: number; label: string }[];
+  exits: { n: number; label: string }[];
+  entered?: number;
+}
+
+export function drawnSteps(s: FunnelSummary): DrawnStep[] {
+  const byKey = new Map(s.stages.map((r) => [r.key, r]));
+  const steps = DRAWN_STEPS.map((d) => {
+    const rows = d.members.map((k) => byKey.get(k)).filter((r): r is FunnelStageRow => !!r);
+    const first = rows[0];
+    const chips: DrawnStep['chips'] = [];
+    for (const [k, n] of Object.entries(first?.substages ?? {})) if (n) chips.push({ n, label: SUBSTAGE_LABELS[k] ?? k });
+    for (const r of rows.slice(1)) chips.push({ n: r.current, label: r.label.toLowerCase() });
+    const exits: Record<string, number> = {};
+    for (const r of rows) for (const [k, n] of Object.entries(r.exits)) exits[k] = (exits[k] ?? 0) + (n ?? 0);
+    const entered = rows.some((r) => r.entered !== undefined) ? rows.reduce((n, r) => n + (r.entered ?? 0), 0) : undefined;
+    return {
+      key: d.key, label: d.label, group: d.group, meaning: first?.meaning ?? '',
+      reached: first?.reached ?? 0, current: rows.reduce((n, r) => n + r.current, 0),
+      direct: rows.reduce((n, r) => n + r.direct, 0), conversion: null as number | null, chips,
+      exits: Object.entries(exits).filter(([, n]) => n).map(([k, n]) => ({ n, label: FUNNEL_EXITS[k as keyof typeof FUNNEL_EXITS] ?? k })),
+      entered,
+    };
+  });
+  steps.forEach((st, i) => {
+    const next = steps[i + 1];
+    st.conversion = next && st.reached ? next.reached / st.reached : null;
+  });
+  return steps;
+}

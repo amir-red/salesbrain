@@ -1,19 +1,20 @@
 'use client';
 
 /**
- * "What converts" on /funnel (funnel Phase C): everyone we contacted, as they were at first contact, against how far
+ * "What converts" on /dashboard (funnel Phase C): everyone we contacted, as they were at first contact, against how far
  * they got. Findings and suggestions are for people to act on; nothing changes by itself.
+ *
+ * `useInsights(query)` fetches once; the page hands the result to the KPI tiles, the "What gets answers" card and this
+ * full table, so one request serves all three.
  */
 import { useEffect, useState } from 'react';
 import { pct } from '@/lib/funnel';
 import type { FunnelInsights } from '@/lib/warm';
 
-export default function Insights({ query }: { query: Record<string, string | undefined> }) {
+export function useInsights(query: Record<string, string | undefined>) {
   const [data, setData] = useState<FunnelInsights | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState<string | null>('fit');
   const qs = new URLSearchParams(Object.entries(query).filter(([, v]) => v) as [string, string][]).toString();
-
   useEffect(() => {
     let live = true;
     setData(null); setError(null);
@@ -22,16 +23,18 @@ export default function Insights({ query }: { query: Record<string, string | und
       .catch(() => { if (live) setError('Could not reach the server'); });
     return () => { live = false; };
   }, [qs]);
+  return { data, error };
+}
+
+export default function Insights({ data, error }: { data: FunnelInsights | null; error: string | null }) {
+  const [open, setOpen] = useState<string | null>('fit');
 
   return (
-    <section className="z-panel p-4 space-y-3">
-      <div>
-        <h2 className="text-sm font-semibold">What converts</h2>
-        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          Everyone we contacted, as they were at first contact, against how far they got. Groups under 8 people are shown
-          but never used for a finding.
-        </p>
-      </div>
+    <section className="space-y-3">
+      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+        Everyone we contacted, as they were at first contact, against how far they got. Groups under 8 people are shown
+        but never used for a finding.
+      </p>
       {error && <p className="text-xs" style={{ color: 'var(--red)' }}>{error}</p>}
       {!data && !error && <div className="h-16 rounded-lg animate-pulse" style={{ background: 'var(--bg-input)' }} />}
       {data && (

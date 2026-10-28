@@ -2702,6 +2702,33 @@ or "hand-made list", Enricher coverage, Warm routes, Outreach), Campaigns using 
 header has a Settings drawer (ListSettings, Import firms on a people list, the old email waves folded as "older way").
 Gone from the page: the duplicate "2 · The list" funnel bar, the numbered sections, the top blocker box.
 
+### 5.ca /dashboard replaces /funnel (2026-10-28, feat/funnel-page, app-only, no migration)
+
+Amir: the funnel page had "a lot of text and doesn't represent the title"; then "rename it Dashboard", deep-coloured
+cards, no text cards like "Biggest leak". Picked design 1 of five (canvas https://claude.ai/artifact/RVn4piTh8uZYW66fnzTuyG:
+1 deep cards + funnel, 2 bento, 3 night, 4 icon cards + tables, 5 goals + today). `/funnel` now redirects to `/dashboard`
+(keeps icp_id / owner / lane / view; the old kernel period keys are dropped). Sidebar: "Dashboard" (grid icon) on top.
+- **Deep cards** (`--deep-plum/blue/teal/violet` in globals.css: the same fill in both themes, white text >= 7:1): people
+  who ENTERED Contacted / Answered or met (lead_engaged) / Meeting / Opportunity in the period, a delta against the SAME
+  STRETCH of the previous period (`lib/dashboard.ts::periodBounds`, UTC like kernel `kpis.period_bounds`; periods Today /
+  Week / Month (default) / Quarter, `?period=`), a 12-week sparkline, and a line from the funnel or the findings.
+- **`GET /api/dashboard`** (direct SQL, ONE client, 4 queries; person_funnel + funnel_events from core 086, sliced by
+  icp_id / owner (uuid or 'me') / lane): `current` / `previous` per stage, `weeks` (12 Monday buckets), `lists` (top 5 by
+  contacted: found / contacted / answered / opportunity, cumulative like api/icp/overview), `replies` (newest
+  reply_events, one per person, name + company + 160-char snippet, org-wide like the /sales-leads track record).
+  Returns `history: false` before 086. ~0.2–0.5 s per query from a laptop. NOTE: funnel_events only dates what the
+  ledgers date, so Sept and earlier weeks are thin (contacted entries total ~280 vs 479 reached).
+- **Funnel card** (`components/funnel/FunnelChart.tsx`): stacked trapezoids (sqrt widths, color-mix ramp of `--accent`) +
+  reached / step / % from the step before, weakest step orange (`weakestStep`: previous step >= 8 people), click a step for
+  its meaning, sub-counts, exits and "See the people →"; footer = contacted → opportunity. Lane select and People |
+  Companies live in its header. `lib/funnel.ts::drawnSteps` folds Scored into Sourced, Meeting/Qualified into Engaged.
+- **Weekly chart** contacted vs answered-or-met (`--series-1/2`, validated both themes). **Lists**, **Latest answers**
+  (→ `/sales-leads?q=&open=`), **What gets answers** (insights rows of first_channel + lane with enough people, bar per
+  answer rate against the average line). "More" folds the full findings (`Insights`), channels / exits / definitions
+  (`components/funnel/FunnelMore.tsx`).
+- Not seen rendered by Claude (Chrome extension not connected). Not built: goals, today's meetings / follow-ups (design 5),
+  an Export button.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

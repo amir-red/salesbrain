@@ -47,7 +47,7 @@ export function RailFunnel({ icpId }: { icpId: string }) {
   const top = data?.people ?? 0;
   const rows: [string, number][] = [['On the list', top], ...STEPS.map(([k, l]) => [l, reached(k)] as [string, number])];
   return (
-    <Card title="Funnel" right={<Link href={`/funnel?icp_id=${icpId}`} className={linkBtn} style={muted}>Full funnel</Link>}>
+    <Card title="Funnel" right={<Link href={`/dashboard?icp_id=${icpId}`} className={linkBtn} style={muted}>Full funnel</Link>}>
       {error && <p className="text-xs" style={{ color: 'var(--red)' }}>{error}</p>}
       {!data && !error && <p className="text-xs" style={muted}>Loading…</p>}
       {data && rows.map(([label, n], i) => {
