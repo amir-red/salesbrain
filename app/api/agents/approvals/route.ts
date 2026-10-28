@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
      LEFT JOIN icp_profiles i ON i.id = COALESCE(oa.icp_profile_id, p.icp_profile_id)
      LEFT JOIN users u ON u.id = oa.owner_user_id
      ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-     ORDER BY ${rate ? 'COALESCE(oa.decided_at, oa.created_at)' : 'oa.created_at'} DESC LIMIT ${rate ? 20 : 100}`, values);
+     ORDER BY ${rate ? 'COALESCE(oa.decided_at, oa.created_at) DESC' : 'i.priority NULLS LAST, oa.created_at DESC'} LIMIT ${rate ? 20 : 100}`, values);
   return NextResponse.json(rows);
 }
 

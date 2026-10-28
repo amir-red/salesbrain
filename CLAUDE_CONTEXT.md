@@ -2667,6 +2667,27 @@ an ICP, so prioritization goes all the way from outreach, focus, onboarding into
 - **Lists page**: Grid | List switch (grid default, remembered in `localStorage icp.layout`); the list view is one line
   per list with the six funnel numbers, step rates (weakest in orange), conversion and "N to approve" (`ListTableRow`).
 
+### 5.ca A priority on the list itself (2026-10-28, feat/list-priority, core/hermes 0.71.0, migration 092)
+
+Amir, on the Lists grid: "how can we prioritise the ICP itself, what happens then, rank them in the UI, remove the numbers
+behind every list." Options drawn on the real card (canvas https://claude.ai/artifact/UY2ZWrUVda1fto37XeHicy); Amir chose
+**A — the same P-pill as on a person**, with the All-lists summary card kept.
+- **092**: `icp_profiles.priority` 1 = top … 10, NULL = not set (same scale as `leads.priority`); the cohort number leaves the
+  NAME ("5 · NRW …" → "NRW …", `cohorts._list_name` too) and stays in `cohort->>'number'`.
+- **Set it**: `priority.set_priority(actor, p, icp_id=)` — owner or admin, audit `icp_priority` (a person's stays any
+  teammate); ring `crm_set_priority {icp_id}`; `POST /api/priority {icp_id}`; `PriorityPicker icpId` on the list card, the
+  list view line (new Prio column) and the list page header. `crm_icp_list` / `GET /api/icp/overview` carry `priority`.
+- **What it changes, top-down everywhere**: Leads Finder plan (`i.priority` before `last_run_at` within an owner),
+  Enricher plan, outreach + follow-up queues (`eff_priority = COALESCE(p.priority, i.priority)` before fit), the firm
+  research / people sweeps (automatic batches take the top list first; hand-queued firms keep their queue order), the
+  Lead Conductor's daily connect batch (`batch_pick`: a person's own priority, else `list_priority`), the due lists /
+  Needs you / `/sales-leads` sorts and the Excel export (`COALESCE(l.priority, ip.priority)`), `/prospecting`, and
+  `/api/agents/approvals` (list priority, then newest). **A person with no priority of their own sorts as their list's;
+  a number set by hand on the person always wins; nothing is written to the person's row.**
+- **Lists page**: sort "Priority first" (default; unset last, then most contacted), filter Any · P1–P3 · Any set · Not set.
+- Not built: Parked / tiers (option C), drag ordering (B), the digests leading with the top list (the due digest follows
+  the due order already), a knowledge entry.
+
 ### 5.by /icp/[id] = leads table + rail (2026-10-28, feat/icp-cockpit, app-only, no migration)
 
 Amir picked design B of three (canvas https://claude.ai/artifact/4y5C8A6rZ7Xg7a5ZWkdDe3). The leads table is the page (left,

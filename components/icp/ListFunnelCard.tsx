@@ -10,6 +10,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import PriorityPicker from '@/components/PriorityPicker';
 import { LIST_FUNNEL_STEPS, LIST_LANE_LABELS, blockersFor, rateLabel, stepRates, weakestStep } from '@/lib/icp-panel';
 import type { ListFunnel, OverviewIcp, OwnerQuota } from '@/lib/icp-panel';
 import type { IcpAgentState } from '@/lib/icp';
@@ -83,7 +84,7 @@ export function AllListsCard({ f, lists }: { f: ListFunnel; lists: number }) {
 }
 
 /** One list. Name, owner and how people came in; its funnel; the conversion rate. Actions sit behind a menu. */
-export default function ListFunnelCard({ icp, quota, viewerUserId, isAdmin, fleet, hold, busy, onRun, onState, onArchive }: {
+export default function ListFunnelCard({ icp, quota, viewerUserId, isAdmin, fleet, hold, busy, onRun, onState, onArchive, onChanged }: {
   icp: OverviewIcp; quota: OwnerQuota | null; viewerUserId: string; isAdmin: boolean;
   fleet: { kill_switch: boolean; leads_finder_enabled: boolean };
   hold?: string | null;
@@ -91,6 +92,8 @@ export default function ListFunnelCard({ icp, quota, viewerUserId, isAdmin, flee
   onRun: (mode: RunMode) => Promise<Record<string, unknown>>;
   onState: (state: 'running' | 'paused') => Promise<void>;
   onArchive: () => Promise<void>;
+  /** After the list's priority changed on the card (092): reload the overview. */
+  onChanged?: () => void;
 }) {
   const [menu, setMenu] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -163,6 +166,7 @@ export default function ListFunnelCard({ icp, quota, viewerUserId, isAdmin, flee
           </p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
+          <PriorityPicker value={icp.priority ?? null} icpId={icp.id} readOnly={!canEdit} onChanged={() => onChanged?.()} />
           {lane && (
             <span className="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap"
                   style={{ background: 'color-mix(in srgb, var(--accent) 10%, transparent)', color: 'var(--accent)' }}>{lane}</span>
@@ -214,13 +218,15 @@ export default function ListFunnelCard({ icp, quota, viewerUserId, isAdmin, flee
 
 
 /** The list view of /icp (2026-10-28): one compact line per list, the same numbers as the card. */
-export function ListTableRow({ icp, viewerUserId }: { icp: OverviewIcp; viewerUserId: string }) {
+export function ListTableRow({ icp, viewerUserId, isAdmin, onChanged }: { icp: OverviewIcp; viewerUserId: string; isAdmin?: boolean; onChanged?: () => void }) {
   const f = icp.funnel;
   const isOwner = icp.owner_user_id === viewerUserId;
+  const canEdit = isOwner || Boolean(isAdmin);
   const rates = f ? stepRates(f) : null;
   const weak = f ? weakestStep(f) : null;
   return (
     <tr style={{ borderTop: '1px solid var(--border)' }}>
+      <td className="p-2"><PriorityPicker value={icp.priority ?? null} icpId={icp.id} readOnly={!canEdit} onChanged={() => onChanged?.()} /></td>
       <td className="p-2">
         <Link href={`/icp/${icp.id}`} className="font-medium hover:underline">{icp.name}</Link>
         <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{isOwner ? 'You' : icp.owner_name}{icp.paused_at ? ' · paused' : ''}</div>

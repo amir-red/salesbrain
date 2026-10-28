@@ -125,6 +125,7 @@ async function salesLeads(args: Record<string, string>, who: Who): Promise<Built
          LEFT JOIN users r ON r.id = l.responsible_user_id
          LEFT JOIN users f ON f.id = l.front_user_id
          LEFT JOIN prospects p ON p.id = l.prospect_id
+         LEFT JOIN icp_profiles ip ON ip.id = p.icp_profile_id
          LEFT JOIN users ou ON ou.id = p.owner_user_id
          ${clause}
         ORDER BY ${SORTS[sort]} LIMIT ${SHEET_ROW_CAP}`, vals);

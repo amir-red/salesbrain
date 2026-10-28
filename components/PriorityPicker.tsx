@@ -3,13 +3,14 @@
 /**
  * The one person priority (1 = top … 10, blank = not set), the same number on a prospect, a lead card and the
  * opportunity it becomes (2026-10-28). Shown as a coloured P-badge; click to change. Saves through POST /api/priority
- * (kernel `crm_set_priority`, audited). Pass `prospectId` for a lead row, `dealId` for an opportunity.
+ * (kernel `crm_set_priority`, audited). Pass `prospectId` for a lead row, `dealId` for an opportunity, `icpId` for a list
+ * (092: agents serve lists top-down; owner or admin only).
  */
 import { useState } from 'react';
 import { PRIORITY_LEVELS, priorityLevel } from '@/lib/sales-leads';
 
-export default function PriorityPicker({ value, prospectId, dealId, size = 'sm', readOnly, onChanged }: {
-  value: number | null | undefined; prospectId?: string; dealId?: string; size?: 'sm' | 'md'; readOnly?: boolean;
+export default function PriorityPicker({ value, prospectId, dealId, icpId, size = 'sm', readOnly, onChanged }: {
+  value: number | null | undefined; prospectId?: string; dealId?: string; icpId?: string; size?: 'sm' | 'md'; readOnly?: boolean;
   onChanged?: (priority: number | null) => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -19,7 +20,7 @@ export default function PriorityPicker({ value, prospectId, dealId, size = 'sm',
     setBusy(true); setErr(null);
     try {
       const res = await fetch('/api/priority', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prospect_id: prospectId, deal_id: dealId, priority: next }) });
+        body: JSON.stringify({ prospect_id: prospectId, deal_id: dealId, icp_id: icpId, priority: next }) });
       const out = await res.json().catch(() => ({}));
       if (!res.ok || out.error) { setErr(out.error || 'Not saved'); return; }
       onChanged?.(next || null);
@@ -30,7 +31,7 @@ export default function PriorityPicker({ value, prospectId, dealId, size = 'sm',
     background: lvl ? `color-mix(in srgb, ${lvl.color} 14%, transparent)` : 'var(--bg-input)',
     color: lvl ? lvl.color : 'var(--text-muted)', border: `1px solid ${lvl ? 'transparent' : 'var(--border)'}`,
   } as const;
-  if (readOnly || (!prospectId && !dealId)) {
+  if (readOnly || (!prospectId && !dealId && !icpId)) {
     return <span className={`inline-flex items-center rounded-md font-semibold tabular-nums ${pad}`} style={style} title={lvl ? `priority ${lvl.label}` : 'no priority set'}>{lvl ? lvl.short : '—'}</span>;
   }
   return (

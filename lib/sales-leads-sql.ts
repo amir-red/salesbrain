@@ -4,11 +4,12 @@ import { QUIET_WARN_DAYS, type LeadSort } from '@/lib/sales-leads';
 
 export const SORTS: Record<LeadSort, string> = {
   // Order numbers are per list (each import brought its own), so within a priority the list comes before the order.
-  priority: 'l.priority NULLS LAST, l.source NULLS LAST, l.rank NULLS LAST, l.must_talk DESC, l.next_contact_at NULLS LAST, l.last_contact_at DESC NULLS LAST, l.created_at DESC',
-  contact: 'COALESCE(l.last_contact_at, l.created_at) ASC, l.priority NULLS LAST, l.rank NULLS LAST',
+  // A person with no priority of their own sorts as their list's (092; `ip` = the prospect's list).
+  priority: 'COALESCE(l.priority, ip.priority) NULLS LAST, l.source NULLS LAST, l.rank NULLS LAST, l.must_talk DESC, l.next_contact_at NULLS LAST, l.last_contact_at DESC NULLS LAST, l.created_at DESC',
+  contact: 'COALESCE(l.last_contact_at, l.created_at) ASC, COALESCE(l.priority, ip.priority) NULLS LAST, l.rank NULLS LAST',
   newest: 'l.created_at DESC',
   // needs the `warmth` output column (the /sales-leads list selects it; the export falls back to priority)
-  warmth: 'warmth DESC NULLS LAST, l.priority NULLS LAST, l.rank NULLS LAST, l.created_at DESC',
+  warmth: 'warmth DESC NULLS LAST, COALESCE(l.priority, ip.priority) NULLS LAST, l.rank NULLS LAST, l.created_at DESC',
 };
 
 /** Teammates for the back / front office pickers: real logins, no service stubs. */

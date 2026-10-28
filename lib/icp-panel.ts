@@ -118,9 +118,11 @@ export interface IcpListFilter {
   state: 'all' | 'running' | 'paused' | 'held';
   pendingOnly: boolean;
   noLinkedin: boolean;
+  /** The list's priority (092): any · P1–P3 · any set · not set. */
+  priority: 'all' | 'top' | 'set' | 'none';
 }
 export const EMPTY_ICP_FILTER: IcpListFilter = {
-  q: '', owner: 'all', product: 'all', state: 'all', pendingOnly: false, noLinkedin: false,
+  q: '', owner: 'all', product: 'all', state: 'all', pendingOnly: false, noLinkedin: false, priority: 'all',
 };
 
 function icpState(icp: OverviewIcp, held: boolean): IcpListFilter['state'] {
@@ -140,6 +142,10 @@ export function applyIcpFilters(
     const held = Boolean(holdsByOwner[icp.owner_user_id]?.leads_finder);
     if (filter.state !== 'all' && icpState(icp, held) !== filter.state) return false;
     if (filter.pendingOnly && icp.approvals.pending <= 0) return false;
+    const pr = icp.priority ?? null;
+    if (filter.priority === 'top' && !(pr !== null && pr <= 3)) return false;
+    if (filter.priority === 'set' && pr === null) return false;
+    if (filter.priority === 'none' && pr !== null) return false;
     if (filter.noLinkedin && icp.owner_can_source !== false) return false;
     if (q && !(icp.name.toLowerCase().includes(q) || icp.owner_name.toLowerCase().includes(q)
         || (icp.description ?? '').toLowerCase().includes(q))) return false;

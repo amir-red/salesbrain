@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
                  FROM icp_agent_state WHERE icp_profile_id = i.id) s) AS agent_state
          FROM icp_profiles i JOIN users u ON u.id = i.owner_user_id
         WHERE i.is_active AND ${estate ? 'TRUE' : 'i.owner_user_id = $1'}
-        ORDER BY ${estate ? '(SELECT count(*) FROM prospects p WHERE p.icp_profile_id = i.id) DESC,' : ''} i.updated_at DESC`,
+        ORDER BY i.priority NULLS LAST, ${estate ? '(SELECT count(*) FROM prospects p WHERE p.icp_profile_id = i.id) DESC,' : ''} i.updated_at DESC`,
       estate ? [] : [session.userId],
     );
   const rules = await client.query(`SELECT value FROM policy_rules WHERE key = 'agents.enricher'`);

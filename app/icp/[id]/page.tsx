@@ -5,6 +5,7 @@ import SeatsControl from '@/components/icp/SeatsControl';
 import TuningPanel from '@/components/icp/TuningPanel';
 import ListSettings from '@/components/icp/ListSettings';
 import CohortHeader from '@/components/icp/CohortHeader';
+import PriorityPicker from '@/components/PriorityPicker';
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -116,7 +117,7 @@ export default function IcpPanelPage() {
             </h1>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
               {data ? <><OwnerControl icpId={id} ownerId={data.icp.owner_user_id} ownerName={data.icp.owner_name} isOwner={data.is_owner}
-                  canEdit={data.can_edit} onChanged={(n) => { setNote(n); void refresh(); }} /> · {lastAt ? `updated ${relativeTime(lastAt.toISOString())}` : ''} · <button onClick={() => refresh()} className="underline">refresh</button></> : 'The whole journey for this list, and what the machinery is doing at each step.'}
+                  canEdit={data.can_edit} onChanged={(n) => { setNote(n); void refresh(); }} /> · <PriorityPicker value={data.icp.priority ?? null} icpId={id} readOnly={!data.can_edit} onChanged={() => void refresh()} /> · {lastAt ? `updated ${relativeTime(lastAt.toISOString())}` : ''} · <button onClick={() => refresh()} className="underline">refresh</button></> : 'The whole journey for this list, and what the machinery is doing at each step.'}
             </p>
             {data && (
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
