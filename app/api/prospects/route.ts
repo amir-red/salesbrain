@@ -18,7 +18,7 @@ const CreateProspectSchema = z.object({
 
 /**
  * GET /api/prospects — one page of the prospects list for /prospecting.
- * Query: stage, mine=true, campaign_id, reply_status, q (name / company / email / title), limit (≤500, default 100), offset.
+ * Query: stage, mine=true, icp_id, warm=1, campaign_id, reply_status, q (name / company / email / title), limit (≤500, default 100), offset.
  * Answers { rows, total, counts, limit, offset }: `total` matches every filter, `counts` is per stage over every
  * filter EXCEPT stage (so the stage chips stay right while one is selected). Visibility: regular users see their own
  * prospects and unowned ones; admins see all. One checked-out client, queries in sequence (pooler rule).
@@ -44,6 +44,11 @@ export async function GET(req: NextRequest) {
   // Prospects are shared with the whole team (2026-10-27); `mine=true` narrows to your own.
   if (ownerOnly) add((n) => `p.owner_user_id = $${n}`, session.userId);
   if (campaignId) add((n) => `p.campaign_id = $${n}`, campaignId);
+  // One place for lists and prospects (Mateo, 2026-10-27): narrow to one list, or to people a teammate knows.
+  const icpId = params.get('icp_id');
+  if (icpId && /^[0-9a-f-]{36}$/i.test(icpId)) add((n) => `p.icp_profile_id = $${n}`, icpId);
+  if (params.get('warm') === '1') filters.push(
+    `EXISTS (SELECT 1 FROM person_warmth w WHERE w.person_id = p.person_id AND w.band IN ('hot', 'warm'))`);
   if (replyStatus) add((n) => `p.reply_status = $${n}`, replyStatus);
   if (q) add((n) => `(c.full_name ILIKE $${n} OR a.name ILIKE $${n} OR c.email ILIKE $${n} OR c.title ILIKE $${n})`,
              `%${q.replace(/[%_\\]/g, '\\$&')}%`);

@@ -74,6 +74,10 @@ export function AllListsCard({ f, lists }: { f: ListFunnel; lists: number }) {
         Conversion rate <b className="text-lg tabular-nums">{rateLabel(f.opportunity, f.contacted)}</b>
         <span className="text-xs ml-1.5" style={{ opacity: 0.8 }}>contacted → opportunity</span>
       </p>
+      <div className="flex gap-3 text-xs" style={{ opacity: 0.9 }}>
+        <Link href="/prospecting" className="underline">All prospects →</Link>
+        <Link href="/prospecting?warm=1" className="underline">Warm people →</Link>
+      </div>
     </article>
   );
 }
