@@ -2669,6 +2669,9 @@ an ICP, so prioritization goes all the way from outreach, focus, onboarding into
 
 ### 5.ca A priority on the list itself (2026-10-28, feat/list-priority, core/hermes 0.71.0, migration 092)
 
+**LIVE 2026-10-28 18:05 Addis (0.71.0)**: 092 applied (11 cohort lists renamed, no clashes), ring deployed (smoke 0.71.0),
+app on Production. Checked: set + clear P1 on NRW through the kernel as Amir. No list has a priority yet — set them on /icp.
+
 Amir, on the Lists grid: "how can we prioritise the ICP itself, what happens then, rank them in the UI, remove the numbers
 behind every list." Options drawn on the real card (canvas https://claude.ai/artifact/UY2ZWrUVda1fto37XeHicy); Amir chose
 **A — the same P-pill as on a person**, with the All-lists summary card kept.
