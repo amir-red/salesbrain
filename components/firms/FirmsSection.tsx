@@ -65,7 +65,9 @@ export default function FirmsSection({ icpId, canEdit, hideWhenEmpty, onCount }:
   const visible = pageSize ? firms.slice(page * pageSize, (page + 1) * pageSize) : firms;
 
   const c = data?.counts;
-  // A people list with no firms: one slim line instead of a whole card.
+  // A people list with no firms: one slim line instead of a whole card. While loading, a hideable section shows
+  // nothing at all (most lists have no firms; a "Loading…" box that then vanishes is worse than nothing).
+  if (hideWhenEmpty && !data && !importing) return null;
   if (data && !c?.total && !importing) {
     if (hideWhenEmpty) return null;
     return (

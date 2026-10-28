@@ -8,6 +8,12 @@ import { cohortsStored } from '@/lib/cohorts-server';
  * The ICP's list: every prospect the Leads Finder (or a manual search / import)
  * attached to this ICP, best fit first, plus the agent's cursor state and the
  * last run — what the Gojiberry "Leads" tab shows.
+ *
+ * SLIM ROWS (2026-10-28, list-speed): the row carries only what the table draws — the research text, the
+ * qualification reasons and the full profile-lookup detail (candidates) live on GET /api/icp/[id]/leads/[leadId],
+ * fetched when a row is expanded. Before this one list was 1.1 MB (research 350 KB, candidates 290 KB) and took
+ * 15–25 s to arrive; now ~100 KB. The ranked page is picked FIRST (`base`), then the per-row laterals run over
+ * those 300 rows, not the whole list. One checked-out client, queries in sequence (pooler rule).
  */
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
@@ -50,9 +56,18 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     ? 'p.priority NULLS LAST, cs.score DESC NULLS LAST, p.priority_rank NULLS LAST, p.icp_score DESC NULLS LAST, p.created_at DESC'
     : 'p.priority NULLS LAST, p.priority_rank NULLS LAST, p.icp_score DESC NULLS LAST, p.created_at DESC';
 
-  const [leads, state, last, counts] = await Promise.all([
-    pool.query(
-      `SELECT ${cohortCols} p.id, p.stage, p.icp_score, p.fit_label, p.qualification_reason, p.research_summary,
+  const client = await pool.connect();
+  let leads, state, last, counts, pending, connect;
+  try {
+    leads = await client.query(
+      `WITH base AS (
+         SELECT p.* FROM leads p -- the one table (088): the prospects view lacks the card columns such as priority
+         ${cohorts ? 'LEFT JOIN cohort_scores cs ON cs.prospect_id = p.id' : ''}
+         WHERE ${filters.join(' AND ')}
+         -- a cohort is worked by its rank (fit + early-adopter signals + warmth); a hand-ranked list in its own order (050)
+         ORDER BY ${order} LIMIT 300)
+       SELECT ${cohortCols} p.id, p.stage, p.icp_score, p.fit_label,
+              (p.research_summary IS NOT NULL) AS researched,
               p.source_type, p.source_detail, p.linkedin_public_id, p.candidate_location,
               p.network_degree, p.warm_paths, p.priority_rank, p.priority, p.must_talk,
               p.created_at, p.scored_at, p.engaged_at, p.converted_deal_id,
@@ -63,16 +78,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
               (SELECT oa.status FROM outreach_approvals oa
                 WHERE oa.prospect_id = p.id AND oa.kind = 'connect'
                   AND oa.status IN ('pending', 'approved') LIMIT 1) AS connect_approval,
-              -- the newest "find the profile by name" attempt, for leads without one (051)
+              -- the newest "find the profile by name" attempt, for leads without one (051): the verdict and the
+              -- counts only; the candidates themselves come with the lead's detail
               CASE WHEN p.linkedin_public_id IS NULL AND lk.result IS NOT NULL THEN jsonb_build_object(
-                'result', lk.result, 'reason', lk.detail->>'reason',
-                'candidates', COALESCE(lk.detail->'candidates', '[]'::jsonb),
-                'strong', COALESCE(lk.detail->'strong', '[]'::jsonb),
-                'duplicate_of', lk.detail->>'duplicate_of', 'created_at', lk.created_at,
-                'rung', lk.detail->>'rung', 'discovered', COALESCE(lk.detail->'discovered', '[]'::jsonb),
-                'possible', COALESCE(lk.detail->'possible', '[]'::jsonb),
-                'queries', COALESCE(lk.detail->'queries', '[]'::jsonb)) END AS profile_lookup
-       FROM leads p -- the one table (088): the prospects view lacks the card columns such as priority
+                'result', lk.result, 'reason', lk.detail->>'reason', 'created_at', lk.created_at,
+                'candidate_count', jsonb_array_length(COALESCE(lk.detail->'candidates', '[]'::jsonb)),
+                'strong_count', jsonb_array_length(COALESCE(lk.detail->'strong', '[]'::jsonb)),
+                'duplicate_of', lk.detail->>'duplicate_of', 'rung', lk.detail->>'rung',
+                'discovered', (SELECT COALESCE(jsonb_agg(d->'name'), '[]'::jsonb) FROM jsonb_array_elements(COALESCE(lk.detail->'discovered', '[]'::jsonb)) d
+                               WHERE (d->>'landed')::boolean)) END AS profile_lookup
+       FROM base p
        LEFT JOIN contacts c ON c.id = p.contact_id
        LEFT JOIN accounts a ON a.id = p.account_id
        -- the newest connection request to this person, sent by us or by hand
@@ -87,18 +102,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
           WHERE e.prospect_id = p.id AND e.kind = 'linkedin'
           ORDER BY e.created_at DESC LIMIT 1) lk ON true
        ${cohortJoin}
-       WHERE ${filters.join(' AND ')}
-       -- a cohort is worked by its rank (fit + early-adopter signals + warmth); a hand-ranked list in its own order (050)
-       ORDER BY ${order} LIMIT 300`,
+       ORDER BY ${order}`,
       values,
-    ),
-    pool.query(`SELECT * FROM icp_agent_state WHERE icp_profile_id = $1`, [params.id]),
-    pool.query(
+    );
+    state = await client.query(`SELECT * FROM icp_agent_state WHERE icp_profile_id = $1`, [params.id]);
+    last = await client.query(
       `SELECT id, status, trigger, source, started_at, finished_at, analyzed, matched, created, researched, detail, error
        FROM agent_runs WHERE icp_profile_id = $1 AND status <> 'requested' ORDER BY started_at DESC LIMIT 1`,
       [params.id],
-    ),
-    pool.query(
+    );
+    counts = await client.query(
       `SELECT count(*)::int AS total,
               count(*) FILTER (WHERE fit_label = 'strong_fit')::int AS strong,
               count(*) FILTER (WHERE fit_label = 'proceed_with_caution')::int AS proceed,
@@ -107,13 +120,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
               count(*) FILTER (WHERE stage IN ('P8_DISQUALIFIED','P9_ARCHIVED'))::int AS archived
        FROM leads p WHERE p.icp_profile_id = $1`,
       [params.id],
-    ),
-  ]);
-  const pending = await pool.query(
-    `SELECT count(*)::int AS n FROM agent_runs WHERE icp_profile_id = $1 AND status = 'requested'`, [params.id]);
+    );
+    pending = await client.query(
+      `SELECT count(*)::int AS n FROM agent_runs WHERE icp_profile_id = $1 AND status = 'requested'`, [params.id]);
   // What the connect cap still allows right now, for the "queue next" button. Caps follow the account's subscription
   // and the windows are ROLLING (last 24 h / last 7 days) — the kernel's policy/invitations.py, mirrored here.
-  const connect = await pool.query(
+    connect = await client.query(
     `SELECT (SELECT value FROM policy_rules WHERE key = 'agents.linkedin_connect') AS cfg,
             la.id IS NOT NULL AS linkedin, la.id AS account_id,
             COALESCE(la.premium_features::text, '') ILIKE '%sales_navigator%' AS sales_navigator,
@@ -126,6 +138,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
        FROM (SELECT 1) one
        LEFT JOIN linkedin_accounts la ON la.owner_user_id = $1 AND la.revoked_at IS NULL`,
     [icp.owner_user_id]);
+  } finally {
+    client.release();
+  }
   const cc = connect.rows[0] ?? {};
   const raw = { enabled: true, per_day: 5, per_week: 25, no_answer_after_days: 21,
                 per_day_sales_navigator: 25, per_week_sales_navigator: 120, ...(cc.cfg ?? {}) };

@@ -23,6 +23,7 @@ import GraphSection from '@/components/icp/panel/GraphSection';
 import OutreachSection from '@/components/icp/panel/OutreachSection';
 import SectionCard from '@/components/panel/SectionCard';
 import Drawer from '@/components/icp/cockpit/Drawer';
+import { Skeleton, SkeletonCard, SkeletonRows } from '@/components/panel/Skeleton';
 import { AgentsCard, CampaignsCard, NeedsYou, RailFunnel, WhoBelongsCard, type AgentKey } from '@/components/icp/cockpit/Rail';
 import type { PanelPayload } from '@/lib/icp-panel';
 import { usePoll } from '@/lib/use-poll';
@@ -46,7 +47,6 @@ export default function IcpPanelPage() {
   const router = useRouter();
   const [data, setData] = useState<PanelPayload | null>(null);
   const [status, setStatus] = useState<number>(200);
-  const [tick, setTick] = useState(0);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState<RunMode | 'state' | 'archive' | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -60,7 +60,6 @@ export default function IcpPanelPage() {
     setStatus(res.status);
     if (!res.ok) throw new Error(res.status === 404 ? 'Not found, or not yours' : 'Failed to load');
     setData(await res.json());
-    setTick((t) => t + 1);
   }, [id]);
   const { refresh, loading, lastAt, error } = usePoll(load, 30_000);
 
@@ -100,6 +99,8 @@ export default function IcpPanelPage() {
     } finally { setBusy(null); }
   };
 
+  // The list reloads only when the poll sees the list change (counts per stage, coverage, pending cards) — not every 30 s.
+  const leadsSignature = data ? JSON.stringify([data.coverage, data.stages, data.outreach.pending.length, data.icp.updated_at]) : '';
   const canAct = Boolean(data?.is_owner) && (data?.blockers.length ?? 0) === 0;
   const disabledReason = data && !data.is_owner ? 'Runs with the owner’s LinkedIn — only the owner can start it' : data?.blockers[0];
   const runBusy = busy === 'now' || busy === 'queue' || busy === 'enrich' ? busy : null;
@@ -140,6 +141,19 @@ export default function IcpPanelPage() {
           )}
         </div>
 
+        {!data && !error && (
+          <div className="p-4 space-y-3" aria-busy="true">
+            <div className="flex flex-wrap items-start gap-4">
+              <div className="z-panel" style={{ flex: '999 1 560px', minWidth: 0 }}>
+                <div className="p-4 space-y-2"><Skeleton className="h-4 w-32" /><Skeleton className="h-3 w-80" /></div>
+                <SkeletonRows rows={10} />
+              </div>
+              <aside className="space-y-3 w-full lg:max-w-[360px]" style={{ flex: '1 1 300px' }}>
+                <SkeletonCard lines={6} /><SkeletonCard lines={2} /><SkeletonCard lines={4} /><SkeletonCard lines={2} />
+              </aside>
+            </div>
+          </div>
+        )}
         {error && !data && (
           <div className="p-8 text-center text-sm space-y-2" style={{ color: 'var(--text-muted)' }}>
             <p>{status === 404 ? 'This ICP does not exist.' : error}</p>
@@ -164,11 +178,11 @@ export default function IcpPanelPage() {
                   right={data.can_edit && <button type="button" onClick={() => setAddingPeople(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium"
                     style={{ border: '1px solid var(--accent)', color: 'var(--accent)' }}
                     title="Paste rows or upload a CSV / Excel file; new people land on this list, scored against it">Add people</button>}>
-                  <LeadsTable icpId={id} tick={tick} />
+                  <LeadsTable icpId={id} signature={leadsSignature} />
                 </SectionCard>
               </div>
               <aside className="space-y-3 w-full lg:max-w-[360px]" style={{ flex: '1 1 300px' }} aria-label="This list">
-                <RailFunnel icpId={id} />
+                <RailFunnel icpId={id} funnel={data.funnel ?? null} />
                 <NeedsYou data={data} onOpen={() => setDrawer('outreach')} />
                 <AgentsCard data={data} onOpen={setDrawer} onActivity={() => setDrawer('activity')} />
                 <CampaignsCard icpId={id} />

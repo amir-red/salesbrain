@@ -2729,6 +2729,28 @@ cards, no text cards like "Biggest leak". Picked design 1 of five (canvas https:
 - Not seen rendered by Claude (Chrome extension not connected). Not built: goals, today's meetings / follow-ups (design 5),
   an Export button.
 
+### 5.cb /icp/[id] loads in seconds: slim rows, load once, skeletons (2026-10-28, feat/list-speed, app-only, no migration)
+
+Amir, with a network tab: the list page took 15–25 s and showed "Loading…" boxes. Measured: the leads request was 1.1 MB
+(research text 350 KB + profile-lookup candidates 290 KB for 300 rows), downloaded TWICE on open (the table loaded, then the
+page's first 30-s poll bumped `tick` and the table loaded again) and again every 30 s; the DB part was only 0.8 s. The rail's
+funnel went through `kernelCall` (a Python process per load, ~7 s); the list request fanned out 4 queries at once.
+- **Slim rows** (`GET /api/icp/[id]/leads`): the row carries what the table draws — `researched` (bool) instead of the text,
+  `profile_lookup` = verdict + `candidate_count` / `strong_count` / landed `discovered` names (`LookupSummary` in
+  LeadsTable). The ranked page is picked FIRST (`WITH base AS (… ORDER BY … LIMIT 300)`), then the per-row laterals run over
+  300 rows, not 1,769. ONE client, sequential. Measured on NRW: 1.1 MB → 487 KB raw (~100 KB gzipped), DB 824 → 164 ms.
+  **`GET /api/icp/[id]/leads/[leadId]`** = the heavy part (qualification reasons, research text, full lookup with
+  candidates), fetched when a row is expanded ("why" / Pick). `lib/connect.ts::connectState` accepts either shape.
+- **Load once**: `LeadsTable` takes `signature` (coverage + stage counts + pending cards + `icp.updated_at` from the panel)
+  instead of `tick`, so a poll reloads the list only when the list changed. Actions still reload after themselves.
+- **50 rows at a time** ("Show 50 more · N of M"); filters reset the page.
+- **Skeletons** (`components/panel/Skeleton.tsx`: `Skeleton`, `SkeletonRows`, `SkeletonCard`): the page draws its layout
+  before the panel answers; the table shows grey rows; a hideable Firms section renders NOTHING while loading (no vanishing
+  "Loading…" box on people lists).
+- **Rail funnel from SQL**: the panel route adds one query over `person_funnel` (`lib/funnel-sql.ts::FUNNEL_COUNTS`, shared
+  with /api/icp/overview) → `PanelPayload.funnel`; `RailFunnel` reads it, no kernel call. Not seen rendered (Chrome extension
+  not connected). Not done: push updates instead of polling, transaction-mode pooling, a resident Python process.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

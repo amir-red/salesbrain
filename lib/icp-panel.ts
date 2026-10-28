@@ -219,6 +219,8 @@ export interface PanelPayload {
     last_run: AgentRun | null;
   };
   activity: AgentRun[];
+  /** The list's funnel from person_funnel (086), cumulative; null before the projection exists. */
+  funnel?: ListFunnel | null;
 }
 
 /** Stage colours: grey while raw, blue while the machinery works it, green once a human is in the loop, muted when terminal. */

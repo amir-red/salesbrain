@@ -8,10 +8,12 @@ import { DegreeWarm } from '@/components/icp/IcpLeads';
 import { COHORTS, SIGNAL_LABELS, cohortName, type CohortInfo } from '@/lib/cohorts';
 import PriorityPicker from '@/components/PriorityPicker';
 import { CONNECT_COLOR, CONNECT_LABEL, RUNG_LABEL, connectState, describeLookup, type ConnectState, type ProfileLookup } from '@/lib/connect';
+import { SkeletonRows } from '@/components/panel/Skeleton';
 
+/** The slim row GET /api/icp/[id]/leads returns; the heavy parts (`LeadDetail`) load when a row is expanded. */
 export interface Lead {
   id: string; stage: string; icp_score: number | null; fit_label: string | null;
-  qualification_reason: string | null; research_summary: string | null;
+  researched: boolean;
   source_type: string | null; source_detail: string | null; created_at: string; scored_at: string | null;
   engaged_at: string | null; converted_deal_id: string | null;
   full_name: string | null; title: string | null; email: string | null; linkedin_url: string | null;
@@ -22,13 +24,20 @@ export interface Lead {
   priority?: number | null; must_talk?: boolean | null;
   invite_status: string | null; invite_sent_at: string | null; invite_source: string | null;
   invite_error: string | null; connect_approval: string | null;
-  profile_lookup: ProfileLookup | null;
+  /** The verdict of the newest lookup-by-name and its counts; the candidates come with the detail. */
+  profile_lookup: LookupSummary | null;
   // Cohorts (090): the rank, why, and the company in two sentences + facts
   cohort_score?: number | null; cohort_why?: string | null; cohort_signals?: string[] | null;
   cohort_guess?: string | null; cohort_confidence?: string | null; warm_via?: string | null;
   company_summary?: string | null;
   company_facts?: { industry?: string; size?: string; revenue_estimate?: string; locations?: string; ownership?: string } | null;
 }
+export interface LookupSummary {
+  result: string; reason: string | null; created_at: string; candidate_count: number; strong_count: number;
+  duplicate_of: string | null; rung?: string | null; discovered: string[];
+}
+/** GET /api/icp/[id]/leads/[leadId]. */
+interface LeadDetail { qualification_reason: string | null; research_summary: string | null; profile_lookup: ProfileLookup | null }
 interface ConnectInfo {
   linkedin: boolean; enabled: boolean; per_day: number; per_week: number; no_answer_after_days: number;
   sent_today: number; sent_week: number; queued: number;  // ROLLING: last 24 h / last 7 days
@@ -38,6 +47,7 @@ interface Payload { leads: Lead[]; counts: { total: number }; connect?: ConnectI
 
 const CONNECT_FILTERS: ConnectState[] = ['not_invited', 'awaiting_approval', 'pending', 'no_answer', 'connected', 'not_accepted', 'failed', 'awaiting_pick', 'no_profile'];
 const FIND_PER_CLICK = 25;
+const PAGE = 50;
 
 const fitColor = (s: number | null) =>
   s === null ? 'var(--text-muted)' : s >= 75 ? 'var(--green)' : s >= 60 ? 'var(--yellow)' : s >= 40 ? 'var(--orange)' : 'var(--red)';
@@ -46,10 +56,14 @@ const fitColor = (s: number | null) =>
  * The ICP's list, best fit first, with the stage / score / warm filters and a
  * coverage strip per lead (employer · research · email · warm angle · route)
  * so what the Enricher and the router still owe is visible per row. Fetches
- * on its own (filters are local); `tick` from the page's poll re-fetches it.
+ * on its own (filters are local). `signature` is the page's summary of the list (counts the poll saw): the table
+ * reloads only when it changes, never on every poll — the list is the heaviest request on the page. Rows are
+ * slim; a row's research / reasons / profile candidates load when it is expanded. 50 rows are drawn at a time.
  */
-export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: number }) {
+export default function LeadsTable({ icpId, signature = '' }: { icpId: string; signature?: string }) {
   const [data, setData] = useState<Payload | null>(null);
+  const [details, setDetails] = useState<Record<string, LeadDetail | 'loading'>>({});
+  const [limit, setLimit] = useState(PAGE);
   const [stage, setStage] = useState('');
   const [minScore, setMinScore] = useState(0);
   const [warmOnly, setWarmOnly] = useState(false);
@@ -67,16 +81,28 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
       ...(warmOnly ? { warm: '1' } : {}),
       ...(prio ? { priority: prio } : {}),
     }).toString());
-    if (res.ok) setData(await res.json());
+    if (res.ok) { setData(await res.json()); setDetails({}); }
   }, [icpId, stage, minScore, warmOnly, prio]);
-  useEffect(() => { load(); }, [load, tick]);
+  useEffect(() => { load(); }, [load, signature]);
+  useEffect(() => { setLimit(PAGE); }, [stage, minScore, warmOnly, prio, conn]);
+
+  const detailOf = (id: string) => {
+    if (details[id]) return;
+    setDetails((d) => ({ ...d, [id]: 'loading' }));
+    fetch(`/api/icp/${icpId}/leads/${id}`).then((r) => (r.ok ? r.json() : null))
+      .then((out) => setDetails((d) => ({ ...d, [id]: out ?? { qualification_reason: null, research_summary: null, profile_lookup: null } })))
+      .catch(() => setDetails((d) => { const { [id]: _gone, ...rest } = d; return rest; }));
+  };
+  const openWhy = (id: string) => { setOpen(open === id ? null : id); detailOf(id); };
+  const openPick = (id: string) => { setPick(pick === id ? null : id); detailOf(id); };
 
   const noAnswer = data?.connect?.no_answer_after_days;
   const stateOf = (l: Lead) => connectState(l, noAnswer);
   const tally = (data?.leads ?? []).reduce<Record<string, number>>((acc, l) => {
     const st = stateOf(l); acc[st] = (acc[st] ?? 0) + 1; return acc;
   }, {});
-  const shown = (data?.leads ?? []).filter((l) => !conn || stateOf(l) === conn);
+  const matching = (data?.leads ?? []).filter((l) => !conn || stateOf(l) === conn);
+  const shown = matching.slice(0, limit);
   const c = data?.connect;
   const room = c ? Math.max(0, Math.min(c.per_day - c.sent_today, c.per_week - c.sent_week) - c.queued) : 0;
 
@@ -118,7 +144,7 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-3 text-[11px]" style={{ color: 'var(--text-muted)' }}>
-        <span>{data ? `${shown.length} shown` : 'Loading…'}</span>
+        <span>{data ? `${matching.length} shown` : <span className="inline-block w-14 h-3 rounded animate-pulse align-middle" style={{ background: 'var(--bg-input)' }} />}</span>
         <label className="ml-auto flex items-center gap-2">
           LinkedIn
           <select value={conn} onChange={(e) => setConn(e.target.value as '' | ConnectState)} className="px-2 py-1 rounded text-xs" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }}>
@@ -191,6 +217,7 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
       {msg && <div className="text-xs" style={{ color: msg.startsWith('Error') ? 'var(--red)' : 'var(--text-muted)' }}>{msg}</div>}
 
       <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+        {!data && <SkeletonRows rows={10} />}
         {data && data.leads.length === 0 && (
           <div className="p-8 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
             Nothing here. The Leads Finder fills the list on its next tick, or click <b>Find more now</b>.
@@ -218,16 +245,19 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
                   : l.invite_sent_at ? `sent ${relativeTime(l.invite_sent_at)}${l.invite_source === 'linkedin' ? ' · by hand in LinkedIn' : ''}`
                   : cs === 'awaiting_approval' ? 'filed — waiting for the owner to approve'
                   : (cs === 'no_profile' || cs === 'awaiting_pick') && l.profile_lookup
-                    ? `${describeLookup(l.profile_lookup)} (searched ${relativeTime(l.profile_lookup.created_at)})`
+                    ? `${describeLookup({ ...l.profile_lookup, strong: new Array(l.profile_lookup.strong_count).fill(0), candidates: new Array(l.profile_lookup.candidate_count).fill(0), discovered: l.profile_lookup.discovered.map(() => ({ landed: true })) })} (searched ${relativeTime(l.profile_lookup.created_at)})`
                   : cs === 'no_profile' ? 'no LinkedIn profile on file — not searched yet' : '';
-                const cands = (l.profile_lookup?.candidates ?? []).filter((x) => x.public_identifier);
-                const strong = new Set(l.profile_lookup?.strong ?? []);
-                const possible = new Set(l.profile_lookup?.possible ?? []);
+                const det = details[l.id];
+                const full = det && det !== 'loading' ? det : null;
+                const cands = (full?.profile_lookup?.candidates ?? []).filter((x) => x.public_identifier);
+                const strong = new Set(full?.profile_lookup?.strong ?? []);
+                const possible = new Set(full?.profile_lookup?.possible ?? []);
+                const candCount = l.profile_lookup?.candidate_count ?? 0;
                 const warm = (l.warm_paths || []).filter((w) => w.type !== 'route');
                 const route = (l.warm_paths || []).find((w) => w.type === 'route') as { path_available?: boolean } | undefined;
                 const dots: { k: string; on: boolean; title: string }[] = [
                   { k: 'E', on: Boolean(l.company_name), title: l.company_name ? `employer: ${l.company_name}` : 'employer unknown' },
-                  { k: 'R', on: Boolean(l.research_summary), title: l.research_summary ? 'researched' : 'not researched' },
+                  { k: 'R', on: l.researched, title: l.researched ? 'researched' : 'not researched' },
                   { k: '@', on: Boolean(l.email), title: l.email ? `email: ${l.email}` : 'no email' },
                   { k: '🔥', on: warm.length > 0, title: warm.length ? warm.map((w) => w.note).join(' · ') : 'no warm angle' },
                   { k: '↝', on: Boolean(route?.path_available), title: route ? (route.path_available ? 'warm route found' : 'route computed: none') : 'route not computed' },
@@ -266,13 +296,13 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
                       </td>
                       <td className="p-2">
                         {l.cohort_score != null ? (
-                          <button onClick={() => setOpen(open === l.id ? null : l.id)} className="text-xs font-semibold tabular-nums px-2 py-0.5 rounded-md"
+                          <button onClick={() => openWhy(l.id)} className="text-xs font-semibold tabular-nums px-2 py-0.5 rounded-md"
                             style={{ background: `color-mix(in srgb, ${fitColor(l.cohort_score)} 14%, transparent)`, color: fitColor(l.cohort_score) }}
                             title="Priority: right person + company fit and early-adopter signals + warmth. Click for details.">
                             {l.cohort_score}
                           </button>
                         ) : (
-                          <button onClick={() => setOpen(open === l.id ? null : l.id)} className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: `color-mix(in srgb, ${fitColor(l.icp_score)} 14%, transparent)`, color: fitColor(l.icp_score) }} title="why?">
+                          <button onClick={() => openWhy(l.id)} className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: `color-mix(in srgb, ${fitColor(l.icp_score)} 14%, transparent)`, color: fitColor(l.icp_score) }} title="why?">
                             {l.icp_score ?? '—'} · {(l.fit_label || 'unscored').replace(/_/g, ' ')}
                           </button>
                         )}
@@ -296,14 +326,14 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
                             {busy === l.id ? '…' : l.profile_lookup ? 'Search again' : 'Find on LinkedIn'}
                           </button>
                         )}
-                        {(cs === 'awaiting_pick' || (cs === 'no_profile' && cands.length > 0)) && (
-                          <button onClick={() => setPick(pick === l.id ? null : l.id)} disabled={busy !== null} className="ml-1.5 underline disabled:opacity-40" style={{ color: 'var(--accent)' }}>
-                            {pick === l.id ? 'Close' : `Pick (${cands.length})`}
+                        {(cs === 'awaiting_pick' || (cs === 'no_profile' && candCount > 0)) && (
+                          <button onClick={() => openPick(l.id)} disabled={busy !== null} className="ml-1.5 underline disabled:opacity-40" style={{ color: 'var(--accent)' }}>
+                            {pick === l.id ? 'Close' : `Pick (${candCount})`}
                           </button>
                         )}
-                        {(l.profile_lookup?.discovered ?? []).filter((d) => d.landed).length > 0 && (
+                        {(l.profile_lookup?.discovered ?? []).length > 0 && (
                           <div className="mt-0.5 text-[10px]" style={{ color: 'var(--text-muted)' }} title="decision makers found by starting from the company, added as new leads">
-                            via company: {(l.profile_lookup?.discovered ?? []).filter((d) => d.landed).map((d) => d.name).join(', ')}
+                            via company: {(l.profile_lookup?.discovered ?? []).join(', ')}
                           </div>
                         )}
                       </td>
@@ -330,7 +360,9 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
                               <div style={{ color: 'var(--text-muted)' }}>Sorter confidence: {l.cohort_confidence ?? '—'}{l.warm_via ? ` · ${l.warm_via} knows them` : ''}</div>
                             </div>
                           )}
-                          {(l.qualification_reason || 'no reasons recorded').split('; ').map((r, i) => <div key={i}>· {r}</div>)}
+                          {!full && <div className="h-3 w-48 rounded animate-pulse" style={{ background: 'var(--bg-input)' }} />}
+                          {full && (full.qualification_reason || 'no reasons recorded').split('; ').map((r, i) => <div key={i}>· {r}</div>)}
+                          {full?.research_summary && <div className="mt-1.5 whitespace-pre-line" style={{ color: 'var(--text)' }}>{full.research_summary}</div>}
                         </td>
                       </tr>
                     )}
@@ -341,6 +373,7 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
                             Which LinkedIn profile is {l.full_name || 'this person'} ({l.company_name || 'company unknown'})?
                             {l.profile_lookup?.reason ? ` ${l.profile_lookup.reason}.` : ''} A wrong pick cannot be undone once a request goes out.
                           </div>
+                          {!full && <div className="h-10 rounded-lg animate-pulse" style={{ background: 'var(--bg-input)' }} />}
                           <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
                             {cands.map((x) => (
                               <div key={x.public_identifier!} className="rounded-lg px-2 py-1.5 flex items-start gap-2" style={{ border: `1px solid ${strong.has(x.public_identifier!) ? 'var(--green)' : possible.has(x.public_identifier!) ? 'var(--yellow)' : 'var(--border)'}`, background: 'var(--bg-input)' }}>
@@ -371,6 +404,13 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
               })}
             </tbody>
           </table>
+        )}
+        {data && matching.length > shown.length && (
+          <div className="p-2 text-center" style={{ borderTop: '1px solid var(--border)' }}>
+            <button type="button" onClick={() => setLimit((n) => n + PAGE)} className="text-xs underline" style={{ color: 'var(--accent)' }}>
+              Show {Math.min(PAGE, matching.length - shown.length)} more · {shown.length} of {matching.length}
+            </button>
+          </div>
         )}
       </div>
     </div>

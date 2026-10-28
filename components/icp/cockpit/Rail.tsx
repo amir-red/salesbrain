@@ -7,12 +7,11 @@
 import Link from 'next/link';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { AgentRun } from '@/lib/icp';
-import type { PanelPayload } from '@/lib/icp-panel';
+import type { ListFunnel, PanelPayload } from '@/lib/icp-panel';
 import { summarizeCriteria } from '@/lib/icp';
 import { pct } from '@/lib/funnel';
 import { STATUS_STYLE, type CampaignRow } from '@/lib/campaigns';
 import { relativeTime } from '@/lib/time';
-import { useFunnel } from '@/components/panel/FunnelStrip';
 import { Chevron } from '@/components/icons';
 
 const muted = { color: 'var(--text-muted)' };
@@ -38,18 +37,22 @@ const linkBtn = 'text-xs underline-offset-2 hover:underline';
 
 const STEPS = [
   ['prospect_ready', 'Ready to reach'], ['lead_contacted', 'Contacted'], ['lead_engaged', 'Answered'],
-  ['lead_meeting', 'Meeting'], ['opportunity', 'Opportunity'], ['client', 'Client'],
+  ['lead_meeting', 'Meeting'], ['opportunity', 'Opportunity'],
 ] as const;
 
-export function RailFunnel({ icpId }: { icpId: string }) {
-  const { data, error } = useFunnel({ icp_id: icpId });
-  const reached = (k: string) => data?.stages.find((s) => s.key === k)?.reached ?? 0;
-  const top = data?.people ?? 0;
+/** The list's funnel, read from the panel payload (person_funnel in SQL — no kernel process per load). */
+export function RailFunnel({ icpId, funnel }: { icpId: string; funnel: ListFunnel | null }) {
+  const data = funnel;
+  const reached = (k: string) => {
+    const m: Record<string, keyof ListFunnel> = { prospect_ready: 'ready', lead_contacted: 'contacted', lead_engaged: 'answered', lead_meeting: 'meeting', opportunity: 'opportunity' };
+    const key = m[k];
+    return key ? Number(data?.[key] ?? 0) : 0;
+  };
+  const top = data?.found ?? 0;
   const rows: [string, number][] = [['On the list', top], ...STEPS.map(([k, l]) => [l, reached(k)] as [string, number])];
   return (
     <Card title="Funnel" right={<Link href={`/dashboard?icp_id=${icpId}`} className={linkBtn} style={muted}>Full funnel</Link>}>
-      {error && <p className="text-xs" style={{ color: 'var(--red)' }}>{error}</p>}
-      {!data && !error && <p className="text-xs" style={muted}>Loading…</p>}
+      {!data && <p className="text-xs" style={muted}>No funnel yet — people appear here once the hourly refresh has seen them.</p>}
       {data && rows.map(([label, n], i) => {
         const prev = i > 0 ? rows[i - 1][1] : 0;
         const w = top ? Math.max(n ? 3 : 0, Math.round(Math.sqrt(n / top) * 100)) : 0;

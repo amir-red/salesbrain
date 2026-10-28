@@ -5,21 +5,7 @@ import { normalizeCriteria } from '@/lib/icp';
 import { ownerQuotas } from '@/lib/quota-server';
 import type { Coverage, ListFunnel, OverviewIcp, OverviewPayload, StageCounts } from '@/lib/icp-panel';
 
-// Cumulative funnel steps over person_funnel.stage (086): everyone who got AT LEAST that far.
-const READY = `('prospect_ready','lead_contacted','lead_engaged','lead_meeting','lead_qualified','opportunity','client')`;
-const CONTACTED = `('lead_contacted','lead_engaged','lead_meeting','lead_qualified','opportunity','client')`;
-const ANSWERED = `('lead_engaged','lead_meeting','lead_qualified','opportunity','client')`;
-const MEETING = `('lead_meeting','lead_qualified','opportunity','client')`;
-const OPPORTUNITY = `('opportunity','client')`;
-const FUNNEL_COUNTS = `count(*)::int AS found,
-       count(*) FILTER (WHERE stage IN ${READY})::int AS ready,
-       count(*) FILTER (WHERE stage IN ${CONTACTED})::int AS contacted,
-       count(*) FILTER (WHERE stage IN ${ANSWERED})::int AS answered,
-       count(*) FILTER (WHERE stage IN ${MEETING})::int AS meeting,
-       count(*) FILTER (WHERE stage IN ${OPPORTUNITY})::int AS opportunity,
-       count(*) FILTER (WHERE exit = 'unfit')::int AS unfit,
-       COALESCE(mode() WITHIN GROUP (ORDER BY lane) FILTER (WHERE stage IN ${CONTACTED}),
-                mode() WITHIN GROUP (ORDER BY lane)) AS lane`;
+import { FUNNEL_COUNTS } from '@/lib/funnel-sql';
 
 /**
  * GET /api/icp/overview — the control panel's fleet view: every visible ICP
