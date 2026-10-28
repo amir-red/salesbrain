@@ -2625,6 +2625,17 @@ clean start (old lists DELETED); rank = right person + company fit/early-adopter
 - Rollout (integration): pg_dump on the box (pg_dump 18 ok vs server 17) → apply 090 → deploy → setup → run until
   `plan` is empty → export sheet for Mateo/Amir → apply → cleanup.
 
+### 5.by /icp/[id] = leads table + rail (2026-10-28, feat/icp-cockpit, app-only, no migration)
+
+Amir picked design B of three (canvas https://claude.ai/artifact/4y5C8A6rZ7Xg7a5ZWkdDe3). The leads table is the page (left,
+wide; Firms above it only on a firm list: `FirmsSection hideWhenEmpty onCount`); a rail on the right
+(`components/icp/cockpit/Rail.tsx`): Funnel (cumulative reached from `/api/funnel?icp_id`, answered % and opportunity % of
+contacted), Needs you (pending approvals by kind → Review), Agents on this list (one line each: Leads Finder with its blocker
+or "hand-made list", Enricher coverage, Warm routes, Outreach), Campaigns using the list (`/api/campaigns` filtered by
+`lists[].icp_id`), Who belongs (cohort / definition + fit counts). Each opens the old section unchanged in a `Drawer`;
+header has a Settings drawer (ListSettings, Import firms on a people list, the old email waves folded as "older way").
+Gone from the page: the duplicate "2 · The list" funnel bar, the numbered sections, the top blocker box.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
