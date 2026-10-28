@@ -2622,8 +2622,16 @@ clean start (old lists DELETED); rank = right person + company fit/early-adopter
   `/api/export/cohorts` = the dry-run sheet (admin); `lib/cohorts.ts` mirrors the kernel (parity test). The Leads Finder
   warning is hidden on hand-made lists (cohorts are objective 'list': sorted, not searched).
 - **Warmth is thin** (2026-10-28: 43 of 3,418 live prospects warm/hot; only Amir has Google connected) — hence a bonus.
-- Rollout (integration): pg_dump on the box (pg_dump 18 ok vs server 17) → apply 090 → deploy → setup → run until
-  `plan` is empty → export sheet for Mateo/Amir → apply → cleanup.
+- **LIVE 2026-10-28 (0.69.0), rollout done**: backup `/root/backups/pre-cohorts-202610281407.dump` (19 MB, 133 tables);
+  090 applied; setup (10 created, NRW + VC adopted); the sort ran in 12 batches of 300 (~1.5 h; batches run four at a time
+  since 190a483 — `agents.cohorts.workers`; 570 Flash calls + 1,195 grounded lookups ≈ $2 tokens + ~$40 grounding); review
+  sheet `~/Downloads/cohort-sort-review-2026-10-28.xlsx`; apply moved 1,192; cleanup deleted 80 old lists (2,601 archived
+  prospects lost their list link, 2 draft campaigns lost a list). Result: NRW 1,768 · Unsorted 785 · VC 627 · PE growth 103
+  · vertical software 102 · distributors 69 · admin services 41 · forwarders 12 · PE distress 12 · PE distributors 4 · PE exit 3.
+  Unsorted is mostly honest (old Ethiopian / CTO / Ops-Hub lists) plus 108 of the 153 "M&A buyers" people the model read as
+  advisors, not PE. Found on the way: the model answers "none/low" for a fixed cohort 5 (its menu lacked it) — cohort 5 now
+  counts as certain membership and is scored on signals (a1b3d06); placeholder companies "Unknown" / "Independent" are
+  judged person by person (4b74063). `/root/rpc.sh '<json>'` = run a kernel tool on the box as a given actor.
 
 ### 5.by /icp/[id] = leads table + rail (2026-10-28, feat/icp-cockpit, app-only, no migration)
 
