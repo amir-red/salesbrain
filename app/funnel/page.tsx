@@ -19,18 +19,42 @@ import {
   type DrawnStep, type FunnelLane, type FunnelPeriod, type FunnelSummary,
 } from '@/lib/funnel';
 import type { FunnelInsights } from '@/lib/warm';
+import { Briefcase, Flag, Handshake, Reply, Send, Sparkle, Users } from '@/components/icons';
 
 interface Opt { id: string; name: string; email?: string }
 
 const selectStyle = { background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' };
 
-function Tile({ label, value, sub, extra }: { label: string; value: string; sub: string; extra?: string }) {
+type IconT = (p: React.SVGProps<SVGSVGElement>) => React.ReactElement;
+
+/** A dashboard card: a light wash of its colour, a coloured icon chip. Text stays in text tokens (only the icon and
+ * the wash carry the colour), so every colour pairing keeps its contrast in both themes. */
+function tint(color: string, pct: number) {
+  return `color-mix(in srgb, ${color} ${pct}%, var(--bg-card))`;
+}
+
+function IconChip({ icon: I, color }: { icon: IconT; color: string }) {
   return (
-    <div className="z-panel px-4 py-3 flex flex-col gap-0.5 min-w-0">
-      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{label}</span>
-      <span className="text-2xl font-semibold leading-tight tabular-nums">{value}</span>
-      <span className="text-xs truncate" style={{ color: 'var(--text-muted)' }} title={sub}>{sub}</span>
-      {extra && <span className="text-xs tabular-nums font-medium" style={{ color: 'var(--accent)' }}>{extra}</span>}
+    <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg shrink-0" aria-hidden="true"
+      style={{ background: `color-mix(in srgb, ${color} 16%, transparent)`, color }}>
+      <I width={16} height={16} />
+    </span>
+  );
+}
+
+function Tile({ label, value, sub, extra, icon, color }: {
+  label: string; value: string; sub: string; extra?: string; icon: IconT; color: string;
+}) {
+  return (
+    <div className="rounded-xl px-4 py-3 flex gap-3 min-w-0"
+      style={{ background: tint(color, 7), border: `1px solid ${tint(color, 22)}` }}>
+      <IconChip icon={icon} color={color} />
+      <div className="flex flex-col gap-0.5 min-w-0">
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{label}</span>
+        <span className="text-2xl font-semibold leading-tight tabular-nums">{value}</span>
+        <span className="text-xs truncate" style={{ color: 'var(--text-muted)' }} title={sub}>{sub}</span>
+        {extra && <span className="text-xs tabular-nums font-medium">{extra}</span>}
+      </div>
     </div>
   );
 }
@@ -43,22 +67,28 @@ function Tiles({ data, insights, unit }: { data: FunnelSummary; insights: Funnel
   const period = (st: DrawnStep) => (st.entered !== undefined ? `+${st.entered.toLocaleString()} in period` : undefined);
   return (
     <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-      <Tile label="Contacted" value={contacted.reached.toLocaleString()}
+      <Tile icon={Send} color="var(--cat-blue)" label="Contacted" value={contacted.reached.toLocaleString()}
         sub={`${contacted.current.toLocaleString()} in contact now · ${pct(ready.conversion)} of ready to reach`} extra={period(contacted)} />
-      <Tile label="Answered" value={insights ? pct(insights.overall.answer_rate) : '…'}
+      <Tile icon={Reply} color="var(--cat-teal)" label="Answered" value={insights ? pct(insights.overall.answer_rate) : '…'}
         sub={insights ? `${insights.overall.answered.toLocaleString()} of ${insights.overall.contacted.toLocaleString()} we reached out to` : 'loading what converts'} />
-      <Tile label="Contacted → opportunity" value={contacted.reached ? pct(fromLeads / contacted.reached) : '—'}
+      <Tile icon={Briefcase} color="var(--cat-violet)" label="Contacted → opportunity" value={contacted.reached ? pct(fromLeads / contacted.reached) : '—'}
         sub={`${fromLeads.toLocaleString()} of ${contacted.reached.toLocaleString()} · ${opp.current.toLocaleString()} open now`} extra={period(opp)} />
-      <Tile label={unit === 'companies' ? 'Client companies' : 'Clients'} value={client.reached.toLocaleString()}
+      <Tile icon={Handshake} color="var(--green)" label={unit === 'companies' ? 'Client companies' : 'Clients'} value={client.reached.toLocaleString()}
         sub={`of ${opp.reached.toLocaleString()} opportunities · ${pct(opp.conversion)}`} extra={period(client)} />
     </div>
   );
 }
 
-function Card({ title, children, foot }: { title: string; children: React.ReactNode; foot?: React.ReactNode }) {
+function Card({ title, children, foot, icon, color }: {
+  title: string; children: React.ReactNode; foot?: React.ReactNode; icon: IconT; color: string;
+}) {
   return (
-    <section className="z-panel p-4 flex flex-col gap-2">
-      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{title}</span>
+    <section className="rounded-xl p-4 flex flex-col gap-2"
+      style={{ background: tint(color, 6), border: `1px solid ${tint(color, 20)}` }}>
+      <div className="flex items-center gap-2.5">
+        <IconChip icon={icon} color={color} />
+        <span className="text-sm font-semibold">{title}</span>
+      </div>
       {children}
       {foot && <div className="text-xs mt-auto pt-1">{foot}</div>}
     </section>
@@ -69,12 +99,12 @@ function Card({ title, children, foot }: { title: string; children: React.ReactN
 function BiggestLeak({ data }: { data: FunnelSummary }) {
   const s = drawnSteps(data);
   const cands = s.filter((x, i) => i < s.length - 1 && x.reached >= 8 && x.conversion != null);
-  if (!cands.length) return <Card title="Biggest leak"><span className="text-sm" style={{ color: 'var(--text-muted)' }}>Not enough people yet.</span></Card>;
+  if (!cands.length) return <Card icon={Flag} color="var(--orange)" title="Biggest leak"><span className="text-sm" style={{ color: 'var(--text-muted)' }}>Not enough people yet.</span></Card>;
   const leak = cands.reduce((a, b) => (b.conversion! < a.conversion! ? b : a));
   const next = s[s.findIndex((x) => x.key === leak.key) + 1];
   const top = [...leak.chips].sort((a, b) => b.n - a.n)[0];
   return (
-    <Card title="Biggest leak" foot={<Link href={GROUP_HREF[leak.group]} className="underline">See who is stuck in {leak.label.toLowerCase()} →</Link>}>
+    <Card icon={Flag} color="var(--orange)" title="Biggest leak" foot={<Link href={GROUP_HREF[leak.group]} className="underline">See who is stuck in {leak.label.toLowerCase()} →</Link>}>
       <span className="text-base font-semibold">{leak.label} → {next.label} · {pct(leak.conversion)}</span>
       <span className="text-sm" style={{ color: 'var(--text)' }}>
         {leak.reached.toLocaleString()} reached {leak.label.toLowerCase()}, <b className="font-semibold">{next.reached.toLocaleString()}</b> went on
@@ -91,7 +121,7 @@ function WhatWorks({ insights, error, onAll }: { insights: FunnelInsights | null
   const works = (insights?.findings ?? []).filter((f) => f.kind === 'works').sort((a, b) => b.ratio - a.ratio).slice(0, 4);
   const weak = (insights?.findings ?? []).filter((f) => f.kind === 'weak').sort((a, b) => a.ratio - b.ratio)[0];
   return (
-    <Card title="What gets answers" foot={<button type="button" onClick={onAll} className="underline">All findings{insights ? ` (${insights.findings.length})` : ''} →</button>}>
+    <Card icon={Sparkle} color="var(--green)" title="What gets answers" foot={<button type="button" onClick={onAll} className="underline">All findings{insights ? ` (${insights.findings.length})` : ''} →</button>}>
       {error && <span className="text-xs" style={{ color: 'var(--red)' }}>{error}</span>}
       {!insights && !error && <div className="h-16 rounded-lg animate-pulse" style={{ background: 'var(--bg-input)' }} />}
       {insights && works.length === 0 && <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Nothing stands out yet — findings need 8 people per group and a few answers.</span>}
@@ -118,15 +148,15 @@ function WhatWorks({ insights, error, onAll }: { insights: FunnelInsights | null
 function Lanes({ data, onMore }: { data: FunnelSummary; onMore: () => void }) {
   const max = Math.max(1, ...data.lanes.map((l) => l.total));
   return (
-    <Card title="How people came in" foot={<button type="button" onClick={onMore} className="underline">Channels, exits, definitions →</button>}>
+    <Card icon={Users} color="var(--cat-blue)" title="How people came in" foot={<button type="button" onClick={onMore} className="underline">Channels, exits, definitions →</button>}>
       {data.lanes.length === 0 && <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Nobody in this slice.</span>}
       <div className="flex flex-col gap-1.5">
         {data.lanes.map((l) => (
           <div key={l.key} className="grid gap-2 items-center text-xs" style={{ gridTemplateColumns: '124px 1fr 52px' }}
             title={`${l.total.toLocaleString()} people · ${l.leads.toLocaleString()} got to lead or further`}>
             <span className="truncate">{l.label}</span>
-            <span className="block h-2 rounded-full" style={{ background: 'var(--bg-input)' }}>
-              <span className="block h-2 rounded-full" style={{ background: 'var(--accent)', width: `${Math.max(3, Math.round((Math.sqrt(l.total) / Math.sqrt(max)) * 100))}%` }} />
+            <span className="block h-2 rounded-full" style={{ background: tint('var(--cat-blue)', 14) }}>
+              <span className="block h-2 rounded-full" style={{ background: 'var(--cat-blue)', width: `${Math.max(3, Math.round((Math.sqrt(l.total) / Math.sqrt(max)) * 100))}%` }} />
             </span>
             <span className="text-right tabular-nums">{l.total.toLocaleString()}</span>
           </div>

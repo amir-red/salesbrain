@@ -9,6 +9,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { GROUP_HREF } from '@/components/panel/FunnelStrip';
+import { Target } from '@/components/icons';
 import { drawnSteps, pct, type DrawnStep, type FunnelGroup, type FunnelSummary } from '@/lib/funnel';
 
 /** One hue, light → dark, in funnel order (validated ordinal ramp; the light end still clears the surface 2:1). */
@@ -34,7 +35,13 @@ export default function FunnelChart({ data, unit }: { data: FunnelSummary; unit:
   return (
     <section className="z-panel p-4 space-y-3">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs" style={{ color: 'var(--text-muted)' }}>
-        <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Everyone once, at the furthest stage they reached</span>
+        <span className="inline-flex items-center gap-2.5 text-sm font-semibold" style={{ color: 'var(--text)' }}>
+          <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg" aria-hidden="true"
+            style={{ background: 'color-mix(in srgb, var(--accent) 14%, transparent)', color: 'var(--accent)' }}>
+            <Target width={16} height={16} />
+          </span>
+          Everyone once, at the furthest stage they reached
+        </span>
         {(['prospect', 'lead', 'opportunity', 'client'] as FunnelGroup[]).map((g) => (
           <span key={g} className="inline-flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-sm" style={{ background: RAMP[g] }} />
