@@ -58,7 +58,7 @@ export async function GET(
            a.command as title, NULL as detail, u.name as actor
     FROM agent_audit_log a
     LEFT JOIN users u ON u.id = a.actor_user_id
-    WHERE a.input->>'deal_id' = $1 AND a.status = 'success'
+    WHERE a.input->>'deal_id' = $1::text AND a.status = 'success'  -- $1 is bound as uuid by the other arms; without the cast Postgres raises "text = uuid"
       AND a.command IN ('create_deal','update_deal','record_note','assess_deal',
                         'schedule_followup','mark_deal_lost','link_deal_person',
                         'request_board_review','board_vote_resolved')`);
