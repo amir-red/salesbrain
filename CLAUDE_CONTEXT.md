@@ -2649,6 +2649,13 @@ an ICP, so prioritization goes all the way from outreach, focus, onboarding into
   leads table (new Prio column + filter any / P1–P3 / any set / not set / P1…P10; order `priority NULLS LAST` first),
   `/prospecting` (column + filter, `?priority=`), the person page header, Opportunities (`DealItem.priority`, Prio column,
   filter select `?priority=`, `deals-board` orders by it) and the deal page header. `/sales-leads` already had it.
+- **0.70.1 (same day)**: the list's leads, /prospecting and the person page 500'd (`column p.priority does not exist`) — they read
+  through the `prospects` VIEW (088: the old 32 columns only); card columns such as `priority` live on the `leads` table. Rule:
+  **a query that needs a card column reads `FROM leads`**, the `prospects` / `sales_leads` views keep only their old columns.
+  Audit of every SQL in app + lib + core commands + ring (aliased and unaliased reads, UPDATE/INSERT column lists, qualified
+  `view.column` refs): nothing else mismatched. Production logs since 088 showed one more real 500: the deal timeline failed for
+  the creator/lead/admin since August (`$1` bound as uuid by `deal_id = $1`, then compared to `a.input->>'deal_id'`) — fixed
+  with `$1::text`; no other route compares one `$N` both as jsonb text and as an id.
 - **Lists page**: Grid | List switch (grid default, remembered in `localStorage icp.layout`); the list view is one line
   per list with the six funnel numbers, step rates (weakest in orange), conversion and "N to approve" (`ListTableRow`).
 
