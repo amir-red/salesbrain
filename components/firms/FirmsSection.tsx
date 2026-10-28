@@ -16,7 +16,13 @@ import { STATUS_LABEL, VERDICT_STYLE, chequeRange, type FirmListPayload, type Fi
 const PAGE_SIZES = [10, 50, 100, 0] as const;   // 0 = all
 const VERDICTS: (FirmVerdict | 'all')[] = ['all', 'go', 'later', 'out', 'unknown'];
 
-export default function FirmsSection({ icpId, canEdit }: { icpId: string; canEdit: boolean }) {
+export default function FirmsSection({ icpId, canEdit, hideWhenEmpty, onCount }: {
+  icpId: string; canEdit: boolean;
+  /** Render nothing (instead of the slim "No firms" line) on a list without firms. */
+  hideWhenEmpty?: boolean;
+  /** Told how many firms the list holds once they are loaded. */
+  onCount?: (n: number) => void;
+}) {
   const [data, setData] = useState<FirmListPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -35,6 +41,7 @@ export default function FirmsSection({ icpId, canEdit }: { icpId: string; canEdi
     const out = await res.json().catch(() => ({}));
     if (!res.ok || out.error) { setError(out.error || 'Could not load the firms.'); return; }
     setData(out);
+    onCount?.(out?.counts?.total ?? 0);
   }, [icpId]);
   useEffect(() => { void load(); }, [load]);
 
@@ -60,6 +67,7 @@ export default function FirmsSection({ icpId, canEdit }: { icpId: string; canEdi
   const c = data?.counts;
   // A people list with no firms: one slim line instead of a whole card.
   if (data && !c?.total && !importing) {
+    if (hideWhenEmpty) return null;
     return (
       <div className="flex items-center justify-between gap-3 rounded-xl px-4 py-2 text-xs" style={{ border: '1px dashed var(--border)', color: 'var(--text-muted)' }}>
         <span>No firms on this list. Import firms to research them (what they invest in, who to contact) before anyone there is known.</span>

@@ -5,7 +5,6 @@ import SeatsControl from '@/components/icp/SeatsControl';
 import TuningPanel from '@/components/icp/TuningPanel';
 import ListSettings from '@/components/icp/ListSettings';
 import CohortHeader from '@/components/icp/CohortHeader';
-import FunnelStrip from '@/components/panel/FunnelStrip';
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -22,7 +21,8 @@ import EnricherSection from '@/components/icp/panel/EnricherSection';
 import GraphSection from '@/components/icp/panel/GraphSection';
 import OutreachSection from '@/components/icp/panel/OutreachSection';
 import SectionCard from '@/components/panel/SectionCard';
-import FunnelBar from '@/components/panel/FunnelBar';
+import Drawer from '@/components/icp/cockpit/Drawer';
+import { AgentsCard, CampaignsCard, NeedsYou, RailFunnel, WhoBelongsCard, type AgentKey } from '@/components/icp/cockpit/Rail';
 import type { PanelPayload } from '@/lib/icp-panel';
 import { usePoll } from '@/lib/use-poll';
 import { relativeTime } from '@/lib/time';
@@ -30,11 +30,16 @@ import ExportButton from '@/components/ExportButton';
 import ImportLeadsModal from '@/components/sales-leads/ImportLeadsModal';
 
 /**
- * /icp/[id] — the control panel for one ICP: the lead's journey, section by
- * section (definition → finder → enricher → graph & routes → outreach), with
- * the machinery's state beside each step, then the list and the activity feed.
+ * /icp/[id] — one list (design B, 2026-10-28): the leads table is the page, and a rail beside it shows the state of the
+ * list — funnel, what needs a decision, each agent in one line, the campaigns that send to it, who belongs. Every rail
+ * card opens its full detail in a drawer (the old sections, unchanged); list settings live in a Settings drawer.
  * Polls every 30 s; actions reuse the endpoints the old cards already had.
  */
+type DrawerKey = AgentKey | 'activity' | 'who' | 'settings';
+const DRAWER_TITLE: Record<DrawerKey, string> = {
+  finder: 'Leads Finder', enricher: 'Enricher', graph: 'Warm routes', outreach: 'Waiting for a decision · outreach and intros',
+  activity: 'Activity', who: 'Who belongs on this list', settings: 'List settings',
+};
 export default function IcpPanelPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -45,6 +50,9 @@ export default function IcpPanelPage() {
   const [busy, setBusy] = useState<RunMode | 'state' | 'archive' | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [addingPeople, setAddingPeople] = useState(false);
+  const [drawer, setDrawer] = useState<DrawerKey | null>(null);
+  const [firmCount, setFirmCount] = useState<number | null>(null);
+  const closeDrawer = useCallback(() => setDrawer(null), []);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/icp/${id}/panel`);
@@ -124,6 +132,7 @@ export default function IcpPanelPage() {
               {data.can_edit && (data.icp.paused_at
                 ? <button onClick={() => setState('running')} disabled={busy === 'state'} className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40" style={{ border: '1px solid var(--accent)', color: 'var(--accent)' }}>Resume</button>
                 : <button onClick={() => setState('paused')} disabled={busy === 'state'} className="px-3 py-1.5 rounded-lg text-xs disabled:opacity-40" style={{ border: '1px solid var(--border)', color: 'var(--text-muted)' }} title="Hold this ICP only — reversible">Pause</button>)}
+              <button onClick={() => setDrawer('settings')} className="px-3 py-1.5 rounded-lg text-xs" style={{ border: '1px solid var(--border)', color: 'var(--text)' }}>Settings</button>
               {data.can_edit && <button onClick={() => setEditing(true)} className="px-3 py-1.5 rounded-lg text-xs" style={{ border: '1px solid var(--border)', color: 'var(--text)' }}>Edit</button>}
               {data.can_edit && <button onClick={archive} disabled={busy === 'archive'} className="px-3 py-1.5 rounded-lg text-xs disabled:opacity-40" style={{ color: 'var(--text-muted)' }}>Archive</button>}
             </div>
@@ -143,51 +152,65 @@ export default function IcpPanelPage() {
         )}
 
         {data && !editing && (
-          <div className="p-4 space-y-4">
-            {data.icp.cohort && <CohortHeader cohort={data.icp.cohort} />}
-            <FunnelStrip compact query={{ icp_id: id }} title="This list's funnel" href={`/funnel?icp_id=${id}`} />
-            <TuningPanel icpId={id} onApplied={(n) => { setNote(n); void refresh(); }} />
-            <ListSettings icpId={id} onSaved={(n) => { setNote(n); void refresh(); }} />
-            {data.blockers.length > 0 && data.icp.objective !== 'list' && (
-              <div className="rounded-xl px-4 py-3 text-xs space-y-0.5" style={{ background: 'color-mix(in srgb, var(--yellow) 8%, transparent)', border: '1px solid var(--yellow)' }}>
-                <div className="font-medium" style={{ color: 'var(--yellow)' }}>The Leads Finder will not run for this ICP right now</div>
-                {data.blockers.map((b, i) => <div key={i} style={{ color: 'var(--text-muted)' }}>· {b}</div>)}
-              </div>
-            )}
+          <div className="p-4 space-y-3">
             {note && <div className="text-[11px]" style={{ color: note.toLowerCase().includes('error') || note.startsWith('Leads Finder can') ? 'var(--red)' : 'var(--text-muted)' }}>{note}</div>}
-
-            <SectionCard title="2 · The list" subtitle={`${data.coverage.total} leads · ${data.coverage.matched} matched · ${data.coverage.engaged} engaged · ${data.coverage.deals} became opportunities`}>
-              <FunnelBar stages={data.stages} legend height={12} />
-            </SectionCard>
-
-            {/* Firms first: on a firm list (e.g. VC funds) they are the work; on a people list the section is one slim line.
-                Everyone may look; changing the list is its owner's or an admin's (the routes enforce it). */}
-            <div id="firms"><FirmsSection icpId={id} canEdit={data.can_edit} /></div>
-            <div id="email"><EmailOutreachSection icpId={id} /></div>
-
-            <div className="grid gap-4 xl:grid-cols-2">
-              <DefinitionSection data={data} onEdit={data.can_edit ? () => setEditing(true) : undefined} />
-              <FinderSection data={data} canAct={canAct} busy={runBusy} onRun={run} disabledReason={disabledReason} />
-              <EnricherSection data={data} canAct={canAct} busy={runBusy} onRun={run} disabledReason={disabledReason} />
-              <GraphSection data={data} onChanged={refresh} />
+            <div className="flex flex-wrap items-start gap-4">
+              <div className="space-y-4" style={{ flex: '999 1 560px', minWidth: 0 }}>
+                {/* On a firm list (e.g. VC funds) the firms are the work; on a people list nothing shows here. */}
+                <div id="firms"><FirmsSection icpId={id} canEdit={data.can_edit} hideWhenEmpty onCount={setFirmCount} /></div>
+                <SectionCard title={`Leads · ${data.coverage.total}`}
+                  subtitle={data.icp.cohort ? 'highest priority first: right person + company fit and early-adopter signals + warmth · click a score for why' : 'priority rank first, then best fit · coverage: E employer · R research · @ email · 🔥 warm angle · ↝ warm route'}
+                  right={data.can_edit && <button type="button" onClick={() => setAddingPeople(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium"
+                    style={{ border: '1px solid var(--accent)', color: 'var(--accent)' }}
+                    title="Paste rows or upload a CSV / Excel file; new people land on this list, scored against it">Add people</button>}>
+                  <LeadsTable icpId={id} tick={tick} />
+                </SectionCard>
+              </div>
+              <aside className="space-y-3 w-full lg:max-w-[360px]" style={{ flex: '1 1 300px' }} aria-label="This list">
+                <RailFunnel icpId={id} />
+                <NeedsYou data={data} onOpen={() => setDrawer('outreach')} />
+                <AgentsCard data={data} onOpen={setDrawer} onActivity={() => setDrawer('activity')} />
+                <CampaignsCard icpId={id} />
+                <WhoBelongsCard data={data} onOpen={() => setDrawer('who')} />
+              </aside>
             </div>
-            <div id="outreach"><OutreachSection data={data} onChanged={refresh} /></div>
 
-            <SectionCard title="Leads" subtitle={data.icp.cohort ? 'highest priority first: right person + company fit and early-adopter signals + warmth · click a score for why' : 'priority rank first, then best fit · coverage: E employer · R research · @ email · 🔥 warm angle · ↝ warm route'}
-              right={data.can_edit && <button type="button" onClick={() => setAddingPeople(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium"
-                style={{ border: '1px solid var(--accent)', color: 'var(--accent)' }}
-                title="Paste rows or upload a CSV / Excel file; new people land on this list, scored against it">Add people</button>}>
-              <LeadsTable icpId={id} tick={tick} />
-            </SectionCard>
             {addingPeople && (
               <ImportLeadsModal list={{ id, name: data.icp.name, ownerName: data.is_owner ? 'You' : data.icp.owner_name }}
                 onClose={() => { setAddingPeople(false); void refresh(); }}
                 onImported={(n) => { setNote(`${n} ${n === 1 ? 'person' : 'people'} added. The agents now look up their LinkedIn profiles and enrich them.`); void refresh(); }} />
             )}
 
-            <SectionCard title="Activity" subtitle="every agent tick that touched this ICP, plus the owner's enricher and graph syncs and the outreach routine">
-              <ActivityList runs={data.activity} showIcp />
-            </SectionCard>
+            {drawer && (
+              <Drawer title={DRAWER_TITLE[drawer]} onClose={closeDrawer}>
+                {drawer === 'finder' && <>
+                  {data.blockers.length > 0 && data.icp.objective !== 'list' && (
+                    <div className="rounded-xl px-4 py-3 text-xs space-y-0.5" style={{ background: 'color-mix(in srgb, var(--yellow) 8%, transparent)', border: '1px solid var(--yellow)' }}>
+                      <div className="font-medium" style={{ color: 'var(--yellow)' }}>The Leads Finder will not run for this list right now</div>
+                      {data.blockers.map((b, i) => <div key={i} style={{ color: 'var(--text-muted)' }}>· {b}</div>)}
+                    </div>
+                  )}
+                  <FinderSection data={data} canAct={canAct} busy={runBusy} onRun={run} disabledReason={disabledReason} />
+                </>}
+                {drawer === 'enricher' && <EnricherSection data={data} canAct={canAct} busy={runBusy} onRun={run} disabledReason={disabledReason} />}
+                {drawer === 'graph' && <GraphSection data={data} onChanged={refresh} />}
+                {drawer === 'outreach' && <OutreachSection data={data} onChanged={refresh} />}
+                {drawer === 'activity' && <ActivityList runs={data.activity} showIcp />}
+                {drawer === 'who' && <>
+                  {data.icp.cohort && <CohortHeader cohort={data.icp.cohort} />}
+                  <DefinitionSection data={data} onEdit={data.can_edit ? () => { setDrawer(null); setEditing(true); } : undefined} />
+                  <TuningPanel icpId={id} onApplied={(n) => { setNote(n); void refresh(); }} />
+                </>}
+                {drawer === 'settings' && <>
+                  <ListSettings icpId={id} onSaved={(n) => { setNote(n); void refresh(); }} />
+                  {firmCount === 0 && <FirmsSection icpId={id} canEdit={data.can_edit} />}
+                  <details className="rounded-xl px-4 py-3" style={{ border: '1px solid var(--border)' }}>
+                    <summary className="text-xs cursor-pointer" style={{ color: 'var(--text-muted)' }}>Email waves (older way to email a list; campaigns now do this)</summary>
+                    <div className="mt-3"><EmailOutreachSection icpId={id} /></div>
+                  </details>
+                </>}
+              </Drawer>
+            )}
           </div>
         )}
       </div>
