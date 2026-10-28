@@ -1520,6 +1520,8 @@ export async function dispatchServiceTool(
       const { employee_id: _drop, owner_user_id: _own, ...rest } = args;
       // A partner app writes only its employee's OWN voice: never a team or list rule (079).
       if (toolName === 'crm_voice_rule_add') { delete rest.scope; delete rest.brand; delete rest.icp_id; }
+      // A partner app sees only its employee's own lists (teammates' lists are shared inside SalesBrain, not with apps).
+      if (toolName === 'crm_icp_list') rest.mine = true;
       return { status: 'success', data: await kernelCall(toolName, rest, owner) };
     }
     if (toolName === 'marketing_overview') {

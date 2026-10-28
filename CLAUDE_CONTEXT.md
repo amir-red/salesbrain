@@ -2656,6 +2656,14 @@ an ICP, so prioritization goes all the way from outreach, focus, onboarding into
   `view.column` refs): nothing else mismatched. Production logs since 088 showed one more real 500: the deal timeline failed for
   the creator/lead/admin since August (`$1` bound as uuid by `deal_id = $1`, then compared to `a.input->>'deal_id'`) — fixed
   with `$1::text`; no other route compares one `$N` both as jsonb text and as an id.
+- **0.70.1 — teammates read every list's data (same day)**: Mateo's cohort page said "List not found or not yours." under
+  Firms. The app routes already answer any teammate (`visibleIcp`, §5.bo) but the KERNEL still answered the owner/admin
+  only: `firms._icp` / `_firm` and `waves._icp` gained `write` (default True = owner or admin; reads pass `write=False`:
+  `list_firms`, `firm_progress`, `firm_get`, `email_sequence_get`, `waves_list`); `prospecting.icp_get` reads for anyone and
+  returns `owner_name` + `can_edit`; `icp_list` lists EVERY teammate's lists with `owner_name` / `mine` (`mine=true` =
+  own only; the service MCP forces `mine` so a partner app sees only its employee's lists). Spending stays owner/admin:
+  `crm_prospect_search` and the Leads Finder step refuse on `can_edit=false`. Rule: **a kernel READ of a list is open
+  to every signed-in teammate; a write or a spend checks owner-or-admin.**
 - **Lists page**: Grid | List switch (grid default, remembered in `localStorage icp.layout`); the list view is one line
   per list with the six funnel numbers, step rates (weakest in orange), conversion and "N to approve" (`ListTableRow`).
 
