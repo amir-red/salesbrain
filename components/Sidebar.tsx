@@ -11,11 +11,12 @@ type NavItem = { href: string; label: string; icon: ReactNode; admin?: boolean }
 
 const NAV_ITEMS: NavItem[] = [
   {
-    href: '/funnel',
-    label: 'Funnel',
+    href: '/dashboard',
+    label: 'Dashboard',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 4h18l-7 8.5V19l-4 2v-8.5z" />
+        <rect x="3" y="3" width="7.5" height="9" rx="1.5" /><rect x="13.5" y="3" width="7.5" height="5" rx="1.5" />
+        <rect x="13.5" y="11" width="7.5" height="10" rx="1.5" /><rect x="3" y="15" width="7.5" height="6" rx="1.5" />
       </svg>
     ),
   },
@@ -247,11 +248,11 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 // The nav follows the funnel (Mateo + Amir, 2026-10-26): first say whom you want and how you sound, then reach them,
-// then work prospects → leads → opportunities. Funnel + Inbox sit on top: what is happening, what needs an answer.
+// then work prospects → leads → opportunities. Dashboard + Inbox sit on top: what is happening, what needs an answer.
 // `foldable` groups start folded on every page (Amir 2026-10-24) and open by a click on their label — or by themselves
 // while one of their pages is the page you are on. The icon rail always shows every item.
 const GROUPS: { label: string; hrefs: string[]; foldable?: boolean }[] = [
-  { label: 'Overview', hrefs: ['/funnel', '/inbox'] },
+  { label: 'Overview', hrefs: ['/dashboard', '/inbox'] },
   { label: 'Target', hrefs: ['/icp', '/brand'] },
   { label: 'Reach', hrefs: ['/warm', '/campaigns', '/marketing', '/network'] },
   // Prospects live on the Lists page since 2026-10-28 ("All prospects" on the All-lists card); /prospecting still answers.

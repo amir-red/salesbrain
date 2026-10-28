@@ -186,7 +186,7 @@ export default function SalesLeadsPage() {
           </div>
 
           <div className="mb-4">
-            <FunnelStrip compact title="Where everyone stands" href="/funnel" />
+            <FunnelStrip compact title="Where everyone stands" href="/dashboard" />
           </div>
 
           {/* ── Toolbar ──────────────────────────────────────────── */}

@@ -110,7 +110,7 @@ export function pct(v: number | null | undefined): string {
 }
 
 /**
- * The funnel as drawn on /funnel (design A, 2026-10-28): six steps, each one or more kernel stages. Scored folds into
+ * The funnel as drawn on /dashboard (2026-10-28): six steps, each one or more kernel stages. Scored folds into
  * Sourced and Meeting / Qualified into Engaged — they are chips on the step, not steps of their own, so the shape
  * narrows the way the team reads it. `reached` of a merged step = the first member's (the widest), `current` = the
  * members' sum, conversion = the next step's reached over this one's.

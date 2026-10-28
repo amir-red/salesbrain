@@ -188,7 +188,7 @@ function ProspectingInner() {
         </div>
 
         <div className="px-4 pt-3">
-          <FunnelStrip compact title="Where everyone stands" href="/funnel" />
+          <FunnelStrip compact title="Where everyone stands" href="/dashboard" />
         </div>
 
         {/* New prospect form */}

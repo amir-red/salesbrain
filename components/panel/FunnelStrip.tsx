@@ -102,7 +102,7 @@ function Tile({ r, compact, next }: { r: FunnelStageRow; compact?: boolean; next
 
 export default function FunnelStrip({ query = {}, compact = false, title, data: given, href }: {
   query?: Record<string, string | undefined>; compact?: boolean; title?: string; data?: FunnelSummary | null;
-  /** In compact mode: a "Funnel →" link (e.g. /funnel?icp_id=…). */
+  /** In compact mode: a link to the dashboard (e.g. /dashboard?icp_id=…). */
   href?: string;
 }) {
   const own = useFunnel(query, given === undefined);
@@ -129,7 +129,7 @@ export default function FunnelStrip({ query = {}, compact = false, title, data: 
         {(title || href) && (
           <div className="flex items-baseline gap-3 text-xs" style={{ color: 'var(--text-muted)' }}>
             {title && <span className="font-medium">{title}</span>}
-            {href && <Link href={href} className="underline">open the funnel →</Link>}
+            {href && <Link href={href} className="underline">open the dashboard →</Link>}
           </div>
         )}
         <div className="flex items-stretch overflow-x-auto pb-1">

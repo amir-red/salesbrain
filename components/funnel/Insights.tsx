@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * "What converts" on /funnel (funnel Phase C): everyone we contacted, as they were at first contact, against how far
+ * "What converts" on /dashboard (funnel Phase C): everyone we contacted, as they were at first contact, against how far
  * they got. Findings and suggestions are for people to act on; nothing changes by itself.
  *
  * `useInsights(query)` fetches once; the page hands the result to the KPI tiles, the "What gets answers" card and this
