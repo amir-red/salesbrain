@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import PriorityPicker from '@/components/PriorityPicker';
 import PageHeader from '@/components/panel/PageHeader';
 import Button from '@/components/panel/Button';
 import { relativeTime } from '@/lib/time';
@@ -37,6 +38,7 @@ export default function DealsView({ deals, userId }: { deals: DealItem[]; userId
   const scope: Scope = (sp.get('scope') as Scope) || (view === 'board' ? 'everyone' : 'mine');
   const status: StatusFilter = (sp.get('status') as StatusFilter) || 'current';
   const flag: Flag = (sp.get('flag') as Flag) || '';
+  const priority = sp.get('priority') || '';
   const q = sp.get('q') || '';
   const grantView = sp.get('grants') === 'gates' ? 'gates' : 'stages';
 
@@ -56,10 +58,10 @@ export default function DealsView({ deals, userId }: { deals: DealItem[]; userId
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  const opts = { userId, scope, status, flag, q, type };
+  const opts = { userId, scope, status, flag, q, type, priority };
   const shown = useMemo(() => deals.filter((d) => matches(d, opts)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [deals, userId, scope, status, flag, q, type]);
+    [deals, userId, scope, status, flag, q, type, priority]);
   // The summary follows type + scope only, so the numbers do not jump while you click through filters.
   const summary = useMemo(() => summarize(deals.filter((d) => matches(d, { ...opts, status: 'all', flag: '', q: '' }))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -122,6 +124,13 @@ export default function DealsView({ deals, userId }: { deals: DealItem[]; userId
           className="px-2 py-1.5 rounded-lg text-xs outline-none"
           style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }}>
           {STATUS_FILTERS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+        </select>
+
+        <select value={priority} onChange={(e) => set({ priority: e.target.value || null })} aria-label="Priority"
+          className="px-2 py-1.5 rounded-lg text-xs outline-none"
+          style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+          <option value="">Any priority</option><option value="top">P1–P3</option><option value="set">Priority set</option><option value="none">No priority</option>
+          {[1,2,3,4,5,6,7,8,9,10].map((n) => <option key={n} value={String(n)}>P{n}</option>)}
         </select>
 
         {FLAGS.map((f) => (
@@ -241,7 +250,7 @@ function DealsTable({ deals }: { deals: DealItem[] }) {
       <table className="w-full text-sm min-w-[860px]">
         <thead>
           <tr style={{ background: 'var(--bg-card)', color: 'var(--text-muted)' }}>
-            {['Opportunity', 'Stage', 'State', 'Value', 'Lead', 'In stage', 'Updated'].map((h) => (
+            {['Prio', 'Opportunity', 'Stage', 'State', 'Value', 'Lead', 'In stage', 'Updated'].map((h) => (
               <th key={h} className="text-left p-2 font-medium text-xs">{h}</th>
             ))}
           </tr>
@@ -254,6 +263,7 @@ function DealsTable({ deals }: { deals: DealItem[] }) {
             return (
               <tr key={d.id} onClick={() => router.push(`/deals/${d.id}`)} className="cursor-pointer hover:brightness-95"
                 style={{ borderTop: '1px solid var(--border)', background: 'var(--bg)' }}>
+                <td className="p-2"><PriorityPicker value={d.priority} dealId={d.id} onChanged={() => router.refresh()} /></td>
                 <td className="p-2">
                   <Link href={`/deals/${d.id}`} onClick={(e) => e.stopPropagation()} className="font-medium hover:underline">{d.name}</Link>
                   <div className="text-xs flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>

@@ -6,6 +6,7 @@ import { PROSPECT_STAGES } from '@/lib/prospecting';
 import { relativeTime } from '@/lib/time';
 import { DegreeWarm } from '@/components/icp/IcpLeads';
 import { COHORTS, SIGNAL_LABELS, cohortName, type CohortInfo } from '@/lib/cohorts';
+import PriorityPicker from '@/components/PriorityPicker';
 import { CONNECT_COLOR, CONNECT_LABEL, RUNG_LABEL, connectState, describeLookup, type ConnectState, type ProfileLookup } from '@/lib/connect';
 
 export interface Lead {
@@ -18,6 +19,7 @@ export interface Lead {
   network_degree: string | null;
   warm_paths: { type: string; value?: string; note: string }[] | null;
   linkedin_public_id: string | null; priority_rank: number | null;
+  priority?: number | null; must_talk?: boolean | null;
   invite_status: string | null; invite_sent_at: string | null; invite_source: string | null;
   invite_error: string | null; connect_approval: string | null;
   profile_lookup: ProfileLookup | null;
@@ -51,6 +53,7 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
   const [stage, setStage] = useState('');
   const [minScore, setMinScore] = useState(0);
   const [warmOnly, setWarmOnly] = useState(false);
+  const [prio, setPrio] = useState('');
   const [open, setOpen] = useState<string | null>(null);
   const [conn, setConn] = useState<'' | ConnectState>('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -62,9 +65,10 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
       ...(stage ? { stage } : {}),
       ...(minScore ? { min_score: String(minScore) } : {}),
       ...(warmOnly ? { warm: '1' } : {}),
+      ...(prio ? { priority: prio } : {}),
     }).toString());
     if (res.ok) setData(await res.json());
-  }, [icpId, stage, minScore, warmOnly]);
+  }, [icpId, stage, minScore, warmOnly, prio]);
   useEffect(() => { load(); }, [load, tick]);
 
   const noAnswer = data?.connect?.no_answer_after_days;
@@ -135,6 +139,13 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
             <option value={0}>any</option><option value={40}>40 weak+</option><option value={60}>60 proceed+</option><option value={75}>75 strong</option>
           </select>
         </label>
+        <label className="flex items-center gap-2">
+          priority
+          <select value={prio} onChange={(e) => setPrio(e.target.value)} className="px-2 py-1 rounded text-xs" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+            <option value="">any</option><option value="top">P1–P3</option><option value="set">any set</option><option value="none">not set</option>
+            {[1,2,3,4,5,6,7,8,9,10].map((n) => <option key={n} value={String(n)}>P{n}</option>)}
+          </select>
+        </label>
         <label className="flex items-center gap-1">
           <input type="checkbox" checked={warmOnly} onChange={(e) => setWarmOnly(e.target.checked)} /> warm only
         </label>
@@ -189,6 +200,7 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
           <table className="w-full text-sm">
             <thead>
               <tr style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>
+                <th className="text-left p-2 font-medium text-xs" title="The one person priority: 1 = top. Set it here, on the lead card or the opportunity — it is the same number everywhere.">Prio</th>
                 <th className="text-left p-2 font-medium text-xs">Person</th>
                 <th className="text-left p-2 font-medium text-xs">Company</th>
                 <th className="text-left p-2 font-medium text-xs">Fit</th>
@@ -224,6 +236,7 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
                 return (
                   <FragmentRow key={l.id}>
                     <tr style={{ borderTop: '1px solid var(--border)' }}>
+                      <td className="p-2 align-top"><PriorityPicker value={l.priority} prospectId={l.id} onChanged={() => void load()} /></td>
                       <td className="p-2">
                         <Link href={`/prospects/${l.id}`} className="font-medium hover:underline">{l.full_name || '—'}</Link>
                         <div className="text-xs truncate max-w-[320px]" style={{ color: 'var(--text-muted)' }}>{l.title || '—'}</div>
@@ -308,7 +321,7 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
                     </tr>
                     {open === l.id && (
                       <tr style={{ background: 'var(--bg-card)' }}>
-                        <td colSpan={7} className="p-2 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                        <td colSpan={8} className="p-2 text-[11px]" style={{ color: 'var(--text-muted)' }}>
                           {l.cohort_score != null && (
                             <div className="mb-1.5 space-y-0.5" style={{ color: 'var(--text)' }}>
                               {l.company_summary && <div>{l.company_summary}</div>}
@@ -323,7 +336,7 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
                     )}
                     {pick === l.id && (
                       <tr style={{ background: 'var(--bg-card)' }}>
-                        <td colSpan={7} className="p-2 text-[11px]">
+                        <td colSpan={8} className="p-2 text-[11px]">
                           <div className="mb-1" style={{ color: 'var(--text-muted)' }}>
                             Which LinkedIn profile is {l.full_name || 'this person'} ({l.company_name || 'company unknown'})?
                             {l.profile_lookup?.reason ? ` ${l.profile_lookup.reason}.` : ''} A wrong pick cannot be undone once a request goes out.

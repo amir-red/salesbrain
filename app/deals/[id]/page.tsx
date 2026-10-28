@@ -12,6 +12,7 @@ import AiCreditPanel from '@/components/AiCreditPanel';
 import ZeamiOnboardingPanel from '@/components/ZeamiOnboardingPanel';
 import Chat from '@/components/Chat';
 import LeadPicker from '@/components/deals/LeadPicker';
+import PriorityPicker from '@/components/PriorityPicker';
 import { getPipeline, SALES_GATES } from '@/lib/gates';
 import { HEALTH_COLOR } from '@/lib/deals-view';
 
@@ -43,6 +44,7 @@ interface Deal {
   status?: 'active' | 'won' | 'lost' | 'cancelled';
   contract_signed_at?: string | null;
   won_at?: string | null;
+  priority?: number | null;
   cancelled_at?: string | null;
   cancelled_reason?: string | null;
   deleted_at?: string | null;
@@ -268,6 +270,7 @@ export default function DealViewPage() {
             </Link>
             <div>
               <div className="flex items-center gap-2">
+                <PriorityPicker value={deal.priority} dealId={deal.id} size="md" onChanged={() => void reload()} />
                 <h1 className="text-xl font-bold">{deal.name}</h1>
                 {isLost && (
                   <span

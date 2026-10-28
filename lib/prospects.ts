@@ -46,6 +46,7 @@ export interface Prospect {
   owner_name?: string | null;
   owner_user_id?: string | null;
   icp_profile_id?: string | null; list_name?: string | null;
+  priority?: number | null;
   // Cohorts (090)
   cohort_score?: number | null; cohort_why?: string | null; cohort_signals?: string[] | null; warm_via?: string | null;
   company_summary?: string | null;

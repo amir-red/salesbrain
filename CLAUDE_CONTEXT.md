@@ -2633,6 +2633,25 @@ clean start (old lists DELETED); rank = right person + company fit/early-adopter
   counts as certain membership and is scored on signals (a1b3d06); placeholder companies "Unknown" / "Independent" are
   judged person by person (4b74063). `/root/rpc.sh '<json>'` = run a kernel tool on the box as a given actor.
 
+### 5.bz One person priority, everywhere + Lists grid | list (2026-10-28, feat/priority, migration 091)
+
+Amir, on the ranked NRW list: "I can see a priority — but also let me prioritize a person from prospects, sales leads, from
+an ICP, so prioritization goes all the way from outreach, focus, onboarding into clients; and filters on the leads."
+- **One number**: `leads.priority` (1 = top … 10, NULL = not set; the 059 column, on the ONE table) is the person's
+  priority as prospect and lead card alike; **091** adds `deals.priority` (copied from the lead at `convert_lead_to_deal`,
+  then its own; `DIRECT_COLUMNS` so `update_deal` writes it). The AI cohort score stays separate: a set priority sorts
+  first, the score orders the rest.
+- **Kernel** `commands/priority.py::set_priority(actor, priority, prospect_id|deal_id)`: any teammate may set a lead's
+  (lists are shared; audited `set_priority`; a card goes through `update_sales_lead` so the track record gets its line;
+  the converted deal follows unless its own number was changed by hand); a deal follows the deal visibility rule; the
+  service actor is refused. Ring tool `crm_set_priority` (family crm_prospecting, mcp write; on the MCP catalogue).
+- **App**: `components/PriorityPicker.tsx` (coloured P-badge, click = select 1–10 / —, `POST /api/priority`) on the list's
+  leads table (new Prio column + filter any / P1–P3 / any set / not set / P1…P10; order `priority NULLS LAST` first),
+  `/prospecting` (column + filter, `?priority=`), the person page header, Opportunities (`DealItem.priority`, Prio column,
+  filter select `?priority=`, `deals-board` orders by it) and the deal page header. `/sales-leads` already had it.
+- **Lists page**: Grid | List switch (grid default, remembered in `localStorage icp.layout`); the list view is one line
+  per list with the six funnel numbers, step rates (weakest in orange), conversion and "N to approve" (`ListTableRow`).
+
 ### 5.by /icp/[id] = leads table + rail (2026-10-28, feat/icp-cockpit, app-only, no migration)
 
 Amir picked design B of three (canvas https://claude.ai/artifact/4y5C8A6rZ7Xg7a5ZWkdDe3). The leads table is the page (left,

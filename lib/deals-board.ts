@@ -10,7 +10,7 @@ import type { DealItem } from '@/lib/deals-view';
 
 export async function loadDeals(): Promise<DealItem[]> {
   const { rows } = await pool.query(
-    `SELECT d.id, d.name, d.company, d.deal_type, d.status, d.gate, d.score,
+    `SELECT d.id, d.name, d.company, d.deal_type, d.status, d.gate, d.score, d.priority,
             d.value::float AS value, COALESCE(d.currency, 'USD') AS currency,
             d.user_id, c.name AS creator_name, d.lead_id, l.name AS lead_name, rep.name AS rep_name,
             d.gate_entered_at, d.created_at, d.updated_at, d.won_at, d.contract_signed_at,
@@ -35,7 +35,7 @@ export async function loadDeals(): Promise<DealItem[]> {
           ORDER BY b.created_at DESC LIMIT 1
        ) bd ON true
       WHERE d.deleted_at IS NULL
-      ORDER BY d.updated_at DESC`,
+      ORDER BY d.priority NULLS LAST, d.updated_at DESC`,
   );
   return rows as DealItem[];
 }

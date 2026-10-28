@@ -47,6 +47,11 @@ export async function GET(req: NextRequest) {
   // One place for lists and prospects (Mateo, 2026-10-27): narrow to one list, or to people a teammate knows.
   const icpId = params.get('icp_id');
   if (icpId && /^[0-9a-f-]{36}$/i.test(icpId)) add((n) => `p.icp_profile_id = $${n}`, icpId);
+  const prio = params.get('priority') || '';
+  if (prio === 'set') filters.push('p.priority IS NOT NULL');
+  else if (prio === 'top') filters.push('p.priority <= 3');
+  else if (prio === 'none') filters.push('p.priority IS NULL');
+  else if (/^(10|[1-9])$/.test(prio)) add((n) => `p.priority = $${n}`, Number(prio));
   if (params.get('warm') === '1') filters.push(
     `EXISTS (SELECT 1 FROM person_warmth w WHERE w.person_id = p.person_id AND w.band IN ('hot', 'warm'))`);
   if (replyStatus) add((n) => `p.reply_status = $${n}`, replyStatus);
@@ -77,7 +82,7 @@ export async function GET(req: NextRequest) {
        ${from}
        LEFT JOIN users u ON u.id = p.owner_user_id
        ${listWhere}
-       ORDER BY p.updated_at DESC, p.id
+       ORDER BY p.priority NULLS LAST, p.updated_at DESC, p.id
        LIMIT ${limit} OFFSET ${offset}`,
       listValues
     );

@@ -13,6 +13,7 @@ import { journeyState, routeEntry, warmAngles } from '@/lib/prospects';
 import type { ActAs, IntroRequestLite, JourneyKey, Prospect } from '@/lib/prospects';
 import { relativeTime, formatDate } from '@/lib/time';
 import { SIGNAL_LABELS } from '@/lib/cohorts';
+import PriorityPicker from '@/components/PriorityPicker';
 
 interface Brief {
   id: string; summary: string | null; pain_hypotheses: string | null; why_now_signals: string | null;
@@ -125,7 +126,10 @@ export default function ProspectDetailPage() {
             <div className="flex items-center gap-4">
               <Link href={backHref} className="px-3 py-1.5 rounded-lg text-xs" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>← {backLabel}</Link>
               <div>
-                <h1 className="text-xl font-bold">{prospect.full_name || '—'}{prospect.title ? ` · ${prospect.title}` : ''}</h1>
+                <h1 className="text-xl font-bold flex items-center gap-2">
+                  <PriorityPicker value={prospect.priority} prospectId={prospect.id} size="md" onChanged={() => void fetchData(true)} />
+                  {prospect.full_name || '—'}{prospect.title ? ` · ${prospect.title}` : ''}
+                </h1>
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
                   {prospect.company_name || '—'}{prospect.domain ? ` · ${prospect.domain}` : ''}
                   {prospect.linkedin_url && <> · <a href={prospect.linkedin_url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>LinkedIn ↗</a></>}

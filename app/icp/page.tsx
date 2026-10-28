@@ -1,10 +1,11 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import IcpWizard from '@/components/icp/IcpWizard';
-import ListFunnelCard, { AllListsCard } from '@/components/icp/ListFunnelCard';
+import ListFunnelCard, { AllListsCard, ListTableRow } from '@/components/icp/ListFunnelCard';
+import { LIST_FUNNEL_STEPS } from '@/lib/icp-panel';
 import type { RunMode } from '@/components/icp/IcpRow';
 import type { IcpProfile } from '@/lib/icp';
 import { EMPTY_ICP_FILTER, applyIcpFilters } from '@/lib/icp-panel';
@@ -27,6 +28,10 @@ export default function IcpPage() {
   const [estate, setEstate] = useState(true);        // every teammate's lists (visible to everyone); off = mine only
   const [filter, setFilter] = useState<IcpListFilter>(EMPTY_ICP_FILTER);
   const [sort, setSort] = useState<'contacted' | 'conversion' | 'found'>('contacted');
+  // Grid (cards, the default) or a compact list; remembered per browser (Amir, 2026-10-28).
+  const [layout, setLayoutState] = useState<'grid' | 'list'>('grid');
+  useEffect(() => { try { if (localStorage.getItem('icp.layout') === 'list') setLayoutState('list'); } catch { /* ignore */ } }, []);
+  const setLayout = (l: 'grid' | 'list') => { setLayoutState(l); try { localStorage.setItem('icp.layout', l); } catch { /* ignore */ } };
 
   const load = useCallback(async () => {
     const [a, b] = await Promise.all([fetch(`/api/icp/overview${estate ? '?scope=all' : ''}`), fetch('/api/agents')]);
@@ -124,6 +129,18 @@ export default function IcpPage() {
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <Link href="/agents" className="text-sm px-3 py-2 rounded-full hover:underline" style={{ color: 'var(--text-muted)' }}>Agents</Link>
+                <div role="group" aria-label="Layout" className="flex gap-1 p-1 rounded-full" style={{ background: 'color-mix(in srgb, var(--accent) 8%, transparent)' }}>
+                  {(['grid', 'list'] as const).map((l) => (
+                    <button key={l} aria-pressed={layout === l} onClick={() => setLayout(l)} title={l === 'grid' ? 'Cards with a funnel each' : 'One line per list'}
+                            className="px-3 py-1.5 rounded-full text-sm font-medium inline-flex items-center gap-1.5"
+                            style={{ background: layout === l ? 'var(--bg-card)' : 'transparent', color: layout === l ? 'var(--text)' : 'var(--text-muted)' }}>
+                      {l === 'grid'
+                        ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+                        : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>}
+                      {l === 'grid' ? 'Grid' : 'List'}
+                    </button>
+                  ))}
+                </div>
                 <div role="group" aria-label="Whose lists" className="flex gap-1 p-1 rounded-full" style={{ background: 'color-mix(in srgb, var(--accent) 8%, transparent)' }}>
                   {([[true, 'Everyone'], [false, 'Mine']] as const).map(([v, label]) => (
                     <button key={label} aria-pressed={estate === v} onClick={() => { setEstate(v); setFilter((f) => ({ ...f, owner: 'all' })); }}
@@ -168,7 +185,24 @@ export default function IcpPage() {
               <p className="text-sm py-10 text-center" style={{ color: 'var(--text-muted)' }}>No list matches “{filter.q}”.</p>
             )}
 
-            {overview && shown.length > 0 && (
+            {overview && shown.length > 0 && layout === 'list' && (
+              <section aria-label="Lists" className="z-panel overflow-x-auto">
+                <table className="w-full text-sm min-w-[900px]">
+                  <thead>
+                    <tr style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>
+                      <th className="text-left p-2 font-medium text-xs">List</th>
+                      {LIST_FUNNEL_STEPS.map(([k, label]) => <th key={k} className="text-right p-2 font-medium text-xs">{label}</th>)}
+                      <th className="text-right p-2 font-medium text-xs" title="contacted → opportunity">Conversion</th>
+                      <th className="text-right p-2 font-medium text-xs">Waiting</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sorted.map((p) => <ListTableRow key={p.id} icp={p} viewerUserId={viewer} />)}
+                  </tbody>
+                </table>
+              </section>
+            )}
+            {overview && shown.length > 0 && layout === 'grid' && (
               <section aria-label="Lists" className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>
                 {total && !filter.q && <AllListsCard f={total} lists={withPeople} />}
                 {sorted.map((p) => (

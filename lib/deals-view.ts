@@ -24,6 +24,7 @@ export interface DealItem {
   status: DealStatus;
   gate: number;
   score: number | null;
+  priority: number | null;   // the one person priority (091), 1 = top
   value: number | null;
   currency: string;
   user_id: string;
@@ -157,6 +158,8 @@ export type View = 'list' | 'board';
 export type Scope = 'mine' | 'everyone';
 export type StatusFilter = 'current' | 'won' | 'lost' | 'cancelled' | 'all';
 export type Flag = 'overdue' | 'vote' | 'delivery' | '';
+/** Priority filter: '' any · 'top' P1–P3 · 'set' any set · 'none' unset · '1'..'10' one level. */
+export type PriorityFilter = string;
 
 export const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
   { key: 'current', label: 'Open & won' },
@@ -172,8 +175,13 @@ export const FLAGS: { key: Exclude<Flag, ''>; label: string }[] = [
   { key: 'delivery', label: 'In delivery' },
 ];
 
-export function matches(d: DealItem, o: { userId: string; scope: Scope; status: StatusFilter; flag: Flag; q: string; type: DealType | 'all' }): boolean {
+export function matches(d: DealItem, o: { userId: string; scope: Scope; status: StatusFilter; flag: Flag; q: string; type: DealType | 'all'; priority?: PriorityFilter }): boolean {
   if (o.type !== 'all' && d.deal_type !== o.type) return false;
+  const pr = o.priority || '';
+  if (pr === 'set' && d.priority == null) return false;
+  if (pr === 'top' && !(d.priority != null && d.priority <= 3)) return false;
+  if (pr === 'none' && d.priority != null) return false;
+  if (/^(10|[1-9])$/.test(pr) && d.priority !== Number(pr)) return false;
   if (o.scope === 'mine' && d.user_id !== o.userId && d.lead_id !== o.userId) return false;
   if (o.status === 'current' && isClosed(d)) return false;
   if (o.status === 'won' && !isWon(d)) return false;

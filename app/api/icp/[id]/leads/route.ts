@@ -21,12 +21,18 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const stage = req.nextUrl.searchParams.get('stage');
   const minScore = Number(req.nextUrl.searchParams.get('min_score') || 0);
   const warm = req.nextUrl.searchParams.get('warm') === '1';
+  // the one person priority (091): 'set' = any priority, 'top' = P1-P3, '1'..'10' = that level, 'none' = unset
+  const prio = req.nextUrl.searchParams.get('priority') || '';
   // Every lead on the list, whoever holds it (a lead can sit with the account that sends to it).
   const values: unknown[] = [params.id];
   const filters: string[] = [`p.icp_profile_id = $1`];
   if (stage) { values.push(stage); filters.push(`p.stage = $${values.length}`); }
   if (minScore > 0) { values.push(minScore); filters.push(`p.icp_score >= $${values.length}`); }
   if (warm) filters.push(`(p.network_degree IN ('1','2') OR jsonb_array_length(COALESCE(p.warm_paths, '[]'::jsonb)) > 0)`);
+  if (prio === 'set') filters.push('p.priority IS NOT NULL');
+  else if (prio === 'top') filters.push('p.priority <= 3');
+  else if (prio === 'none') filters.push('p.priority IS NULL');
+  else if (/^(10|[1-9])$/.test(prio)) { values.push(Number(prio)); filters.push(`p.priority = $${values.length}`); }
 
   // Cohorts (090): the rank Mateo works by, why, and the company's short summary. Before 090 the old order stays.
   const cohorts = await cohortsStored();
@@ -41,14 +47,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
        LEFT JOIN account_profiles ap ON ap.account_id = p.account_id AND ap.kind = 'company'`
     : '';
   const order = cohorts
-    ? 'cs.score DESC NULLS LAST, p.priority_rank NULLS LAST, p.icp_score DESC NULLS LAST, p.created_at DESC'
-    : 'p.priority_rank NULLS LAST, p.icp_score DESC NULLS LAST, p.created_at DESC';
+    ? 'p.priority NULLS LAST, cs.score DESC NULLS LAST, p.priority_rank NULLS LAST, p.icp_score DESC NULLS LAST, p.created_at DESC'
+    : 'p.priority NULLS LAST, p.priority_rank NULLS LAST, p.icp_score DESC NULLS LAST, p.created_at DESC';
 
   const [leads, state, last, counts] = await Promise.all([
     pool.query(
       `SELECT ${cohortCols} p.id, p.stage, p.icp_score, p.fit_label, p.qualification_reason, p.research_summary,
               p.source_type, p.source_detail, p.linkedin_public_id, p.candidate_location,
-              p.network_degree, p.warm_paths, p.priority_rank,
+              p.network_degree, p.warm_paths, p.priority_rank, p.priority, p.must_talk,
               p.created_at, p.scored_at, p.engaged_at, p.converted_deal_id,
               c.full_name, c.title, c.email, c.linkedin_url,
               a.name AS company_name, a.industry, a.company_size,

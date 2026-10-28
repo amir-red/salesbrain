@@ -211,3 +211,32 @@ export default function ListFunnelCard({ icp, quota, viewerUserId, isAdmin, flee
     </article>
   );
 }
+
+
+/** The list view of /icp (2026-10-28): one compact line per list, the same numbers as the card. */
+export function ListTableRow({ icp, viewerUserId }: { icp: OverviewIcp; viewerUserId: string }) {
+  const f = icp.funnel;
+  const isOwner = icp.owner_user_id === viewerUserId;
+  const rates = f ? stepRates(f) : null;
+  const weak = f ? weakestStep(f) : null;
+  return (
+    <tr style={{ borderTop: '1px solid var(--border)' }}>
+      <td className="p-2">
+        <Link href={`/icp/${icp.id}`} className="font-medium hover:underline">{icp.name}</Link>
+        <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{isOwner ? 'You' : icp.owner_name}{icp.paused_at ? ' · paused' : ''}</div>
+      </td>
+      {LIST_FUNNEL_STEPS.map(([k], i) => (
+        <td key={k} className="p-2 text-right tabular-nums whitespace-nowrap">
+          <span className={i === 0 ? 'font-medium' : ''}>{f ? f[k].toLocaleString() : '—'}</span>
+          {f && rates && rates[i] !== null && (
+            <span className="ml-1 text-[10px]" style={{ color: weak === i ? 'var(--orange)' : 'var(--text-muted)' }}>{rateLabel(f[k], f[LIST_FUNNEL_STEPS[i - 1][0]])}</span>
+          )}
+        </td>
+      ))}
+      <td className="p-2 text-right font-semibold tabular-nums">{f ? rateLabel(f.opportunity, f.contacted) : '—'}</td>
+      <td className="p-2 text-right text-xs">
+        {icp.approvals.pending > 0 ? <span className="px-2 py-0.5 rounded-full" style={{ background: 'color-mix(in srgb, var(--green) 14%, transparent)', color: 'var(--green)' }}>{icp.approvals.pending} to approve</span> : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+      </td>
+    </tr>
+  );
+}

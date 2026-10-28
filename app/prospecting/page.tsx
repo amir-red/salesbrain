@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { PROSPECT_STAGES } from '@/lib/prospecting';
 import { relativeTime } from '@/lib/time';
 import ExportButton from '@/components/ExportButton';
+import PriorityPicker from '@/components/PriorityPicker';
 
 interface Prospect {
   id: string;
@@ -24,6 +25,7 @@ interface Prospect {
   title: string | null;
   owner_name: string | null;
   converted_deal_id: string | null;
+  priority: number | null;
 }
 
 const STAGE_COLORS: Record<string, string> = {
@@ -69,6 +71,7 @@ function ProspectingInner() {
   const search0 = useSearchParams();
   const [listId, setListId] = useState(search0.get('icp_id') || '');
   const [warmOnly, setWarmOnly] = useState(search0.get('warm') === '1');
+  const [prio, setPrio] = useState(search0.get('priority') || '');
   const [lists, setLists] = useState<{ id: string; name: string; prospects: number }[]>([]);
   useEffect(() => {
     fetch('/api/icp?scope=all').then((r) => (r.ok ? r.json() : [])).then((d) => {
@@ -99,11 +102,12 @@ function ProspectingInner() {
     if (mineOnly) params.set('mine', 'true');
     if (listId) params.set('icp_id', listId);
     if (warmOnly) params.set('warm', '1');
+    if (prio) params.set('priority', prio);
     if (query) params.set('q', query);
     const res = await fetch(`/api/prospects?${params.toString()}`);
     if (!res.ok) throw new Error(`Could not load prospects (${res.status})`);
     return res.json() as Promise<{ rows: Prospect[]; total: number; counts: Record<string, number> }>;
-  }, [stageFilter, mineOnly, listId, warmOnly, query]);
+  }, [stageFilter, mineOnly, listId, warmOnly, prio, query]);
 
   const fetchProspects = useCallback(async () => {
     setLoading(true);
@@ -236,6 +240,11 @@ function ProspectingInner() {
             <option value="">Every list</option>
             {lists.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.prospects})</option>)}
           </select>
+          <select value={prio} onChange={(e) => setPrio(e.target.value)} aria-label="Priority"
+            className="px-2 py-1 rounded-lg text-xs outline-none" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+            <option value="">Any priority</option><option value="top">P1–P3</option><option value="set">Priority set</option><option value="none">No priority</option>
+            {[1,2,3,4,5,6,7,8,9,10].map((n) => <option key={n} value={String(n)}>P{n}</option>)}
+          </select>
           <label className="text-xs flex items-center gap-1" style={{ color: 'var(--text-muted)' }} title="Someone on the team already talks to them (warm or hot)">
             <input type="checkbox" checked={warmOnly} onChange={(e) => setWarmOnly(e.target.checked)} />
             Warm
@@ -268,6 +277,7 @@ function ProspectingInner() {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ background: 'var(--bg-card)', color: 'var(--text-muted)' }}>
+                    <th className="text-left p-2 font-medium text-xs" title="The one person priority: 1 = top; the same number on the lead card and the opportunity">Prio</th>
                     <th className="text-left p-2 font-medium text-xs">Prospect</th>
                     <th className="text-left p-2 font-medium text-xs">Company</th>
                     <th className="text-left p-2 font-medium text-xs">Stage</th>
@@ -280,6 +290,7 @@ function ProspectingInner() {
                 <tbody>
                   {prospects.map((p) => (
                     <tr key={p.id} style={{ borderTop: '1px solid var(--border)' }}>
+                      <td className="p-2 align-top"><PriorityPicker value={p.priority} prospectId={p.id} onChanged={() => void fetchProspects()} /></td>
                       <td className="p-2">
                         <Link href={`/prospects/${p.id}`} className="hover:underline">
                           <div className="font-medium">{p.full_name || '—'}</div>
