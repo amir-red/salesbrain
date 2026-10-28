@@ -2678,6 +2678,22 @@ or "hand-made list", Enricher coverage, Warm routes, Outreach), Campaigns using 
 header has a Settings drawer (ListSettings, Import firms on a people list, the old email waves folded as "older way").
 Gone from the page: the duplicate "2 · The list" funnel bar, the numbered sections, the top blocker box.
 
+### 5.ca /funnel = the funnel, drawn (2026-10-28, feat/funnel-page, app-only, no migration)
+
+Amir: "the ui/ux is not really good, a lot of text, it doesn't represent the title — it's a funnel; a dashboard/report with
+highlights". Picked design A of three (canvas https://claude.ai/artifact/RVn4piTh8uZYW66fnzTuyG; B = period-delta report
+dashboard, C = stage → people explorer, not built). The page is now: four headline tiles (Contacted, Answered, Contacted →
+opportunity, Clients; "+N in period" when a period is set) → **`components/funnel/FunnelChart.tsx`**, the funnel as six
+trapezoids whose heights are the square root of `reached`, on one plum ramp (`RAMP`, color-mix of `--accent`), click a step
+for its meaning / sub-counts / exits / "See the people →" (`GROUP_HREF`) → three cards: **Biggest leak** (lowest conversion
+among steps ≥ 8 people reached, with the largest sub-count named), **What gets answers** (top 4 `works` findings as
+value · dimension · answer rate, the weakest one muted), **How people came in** (lanes) → a "More" panel with the full
+"What converts" table, channels, exits and definitions. `lib/funnel.ts::DRAWN_STEPS / drawnSteps` fold Scored into Sourced
+and Meeting / Qualified into Engaged (chips, not steps — the kernel's nine stages are unchanged; `FunnelStrip compact` on
+/sales-leads and /prospecting still shows all nine). `useInsights` (Insights.tsx) fetches once for tiles, card and table.
+Filters moved into the PageHeader actions (lanes are a select, not chips); the subtitle names the slice. Not seen rendered
+(Chrome extension not connected at build time).
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
