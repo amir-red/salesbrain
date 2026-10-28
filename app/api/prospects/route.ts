@@ -60,7 +60,8 @@ export async function GET(req: NextRequest) {
 
   const from = `FROM leads p -- the one table (088): the prospects view lacks the card columns such as priority
      LEFT JOIN accounts a ON a.id = p.account_id
-     LEFT JOIN contacts c ON c.id = p.contact_id`;
+     LEFT JOIN contacts c ON c.id = p.contact_id
+     LEFT JOIN icp_profiles ip ON ip.id = p.icp_profile_id`;
   const baseWhere = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
   const listFilters = [...filters];
   const listValues = [...values];
@@ -82,7 +83,7 @@ export async function GET(req: NextRequest) {
        ${from}
        LEFT JOIN users u ON u.id = p.owner_user_id
        ${listWhere}
-       ORDER BY p.priority NULLS LAST, p.updated_at DESC, p.id
+       ORDER BY COALESCE(p.priority, ip.priority) NULLS LAST, p.updated_at DESC, p.id
        LIMIT ${limit} OFFSET ${offset}`,
       listValues
     );

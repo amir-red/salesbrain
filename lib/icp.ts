@@ -47,6 +47,8 @@ export interface IcpProfile {
   paused_reason?: string | null;
   /** What every firm on an investor list is judged against (075); {} on a customer list. */
   firm_brief?: Record<string, unknown> | null;
+  /** The list's priority (092): 1 = top … 10, null = not set. Agents serve lists top-down; people inherit it for sorting. */
+  priority?: number | null;
   /** Mateo's cohort this list is (090); null on a list that is not a cohort. */
   cohort?: import('@/lib/cohorts').CohortInfo | null;
   paused_by_admin?: boolean;

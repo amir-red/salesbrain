@@ -27,7 +27,7 @@ export default function IcpPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [estate, setEstate] = useState(true);        // every teammate's lists (visible to everyone); off = mine only
   const [filter, setFilter] = useState<IcpListFilter>(EMPTY_ICP_FILTER);
-  const [sort, setSort] = useState<'contacted' | 'conversion' | 'found'>('contacted');
+  const [sort, setSort] = useState<'priority' | 'contacted' | 'conversion' | 'found'>('priority');
   // Grid (cards, the default) or a compact list; remembered per browser (Amir, 2026-10-28).
   const [layout, setLayoutState] = useState<'grid' | 'list'>('grid');
   useEffect(() => { try { if (localStorage.getItem('icp.layout') === 'list') setLayoutState('list'); } catch { /* ignore */ } }, []);
@@ -84,6 +84,10 @@ export default function IcpPage() {
     const fa = a.funnel, fb = b.funnel;
     const ea = !fa || fa.found === 0, eb = !fb || fb.found === 0;
     if (ea !== eb) return ea ? 1 : -1;                       // lists with nobody on them go last
+    if (sort === 'priority') {                               // the list's priority (092), unset last, then most contacted
+      const pa = a.priority ?? 99, pb = b.priority ?? 99;
+      if (pa !== pb) return pa - pb;
+    }
     if (sort === 'conversion') {
       // contacted → opportunity first; with no opportunities yet, the deepest step still separates lists
       const key = (f: typeof fa) => (f && f.contacted
@@ -165,9 +169,18 @@ export default function IcpPage() {
                        aria-label="Search lists" className="h-10 px-4 rounded-full text-sm w-72 outline-none" style={inputStyle} />
                 <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Sort lists"
                         className="h-10 px-3 rounded-full text-sm outline-none" style={inputStyle}>
+                  <option value="priority">Priority first</option>
                   <option value="contacted">Most contacted</option>
                   <option value="conversion">Best conversion</option>
                   <option value="found">Most people</option>
+                </select>
+                <select value={filter.priority} onChange={(e) => setFilter((f) => ({ ...f, priority: e.target.value as IcpListFilter['priority'] }))}
+                        aria-label="Priority filter" className="h-10 px-3 rounded-full text-sm outline-none"
+                        style={filter.priority === 'all' ? inputStyle : { ...inputStyle, border: '1px solid var(--accent)', color: 'var(--accent)' }}>
+                  <option value="all">Any priority</option>
+                  <option value="top">P1–P3</option>
+                  <option value="set">Any set</option>
+                  <option value="none">Not set</option>
                 </select>
               </div>
             )}
@@ -190,6 +203,7 @@ export default function IcpPage() {
                 <table className="w-full text-sm min-w-[900px]">
                   <thead>
                     <tr style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>
+                      <th className="text-left p-2 font-medium text-xs" title="The list's priority: 1 = top">Prio</th>
                       <th className="text-left p-2 font-medium text-xs">List</th>
                       {LIST_FUNNEL_STEPS.map(([k, label]) => <th key={k} className="text-right p-2 font-medium text-xs">{label}</th>)}
                       <th className="text-right p-2 font-medium text-xs" title="contacted → opportunity">Conversion</th>
@@ -197,7 +211,7 @@ export default function IcpPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {sorted.map((p) => <ListTableRow key={p.id} icp={p} viewerUserId={viewer} />)}
+                    {sorted.map((p) => <ListTableRow key={p.id} icp={p} viewerUserId={viewer} isAdmin={isAdmin} onChanged={() => void refresh()} />)}
                   </tbody>
                 </table>
               </section>
@@ -208,7 +222,7 @@ export default function IcpPage() {
                 {sorted.map((p) => (
                   <ListFunnelCard key={p.id} icp={p} quota={overview?.quota_by_owner[p.owner_user_id] ?? null} viewerUserId={viewer} isAdmin={isAdmin}
                                   fleet={fleetFlags} hold={overview?.holds_by_owner?.[p.owner_user_id]?.leads_finder ?? null} busy={busy === p.id}
-                                  onRun={runAgent(p)} onState={(st) => setState(p, st)} onArchive={() => archive(p)} />
+                                  onRun={runAgent(p)} onState={(st) => setState(p, st)} onArchive={() => archive(p)} onChanged={() => void refresh()} />
                 ))}
               </section>
             )}
