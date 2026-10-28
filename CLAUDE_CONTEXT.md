@@ -2597,6 +2597,34 @@ only, regions, round size + currency, our country, latest fund year, pitch) = th
 list through `POST /api/icp/[id]/firms/brief` (re-judges every firm already on it). Opening a list with a brief shows it
 as Investors. The kernel brief rules are unchanged (`policy/firms.eligibility`).
 
+### 5.bx Lists = Mateo's 11 cohorts, sorted and ranked by AI (2026-10-28, feat/cohorts, migration 090)
+
+From the 2026-10-27 call: lists mixed ICPs with events (PEI Napa, Fakuma) and nothing said who to work first. Mateo sent
+the cohorts (10 customer + VC investors, each with "characteristics we want" and "person to contact"). Amir's calls:
+AI sorts every live prospect into ONE cohort; NRW Kunststoff-Netzwerk IS cohort 5 (adopted, renamed); the VC raise list
+IS cohort 11 (firms, brief, sequence kept); PE-firm partners go to the PE cohort of the fund's focus; full backup, then
+clean start (old lists DELETED); rank = right person + company fit/early-adopter signals + warmth (bonus); seats later.
+- **090**: `icp_profiles.cohort` jsonb {key, number, name, characteristics, person_to_contact, kind} (unique active key);
+  `cohort_scores` (one row per prospect: list, cohort_key, guess_key, score 0-100 = person 50 + company 50 + warmth bonus
+  15, confidence, why, signals, warm_via, verdict); policy `agents.cohorts`. Company verdicts + short summary/facts live
+  on `account_profiles(kind='company')` (org-wide); a company-less person's verdict on their cohort_scores row.
+- **Kernel** `policy/cohorts.py` (pure: the 11 cohorts as data, EN/DE role tiers per cohort, company fit, score, why,
+  `clean_verdict`), `commands/cohorts.py`: `ensure_cohorts` (dry run) → `sort_plan` → `save_verdicts` → `score_people`
+  (moves nobody) → `apply_sort` (dry run; only icp_profile_id changes, never owner/sender) → `cleanup_old_lists` (dry
+  run; refuses while live people remain; re-points runs/approvals/waves, VC firms + voice rules to cohort 11, archived
+  prospects lose the link) · `move_to_cohort` (owner or admin) · `sort_report`.
+- **Ring** `cohort_sort.py`: batched Gemini JSON pass (10 per call), one Google-grounded lookup per unknown company
+  (cap `grounded_per_run`), no LinkedIn calls; tool `crm_cohort_sort` (crm_admin: setup|plan|run|score|apply|cleanup|
+  move); nightly cron `cohort-score` 02:40 (verdicts for new companies + re-rank, never moves); RPC `cohort_move`.
+  Measured: 10 real companies in 7 s on gemini-2.5-flash; signals mostly empty without the web lookup.
+- **App**: list page shows the cohort's two columns (`CohortHeader`); leads sorted by score with the why line, company
+  summary + facts, click → signals/confidence/warm; Unsorted rows have guess + "Move to…" (`/api/prospects/[id]/cohort`);
+  `/api/export/cohorts` = the dry-run sheet (admin); `lib/cohorts.ts` mirrors the kernel (parity test). The Leads Finder
+  warning is hidden on hand-made lists (cohorts are objective 'list': sorted, not searched).
+- **Warmth is thin** (2026-10-28: 43 of 3,418 live prospects warm/hot; only Amir has Google connected) — hence a bonus.
+- Rollout (integration): pg_dump on the box (pg_dump 18 ok vs server 17) → apply 090 → deploy → setup → run until
+  `plan` is empty → export sheet for Mateo/Amir → apply → cleanup.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

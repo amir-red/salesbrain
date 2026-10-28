@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { PROSPECT_STAGES } from '@/lib/prospecting';
 import { relativeTime } from '@/lib/time';
 import { DegreeWarm } from '@/components/icp/IcpLeads';
+import { COHORTS, SIGNAL_LABELS, cohortName, type CohortInfo } from '@/lib/cohorts';
 import { CONNECT_COLOR, CONNECT_LABEL, RUNG_LABEL, connectState, describeLookup, type ConnectState, type ProfileLookup } from '@/lib/connect';
 
 export interface Lead {
@@ -20,13 +21,18 @@ export interface Lead {
   invite_status: string | null; invite_sent_at: string | null; invite_source: string | null;
   invite_error: string | null; connect_approval: string | null;
   profile_lookup: ProfileLookup | null;
+  // Cohorts (090): the rank, why, and the company in two sentences + facts
+  cohort_score?: number | null; cohort_why?: string | null; cohort_signals?: string[] | null;
+  cohort_guess?: string | null; cohort_confidence?: string | null; warm_via?: string | null;
+  company_summary?: string | null;
+  company_facts?: { industry?: string; size?: string; revenue_estimate?: string; locations?: string; ownership?: string } | null;
 }
 interface ConnectInfo {
   linkedin: boolean; enabled: boolean; per_day: number; per_week: number; no_answer_after_days: number;
   sent_today: number; sent_week: number; queued: number;  // ROLLING: last 24 h / last 7 days
   subscription?: 'free' | 'sales_navigator'; next_request_at?: string | null;
 }
-interface Payload { leads: Lead[]; counts: { total: number }; connect?: ConnectInfo }
+interface Payload { leads: Lead[]; counts: { total: number }; connect?: ConnectInfo; cohort?: CohortInfo | null }
 
 const CONNECT_FILTERS: ConnectState[] = ['not_invited', 'awaiting_approval', 'pending', 'no_answer', 'connected', 'not_accepted', 'failed', 'awaiting_pick', 'no_profile'];
 const FIND_PER_CLICK = 25;
@@ -87,6 +93,17 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
     void post(l.id, `/api/prospects/${l.id}/find-linkedin`, { public_identifier, ...(member_id ? { member_id } : {}) });
   };
   const findNext = () => post('find', `/api/icp/${icpId}/find-linkedin`, { limit: FIND_PER_CLICK });
+  // Unsorted (cohorts, 090): a person decides where the sorter was unsure. The person leaves this list.
+  const unsorted = data?.cohort?.key === 'unsorted';
+  const moveTo = async (l: Lead, cohort: string) => {
+    setBusy(l.id); setMsg(null);
+    try {
+      const res = await fetch(`/api/prospects/${l.id}/cohort`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cohort }) });
+      const out = await res.json().catch(() => ({}));
+      setMsg(out.error ? `Error: ${out.error}` : `${l.full_name || 'Moved'} → ${cohortName(cohort)}.`);
+      await load();
+    } finally { setBusy(null); }
+  };
   const connectOne = (l: Lead) => {
     const note = window.prompt(
       `Connection request to ${l.full_name || 'this person'}.\n\nOptional note (max 200 characters, no pitch). Leave empty for a plain request.`, '');
@@ -210,6 +227,18 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
                       <td className="p-2">
                         <Link href={`/prospects/${l.id}`} className="font-medium hover:underline">{l.full_name || '—'}</Link>
                         <div className="text-xs truncate max-w-[320px]" style={{ color: 'var(--text-muted)' }}>{l.title || '—'}</div>
+                        {l.cohort_why && <div className="text-[11px] max-w-[320px]" style={{ color: 'var(--accent)' }}>{l.cohort_why}</div>}
+                        {unsorted && (
+                          <div className="mt-1 flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                            {l.cohort_guess && <span>guess: {cohortName(l.cohort_guess)}</span>}
+                            <select defaultValue="" disabled={busy !== null} onChange={(e) => e.target.value && moveTo(l, e.target.value)}
+                              className="px-1.5 py-0.5 rounded-md text-[11px]" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }}
+                              aria-label="Move to a cohort">
+                              <option value="">Move to…</option>
+                              {COHORTS.map((c) => <option key={c.key} value={c.key}>{c.number} · {c.name}</option>)}
+                            </select>
+                          </div>
+                        )}
                         {l.linkedin_url && <a href={l.linkedin_url.startsWith('http') ? l.linkedin_url : `https://linkedin.com/in/${l.linkedin_url}`} target="_blank" rel="noreferrer" className="text-[10px] underline" style={{ color: 'var(--accent)' }}>LinkedIn ↗</a>}
                         <DegreeWarm degree={l.network_degree} paths={l.warm_paths} />
                       </td>
@@ -219,12 +248,21 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
                           {l.company_name || '—'}
                           {l.source_type === 'company_discovery' && <span title={l.source_detail || 'found by starting from the company'} className="ml-1.5 px-1 rounded text-[10px] font-medium" style={{ background: 'color-mix(in srgb, var(--accent) 14%, transparent)', color: 'var(--accent)' }}>via company</span>}
                         </div>
-                        <div style={{ color: 'var(--text-muted)' }}>{[l.industry, l.company_size].filter(Boolean).join(' · ')}</div>
+                        <div style={{ color: 'var(--text-muted)' }}>{[l.company_facts?.industry || l.industry, l.company_facts?.size || l.company_size, l.company_facts?.revenue_estimate].filter(Boolean).join(' · ')}</div>
+                        {l.company_summary && <div className="mt-0.5 max-w-[340px] line-clamp-2" title={l.company_summary} style={{ color: 'var(--text)' }}>{l.company_summary}</div>}
                       </td>
                       <td className="p-2">
-                        <button onClick={() => setOpen(open === l.id ? null : l.id)} className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: `color-mix(in srgb, ${fitColor(l.icp_score)} 14%, transparent)`, color: fitColor(l.icp_score) }} title="why?">
-                          {l.icp_score ?? '—'} · {(l.fit_label || 'unscored').replace(/_/g, ' ')}
-                        </button>
+                        {l.cohort_score != null ? (
+                          <button onClick={() => setOpen(open === l.id ? null : l.id)} className="text-xs font-semibold tabular-nums px-2 py-0.5 rounded-md"
+                            style={{ background: `color-mix(in srgb, ${fitColor(l.cohort_score)} 14%, transparent)`, color: fitColor(l.cohort_score) }}
+                            title="Priority: right person + company fit and early-adopter signals + warmth. Click for details.">
+                            {l.cohort_score}
+                          </button>
+                        ) : (
+                          <button onClick={() => setOpen(open === l.id ? null : l.id)} className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: `color-mix(in srgb, ${fitColor(l.icp_score)} 14%, transparent)`, color: fitColor(l.icp_score) }} title="why?">
+                            {l.icp_score ?? '—'} · {(l.fit_label || 'unscored').replace(/_/g, ' ')}
+                          </button>
+                        )}
                       </td>
                       <td className="p-2 text-[10px]" style={{ color: 'var(--text-muted)' }}>
                         {stageLabel}
@@ -271,6 +309,14 @@ export default function LeadsTable({ icpId, tick = 0 }: { icpId: string; tick?: 
                     {open === l.id && (
                       <tr style={{ background: 'var(--bg-card)' }}>
                         <td colSpan={7} className="p-2 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                          {l.cohort_score != null && (
+                            <div className="mb-1.5 space-y-0.5" style={{ color: 'var(--text)' }}>
+                              {l.company_summary && <div>{l.company_summary}</div>}
+                              {l.company_facts && <div style={{ color: 'var(--text-muted)' }}>{Object.entries(l.company_facts).filter(([, v]) => v).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`).join(' · ')}</div>}
+                              {(l.cohort_signals ?? []).length > 0 && <div>Signals: {(l.cohort_signals ?? []).map((x) => SIGNAL_LABELS[x] ?? x).join(', ')}</div>}
+                              <div style={{ color: 'var(--text-muted)' }}>Sorter confidence: {l.cohort_confidence ?? '—'}{l.warm_via ? ` · ${l.warm_via} knows them` : ''}</div>
+                            </div>
+                          )}
                           {(l.qualification_reason || 'no reasons recorded').split('; ').map((r, i) => <div key={i}>· {r}</div>)}
                         </td>
                       </tr>

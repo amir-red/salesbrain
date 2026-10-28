@@ -47,6 +47,8 @@ export interface IcpProfile {
   paused_reason?: string | null;
   /** What every firm on an investor list is judged against (075); {} on a customer list. */
   firm_brief?: Record<string, unknown> | null;
+  /** Mateo's cohort this list is (090); null on a list that is not a cohort. */
+  cohort?: import('@/lib/cohorts').CohortInfo | null;
   paused_by_admin?: boolean;
   created_at: string;
   updated_at: string;

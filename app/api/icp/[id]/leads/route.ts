@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { visibleIcp } from '@/lib/icp-server';
+import { cohortsStored } from '@/lib/cohorts-server';
 
 /**
  * The ICP's list: every prospect the Leads Finder (or a manual search / import)
@@ -27,9 +28,25 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (minScore > 0) { values.push(minScore); filters.push(`p.icp_score >= $${values.length}`); }
   if (warm) filters.push(`(p.network_degree IN ('1','2') OR jsonb_array_length(COALESCE(p.warm_paths, '[]'::jsonb)) > 0)`);
 
+  // Cohorts (090): the rank Mateo works by, why, and the company's short summary. Before 090 the old order stays.
+  const cohorts = await cohortsStored();
+  const cohortCols = cohorts
+    ? `cs.score AS cohort_score, cs.why AS cohort_why, cs.signals AS cohort_signals, cs.guess_key AS cohort_guess,
+       cs.confidence AS cohort_confidence, cs.warm_via,
+       COALESCE(ap.profile ->> 'summary', cs.verdict ->> 'summary') AS company_summary,
+       COALESCE(ap.profile -> 'facts', cs.verdict -> 'facts') AS company_facts,`
+    : '';
+  const cohortJoin = cohorts
+    ? `LEFT JOIN cohort_scores cs ON cs.prospect_id = p.id
+       LEFT JOIN account_profiles ap ON ap.account_id = p.account_id AND ap.kind = 'company'`
+    : '';
+  const order = cohorts
+    ? 'cs.score DESC NULLS LAST, p.priority_rank NULLS LAST, p.icp_score DESC NULLS LAST, p.created_at DESC'
+    : 'p.priority_rank NULLS LAST, p.icp_score DESC NULLS LAST, p.created_at DESC';
+
   const [leads, state, last, counts] = await Promise.all([
     pool.query(
-      `SELECT p.id, p.stage, p.icp_score, p.fit_label, p.qualification_reason, p.research_summary,
+      `SELECT ${cohortCols} p.id, p.stage, p.icp_score, p.fit_label, p.qualification_reason, p.research_summary,
               p.source_type, p.source_detail, p.linkedin_public_id, p.candidate_location,
               p.network_degree, p.warm_paths, p.priority_rank,
               p.created_at, p.scored_at, p.engaged_at, p.converted_deal_id,
@@ -63,9 +80,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
          SELECT e.result, e.detail, e.created_at FROM prospect_enrichment e
           WHERE e.prospect_id = p.id AND e.kind = 'linkedin'
           ORDER BY e.created_at DESC LIMIT 1) lk ON true
+       ${cohortJoin}
        WHERE ${filters.join(' AND ')}
-       -- a hand-ranked list is worked in its own order (050); fit decides the rest
-       ORDER BY p.priority_rank NULLS LAST, p.icp_score DESC NULLS LAST, p.created_at DESC LIMIT 300`,
+       -- a cohort is worked by its rank (fit + early-adopter signals + warmth); a hand-ranked list in its own order (050)
+       ORDER BY ${order} LIMIT 300`,
       values,
     ),
     pool.query(`SELECT * FROM icp_agent_state WHERE icp_profile_id = $1`, [params.id]),
@@ -125,6 +143,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
   return NextResponse.json({
     icp: own.rows[0], leads: leads.rows, counts: counts.rows[0],
+    cohort: (icp as { cohort?: unknown }).cohort ?? null,
     agent_state: state.rows[0] ?? null, last_run: last.rows[0] ?? null,
     queued_runs: pending.rows[0]?.n ?? 0,
     connect: {

@@ -427,6 +427,55 @@ async function warm(args: Record<string, string>, who: Who): Promise<Built> {
   } finally { client.release(); }
 }
 
+// ─── Cohort sort (090): the dry-run sheet ─────────────────────────────
+
+interface CohortRow {
+  full_name: string | null; title: string | null; company: string | null; current_list: string | null;
+  proposed: string | null; guess_key: string | null; confidence: string | null; score: number;
+  person_points: number; company_points: number; warmth_points: number; why: string | null;
+  summary: string | null; reason: string | null; signals: string[] | null; owner: string | null;
+}
+
+/** Admin: everyone the sorter scored, where they are now and where they would go — checked before apply_sort. */
+async function cohorts(_args: Record<string, string>, who: Who): Promise<Built> {
+  if (who.role !== 'admin') throw new Error('Only an admin can export the cohort sort.');
+  const cols: Col<CohortRow>[] = [
+    { h: 'Proposed cohort', w: 34, v: (r) => r.proposed }, { h: 'Score', w: 7, v: (r) => r.score },
+    { h: 'Name', w: 24, v: (r) => r.full_name }, { h: 'Title', w: 36, v: (r) => r.title }, { h: 'Company', w: 26, v: (r) => r.company },
+    { h: 'Why', w: 48, v: (r) => r.why }, { h: 'Sorter confidence', w: 10, v: (r) => r.confidence },
+    { h: 'Best guess (Unsorted)', w: 22, v: (r) => r.guess_key }, { h: 'Reason', w: 50, v: (r) => r.reason },
+    { h: 'Company summary', w: 60, v: (r) => r.summary },
+    { h: 'Signals', w: 30, v: (r) => (r.signals ?? []).join(', ') },
+    { h: 'Person pts (of 50)', w: 9, v: (r) => r.person_points }, { h: 'Company pts (of 50)', w: 9, v: (r) => r.company_points },
+    { h: 'Warmth bonus', w: 8, v: (r) => r.warmth_points }, { h: 'List today', w: 30, v: (r) => r.current_list },
+    { h: 'Owner', w: 18, v: (r) => r.owner },
+  ];
+  const client = await pool.connect();
+  try {
+    const { rows } = await client.query<CohortRow>(
+      `SELECT c.full_name, c.title, a.name AS company, ci.name AS current_list, ti.name AS proposed, s.guess_key,
+              s.confidence, s.score, s.person_points, s.company_points, s.warmth_points, s.why, s.signals,
+              COALESCE(co.profile ->> 'summary', s.verdict ->> 'summary') AS summary,
+              COALESCE(co.profile -> 'cohort_verdict' ->> 'reason', s.verdict ->> 'reason') AS reason, u.name AS owner
+         FROM cohort_scores s JOIN prospects l ON l.id = s.prospect_id
+         LEFT JOIN contacts c ON c.id = l.contact_id
+         LEFT JOIN accounts a ON a.id = l.account_id
+         LEFT JOIN account_profiles co ON co.account_id = l.account_id AND co.kind = 'company'
+         LEFT JOIN icp_profiles ci ON ci.id = l.icp_profile_id
+         LEFT JOIN icp_profiles ti ON ti.id = s.icp_profile_id
+         LEFT JOIN users u ON u.id = l.owner_user_id
+        WHERE l.stage <> 'P9_ARCHIVED' AND s.icp_profile_id IS NOT NULL
+        ORDER BY ti.name, s.score DESC LIMIT ${SHEET_ROW_CAP}`);
+    const counts = new Map<string, number>();
+    for (const r of rows) counts.set(r.proposed ?? '—', (counts.get(r.proposed ?? '—') ?? 0) + 1);
+    const summary: [string, number][] = [...counts.entries()].sort((x, y) => y[1] - x[1]);
+    return finish('salesbrain-cohort-sort', [
+      { name: 'Proposed cohorts', ws: sheetOf(cols, rows), rows: rows.length },
+      { name: 'Per cohort', ws: pairsSheet(summary), rows: summary.length },
+    ], 0);
+  } finally { client.release(); }
+}
+
 // ─── Entry point ───────────────────────────────────────────────────
 
 export async function buildExport(req: ExportRequest, who: Who): Promise<Built> {
@@ -435,6 +484,7 @@ export async function buildExport(req: ExportRequest, who: Who): Promise<Built> 
   if (kind === 'prospects') return prospects(req.args, who);
   if (kind === 'icp') return icp(req.args, who);
   if (kind === 'warm') return warm(req.args, who);
+  if (kind === 'cohorts') return cohorts(req.args, who);
   throw new Error(`Unknown export: ${kind}`);
 }
 
@@ -445,6 +495,7 @@ export function cleanArgs(kind: ExportKind, raw: Record<string, unknown>): Recor
     prospects: ['stage', 'mine', 'icp_id', 'reply_status', 'q'],
     icp: ['icp_id'],
     warm: ['band', 'owner', 'worked'],
+    cohorts: [],
   };
   const out: Record<string, string> = {};
   for (const k of allowed[kind]) {
