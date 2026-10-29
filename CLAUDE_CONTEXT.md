@@ -2751,6 +2751,51 @@ funnel went through `kernelCall` (a Python process per load, ~7 s); the list req
   with /api/icp/overview) → `PanelPayload.funnel`; `RailFunnel` reads it, no kernel call. Not seen rendered (Chrome extension
   not connected). Not done: push updates instead of polling, transaction-mode pooling, a resident Python process.
 
+### 5.cc /icp/[id] = "Next move": the list page as a journey, campaigns up front (2026-10-29, feat/icp-journey, app-only, no migration)
+
+Amir, after a review of the list page from a seller's view (artifact PPVBdPekGPtSQbaq4o2p2N) and a plan for the journey
+(1YQqmoBhZ99BhgGmFnvmXu): design A of three (canvas 4M96r1ZtXdfRzHBEpo7UrE: A Next move · B feed · C journey board), then
+"add the campaigns to the front, and do it". The page now leads with what to do, not with a table.
+- **Two views**, a segmented switch in the header: **Next move** (default; a badge = replies + drafts + requests waiting
+  on a person) and **All people** (`?view=people`, the 2026-10-28 table + rail unchanged, Firms above it on a firm list).
+  The machinery went behind **Agents ▾** (Leads Finder, Enricher, Warm routes, Outreach & intros, Activity, Who belongs
+  → the old drawers) and **Settings** (seats, Export Excel, Edit who belongs, Pause / Resume, Archive, list settings,
+  Firms on a people list, email waves). Nothing was deleted; the header lost its five buttons.
+- **`GET /api/icp/[id]/journey`** (direct SQL, ONE client, ~12 sequential queries, ~3 s from a laptop, every lane
+  capped at 50; contract `lib/icp-journey.ts`): lanes **answer** (LinkedIn thread `needs_reply` + `last_from_them` on an
+  active account of the lead's owner, matched by person or member id, or an `email_threads` row in needs_reply; with the
+  last line they wrote), **message** (accepted our request or 1st degree, has a profile, no conversation, not P5+; a
+  pending LinkedIn `outreach` draft rides along), **send** (pending `connect` approvals), **follow** (P5_SENT with
+  `next_followup_at` due or a pending `followup` draft; the thread id), **pick** (newest `kind='linkedin'` lookup
+  ambiguous / candidates); counts (`send_ready` = profile, never asked, no request waiting; `fresh_profiles` = found in
+  the last 5 h; no_profile, requests_pending, followups_timed, messaged_waiting); the connect cap left today
+  (`lib/connect-quota-server.ts::connectQuota`, extracted from the leads route, which now uses it too); the last 24 h
+  as events (replies, acceptances, messages one line each; requests / profile finds / runs folded into counts); the
+  campaigns on the list (campaign_lists → enrolled, in sequence, sent, handed off, pending cards + the newest card id);
+  the funnel (`FUNNEL_COUNTS`). Live on NRW at build: answer 1 (Jannik Bühring, replied today), message 50 (drafts
+  ready), send 1, follow 17, pick 36; 23/25 requests used.
+- **`heroFor()`** (pure, `lib/icp-journey.ts`) picks the ONE move: a reply → the people who accepted → requests waiting
+  for a tap → queue today's requests (cap left, fresh profiles first) → follow-ups → picks → "owner has no LinkedIn"
+  → "nothing waits on you" (with the next free request time). The hero card takes the lane's colour; "then: …" names
+  the lane after it.
+- **Queue** (`components/icp/journey/Queue.tsx`): one line per person with the one action. Approve / Skip / Send =
+  `POST /api/agents/approvals` (the kernel gate; only the draft's owner — others see "<owner> decides"); **Send N now /
+  Approve all N drafts** walk the lane one person at a time with an 8 s pause and a progress bar, stop on the first
+  refusal or on "Stop after this one"; **Queue next N** = `POST /api/icp/[id]/connect` (files cards, sends nothing);
+  Draft → `POST /api/sales-leads/[card]/outreach` (message lane, needs a card) or `POST /api/prospects/[id]/followup`
+  (follow lane) → editable → Queue for the owner's approval; Skip clears the follow-up timer; Pick loads the candidates
+  from `GET /api/icp/[id]/leads/[leadId]` and attaches one via `POST /api/prospects/[id]/find-linkedin`; Answer opens
+  `/inbox?c=<channel>:<thread>`. Drafting / queueing / picking need owner-or-admin (act-as, audited, as before).
+- **Right column, in this order: Campaigns on this list** (status pill, enrolled · in sequence · sent · handed off, "N
+  cards wait for a tap →" to the card page, "New campaign" → `/campaigns/new?icp_id=` — the wizard pre-ticks that list),
+  What happened since yesterday, In progress (requests waiting, profiles to find, messaged waiting, follow-ups timed,
+  requests used in the last 24 h), Journey (one line, weakest step highlighted, "All N people ↓").
+- Lane colours are tokens (`--lane-answer/-message/-send/-follow/-pick` = the fill, same in both themes; `-text`
+  variants pass 4.5:1 per theme). The old `CampaignsCard` in the rail is gone (the journey view holds campaigns).
+- Not seen rendered by Claude: the Chrome check needed a local session cookie, which the permission classifier refused
+  to materialise; the API was exercised against the real list, tsc + build are clean. Not built: design C (journey
+  board) as a real view, a per-lane "snooze", email drafting in the message lane, the Telegram pick buttons.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

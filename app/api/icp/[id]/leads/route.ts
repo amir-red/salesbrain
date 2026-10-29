@@ -3,6 +3,7 @@ import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { visibleIcp } from '@/lib/icp-server';
 import { cohortsStored } from '@/lib/cohorts-server';
+import { connectQuota, type ConnectQuota } from '@/lib/connect-quota-server';
 
 /**
  * The ICP's list: every prospect the Leads Finder (or a manual search / import)
@@ -57,7 +58,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     : 'p.priority NULLS LAST, p.priority_rank NULLS LAST, p.icp_score DESC NULLS LAST, p.created_at DESC';
 
   const client = await pool.connect();
-  let leads, state, last, counts, pending, connect;
+  let leads, state, last, counts, pending, connect: ConnectQuota | undefined;
   try {
     leads = await client.query(
       `WITH base AS (
@@ -123,56 +124,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     );
     pending = await client.query(
       `SELECT count(*)::int AS n FROM agent_runs WHERE icp_profile_id = $1 AND status = 'requested'`, [params.id]);
-  // What the connect cap still allows right now, for the "queue next" button. Caps follow the account's subscription
-  // and the windows are ROLLING (last 24 h / last 7 days) — the kernel's policy/invitations.py, mirrored here.
-    connect = await client.query(
-    `SELECT (SELECT value FROM policy_rules WHERE key = 'agents.linkedin_connect') AS cfg,
-            la.id IS NOT NULL AS linkedin, la.id AS account_id,
-            COALESCE(la.premium_features::text, '') ILIKE '%sales_navigator%' AS sales_navigator,
-            (SELECT count(*)::int FROM linkedin_invitations i
-              WHERE i.account_id = la.id AND i.status <> 'failed' AND i.sent_at > now() - interval '24 hours') AS sent_today,
-            (SELECT count(*)::int FROM linkedin_invitations i
-              WHERE i.account_id = la.id AND i.status <> 'failed' AND i.sent_at > now() - interval '7 days') AS sent_week,
-            (SELECT count(*)::int FROM outreach_approvals oa
-              WHERE oa.owner_user_id = $1 AND oa.kind = 'connect' AND oa.status IN ('pending', 'approved')) AS queued
-       FROM (SELECT 1) one
-       LEFT JOIN linkedin_accounts la ON la.owner_user_id = $1 AND la.revoked_at IS NULL`,
-    [icp.owner_user_id]);
+    connect = await connectQuota(client, icp.owner_user_id);
   } finally {
     client.release();
-  }
-  const cc = connect.rows[0] ?? {};
-  const raw = { enabled: true, per_day: 5, per_week: 25, no_answer_after_days: 21,
-                per_day_sales_navigator: 25, per_week_sales_navigator: 120, ...(cc.cfg ?? {}) };
-  const cfg = cc.sales_navigator
-    ? { ...raw, per_day: Number(raw.per_day_sales_navigator), per_week: Number(raw.per_week_sales_navigator) }
-    : raw;
-  // When the window is full: the moment enough requests age out of it.
-  let nextAt: string | null = null;
-  if (cc.account_id) {
-    const waits: string[] = [];
-    for (const [n, cap, span] of [[cc.sent_today ?? 0, Number(cfg.per_day), '24 hours'], [cc.sent_week ?? 0, Number(cfg.per_week), '7 days']] as const) {
-      if (cap > 0 && n >= cap) {
-        const r = await pool.query(
-          `SELECT (sent_at + interval '${span}') AS t FROM linkedin_invitations
-            WHERE account_id = $1 AND status <> 'failed' AND sent_at > now() - interval '${span}'
-            ORDER BY sent_at OFFSET $2 LIMIT 1`, [cc.account_id, n - cap]);
-        if (r.rows[0]?.t) waits.push(new Date(r.rows[0].t).toISOString());
-      }
-    }
-    nextAt = waits.sort().pop() ?? null;
   }
   return NextResponse.json({
     icp: own.rows[0], leads: leads.rows, counts: counts.rows[0],
     cohort: (icp as { cohort?: unknown }).cohort ?? null,
     agent_state: state.rows[0] ?? null, last_run: last.rows[0] ?? null,
     queued_runs: pending.rows[0]?.n ?? 0,
-    connect: {
-      linkedin: Boolean(cc.linkedin), enabled: Boolean(cfg.enabled),
-      per_day: Number(cfg.per_day), per_week: Number(cfg.per_week),
-      no_answer_after_days: Number(cfg.no_answer_after_days),
-      sent_today: cc.sent_today ?? 0, sent_week: cc.sent_week ?? 0, queued: cc.queued ?? 0,
-      subscription: cc.sales_navigator ? 'sales_navigator' : 'free', next_request_at: nextAt,
-    },
+    connect,
   });
 }

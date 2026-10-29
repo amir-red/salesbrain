@@ -103,6 +103,10 @@ export default function CampaignWizard() {
   const [language, setLanguage] = useState('');
   const [productId, setProductId] = useState('');
   const [icps, setIcps] = useState<string[]>([]);
+  // Opened from a list page ("New campaign" on /icp/[id]?icp_id=…): that list is ticked from the start.
+  useEffect(() => {
+    try { const pre = new URLSearchParams(window.location.search).get('icp_id'); if (pre && /^[0-9a-f-]{36}$/i.test(pre)) setIcps((v) => (v.includes(pre) ? v : [...v, pre])); } catch { /* ignore */ }
+  }, []);
   const [sources, setSources] = useState<string[]>([]);
   const [spec, setSpec] = useState<WizardSpec>(DEFAULT_SPEC);
   const [dailyMax, setDailyMax] = useState(10);

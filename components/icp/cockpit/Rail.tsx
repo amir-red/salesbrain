@@ -2,15 +2,14 @@
 
 /**
  * The right-hand rail of /icp/[id] (design B, 2026-10-28): the state of the list next to its leads table. Each card is
- * short and opens the full detail in a drawer; nothing here acts on its own.
+ * short and opens the full detail in a drawer; nothing here acts on its own. (Campaigns moved to the journey view, 2026-10-29.)
  */
 import Link from 'next/link';
-import { useEffect, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import type { AgentRun } from '@/lib/icp';
 import type { ListFunnel, PanelPayload } from '@/lib/icp-panel';
 import { summarizeCriteria } from '@/lib/icp';
 import { pct } from '@/lib/funnel';
-import { STATUS_STYLE, type CampaignRow } from '@/lib/campaigns';
 import { relativeTime } from '@/lib/time';
 import { Chevron } from '@/components/icons';
 
@@ -164,40 +163,6 @@ export function AgentsCard({ data, onOpen, onActivity }: { data: PanelPayload; o
         line={`${coverage.routed} leads with a warm route · ${coverage.warm} with a warm angle`} onOpen={() => onOpen('graph')} />
       <AgentLine name="Outreach" tone={policy.enabled.outreach ? runTone(outreach.last_run) : 'off'} when={when(outreach.last_run)}
         line={`${outreach.by_status.sent ?? 0} sent · ${outreach.pending.length} waiting · ${outreach.intros.open.length} intro asks open`} onOpen={() => onOpen('outreach')} />
-    </Card>
-  );
-}
-
-/* ── Campaigns ──────────────────────────────────────────────────────── */
-
-export function CampaignsCard({ icpId }: { icpId: string }) {
-  const [rows, setRows] = useState<CampaignRow[] | null>(null);
-  const [error, setError] = useState(false);
-  useEffect(() => {
-    let live = true;
-    fetch('/api/campaigns').then((r) => r.json()).then((out) => {
-      if (!live) return;
-      if (out?.error) { setError(true); return; }
-      setRows(((out.campaigns ?? []) as CampaignRow[]).filter((c) => (c.lists ?? []).some((l) => l.icp_id === icpId && l.include !== false)));
-    }).catch(() => { if (live) setError(true); });
-    return () => { live = false; };
-  }, [icpId]);
-  return (
-    <Card title="Campaigns" right={<Link href="/campaigns/new" className={linkBtn} style={muted}>New</Link>}>
-      {error && <p className="text-xs" style={muted}>Could not load campaigns.</p>}
-      {!rows && !error && <p className="text-xs" style={muted}>Loading…</p>}
-      {rows?.length === 0 && <p className="text-xs" style={muted}>No campaign uses this list yet. A campaign is what sends to it.</p>}
-      {rows?.map((c) => (
-        <Link key={c.id} href={`/campaigns/${c.id}`} className="block text-xs hover:underline">
-          <div className="flex items-center justify-between gap-2">
-            <span className="truncate font-medium">{c.name}</span>
-            <span className="shrink-0 text-[11px]" style={{ color: STATUS_STYLE[c.status]?.color }}>{STATUS_STYLE[c.status]?.label ?? c.status}</span>
-          </div>
-          <div className="text-[11px]" style={muted}>
-            {c.enrolled} enrolled · {c.sent} sent{c.cards_waiting ? ` · ${c.cards_waiting} cards waiting` : ''}
-          </div>
-        </Link>
-      ))}
     </Card>
   );
 }

@@ -75,6 +75,26 @@
   --deep-blue: #1b589b;
   --deep-teal: #0d606a;
   --deep-violet: #6c477d;
+  /* Journey lanes (/icp/[id] "Next move"): the fill is the same in both themes (white text on it, >= 6.5:1); the
+     `-text` token is the lane's colour as small text on the page and passes 4.5:1 on --bg / --bg-card per theme. */
+  --lane-answer: #a5370a;
+  --lane-message: #691c47;
+  --lane-send: #1b589b;
+  --lane-follow: #0d606a;
+  --lane-pick: #994708;
+  --lane-answer-text: #a5370a;
+  --lane-message-text: #691c47;
+  --lane-send-text: #1b589b;
+  --lane-follow-text: #0d606a;
+  --lane-pick-text: #994708;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --lane-answer-text: #fb923c; --lane-message-text: #d9a6c4; --lane-send-text: #8fb4e6; --lane-follow-text: #6cc3cc; --lane-pick-text: #f5a524;
+  }
+}
+:root[data-theme="dark"] {
+  --lane-answer-text: #fb923c; --lane-message-text: #d9a6c4; --lane-send-text: #8fb4e6; --lane-follow-text: #6cc3cc; --lane-pick-text: #f5a524;
 }
 
 * {
