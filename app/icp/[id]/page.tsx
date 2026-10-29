@@ -212,7 +212,7 @@ export default function IcpPanelPage() {
         {!editing && note && <div className="px-4 pt-3 text-[11px]" style={{ color: note.toLowerCase().includes('error') || note.startsWith('Leads Finder can') ? 'var(--red)' : 'var(--text-muted)' }}>{note}</div>}
 
         {!editing && !gone && view === 'next' && (
-          <JourneyView icpId={id} data={journey} error={journeyError} onChanged={refreshAll} onOpenPeople={() => setView('people')} />
+          <JourneyView icpId={id} data={journey} error={journeyError} onChanged={refreshAll} onOpenPeople={() => setView('people')} leadsSignature={leadsSignature} />
         )}
 
         {!editing && view === 'people' && !data && !error && (

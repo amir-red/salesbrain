@@ -58,12 +58,15 @@ const fitColor = (s: number | null) =>
  * so what the Enricher and the router still owe is visible per row. Fetches
  * on its own (filters are local). `signature` is the page's summary of the list (counts the poll saw): the table
  * reloads only when it changes, never on every poll — the list is the heaviest request on the page. Rows are
- * slim; a row's research / reasons / profile candidates load when it is expanded. 50 rows are drawn at a time.
+ * slim; a row's research / reasons / profile candidates load when it is expanded. `pageSize` rows are drawn at a time
+ * (50 on the All-people view, 10 under the journey view); the footer lets the person change it.
  */
-export default function LeadsTable({ icpId, signature = '' }: { icpId: string; signature?: string }) {
+const PAGE_SIZES = [10, 25, 50, 100];
+export default function LeadsTable({ icpId, signature = '', pageSize = PAGE }: { icpId: string; signature?: string; pageSize?: number }) {
+  const [page, setPage] = useState(pageSize);
   const [data, setData] = useState<Payload | null>(null);
   const [details, setDetails] = useState<Record<string, LeadDetail | 'loading'>>({});
-  const [limit, setLimit] = useState(PAGE);
+  const [limit, setLimit] = useState(pageSize);
   const [stage, setStage] = useState('');
   const [minScore, setMinScore] = useState(0);
   const [warmOnly, setWarmOnly] = useState(false);
@@ -84,7 +87,7 @@ export default function LeadsTable({ icpId, signature = '' }: { icpId: string; s
     if (res.ok) { setData(await res.json()); setDetails({}); }
   }, [icpId, stage, minScore, warmOnly, prio]);
   useEffect(() => { load(); }, [load, signature]);
-  useEffect(() => { setLimit(PAGE); }, [stage, minScore, warmOnly, prio, conn]);
+  useEffect(() => { setLimit(page); }, [stage, minScore, warmOnly, prio, conn, page]);
 
   const detailOf = (id: string) => {
     if (details[id]) return;
@@ -405,11 +408,20 @@ export default function LeadsTable({ icpId, signature = '' }: { icpId: string; s
             </tbody>
           </table>
         )}
-        {data && matching.length > shown.length && (
-          <div className="p-2 text-center" style={{ borderTop: '1px solid var(--border)' }}>
-            <button type="button" onClick={() => setLimit((n) => n + PAGE)} className="text-xs underline" style={{ color: 'var(--accent)' }}>
-              Show {Math.min(PAGE, matching.length - shown.length)} more · {shown.length} of {matching.length}
-            </button>
+        {data && matching.length > 0 && (
+          <div className="px-3 py-2 flex items-center justify-between gap-3 text-xs flex-wrap" style={{ borderTop: '1px solid var(--border)' }}>
+            <span style={{ color: 'var(--text-muted)' }}>{shown.length} of {matching.length}</span>
+            {matching.length > shown.length && (
+              <button type="button" onClick={() => setLimit((n) => n + page)} className="underline" style={{ color: 'var(--accent)' }}>
+                Show {Math.min(page, matching.length - shown.length)} more
+              </button>
+            )}
+            <label className="flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
+              per page
+              <select value={page} onChange={(e) => setPage(Number(e.target.value))} className="px-1.5 py-0.5 rounded text-xs" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+                {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </label>
           </div>
         )}
       </div>

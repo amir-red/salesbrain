@@ -2790,6 +2790,9 @@ Amir, after a review of the list page from a seller's view (artifact PPVBdPekGPt
   cards wait for a tap →" to the card page, "New campaign" → `/campaigns/new?icp_id=` — the wizard pre-ticks that list),
   What happened since yesterday, In progress (requests waiting, profiles to find, messaged waiting, follow-ups timed,
   requests used in the last 24 h), Journey (one line, weakest step highlighted, "All N people ↓").
+- **People under the journey** (Amir: "have some list in the page instead of clicking All people"): the same `LeadsTable`
+  sits under the two columns with `pageSize={10}` (its footer has Show N more + a per-page select 10 / 25 / 50 / 100; the
+  All-people view keeps 50) and reloads only on the panel's `leadsSignature`, like the full view.
 - Lane colours are tokens (`--lane-answer/-message/-send/-follow/-pick` = the fill, same in both themes; `-text`
   variants pass 4.5:1 per theme). The old `CampaignsCard` in the rail is gone (the journey view holds campaigns).
 - Not seen rendered by Claude: the Chrome check needed a local session cookie, which the permission classifier refused

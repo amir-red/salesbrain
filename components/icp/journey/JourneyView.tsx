@@ -19,6 +19,7 @@ import Button from '@/components/panel/Button';
 import { Pill } from '@/components/panel/PageHeader';
 import { Skeleton, SkeletonCard } from '@/components/panel/Skeleton';
 import Queue from './Queue';
+import LeadsTable from '@/components/icp/LeadsTable';
 
 const muted = { color: 'var(--text-muted)' };
 
@@ -34,8 +35,10 @@ function Card({ title, right, children, className = '' }: { title: string; right
   );
 }
 
-export default function JourneyView({ icpId, data, error, onChanged, onOpenPeople }: {
+export default function JourneyView({ icpId, data, error, onChanged, onOpenPeople, leadsSignature = '' }: {
   icpId: string; data: JourneyPayload | null; error: string | null; onChanged: () => Promise<void>; onOpenPeople: () => void;
+  /** The page's summary of the list; the people table below reloads only when it changes. */
+  leadsSignature?: string;
 }) {
   const [lane, setLane] = useState<LaneKey | null>(null);
   // The lane opens on the hero's move until the person picks another one.
@@ -112,6 +115,16 @@ export default function JourneyView({ icpId, data, error, onChanged, onOpenPeopl
           <Journey data={data} onOpenPeople={onOpenPeople} />
         </div>
       </div>
+
+      {/* The people themselves, ten at a time — the full view with Firms and the rail is one click away. */}
+      <section className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+        <div className="flex items-center gap-3 px-4 py-3 flex-wrap" style={{ borderBottom: '1px solid var(--border)' }}>
+          <h2 className="text-sm font-semibold">People · {data.icp.total.toLocaleString()}</h2>
+          <span className="text-xs" style={muted}>highest priority first · the filters narrow this list</span>
+          <button type="button" onClick={onOpenPeople} className="ml-auto text-xs hover:underline" style={{ color: 'var(--accent)' }}>Open the full view →</button>
+        </div>
+        <LeadsTable icpId={icpId} signature={leadsSignature} pageSize={10} />
+      </section>
     </div>
   );
 }
