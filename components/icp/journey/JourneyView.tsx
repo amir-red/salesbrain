@@ -15,7 +15,6 @@ import { LANE_META, LANE_ORDER, heroFor } from '@/lib/icp-journey';
 import { LIST_FUNNEL_STEPS, rateLabel, weakestStep } from '@/lib/icp-panel';
 import { STATUS_STYLE, type CampaignStatus } from '@/lib/campaigns';
 import { relativeTime } from '@/lib/time';
-import Button from '@/components/panel/Button';
 import { Pill } from '@/components/panel/PageHeader';
 import { Skeleton, SkeletonCard } from '@/components/panel/Skeleton';
 import Queue from './Queue';
@@ -25,7 +24,7 @@ const muted = { color: 'var(--text-muted)' };
 
 function Card({ title, right, children, className = '' }: { title: string; right?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
-    <section className={`rounded-2xl p-4 space-y-2.5 ${className}`} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+    <section className={`rounded-2xl p-3 space-y-2 ${className}`} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-xs font-semibold">{title}</h2>
         {right}
@@ -105,8 +104,19 @@ export default function JourneyView({ icpId, data, error, onChanged, onOpenPeopl
         })}
       </div>
 
-      <div className="grid gap-4 items-start" style={{ gridTemplateColumns: 'minmax(0, 1.6fr) minmax(280px, 1fr)' }}>
-        <Queue icpId={icpId} lane={active} data={data} onChanged={onChanged} />
+      <div className="grid gap-4 items-start" style={{ gridTemplateColumns: 'minmax(0, 1fr) 300px' }}>
+        {/* Left: the queue, then the people themselves — so the column is always as tall as the cards beside it. */}
+        <div className="space-y-4 min-w-0">
+          <Queue icpId={icpId} lane={active} data={data} onChanged={onChanged} />
+          <section className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center gap-3 px-4 py-3 flex-wrap" style={{ borderBottom: '1px solid var(--border)' }}>
+              <h2 className="text-sm font-semibold">People · {data.icp.total.toLocaleString()}</h2>
+              <span className="text-xs" style={muted}>highest priority first · the filters narrow this list</span>
+              <button type="button" onClick={onOpenPeople} className="ml-auto text-xs hover:underline" style={{ color: 'var(--accent)' }}>Open the full view →</button>
+            </div>
+            <LeadsTable icpId={icpId} signature={leadsSignature} pageSize={10} />
+          </section>
+        </div>
 
         <div className="space-y-3 min-w-0">
           <Campaigns icpId={icpId} rows={data.campaigns} />
@@ -115,16 +125,6 @@ export default function JourneyView({ icpId, data, error, onChanged, onOpenPeopl
           <Journey data={data} onOpenPeople={onOpenPeople} />
         </div>
       </div>
-
-      {/* The people themselves, ten at a time — the full view with Firms and the rail is one click away. */}
-      <section className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-        <div className="flex items-center gap-3 px-4 py-3 flex-wrap" style={{ borderBottom: '1px solid var(--border)' }}>
-          <h2 className="text-sm font-semibold">People · {data.icp.total.toLocaleString()}</h2>
-          <span className="text-xs" style={muted}>highest priority first · the filters narrow this list</span>
-          <button type="button" onClick={onOpenPeople} className="ml-auto text-xs hover:underline" style={{ color: 'var(--accent)' }}>Open the full view →</button>
-        </div>
-        <LeadsTable icpId={icpId} signature={leadsSignature} pageSize={10} />
-      </section>
     </div>
   );
 }
@@ -134,16 +134,16 @@ export default function JourneyView({ icpId, data, error, onChanged, onOpenPeopl
 function Campaigns({ icpId, rows }: { icpId: string; rows: JourneyCampaign[] }) {
   const live = rows.filter((c) => c.status === 'live');
   return (
-    <Card title="Campaigns on this list" right={<Button size="sm" href={`/campaigns/new?icp_id=${icpId}`}>New campaign</Button>}>
+    <Card title="Campaigns on this list" right={<Link href={`/campaigns/new?icp_id=${icpId}`} className="text-xs hover:underline" style={{ color: 'var(--accent)' }}>New</Link>}>
       {rows.length === 0 && (
         <p className="text-xs" style={muted}>No campaign sends to this list yet. A campaign connects, messages and follows up by itself — you only approve each day&rsquo;s card.</p>
       )}
       {rows.map((c) => {
         const st = STATUS_STYLE[c.status as CampaignStatus] ?? { label: c.status, color: 'var(--text-muted)' };
         return (
-          <div key={c.id} className="rounded-xl px-3 py-2.5 space-y-1" style={{ background: 'var(--bg-input)' }}>
+          <div key={c.id} className="rounded-xl px-2.5 py-2 space-y-0.5" style={{ background: 'var(--bg-input)' }}>
             <div className="flex items-center justify-between gap-2">
-              <Link href={`/campaigns/${c.id}`} className="text-sm font-medium truncate hover:underline">{c.name}</Link>
+              <Link href={`/campaigns/${c.id}`} className="text-xs font-medium truncate hover:underline">{c.name}</Link>
               <Pill color={st.color}>{st.label}</Pill>
             </div>
             <div className="text-[11px] flex flex-wrap gap-x-3 gap-y-0.5" style={muted}>
@@ -173,12 +173,14 @@ const EVENT_COLOR: Record<JourneyEvent['kind'], string> = {
   reply: 'var(--lane-answer)', accepted: 'var(--lane-message)', sent: 'var(--lane-follow)', request: 'var(--lane-send)',
   found: 'var(--lane-pick)', run: 'var(--deep-violet)', campaign: 'var(--deep-violet)',
 };
-function Happened({ events }: { events: JourneyEvent[] }) {
+function Happened({ events: all }: { events: JourneyEvent[] }) {
+  const [more, setMore] = useState(false);
+  const events = more ? all : all.slice(0, 6);
   return (
-    <Card title="What happened since yesterday">
-      {events.length === 0 && <p className="text-xs" style={muted}>Quiet day: no reply, acceptance, send or find on this list in the last 24 hours.</p>}
+    <Card title="What happened since yesterday" right={all.length > 6 ? <button type="button" onClick={() => setMore((m) => !m)} className="text-xs hover:underline" style={muted}>{more ? 'Fewer' : `All ${all.length}`}</button> : undefined}>
+      {all.length === 0 && <p className="text-xs" style={muted}>Quiet day: no reply, acceptance, send or find on this list in the last 24 hours.</p>}
       {events.map((e, i) => (
-        <div key={`${e.kind}-${i}`} className="grid gap-2.5 items-baseline text-xs" style={{ gridTemplateColumns: '8px 1fr auto' }}>
+        <div key={`${e.kind}-${i}`} className="grid gap-2 items-baseline text-[11px] leading-snug" style={{ gridTemplateColumns: '8px 1fr auto' }}>
           <span className="inline-block w-2 h-2 rounded-full relative top-px" style={{ background: EVENT_COLOR[e.kind] }} />
           <span className="min-w-0">{e.prospect_id ? <Link href={`/prospects/${e.prospect_id}`} className="hover:underline">{e.text}</Link> : e.text}</span>
           <span className="text-[11px] whitespace-nowrap" style={muted}>{relativeTime(e.at)}</span>
@@ -201,7 +203,7 @@ function InProgress({ data }: { data: JourneyPayload }) {
   ];
   return (
     <Card title="In progress">
-      <div className="text-xs space-y-1.5">
+      <div className="text-[11px] space-y-1">
         {rows.map(([l, v]) => <div key={l} className="flex justify-between gap-3"><span style={{ color: 'var(--text)' }}>{l}</span><b className="font-mono font-semibold">{v}</b></div>)}
       </div>
       {!data.sender.linkedin && <p className="text-[11px]" style={{ color: 'var(--red)' }}>{data.sender.name} has no LinkedIn connected — requests and messages cannot go out.</p>}
@@ -219,7 +221,7 @@ function Journey({ data, onOpenPeople }: { data: JourneyPayload; onOpenPeople: (
     <Card title="Journey" right={<Link href={`/dashboard?icp_id=${data.icp.id}`} className="text-xs hover:underline" style={muted}>Full funnel</Link>}>
       {!f && <p className="text-xs" style={muted}>No funnel yet — people appear once the hourly refresh has seen them.</p>}
       {f && (
-        <div className="text-xs leading-relaxed">
+        <div className="text-[11px] leading-relaxed">
           {LIST_FUNNEL_STEPS.map(([k, label], i) => (
             <span key={k}>
               {i > 0 && <span style={muted}> → </span>}
