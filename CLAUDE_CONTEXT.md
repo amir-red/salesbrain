@@ -2801,21 +2801,19 @@ Amir, after a review of the list page from a seller's view (artifact PPVBdPekGPt
 
 ### 5.ce Sales-leads fresh start + campaign sender / approver of your choice (2026-10-30, feat/fresh-start, migration 093)
 
-Amir, after the meeting review: "yes, a fresh start of sales leads" (remove the cards nobody contacted, Fakuma's 55
+Amir, after the meeting review: "yes, a fresh start of sales leads" (remove the cards nobody contacted, Fakuma's
 included) and "campaign — make it flexible" (any chosen person approves, no consent step).
-- **A card = somebody was contacted.** `sales_leads.card_for_request(conn, prospect_id, owner)` makes a 'contacted' card
-  (head "Connection request sent [by hand] from X's LinkedIn", NO message line — the request is the `status` line
-  `note_invitation` writes) when a request is recorded (`invitations.record_invitation`) or found hand-sent in the
-  reconcile. `upsert_sales_lead(line=None, head=)` support it. **Firm research no longer makes cards**
-  (`firms.land_firm_people`). Cards still come from: a sent message / email, a reply, a person adding someone (Add lead,
-  import, `crm_prospect_add`, Warm → Add as lead), the zeami.io form / Calendly.
-- **One-off** `python -m salesbrain_core.store.fresh_start_leads [--apply]`: removes every OPEN card whose person is
-  still `prospect_*` in `person_funnel` (a card with a met/sent/reply/call/meeting line is kept), puts the person's
-  `priority` back (the card delete trigger clears it), lifts statuses (reply on record → replied; contacted / met /
-  request out → contacted; demo requests stay new), refreshes the funnel; `--apply` writes a JSON backup to
-  `~/.cache/salesbrain/backups/fresh-start-leads-*.json` first. Dry run 2026-10-30: 654 removed (598 firm research
-  `manual:new`, 55 `event:fakuma-2026`, 1 warm), 144 new → contacted. The Lead Conductor's Fakuma scope then has nothing
-  until those people are touched (Amir chose that).
+- **A sales lead = someone we contacted.** Cards come from a sent message / email, a reply, a person adding someone (Add
+  lead, import, `crm_prospect_add`, Warm → Add as lead), the zeami.io form / Calendly. **A connection request is NOT contact
+  and makes no card** (Amir); **firm research no longer makes cards** (`firms.land_firm_people`).
+- **One-off** `python -m salesbrain_core.store.fresh_start_leads [--apply]`: removes every OPEN card with no evidence of
+  contact (evidence = a met/sent/reply/call/meeting line, a sent non-connect approval, a reply, a booking, a demo request, a
+  real meeting). `met_at` alone is not trusted: the VC import filled it with the list's name, "PEI Napa 2026 (attendee)" =
+  only on the attendee list, "Did not meet". Puts the person's `priority` back (the delete trigger clears it), lifts statuses,
+  refreshes the funnel; `--apply` writes a JSON backup to `~/.cache/salesbrain/backups/fresh-start-leads-*.json` first. Dry
+  run 2026-10-30: 886 open → 780 removed (598 firm research, 80 Napa, 57 Fakuma, 44 VC import, 1 warm), 28 new → contacted.
+  **The funnel still counts a sent request as Contacted** (`policy/funnel.py`), so the funnel's Lead count is larger than
+  /sales-leads; not changed, Amir to decide. The Lead Conductor works from cards, so it has few left to send requests for.
 - **Campaign `settings.send_from`** `{mode: owner | list_sender | back_office | front_office | person, user_id?}`
   (`policy/campaigns.pick_sender`): applied at enrollment; the owner keeps a person already written to or sent a
   request, and anyone whose chosen sender lacks EVERY channel the campaign uses (LinkedIn account / Gmail mailbox,
