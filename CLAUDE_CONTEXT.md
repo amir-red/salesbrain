@@ -2866,6 +2866,8 @@ included) and "campaign — make it flexible" (any chosen person approves, no co
 
 ### 5.cf Funnel step "Connected": a request is not contact (2026-10-30, 0.73.0, app + core, no migration)
 
+**LIVE 2026-10-30 (0.73.0)**: ring + app deployed, history corrected (265 entries removed, 17 re-dated, 66 Connected dated).
+
 Amir: "if we didn't contact them, no; say Connected". `prospect_connected` sits between Ready to reach and Contacted
 (`policy/funnel.py`, `lib/funnel.ts`, list cards, /dashboard): a 1st-degree connection (accepted request or existing)
 nobody has written to. A pending or declined request stays `prospect_ready` with a substage. Contacted = a message, email
