@@ -24,7 +24,8 @@ export interface Campaign {
   language: string | null; product_id: string | null; owner_user_id: string | null; graph: Graph;
   draft_graph: Graph | null; editing_graph: Graph; graph_version: number; validation: Validation; can_edit: boolean;
   lists: CampaignList[];
-  settings: { daily_max_per_step?: number; samples?: Record<string, SavedSample>; auto_send?: AutoSend; allow_unverified?: boolean };
+  settings: { daily_max_per_step?: number; samples?: Record<string, SavedSample>; auto_send?: AutoSend; allow_unverified?: boolean;
+    send_from?: Choice; approve_by?: Choice };
   launched_at: string | null;
   paused_at: string | null; updated_at: string;
 }
@@ -383,3 +384,22 @@ export function summaryOf(text: string, max = 110): string {
   const t = text.replace(/\s+/g, ' ').trim();
   return t.length > max ? `${t.slice(0, max).replace(/\s\S*$/, '')}…` : t;
 }
+
+// ---------------------------------------------------------------- who sends, who approves (settings.send_from / approve_by)
+// Mirrors policy/campaigns.py SEND_FROM / APPROVE_BY — change both.
+
+export interface Choice { mode: string; user_id?: string }
+
+export const SEND_FROM: { mode: string; label: string; hint: string }[] = [
+  { mode: 'owner', label: 'Each person’s owner', hint: 'The teammate who holds the person (today’s rule).' },
+  { mode: 'list_sender', label: 'The list’s “Sends from” seat', hint: 'Set on each list page; people on lists without one stay with their owner.' },
+  { mode: 'back_office', label: 'The lead’s back office', hint: 'Only for people with a lead card; others stay with their owner.' },
+  { mode: 'front_office', label: 'The lead’s front office', hint: 'Only for people with a lead card; others stay with their owner.' },
+  { mode: 'person', label: 'One teammate', hint: 'Everyone in the campaign goes out from this teammate’s account.' },
+];
+
+export const APPROVE_BY: { mode: string; label: string; hint: string }[] = [
+  { mode: 'sender', label: 'The sender', hint: 'Each card goes to the person whose account sends it.' },
+  { mode: 'campaign_owner', label: 'The campaign owner', hint: 'Every card goes to whoever owns this campaign.' },
+  { mode: 'person', label: 'One teammate', hint: 'Every card goes to this teammate.' },
+];

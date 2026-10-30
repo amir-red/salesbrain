@@ -14,7 +14,7 @@ import {
   ENROLLMENT_STYLE, STATUS_STYLE, nodeLabel, toTemplate,
   needsSample, sampleIsStale,
   type PreviewDraft, type PreviewPerson, type Sample, type SavedSample,
-  type Campaign, type CampaignList, type Graph, type Validation, sampleSlots, type AutoSend, type StepTrust } from '@/lib/campaigns';
+  type Campaign, type CampaignList, type Graph, type Validation, sampleSlots, type AutoSend, type StepTrust, SEND_FROM, APPROVE_BY } from '@/lib/campaigns';
 
 const SequenceCanvas = dynamic(() => import('@/components/campaigns/SequenceCanvas'), {
   ssr: false, loading: () => <div className="p-6 text-sm" style={{ color: 'var(--text-muted)' }}>Loading the canvas…</div>,
@@ -657,14 +657,17 @@ function ResultsTab({ results, draft, canEdit, autoSend, onWinner }: {
   );
 }
 
-interface Options { icps: { id: string; name: string; owner_name: string | null; leads: number }[]; sources: { source: string; leads: number }[]; products: { id: string; name: string }[] }
+interface Teammate { id: string; name: string; has_gmail: boolean; has_linkedin: boolean }
+interface Options { icps: { id: string; name: string; owner_name: string | null; leads: number }[]; sources: { source: string; leads: number }[]; products: { id: string; name: string }[]; teammates?: Teammate[] }
 
 function SettingsTab({ c, onSaved }: { c: Campaign; onSaved: () => Promise<void> }) {
   const [opts, setOpts] = useState<Options | null>(null);
   const [f, setF] = useState({ name: c.name, goal: c.goal ?? '', writing_context: c.writing_context ?? '', language: c.language ?? '',
     product_id: c.product_id ?? '', daily_max_per_step: c.settings?.daily_max_per_step ?? '' as number | '',
     auto_enabled: !!c.settings?.auto_send?.enabled, trust_after: c.settings?.auto_send?.trust_after ?? 3,
-    allow_unverified: !!c.settings?.allow_unverified });
+    allow_unverified: !!c.settings?.allow_unverified,
+    send_from: c.settings?.send_from?.mode ?? 'owner', send_from_user: c.settings?.send_from?.user_id ?? '',
+    approve_by: c.settings?.approve_by?.mode ?? 'sender', approve_by_user: c.settings?.approve_by?.user_id ?? '' });
   const [lists, setLists] = useState<CampaignList[]>(c.lists);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -678,7 +681,9 @@ function SettingsTab({ c, onSaved }: { c: Campaign; onSaved: () => Promise<void>
         fields: { name: f.name, goal: f.goal, writing_context: f.writing_context, language: f.language, product_id: f.product_id || null,
           settings: { ...(f.daily_max_per_step ? { daily_max_per_step: Number(f.daily_max_per_step) } : {}),
             auto_send: { enabled: f.auto_enabled, trust_after: Math.max(1, Math.min(10, Number(f.trust_after) || 3)) },
-            allow_unverified: f.allow_unverified } },
+            allow_unverified: f.allow_unverified,
+            send_from: f.send_from === 'person' ? { mode: 'person', user_id: f.send_from_user } : { mode: f.send_from },
+            approve_by: f.approve_by === 'person' ? { mode: 'person', user_id: f.approve_by_user } : { mode: f.approve_by } } },
         lists: lists.map((l) => (l.icp_id ? { icp_id: l.icp_id, include: l.include } : { source: l.source, include: l.include })),
       }));
       setMsg({ ok: true, text: 'Saved.' }); await onSaved();
@@ -686,6 +691,14 @@ function SettingsTab({ c, onSaved }: { c: Campaign; onSaved: () => Promise<void>
     finally { setBusy(false); }
   };
   const dis = !c.can_edit;
+  const team = opts?.teammates ?? [];
+  const accounts = (t: Teammate) => [t.has_linkedin && 'LinkedIn', t.has_gmail && 'Gmail'].filter(Boolean).join(' + ') || 'no accounts';
+  const picker = (value: string, set: (v: string) => void, withAccounts: boolean) => (
+    <select className="z-input" disabled={dis} value={value} onChange={(e) => set(e.target.value)}>
+      <option value="">— choose a teammate —</option>
+      {team.map((t) => <option key={t.id} value={t.id}>{t.name}{withAccounts ? ` · ${accounts(t)}` : ''}</option>)}
+    </select>
+  );
   return (
     <div className="p-4 overflow-y-auto h-full">
       <div className="max-w-2xl grid gap-4">
@@ -708,6 +721,25 @@ function SettingsTab({ c, onSaved }: { c: Campaign; onSaved: () => Promise<void>
           <input type="number" min={1} max={100} className="z-input" style={{ width: 128 }} disabled={dis} value={f.daily_max_per_step} placeholder="25"
             onChange={(e) => setF({ ...f, daily_max_per_step: e.target.value ? Number(e.target.value) : '' })} />
           <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>The LinkedIn and email caps of each sender still apply on top.</span></label>
+        <div className="grid sm:grid-cols-2 gap-3 rounded-xl p-3" style={{ border: '1px solid var(--border)' }}>
+          <label className="grid gap-1 text-sm content-start"><span className="text-xs font-medium">Sends from</span>
+            <select className="z-input" disabled={dis} value={f.send_from} onChange={(e) => setF({ ...f, send_from: e.target.value })}>
+              {SEND_FROM.map((o) => <option key={o.mode} value={o.mode}>{o.label}</option>)}
+            </select>
+            {f.send_from === 'person' && picker(f.send_from_user, (v) => setF({ ...f, send_from_user: v }), true)}
+            <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+              {SEND_FROM.find((o) => o.mode === f.send_from)?.hint} Applies to people as they join. Someone already written to or sent a
+              request stays with that account, and so does anyone whose chosen sender lacks the LinkedIn or Gmail this campaign needs.
+            </span></label>
+          <label className="grid gap-1 text-sm content-start"><span className="text-xs font-medium">Approved by</span>
+            <select className="z-input" disabled={dis} value={f.approve_by} onChange={(e) => setF({ ...f, approve_by: e.target.value })}>
+              {APPROVE_BY.map((o) => <option key={o.mode} value={o.mode}>{o.label}</option>)}
+            </select>
+            {f.approve_by === 'person' && picker(f.approve_by_user, (v) => setF({ ...f, approve_by_user: v }), false)}
+            <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+              {APPROVE_BY.find((o) => o.mode === f.approve_by)?.hint} The sender can always decide their own cards too. Applies to new cards.
+            </span></label>
+        </div>
         <div className="grid gap-2 rounded-xl p-3" style={{ border: '1px solid var(--border)' }}>
           <label className="flex items-start gap-2 text-sm">
             <input type="checkbox" className="mt-1" disabled={dis} checked={f.auto_enabled} onChange={(e) => setF({ ...f, auto_enabled: e.target.checked })} />

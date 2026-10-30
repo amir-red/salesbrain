@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { TEAM_USERS_SQL } from '@/lib/sales-leads-sql';
 
 /**
  * GET /api/campaigns/options — what a campaign can include and pitch: the caller's ICP lists (an admin sees every
  * one, the same rule as /icp) with how many people have an email / a LinkedIn profile, the /sales-leads sources with how many open leads each holds (org-wide, like the
- * page), the products and the teammates. ONE checked-out client, sequential (pooler: no fan-out).
+ * page), the products, the list owners and every teammate who can be chosen to send or approve. ONE checked-out client, sequential (pooler: no fan-out).
  */
 export async function GET() {
   const session = await getSession();
@@ -39,7 +40,13 @@ export async function GET() {
               EXISTS (SELECT 1 FROM email_senders s WHERE s.user_id = u.id AND s.revoked_at IS NULL) AS has_gmail,
               EXISTS (SELECT 1 FROM linkedin_accounts a WHERE a.owner_user_id = u.id AND a.revoked_at IS NULL) AS has_linkedin
          FROM users u WHERE u.id = ANY($1::uuid[])`, [ownerIds])).rows : [];
-    return NextResponse.json({ icps: icps.rows, sources: sources.rows, products: products.rows, owners, viewer_is_admin: admin });
+    // Everyone who can be chosen to send or to approve (settings.send_from / approve_by), with their accounts.
+    const teammates = (await client.query(
+      `SELECT t.id, t.name,
+              EXISTS (SELECT 1 FROM email_senders s WHERE s.user_id = t.id AND s.revoked_at IS NULL) AS has_gmail,
+              EXISTS (SELECT 1 FROM linkedin_accounts a WHERE a.owner_user_id = t.id AND a.revoked_at IS NULL) AS has_linkedin
+         FROM (${TEAM_USERS_SQL}) t`)).rows;
+    return NextResponse.json({ icps: icps.rows, sources: sources.rows, products: products.rows, owners, teammates, viewer_is_admin: admin });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   } finally { client.release(); }
