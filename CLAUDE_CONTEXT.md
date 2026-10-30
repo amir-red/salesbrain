@@ -2833,6 +2833,35 @@ memory? agents don't have memory which will use last run learnings." Plan `~/.cl
   the two edited bodies are updated by hand at deploy. Persona: one tool from the knowledge hint, a second only if its result
   lacks the answer, number first; MEMORY.md is the team's shared notebook, personal → crm_memory.
 
+### 5.ce Sales-leads fresh start + campaign sender / approver of your choice (2026-10-30, feat/fresh-start, migration 093)
+
+Amir, after the meeting review: "yes, a fresh start of sales leads" (remove the cards nobody contacted, Fakuma's
+included) and "campaign — make it flexible" (any chosen person approves, no consent step).
+- **A sales lead = someone we contacted.** Cards come from a sent message / email, a reply, a person adding someone (Add
+  lead, import, `crm_prospect_add`, Warm → Add as lead), the zeami.io form / Calendly. **A connection request is NOT contact
+  and makes no card** (Amir); **firm research no longer makes cards** (`firms.land_firm_people`).
+- **One-off** `python -m salesbrain_core.store.fresh_start_leads [--apply]`: removes every OPEN card with no evidence of
+  contact (evidence = a met/sent/reply/call/meeting line, a sent non-connect approval, a reply, a booking, a demo request, a
+  real meeting). `met_at` alone is not trusted: the VC import filled it with the list's name, "PEI Napa 2026 (attendee)" =
+  only on the attendee list, "Did not meet". Puts the person's `priority` back (the delete trigger clears it), lifts statuses,
+  refreshes the funnel; `--apply` writes a JSON backup to `~/.cache/salesbrain/backups/fresh-start-leads-*.json` first. Dry
+  run 2026-10-30: 886 open → 780 removed (598 firm research, 80 Napa, 57 Fakuma, 44 VC import, 1 warm), 28 new → contacted.
+  **The funnel still counts a sent request as Contacted** (`policy/funnel.py`), so the funnel's Lead count is larger than
+  /sales-leads; not changed, Amir to decide. The Lead Conductor works from cards, so it has few left to send requests for.
+- **Campaign `settings.send_from`** `{mode: owner | list_sender | back_office | front_office | person, user_id?}`
+  (`policy/campaigns.pick_sender`): applied at enrollment; the owner keeps a person already written to or sent a
+  request, and anyone whose chosen sender lacks EVERY channel the campaign uses (LinkedIn account / Gmail mailbox,
+  `_can_send`); otherwise the person is handed over (`campaigns._hand_over`: prospect + contact owner, an `assign` line,
+  unique clash = no move), so every gate works unchanged.
+- **`settings.approve_by`** `{mode: sender | campaign_owner | person, user_id?}` → `campaign_cards.approver_user_id`
+  (093, NULL = the sender) set when the day's card is filed. The approver sees it (`card`, `cards_waiting`), gets it on
+  Telegram (`campaign_runner._post_or_update`) and may decide it; the sender can always decide their own; audit
+  `campaign_card_decide` names the decider. No consent step from the account owner (Amir's decision). Card text adds
+  "— they go out from X's account". App: Settings tab "Sends from" / "Approved by" (+ teammate picker with accounts,
+  `GET /api/campaigns/options` → `teammates`), `SEND_FROM` / `APPROVE_BY` in `lib/campaigns.ts` mirror the policy.
+- At deploy: apply 093, run the fresh start (dry run, then `--apply`), hand-update the seed entry "Message: Campaign
+  card" (seeds are insert-only). Tests: `tests/test_campaign_sender_db.py` (real Postgres), policy tests.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
