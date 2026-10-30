@@ -2,6 +2,7 @@
 
 import OwnerControl from '@/components/icp/OwnerControl';
 import SeatsControl from '@/components/icp/SeatsControl';
+import DailyConnectControl from '@/components/icp/DailyConnectControl';
 import TuningPanel from '@/components/icp/TuningPanel';
 import ListSettings from '@/components/icp/ListSettings';
 import CohortHeader from '@/components/icp/CohortHeader';
@@ -285,6 +286,10 @@ export default function IcpPanelPage() {
                 <div className="text-xs font-semibold">This list</div>
                 <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
                   <SeatsControl icpId={id} canEdit={data.can_edit} onChanged={(n) => { setNote(n); void refreshAll(); }} />
+                </div>
+                <div className="rounded-lg px-3 py-2" style={{ background: 'var(--bg-input)' }}>
+                  <DailyConnectControl icpId={id} mode={journey?.icp.daily_connect ?? 'off'} canEdit={data.can_edit}
+                    senderName={journey?.sender.name ?? null} onChanged={(n) => { setNote(n); void refreshAll(); }} />
                 </div>
                 <div className="flex flex-wrap gap-2 pt-1">
                   <ExportButton href={`/api/export/icp?icp_id=${id}`} label="Export Excel"

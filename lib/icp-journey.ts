@@ -44,10 +44,14 @@ export interface JourneyCampaign {
 }
 
 export interface JourneyPayload {
-  icp: { id: string; name: string; owner_user_id: string; owner_name: string; total: number; paused_at: string | null };
+  icp: { id: string; name: string; owner_user_id: string; owner_name: string; total: number; paused_at: string | null;
+    /** 094: the daily LinkedIn connector for this list. */
+    daily_connect: 'off' | 'card' | 'auto' };
   viewer: { user_id: string; is_admin: boolean; is_owner: boolean; can_edit: boolean };
   /** Whose LinkedIn sends for this list (the owner), and whether it is connected. */
-  sender: { name: string; linkedin: boolean; sales_navigator: boolean };
+  sender: { name: string; linkedin: boolean; sales_navigator: boolean;
+    /** The sender's newest daily batch (any list of theirs), for the "In progress" line. */
+    last_batch: { mode: 'card' | 'auto'; status: string; size: number; sent: number | null; failed: number | null; at: string } | null };
   lanes: Record<LaneKey, LanePerson[]>;
   /** Beyond the lanes' rows: how many more could be queued, found recently, etc. */
   counts: {
