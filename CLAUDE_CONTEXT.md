@@ -2928,6 +2928,18 @@ people were queued by hand ("Queue next N"); fit decided the order, never the pa
   15–25), a note template per list (requests go without a note), Telegram buttons on the auto summary, a Workspace
   card line per list, the degree re-measured from the sender's account before sending (one profile fetch each).
 
+### 5.cg Nobody new could link Telegram from 2026-10-16 to 10-30 (fixed 0.74.1, no migration)
+
+Mateo sent `/start LINK-…` five times with no answer; the log said `Blocked unauthorized user 459013873`. The 0.50.0 setting
+`unauthorized_dm_behavior: ignore` (strangers get silence) also makes the Telegram adapter's INTAKE FILTER
+(`_is_user_authorized_from_message`) drop every unauthorized DM before `pre_gateway_dispatch`, so `_link_inner` and
+`_sync_access` never ran for anyone not already allowed. §5.al's "the link hook runs before authorization" checked only the
+later gate in `gateway/run_inbound.py`. Also locked out: Hannes (active link since 08-10, in neither the allowlist nor the
+pairing store). Now the setting is `decline` (passes the filter; deploy verify refuses anything else) and
+`board_hook._silence_stranger` drops strangers after linking + access sync, using the gateway's own
+`_is_user_authorized_for_source`. If the hook fails, a stranger gets one decline line, never a pairing code. Lesson: test an
+access change by sending a real message from an unknown account, not by reading one gate.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

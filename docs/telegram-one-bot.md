@@ -23,7 +23,7 @@ Enforcement lives in three places, none of them the prompt:
 2. **`platforms.telegram.extra.allow_admin_from` / `user_allowed_commands`** (Hermes slash-command gating). Admin ids
    are written at every deploy from the database: role `admin` + an active Telegram link.
 3. **The link table.** Nobody gets in without `/start LINK-…` from the app (`board_hook._sync_access` pairs an active
-   link, unpairs a revoked one). Strangers are dropped silently (`unauthorized_dm_behavior: ignore`).
+   link, unpairs a revoked one). Strangers are dropped silently by `board_hook._silence_stranger`; the setting is `unauthorized_dm_behavior: decline`, because `ignore` makes the Telegram adapter drop a `/start LINK-…` before the hook sees it.
 
 ## Cut over (integration session, Amir present, bot idle) — DONE 2026-10-17 18:33 EAT
 
