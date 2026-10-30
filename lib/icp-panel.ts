@@ -58,12 +58,12 @@ export interface OverviewIcp extends IcpProfile {
  * `lane` = how most people on the list came in (the funnel lane of those contacted, else of everyone).
  */
 export interface ListFunnel {
-  found: number; ready: number; contacted: number; answered: number; meeting: number; opportunity: number;
+  found: number; ready: number; connected: number; contacted: number; answered: number; meeting: number; opportunity: number;
   unfit: number;
   lane: string | null;
 }
 export const LIST_FUNNEL_STEPS = [
-  ['found', 'Found'], ['ready', 'Ready'], ['contacted', 'Contacted'],
+  ['found', 'Found'], ['ready', 'Ready'], ['connected', 'Connected'], ['contacted', 'Contacted'],
   ['answered', 'Answered'], ['meeting', 'Meeting'], ['opportunity', 'Opportunity'],
 ] as const;
 /** Short lane labels for a list card. */

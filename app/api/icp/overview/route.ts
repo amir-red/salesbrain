@@ -134,7 +134,7 @@ export async function GET(req: NextRequest) {
         coverage: { ...zeroCoverage, ...cov, icp_profile_id: undefined } as Coverage,
         approvals: { pending: approvalsBy[r.id]?.pending ?? 0, sent: approvalsBy[r.id]?.sent ?? 0 },
         queued: queuedBy[r.id] ?? { leads_finder: 0, enricher: 0 },
-        funnel: funnelBy[r.id] ?? (funnelTotal ? { found: 0, ready: 0, contacted: 0, answered: 0, meeting: 0, opportunity: 0, unfit: 0, lane: null } : null),
+        funnel: funnelBy[r.id] ?? (funnelTotal ? { found: 0, ready: 0, connected: 0, contacted: 0, answered: 0, meeting: 0, opportunity: 0, unfit: 0, lane: null } : null),
       };
     }),
     funnel_total: funnelTotal,

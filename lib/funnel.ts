@@ -13,7 +13,7 @@
  */
 
 export const FUNNEL_STAGES = [
-  'prospect_sourced', 'prospect_scored', 'prospect_ready',
+  'prospect_sourced', 'prospect_scored', 'prospect_ready', 'prospect_connected',
   'lead_contacted', 'lead_engaged', 'lead_meeting', 'lead_qualified',
   'opportunity', 'client',
 ] as const;
@@ -21,7 +21,7 @@ export type FunnelStage = (typeof FUNNEL_STAGES)[number];
 
 export const FUNNEL_LABELS = {
   prospect_sourced: 'Sourced', prospect_scored: 'Scored', prospect_ready: 'Ready to reach',
-  lead_contacted: 'Contacted', lead_engaged: 'Engaged', lead_meeting: 'Meeting',
+  prospect_connected: 'Connected', lead_contacted: 'Contacted', lead_engaged: 'Engaged', lead_meeting: 'Meeting',
   lead_qualified: 'Qualified', opportunity: 'Opportunity', client: 'Client',
 } as const;
 
@@ -56,7 +56,6 @@ export const FUNNEL_EXITS = { unfit: 'Not a fit', lost: 'Lost', archived: 'Archi
 
 export const SUBSTAGE_LABELS: Record<string, string> = {
   request_pending: 'request pending',
-  connected: 'connected, not messaged',
   messaged: 'messaged',
   request_declined: 'request not accepted',
   answered: 'answered',
@@ -110,7 +109,7 @@ export function pct(v: number | null | undefined): string {
 }
 
 /**
- * The funnel as drawn on /dashboard (2026-10-28): six steps, each one or more kernel stages. Scored folds into
+ * The funnel as drawn on /dashboard (2026-10-28): seven steps, each one or more kernel stages. Scored folds into
  * Sourced and Meeting / Qualified into Engaged — they are chips on the step, not steps of their own, so the shape
  * narrows the way the team reads it. `reached` of a merged step = the first member's (the widest), `current` = the
  * members' sum, conversion = the next step's reached over this one's.
@@ -118,6 +117,7 @@ export function pct(v: number | null | undefined): string {
 export const DRAWN_STEPS: { key: string; label: string; members: FunnelStage[]; group: FunnelGroup }[] = [
   { key: 'sourced', label: 'Sourced', members: ['prospect_sourced', 'prospect_scored'], group: 'prospect' },
   { key: 'ready', label: 'Ready to reach', members: ['prospect_ready'], group: 'prospect' },
+  { key: 'connected', label: 'Connected', members: ['prospect_connected'], group: 'prospect' },
   { key: 'contacted', label: 'Contacted', members: ['lead_contacted'], group: 'lead' },
   { key: 'engaged', label: 'Engaged', members: ['lead_engaged', 'lead_meeting', 'lead_qualified'], group: 'lead' },
   { key: 'opportunity', label: 'Opportunity', members: ['opportunity'], group: 'opportunity' },

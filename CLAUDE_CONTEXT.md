@@ -2850,8 +2850,7 @@ included) and "campaign — make it flexible" (any chosen person approves, no co
   only on the attendee list, "Did not meet". Puts the person's `priority` back (the delete trigger clears it), lifts statuses,
   refreshes the funnel; `--apply` writes a JSON backup to `~/.cache/salesbrain/backups/fresh-start-leads-*.json` first. Dry
   run 2026-10-30: 886 open → 780 removed (598 firm research, 80 Napa, 57 Fakuma, 44 VC import, 1 warm), 28 new → contacted.
-  **The funnel still counts a sent request as Contacted** (`policy/funnel.py`), so the funnel's Lead count is larger than
-  /sales-leads; not changed, Amir to decide. The Lead Conductor works from cards, so it has few left to send requests for.
+  The Lead Conductor works from cards, so it has few left to send requests for.
 - **Campaign `settings.send_from`** `{mode: owner | list_sender | back_office | front_office | person, user_id?}`
   (`policy/campaigns.pick_sender`): applied at enrollment; the owner keeps a person already written to or sent a
   request, and anyone whose chosen sender lacks EVERY channel the campaign uses (LinkedIn account / Gmail mailbox,
@@ -2864,6 +2863,17 @@ included) and "campaign — make it flexible" (any chosen person approves, no co
   "— they go out from X's account". App: Settings tab "Sends from" / "Approved by" (+ teammate picker with accounts,
   `GET /api/campaigns/options` → `teammates`), `SEND_FROM` / `APPROVE_BY` in `lib/campaigns.ts` mirror the policy.
 - Tests: `tests/test_campaign_sender_db.py` (real Postgres), policy tests.
+
+### 5.cf Funnel step "Connected": a request is not contact (2026-10-30, 0.73.0, app + core, no migration)
+
+Amir: "if we didn't contact them, no; say Connected". `prospect_connected` sits between Ready to reach and Contacted
+(`policy/funnel.py`, `lib/funnel.ts`, list cards, /dashboard): a 1st-degree connection (accepted request or existing)
+nobody has written to. A pending or declined request stays `prospect_ready` with a substage. Contacted = a message, email
+or intro ask. Steps are cumulative, so anyone contacted also counts as having reached Connected, even by email only.
+Requests still join `funnel_cohorts` ("What converts" compares them), via `pf.requested`. One-off
+`store/funnel_request_not_contact.py` corrected `funnel_events`. Demo-form people land on "Inbound: demo requests"
+(`conductor.ensure_prospect_for_lead`), not a list named after the source. Conversion (contacted → opportunity) jumped
+because the denominator shrank: earlier figures do not compare.
 
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 

@@ -35,7 +35,7 @@ const linkBtn = 'text-xs underline-offset-2 hover:underline';
 /* ── Funnel ─────────────────────────────────────────────────────────── */
 
 const STEPS = [
-  ['prospect_ready', 'Ready to reach'], ['lead_contacted', 'Contacted'], ['lead_engaged', 'Answered'],
+  ['prospect_ready', 'Ready to reach'], ['prospect_connected', 'Connected'], ['lead_contacted', 'Contacted'], ['lead_engaged', 'Answered'],
   ['lead_meeting', 'Meeting'], ['opportunity', 'Opportunity'],
 ] as const;
 
@@ -43,7 +43,7 @@ const STEPS = [
 export function RailFunnel({ icpId, funnel }: { icpId: string; funnel: ListFunnel | null }) {
   const data = funnel;
   const reached = (k: string) => {
-    const m: Record<string, keyof ListFunnel> = { prospect_ready: 'ready', lead_contacted: 'contacted', lead_engaged: 'answered', lead_meeting: 'meeting', opportunity: 'opportunity' };
+    const m: Record<string, keyof ListFunnel> = { prospect_ready: 'ready', prospect_connected: 'connected', lead_contacted: 'contacted', lead_engaged: 'answered', lead_meeting: 'meeting', opportunity: 'opportunity' };
     const key = m[k];
     return key ? Number(data?.[key] ?? 0) : 0;
   };
