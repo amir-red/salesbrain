@@ -177,10 +177,27 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     try { funnel = ((await q(`SELECT ${FUNNEL_COUNTS} FROM person_funnel WHERE $1::uuid = ANY(icp_ids)`)).rows[0] as ListFunnel) ?? null; }
     catch { funnel = null; }
 
+    // Whose LinkedIn sends for this list: the sender seat, else the back office, else the owner (085 / 094).
+    const seat = (await q(
+      `SELECT u.id, u.name, i.daily_connect
+         FROM icp_profiles i JOIN users u ON u.id = COALESCE(i.sender_user_id, i.responsible_user_id, i.owner_user_id)
+        WHERE i.id = $1`, [id])).rows[0] as { id: string; name: string; daily_connect: 'off' | 'card' | 'auto' } | undefined;
+    const senderId = seat?.id ?? icp.owner_user_id;
     const sender = (await q(
       `SELECT la.id IS NOT NULL AS linkedin, COALESCE(la.premium_features::text, '') ILIKE '%sales_navigator%' AS sales_navigator
          FROM (SELECT 1) one LEFT JOIN linkedin_accounts la ON la.owner_user_id = $1 AND la.revoked_at IS NULL LIMIT 1`,
-      [icp.owner_user_id])).rows[0] ?? { linkedin: false, sales_navigator: false };
+      [senderId])).rows[0] ?? { linkedin: false, sales_navigator: false };
+    let lastBatch: JourneyPayload['sender']['last_batch'] = null;
+    try {
+      const b = (await q(
+        `SELECT mode, status, size, result, created_at FROM connect_batches
+          WHERE owner_user_id = $1 ORDER BY created_at DESC LIMIT 1`, [senderId])).rows[0];
+      if (b) {
+        const result = (b.result ?? {}) as { sent?: number; failed?: number };
+        lastBatch = { mode: b.mode, status: b.status, size: Number(b.size), at: new Date(b.created_at).toISOString(),
+          sent: typeof result.sent === 'number' ? result.sent : null, failed: typeof result.failed === 'number' ? result.failed : null };
+      }
+    } catch { lastBatch = null; }  // before 094 (no mode column)
 
     // ── Shape ──────────────────────────────────────────────────────────────────────────────────────────────
     const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
@@ -227,9 +244,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     events.sort((x, y) => (x.at < y.at ? 1 : -1));
 
     const payload: JourneyPayload = {
-      icp: { id, name: icp.name, owner_user_id: icp.owner_user_id, owner_name: icp.owner_name, total: Number(counts.total ?? 0), paused_at: iso((icp as { paused_at?: string | null }).paused_at) },
+      icp: { id, name: icp.name, owner_user_id: icp.owner_user_id, owner_name: icp.owner_name, total: Number(counts.total ?? 0), paused_at: iso((icp as { paused_at?: string | null }).paused_at),
+        daily_connect: seat?.daily_connect ?? 'off' },
       viewer: { user_id: session.userId, is_admin: session.role === 'admin', is_owner: icp.owner_user_id === session.userId, can_edit: Boolean(icp.can_edit) },
-      sender: { name: icp.owner_name, linkedin: Boolean(sender.linkedin), sales_navigator: Boolean(sender.sales_navigator) },
+      sender: { name: seat?.name ?? icp.owner_name, linkedin: Boolean(sender.linkedin), sales_navigator: Boolean(sender.sales_navigator), last_batch: lastBatch },
       lanes,
       counts: {
         send_ready: Number(counts.send_ready ?? 0), fresh_profiles: Number(counts.fresh_profiles ?? 0), no_profile: Number(counts.no_profile ?? 0),

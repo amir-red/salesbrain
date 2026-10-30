@@ -2877,6 +2877,57 @@ Requests still join `funnel_cohorts` ("What converts" compares them), via `pf.re
 (`conductor.ensure_prospect_for_lead`), not a list named after the source. Conversion (contacted → opportunity) jumped
 because the denominator shrank: earlier figures do not compare.
 
+### 5.cd The daily LinkedIn connector — lists on the Lead Conductor's batch, warm paths first (2026-10-30, feat/daily-connector, core/hermes, migration 094)
+
+Mateo on the 10-29 call: "every single day my agent goes into LinkedIn and connects 15 or 25 times with our target
+market, mostly where there is already a connection — three mutual contacts and the person clicking yes is much more
+likely." Amir: "let's start with 1". Before: the Conductor's daily batch drew only from /sales-leads cards; a list's
+people were queued by hand ("Queue next N"); fit decided the order, never the path.
+- **094**: `icp_profiles.daily_connect` off | card | auto; `connect_batches.mode` (card | auto, the 20-hour "already
+  filed" guard is per mode, so a sender may have one of each a day) and `decided_by` (human | auto); policy
+  `agents.conductor.list_connect` (default true, admin-editable from chat).
+- **Order** (`policy/lifecycle.py::path_warmth`, used by `batch_pick`): a person's own priority → their list's (092) →
+  a firm we already asked someone at waits → **mutual connections on record** (LinkedIn's `shared_connections_count`
+  on `people.facets`, or stored `linkedin_mutual` edges of the sender) → **2nd degree** → 3rd / unknown → order →
+  star → fit. A hand-set P1 still beats a warm 3rd. Caveat: `prospects.network_degree` was measured from the account
+  that SEARCHED the person (often not the sender's); the send path now records the sender's own degree and shared
+  count after its profile fetch (`invitations.note_profile_signal` from `outreach_agent._send_connect`), so the signal
+  improves with every batch.
+- **Kernel** `commands/conductor.py`: `list_connect_candidates` (ONE query over every active, unpaused list with
+  `daily_connect` on: profile, not 1st degree, stage < P5, never touched, no request from the sender's or the holder's
+  account, no card waiting, no thread, card not paused; reads `FROM leads` because `priority` is a card column) →
+  `lifecycle_tick` fills the sender's `card` pool after the sales-lead cards (a person on a card is never picked
+  twice) and an `auto` pool of its own; the card batch takes the day's room first. `file_connect_batch(owner, ids,
+  mode)`: a person held by a teammate is **handed to the list's sender** first (`_hand_prospect`: prospect + contact,
+  an `assign` line when a card exists; a unique clash leaves them), then `propose_connect` per person as before;
+  `mode='auto'` inserts the batch as `approved / decided_by 'auto'`, decides every approval as the owner and returns no
+  card event. `_batch_card_text` shows "· 3 mutual" / "· 2nd degree", the list, and "N of M share a connection with you".
+  `icp_owner.set_daily_connect` (owner or admin, audit `icp_daily_connect`; answers who sends and whether they have
+  LinkedIn / Telegram). `conductor_status.daily_connect_lists`.
+- **Ring**: `lead_conductor.py` sends an auto batch inline, paced 8–16 s per person (the step is its own process with
+  a 25-min budget; 25 requests ≈ 5 min), summary DM to the sender (own DM or nothing), `auto_sent` in the run detail;
+  card batches unchanged. Tool `crm_icp_daily_connect {icp_id, mode}` (mcp=None, withheld from the catalogue; the
+  persona confirms with the person before 'auto'). Knowledge entry "Daily LinkedIn connector". Sender = the list's
+  sender seat, else back office, else owner — the journey page's "sender" now says the same.
+- **App**: `components/icp/DailyConnectControl.tsx` (Off · Ask me each day · Send automatically; 'auto' asks once
+  more and names whose account sends) in the list page's Settings drawer and inline in the journey's "In progress"
+  card, with the sender's last batch ("card waiting for Mateo's tap (12)", "automatic: 15 sent 2 h ago");
+  `POST /api/icp/[id]/daily-connect`; the journey payload carries `icp.daily_connect` + `sender.last_batch`.
+- **Live facts at build (read-only check of the candidate query on production, standing in for the column)**:
+  Mateo's ten cohort lists hold 1,071 people the connector could ask (715 of them 2nd degree, 1 with a stored mutual
+  count); 636 are held by teammates / the Zeami service stub today and would move to Mateo as they are filed.
+  Mateo's LinkedIn (Sales Navigator, connected 10-27, 93 pending requests on the ledger) → cap 25/day, 120/7 d. He has
+  NO Telegram link: in 'card' mode his card waits on the list page / Agents; 'auto' needs no tap. Query 2.6 s from a
+  laptop.
+- **Rollout** (integration session): apply 094; deploy ring + app; then per list, on /icp/[id] → Settings (or
+  `crm_icp_daily_connect`): Mateo decides card vs auto; set the list's sender seat where it is not Mateo. Nothing
+  changes until a list is switched on. Tests: `test_lifecycle.py` (warmth order, P1 beats warm, touched firm waits),
+  `test_conductor_db.py` (list fill warm-first + hand-over, auto batch approved + per-mode guard, setting is owner or
+  admin) on a scratch Postgres.
+- Not built: a per-list "how many a day" (the cap and `connect_batch_size` 10 decide; raise the size for Mateo's
+  15–25), a note template per list (requests go without a note), Telegram buttons on the auto summary, a Workspace
+  card line per list, the degree re-measured from the sender's account before sending (one profile fetch each).
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

@@ -19,6 +19,7 @@ import { Pill } from '@/components/panel/PageHeader';
 import { Skeleton, SkeletonCard } from '@/components/panel/Skeleton';
 import Queue from './Queue';
 import LeadsTable from '@/components/icp/LeadsTable';
+import DailyConnectControl, { DAILY_CONNECT_TEXT } from '@/components/icp/DailyConnectControl';
 
 const muted = { color: 'var(--text-muted)' };
 
@@ -121,7 +122,7 @@ export default function JourneyView({ icpId, data, error, onChanged, onOpenPeopl
         <div className="space-y-3 min-w-0">
           <Campaigns icpId={icpId} rows={data.campaigns} />
           <Happened events={data.events} />
-          <InProgress data={data} />
+          <InProgress data={data} onChanged={() => { void onChanged(); }} />
           <Journey data={data} onOpenPeople={onOpenPeople} />
         </div>
       </div>
@@ -192,8 +193,14 @@ function Happened({ events: all }: { events: JourneyEvent[] }) {
 
 /* ── In progress: what the machinery holds, with no one to act ────────────────────────────────────────────── */
 
-function InProgress({ data }: { data: JourneyPayload }) {
+function InProgress({ data, onChanged }: { data: JourneyPayload; onChanged?: (note: string) => void }) {
   const { counts, connect } = data;
+  const lb = data.sender.last_batch;
+  const batchLine = lb
+    ? lb.status === 'pending' ? `card waiting for ${data.sender.name}'s tap (${lb.size})`
+      : lb.status === 'sent' || lb.status === 'failed' ? `${lb.mode === 'auto' ? 'automatic' : 'card'}: ${lb.sent ?? 0} sent${lb.failed ? `, ${lb.failed} failed` : ''} ${relativeTime(lb.at)}`
+      : `${lb.mode === 'auto' ? 'automatic' : 'card'} ${lb.status} ${relativeTime(lb.at)}`
+    : null;
   const rows: [string, string][] = [
     ['Requests waiting for acceptance', counts.requests_pending.toLocaleString()],
     ['Profiles still to find', counts.no_profile.toLocaleString()],
@@ -205,6 +212,13 @@ function InProgress({ data }: { data: JourneyPayload }) {
     <Card title="In progress">
       <div className="text-[11px] space-y-1">
         {rows.map(([l, v]) => <div key={l} className="flex justify-between gap-3"><span style={{ color: 'var(--text)' }}>{l}</span><b className="font-mono font-semibold">{v}</b></div>)}
+      </div>
+      <div className="pt-1 text-[11px] space-y-1" style={{ borderTop: '1px solid var(--border)' }}>
+        <DailyConnectControl icpId={data.icp.id} mode={data.icp.daily_connect} canEdit={data.viewer.can_edit} senderName={data.sender.name} variant="inline" onChanged={onChanged} />
+        <p style={muted}>
+          {data.icp.daily_connect === 'off' ? 'Switch on to have the Lead Conductor queue this list every day after 09:00.' : `${DAILY_CONNECT_TEXT[data.icp.daily_connect].hint}`}
+          {batchLine ? ` Last batch: ${batchLine}.` : ''}
+        </p>
       </div>
       {!data.sender.linkedin && <p className="text-[11px]" style={{ color: 'var(--red)' }}>{data.sender.name} has no LinkedIn connected — requests and messages cannot go out.</p>}
       {data.sender.linkedin && connect.remaining === 0 && connect.next_request_at && <p className="text-[11px]" style={muted}>Next request free {relativeTime(connect.next_request_at)}.</p>}
