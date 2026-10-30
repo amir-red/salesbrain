@@ -2835,6 +2835,10 @@ memory? agents don't have memory which will use last run learnings." Plan `~/.cl
 
 ### 5.ce Sales-leads fresh start + campaign sender / approver of your choice (2026-10-30, feat/fresh-start, migration 093)
 
+**LIVE 2026-10-30 (0.72.0, with §5.cd agent memory)**: 093 applied, ring + app deployed, cleanup applied: 780 cards removed, 28 lifted to
+contacted, 112 open remain (75 contacted, 30 replied, 7 new). Backup on Amir's Mac: `~/.cache/salesbrain/backups/fresh-start-leads-20261030113932.json`.
+Not yet seen live: a card sent to a named approver, a campaign sending from a chosen teammate.
+
 Amir, after the meeting review: "yes, a fresh start of sales leads" (remove the cards nobody contacted, Fakuma's
 included) and "campaign — make it flexible" (any chosen person approves, no consent step).
 - **A sales lead = someone we contacted.** Cards come from a sent message / email, a reply, a person adding someone (Add
@@ -2859,8 +2863,7 @@ included) and "campaign — make it flexible" (any chosen person approves, no co
   `campaign_card_decide` names the decider. No consent step from the account owner (Amir's decision). Card text adds
   "— they go out from X's account". App: Settings tab "Sends from" / "Approved by" (+ teammate picker with accounts,
   `GET /api/campaigns/options` → `teammates`), `SEND_FROM` / `APPROVE_BY` in `lib/campaigns.ts` mirror the policy.
-- At deploy: apply 093, run the fresh start (dry run, then `--apply`), hand-update the seed entry "Message: Campaign
-  card" (seeds are insert-only). Tests: `tests/test_campaign_sender_db.py` (real Postgres), policy tests.
+- Tests: `tests/test_campaign_sender_db.py` (real Postgres), policy tests.
 
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
