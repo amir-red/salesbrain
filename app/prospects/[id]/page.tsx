@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import JourneyStepper from '@/components/prospect/JourneyStepper';
@@ -12,6 +12,8 @@ import { PROSPECT_STAGES } from '@/lib/prospecting';
 import { journeyState, routeEntry, warmAngles } from '@/lib/prospects';
 import type { ActAs, IntroRequestLite, JourneyKey, Prospect } from '@/lib/prospects';
 import { relativeTime, formatDate } from '@/lib/time';
+import { SIGNAL_LABELS } from '@/lib/cohorts';
+import PriorityPicker from '@/components/PriorityPicker';
 
 interface Brief {
   id: string; summary: string | null; pain_hypotheses: string | null; why_now_signals: string | null;
@@ -33,6 +35,7 @@ interface Payload {
  */
 export default function ProspectDetailPage() {
   const params = useParams();
+  const search = useSearchParams();
   const prospectId = params.id as string;
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -106,6 +109,13 @@ export default function ProspectDetailPage() {
     </div>
   );
 
+  // Back goes where the person was opened from (?from=), else to their list, else to Prospects (Mateo, 2026-10-27).
+  const from = search.get('from');
+  const backHref = from && from.startsWith('/') ? from : prospect.icp_profile_id ? `/icp/${prospect.icp_profile_id}` : '/prospecting';
+  const backLabel = from && from.startsWith('/') ? 'Back' : prospect.icp_profile_id ? (prospect.list_name || 'List') : 'Prospects';
+  const facts = prospect.company_facts || {};
+  const factLine = [facts.industry || prospect.industry, facts.size || prospect.company_size, facts.revenue_estimate, facts.locations || prospect.hq_location, facts.ownership].filter(Boolean).join(' · ');
+
   return (
     <div className="flex h-screen">
       <Sidebar />
@@ -114,9 +124,12 @@ export default function ProspectDetailPage() {
         <div className="p-6 border-b space-y-3" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Link href="/prospecting" className="px-3 py-1.5 rounded-lg text-xs" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>← Prospecting</Link>
+              <Link href={backHref} className="px-3 py-1.5 rounded-lg text-xs" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>← {backLabel}</Link>
               <div>
-                <h1 className="text-xl font-bold">{prospect.full_name || '—'}{prospect.title ? ` · ${prospect.title}` : ''}</h1>
+                <h1 className="text-xl font-bold flex items-center gap-2">
+                  <PriorityPicker value={prospect.priority} prospectId={prospect.id} size="md" onChanged={() => void fetchData(true)} />
+                  {prospect.full_name || '—'}{prospect.title ? ` · ${prospect.title}` : ''}
+                </h1>
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
                   {prospect.company_name || '—'}{prospect.domain ? ` · ${prospect.domain}` : ''}
                   {prospect.linkedin_url && <> · <a href={prospect.linkedin_url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>LinkedIn ↗</a></>}
@@ -134,6 +147,21 @@ export default function ProspectDetailPage() {
               )}
             </div>
           </div>
+          {(prospect.company_summary || prospect.cohort_why) && (
+            <div className="rounded-xl p-3 text-sm space-y-1" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+              {prospect.cohort_why && (
+                <div className="flex items-center gap-2 text-xs">
+                  {prospect.cohort_score != null && <span className="font-semibold tabular-nums px-2 py-0.5 rounded-md" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>{prospect.cohort_score}</span>}
+                  <span style={{ color: 'var(--accent)' }}>{prospect.cohort_why}</span>
+                </div>
+              )}
+              {prospect.company_summary && <p>{prospect.company_summary}</p>}
+              {factLine && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{factLine}</p>}
+              {(prospect.cohort_signals ?? []).length > 0 && (
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Signals: {(prospect.cohort_signals ?? []).map((x) => SIGNAL_LABELS[x] ?? x).join(', ')}</p>
+              )}
+            </div>
+          )}
           <JourneyStepper state={state} onJump={jump} />
         </div>
 
@@ -173,7 +201,9 @@ export default function ProspectDetailPage() {
                 <div>Email: <b style={{ color: prospect.email ? 'var(--text)' : 'inherit' }}>{prospect.email || 'none on file'}</b></div>
                 <div>Research: <b style={{ color: prospect.research_summary ? 'var(--text)' : 'inherit' }}>{prospect.research_summary ? 'done' : 'not yet'}</b></div>
               </div>
-              {prospect.research_summary && <p className="text-xs mt-2">{prospect.research_summary}</p>}
+              {prospect.research_summary && (
+                <details className="mt-2 text-xs"><summary className="cursor-pointer" style={{ color: 'var(--accent)' }}>Full research</summary><p className="mt-1 whitespace-pre-wrap">{prospect.research_summary}</p></details>
+              )}
               {briefs[0] && (
                 <div className="mt-2 space-y-1">
                   {briefs[0].outreach_angle && <div><p className="text-[10px] uppercase" style={{ color: 'var(--text-muted)' }}>Angle</p><p className="text-xs">{briefs[0].outreach_angle}</p></div>}

@@ -1,5 +1,11 @@
 import pool from '@/lib/db';
-import { GATES } from '@/lib/gates';
+import { AI_CREDIT_GATES, GRANT_GATES, SALES_GATES, type Gate } from '@/lib/gates';
+
+// Sales has six stages since 2026-10-26 (was nine): never hard-code the final stage or the SLA days here.
+const SALES_FINAL = SALES_GATES[SALES_GATES.length - 1].number;
+const slaCase = (gates: Gate[]) => `CASE gate ${gates.map((g) => `WHEN ${g.number} THEN ${g.slaDays}`).join(' ')} END`;
+const SLA_DAYS_SQL = `CASE deal_type WHEN 'grant' THEN ${slaCase(GRANT_GATES)} WHEN 'ai_credit' THEN ${slaCase(AI_CREDIT_GATES)} ELSE ${slaCase(SALES_GATES)} END`;
+const OPEN_SQL = `status = 'active' AND deleted_at IS NULL AND NOT (deal_type = 'sales' AND gate >= ${SALES_FINAL})`;
 import Sidebar from '@/components/Sidebar';
 import { relativeTime } from '@/lib/time';
 import { cookies } from 'next/headers';
@@ -38,8 +44,8 @@ export default async function ReportsPage() {
 
   // Metric queries (org-wide — all deals visible)
   const [activeRes, valueRes, overdueRes, wonRes, byGateRes, activityRes] = await Promise.all([
-    pool.query('SELECT COUNT(*)::int as count FROM deals WHERE gate < 9 AND deleted_at IS NULL'),
-    pool.query('SELECT COALESCE(SUM(value), 0)::numeric as total FROM deals WHERE gate < 9 AND deleted_at IS NULL'),
+    pool.query(`SELECT COUNT(*)::int as count FROM deals WHERE ${OPEN_SQL}`),
+    pool.query(`SELECT COALESCE(SUM(value), 0)::numeric as total FROM deals WHERE ${OPEN_SQL}`),
     pool.query(
       // Signed grants (contract_signed_at IS NOT NULL) don't count as
       // "overdue" from a gate-SLA perspective — they're in Stage 2 where
@@ -47,23 +53,18 @@ export default async function ReportsPage() {
       // avoids reporting all 9 real grants as "overdue" for sitting at
       // G10 for a year (which they always would under the old SLA logic).
       `SELECT COUNT(*)::int as count FROM deals
-       WHERE gate < 9
-       AND deleted_at IS NULL
+       WHERE ${OPEN_SQL}
        AND contract_signed_at IS NULL
-       AND EXTRACT(EPOCH FROM (now() - gate_entered_at))/86400 >
-         CASE gate
-           WHEN 1 THEN 3 WHEN 2 THEN 10 WHEN 3 THEN 5 WHEN 4 THEN 14
-           WHEN 5 THEN 5 WHEN 6 THEN 7 WHEN 7 THEN 21 WHEN 8 THEN 3 WHEN 9 THEN 5
-         END`
+       AND EXTRACT(EPOCH FROM (now() - gate_entered_at))/86400 > ${SLA_DAYS_SQL}`
     ),
     pool.query(
-      `SELECT COUNT(*)::int as count FROM gate_events
-       WHERE to_gate = 9
-       AND created_at >= date_trunc('month', now())`
+      `SELECT COUNT(*)::int as count FROM gate_events ge JOIN deals d ON d.id = ge.deal_id
+       WHERE d.deal_type = 'sales' AND ge.to_gate = ${SALES_FINAL}
+       AND ge.created_at >= date_trunc('month', now())`
     ),
     pool.query(
       `SELECT gate, COUNT(*)::int as count FROM deals
-       WHERE deleted_at IS NULL
+       WHERE deleted_at IS NULL AND deal_type = 'sales' AND status = 'active'
        GROUP BY gate ORDER BY gate`
     ),
     pool.query(
@@ -80,7 +81,7 @@ export default async function ReportsPage() {
   const wonCount = wonRes.rows[0]?.count || 0;
 
   // Bar chart data
-  const gateCounts = GATES.map((g) => {
+  const gateCounts = SALES_GATES.map((g) => {
     const row = byGateRes.rows.find((r) => r.gate === g.number);
     return { gate: g.number, name: g.name, count: row?.count || 0 };
   });

@@ -23,7 +23,8 @@ export const IcpBodySchema = z.object({
   name: z.string().trim().min(1).max(120),
   product: z.string().trim().max(40).nullable().optional(),
   description: z.string().trim().max(2000).nullable().optional(),
-  objective: z.enum(['speed_to_market', 'volume', 'margin', 'logo', 'test_cases']).nullable().optional(),
+  // 'list' = a hand-made list the Leads Finder never searches (Lead Conductor, 068); the builder sends it back unchanged.
+  objective: z.enum(['speed_to_market', 'volume', 'margin', 'logo', 'test_cases', 'list']).nullable().optional(),
   // What the list sends once a connection request is accepted (053): one approval card per acceptance.
   first_message_template: z.string().trim().max(1900).nullable().optional(),
   criteria: CriteriaSchema,

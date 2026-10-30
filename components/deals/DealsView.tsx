@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import PriorityPicker from '@/components/PriorityPicker';
 import PageHeader from '@/components/panel/PageHeader';
 import Button from '@/components/panel/Button';
 import { relativeTime } from '@/lib/time';
@@ -37,6 +38,7 @@ export default function DealsView({ deals, userId }: { deals: DealItem[]; userId
   const scope: Scope = (sp.get('scope') as Scope) || (view === 'board' ? 'everyone' : 'mine');
   const status: StatusFilter = (sp.get('status') as StatusFilter) || 'current';
   const flag: Flag = (sp.get('flag') as Flag) || '';
+  const priority = sp.get('priority') || '';
   const q = sp.get('q') || '';
   const grantView = sp.get('grants') === 'gates' ? 'gates' : 'stages';
 
@@ -56,10 +58,10 @@ export default function DealsView({ deals, userId }: { deals: DealItem[]; userId
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  const opts = { userId, scope, status, flag, q, type };
+  const opts = { userId, scope, status, flag, q, type, priority };
   const shown = useMemo(() => deals.filter((d) => matches(d, opts)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [deals, userId, scope, status, flag, q, type]);
+    [deals, userId, scope, status, flag, q, type, priority]);
   // The summary follows type + scope only, so the numbers do not jump while you click through filters.
   const summary = useMemo(() => summarize(deals.filter((d) => matches(d, { ...opts, status: 'all', flag: '', q: '' }))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -72,8 +74,8 @@ export default function DealsView({ deals, userId }: { deals: DealItem[]; userId
   return (
     <div className="flex-1 overflow-hidden flex flex-col">
       <PageHeader
-        title="Deals"
-        subtitle={`${shown.length} shown · ${scope === 'mine' ? 'deals you created or lead' : 'everyone’s deals'}`}
+        title="Opportunities"
+        subtitle={`${shown.length} shown · ${scope === 'mine' ? 'opportunities you created or lead' : 'everyone’s opportunities'}`}
         actions={
           <>
             <div className="flex rounded-lg overflow-hidden text-sm" style={{ border: '1px solid var(--border)' }} role="tablist" aria-label="View">
@@ -81,13 +83,13 @@ export default function DealsView({ deals, userId }: { deals: DealItem[]; userId
                 <button key={v} role="tab" aria-selected={view === v}
                   onClick={() => set({ view: v === 'list' ? null : 'pipeline', type: null, scope: null, grants: null })}
                   className="px-3 py-1.5 font-medium flex items-center gap-1.5"
-                  title={v === 'list' ? 'Deals as a list' : 'Deals on the pipeline board, by gate'}
+                  title={v === 'list' ? 'Opportunities as a list' : 'Opportunities on the pipeline board, by gate'}
                   style={{ background: view === v ? 'var(--accent)' : 'transparent', color: view === v ? 'var(--accent-fg)' : 'var(--text-muted)' }}>
                   {icon}{label}
                 </button>
               ))}
             </div>
-            <Button variant="primary" onClick={() => setShowNew((v) => !v)}>+ New deal</Button>
+            <Button variant="primary" onClick={() => setShowNew((v) => !v)}>+ New opportunity</Button>
           </>
         }
       />
@@ -124,6 +126,13 @@ export default function DealsView({ deals, userId }: { deals: DealItem[]; userId
           {STATUS_FILTERS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
         </select>
 
+        <select value={priority} onChange={(e) => set({ priority: e.target.value || null })} aria-label="Priority"
+          className="px-2 py-1.5 rounded-lg text-xs outline-none"
+          style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+          <option value="">Any priority</option><option value="top">P1–P3</option><option value="set">Priority set</option><option value="none">No priority</option>
+          {[1,2,3,4,5,6,7,8,9,10].map((n) => <option key={n} value={String(n)}>P{n}</option>)}
+        </select>
+
         {FLAGS.map((f) => (
           <button key={f.key} onClick={() => set({ flag: flag === f.key ? null : f.key })}
             className="px-2.5 py-1.5 rounded-lg text-xs" style={chip(flag === f.key)}>
@@ -143,7 +152,7 @@ export default function DealsView({ deals, userId }: { deals: DealItem[]; userId
           </div>
         )}
 
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search deal, company, person"
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search opportunity, company, person"
           className="ml-auto px-3 py-1.5 rounded-lg text-xs outline-none w-56"
           style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }} />
       </div>
@@ -153,9 +162,9 @@ export default function DealsView({ deals, userId }: { deals: DealItem[]; userId
       <div className="flex-1 overflow-auto p-4">
         {shown.length === 0 ? (
           <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
-            <p className="text-sm">No deals match.</p>
+            <p className="text-sm">No opportunities match.</p>
             {scope === 'mine' && (
-              <button onClick={() => set({ scope: 'everyone' })} className="text-xs mt-2 underline">Show everyone’s deals</button>
+              <button onClick={() => set({ scope: 'everyone' })} className="text-xs mt-2 underline">Show everyone’s opportunities</button>
             )}
           </div>
         ) : view === 'list' ? (
@@ -206,7 +215,7 @@ function SummaryStrip({ summary: s, onFlag, onStatus }: {
       {item('Board votes open', String(s.votes), () => onFlag('vote'), s.votes ? 'var(--cat-violet)' : undefined)}
       {item('Overdue', String(s.overdue), () => onFlag('overdue'), s.overdue ? 'var(--red)' : undefined)}
       {item('Lost', String(s.lost), () => onStatus('lost'))}
-      <Link href="/lessons" className="self-center text-xs ml-1" style={{ color: 'var(--text-muted)' }}>Lessons from lost deals →</Link>
+      <Link href="/lessons" className="self-center text-xs ml-1" style={{ color: 'var(--text-muted)' }}>Lessons from lost opportunities →</Link>
     </div>
   );
 }
@@ -241,7 +250,7 @@ function DealsTable({ deals }: { deals: DealItem[] }) {
       <table className="w-full text-sm min-w-[860px]">
         <thead>
           <tr style={{ background: 'var(--bg-card)', color: 'var(--text-muted)' }}>
-            {['Deal', 'Stage', 'State', 'Value', 'Lead', 'In stage', 'Updated'].map((h) => (
+            {['Prio', 'Opportunity', 'Stage', 'State', 'Value', 'Lead', 'In stage', 'Updated'].map((h) => (
               <th key={h} className="text-left p-2 font-medium text-xs">{h}</th>
             ))}
           </tr>
@@ -254,6 +263,7 @@ function DealsTable({ deals }: { deals: DealItem[] }) {
             return (
               <tr key={d.id} onClick={() => router.push(`/deals/${d.id}`)} className="cursor-pointer hover:brightness-95"
                 style={{ borderTop: '1px solid var(--border)', background: 'var(--bg)' }}>
+                <td className="p-2"><PriorityPicker value={d.priority} dealId={d.id} onChanged={() => router.refresh()} /></td>
                 <td className="p-2">
                   <Link href={`/deals/${d.id}`} onClick={(e) => e.stopPropagation()} className="font-medium hover:underline">{d.name}</Link>
                   <div className="text-xs flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
@@ -319,7 +329,7 @@ function Board({ deals, type, grantView }: { deals: DealItem[]; type: DealType; 
             <span className="text-[10px] bg-white/20 text-white px-1.5 py-0.5 rounded-full flex-shrink-0">{c.deals.length}</span>
           </div>
           <div className="flex-1 p-2 rounded-b-lg overflow-y-auto" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderTop: 'none' }}>
-            {c.deals.length === 0 && <p className="text-xs text-center py-4" style={{ color: 'var(--text-muted)' }}>No deals</p>}
+            {c.deals.length === 0 && <p className="text-xs text-center py-4" style={{ color: 'var(--text-muted)' }}>No opportunities</p>}
             {c.deals.map((d) => <DealCard key={d.id} d={d} />)}
           </div>
         </div>
@@ -407,11 +417,11 @@ function NewDeal({ onClose }: { onClose: () => void }) {
         body: JSON.stringify({ name: name.trim(), company: company.trim(), deal_type: type }),
       });
       const body = await res.json();
-      if (!res.ok) { setError(body.error || 'Could not create the deal'); return; }
+      if (!res.ok) { setError(body.error || 'Could not create the opportunity'); return; }
       router.push(`/deals/${body.id}?tab=chat`);
     } catch { setError('Could not reach the server'); } finally { setBusy(false); }
   };
-  const label = type === 'grant' ? ['Opportunity name', 'Donor / funding body'] : type === 'ai_credit' ? ['Programme name', 'Provider'] : ['Deal name', 'Company'];
+  const label = type === 'grant' ? ['Opportunity name', 'Donor / funding body'] : type === 'ai_credit' ? ['Programme name', 'Provider'] : ['Opportunity name', 'Company'];
   return (
     <div className="px-4 py-3 border-b flex flex-wrap items-center gap-2" style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}>
       <div className="flex rounded-lg overflow-hidden text-xs" style={{ border: '1px solid var(--border)' }}>

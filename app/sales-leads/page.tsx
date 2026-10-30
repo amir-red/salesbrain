@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
+import FunnelStrip from '@/components/panel/FunnelStrip';
 import LeadRow, { ROW_GRID } from '@/components/sales-leads/LeadRow';
 import LeadDetail from '@/components/sales-leads/LeadDetail';
 import { Search } from '@/components/sales-leads/icons';
@@ -42,6 +43,12 @@ export default function SalesLeadsPage() {
   const [role, setRole] = useState<RoleFilter>('');   // '' everyone · any = mine · responsible / front = mine in that seat
   const [list, setList] = useState('');               // one list (sales_leads.source); order numbers only compare inside a list
   const [lists, setLists] = useState<{ source: string; n: number }[]>([]);
+  // People nobody has contacted are prospects, not leads (funnel definitions): hidden unless asked for. The choice
+  // is remembered per browser.
+  const [finds, setFindsState] = useState(false);
+  useEffect(() => { try { setFindsState(localStorage.getItem('salesleads.showNotContacted') === '1'); } catch { /* private mode */ } }, []);
+  const setFinds = (v: boolean) => { setFindsState(v); try { localStorage.setItem('salesleads.showNotContacted', v ? '1' : '0'); } catch { /* private mode */ } };
+  const [agentFinds, setAgentFinds] = useState(0);
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [viewerIsAdmin, setViewerIsAdmin] = useState(false);
   const [open, setOpen] = useState<Set<string>>(new Set());
@@ -60,6 +67,7 @@ export default function SalesLeadsPage() {
       if (list) params.set('list', list);
       if (q.trim()) params.set('q', q.trim());
       if (role) { params.set('mine', '1'); if (role !== 'any') params.set('role', role); }
+      if (finds) params.set('finds', '1');
       const res = await fetch(`/api/sales-leads?${params}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load');
@@ -68,6 +76,7 @@ export default function SalesLeadsPage() {
       setFunnel(data.funnel || {});
       setUsers(data.users || []);
       setLists(data.lists || []);
+      setAgentFinds(data.agent_finds || 0);
       setViewerId(data.viewer_id || null);
       setViewerIsAdmin(!!data.viewer_is_admin);
     } catch (err) {
@@ -75,7 +84,7 @@ export default function SalesLeadsPage() {
     } finally {
       setLoading(false);
     }
-  }, [view, sort, q, role, stage, list]);
+  }, [view, sort, q, role, stage, list, finds]);
 
   // Deep links from the digest / chat: /sales-leads?view=due&mine=1[&role=responsible]
   useEffect(() => {
@@ -154,8 +163,8 @@ export default function SalesLeadsPage() {
           {/* ── Header ───────────────────────────────────────────── */}
           <div className="flex flex-wrap items-end justify-between gap-6 mb-6">
             <div>
-              <div className="z-eyebrow mb-1">Pipeline</div>
-              <h1 className="text-2xl font-semibold tracking-tight">Sales leads</h1>
+              <div className="z-eyebrow mb-1">Leads</div>
+              <h1 className="text-2xl font-semibold tracking-tight">Leads</h1>
               <p className="text-sm mt-1 max-w-2xl" style={{ color: 'var(--text-muted)' }}>
                 Everyone we are working, best first. The counter is days since we last talked.
               </p>
@@ -174,6 +183,10 @@ export default function SalesLeadsPage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="mb-4">
+            <FunnelStrip compact title="Where everyone stands" href="/dashboard" />
           </div>
 
           {/* ── Toolbar ──────────────────────────────────────────── */}
@@ -216,7 +229,15 @@ export default function SalesLeadsPage() {
               <option value="priority">Priority</option>
               <option value="contact">Longest since contact</option>
               <option value="newest">Newest</option>
+              <option value="warmth">Warmest first</option>
             </select>
+            {(agentFinds > 0 || finds) && (
+              <label className="text-xs inline-flex items-center gap-1.5 cursor-pointer" style={{ color: 'var(--text-muted)' }}
+                title="Cards for people nobody has contacted yet (agent finds, hand-picked lists, exhibitor lists). In the funnel they are prospects; they become leads at the first contact.">
+                <input type="checkbox" checked={finds} onChange={(e) => setFinds(e.target.checked)} />
+                Show not contacted yet ({agentFinds})
+              </label>
+            )}
             <ExportButton
               href={`/api/export/sales-leads?${new URLSearchParams({ view, sort, ...(q ? { q } : {}), ...(list ? { list } : {}), ...(role ? { mine: '1', ...(role !== 'any' ? { role } : {}) } : {}) })}`}
               title="Download what this list shows (current view, search and Mine filter) as Excel, with every track-record line" />

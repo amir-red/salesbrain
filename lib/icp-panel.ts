@@ -41,11 +41,59 @@ export interface Coverage {
 export interface OverviewIcp extends IcpProfile {
   owner_user_id: string;
   owner_name: string;
+  /** Who works the list (085): the seat, else the owner / the back office. */
+  back_office_name?: string;
+  front_office_name?: string;
   owner_can_source: boolean;
   stages: StageCounts;
   coverage: Coverage;
   approvals: { pending: number; sent: number };
   queued: { leads_finder: number; enricher: number };
+  /** The list's funnel from person_funnel (086); null before that table exists. */
+  funnel?: ListFunnel | null;
+}
+
+/**
+ * One list's funnel, cumulative: each step counts everyone who got AT LEAST that far, so the shape always narrows.
+ * `lane` = how most people on the list came in (the funnel lane of those contacted, else of everyone).
+ */
+export interface ListFunnel {
+  found: number; ready: number; contacted: number; answered: number; meeting: number; opportunity: number;
+  unfit: number;
+  lane: string | null;
+}
+export const LIST_FUNNEL_STEPS = [
+  ['found', 'Found'], ['ready', 'Ready'], ['contacted', 'Contacted'],
+  ['answered', 'Answered'], ['meeting', 'Meeting'], ['opportunity', 'Opportunity'],
+] as const;
+/** Short lane labels for a list card. */
+export const LIST_LANE_LABELS: Record<string, string> = {
+  warm: 'Own network', event: 'Met at event', inbound: 'Came to us',
+  imported: 'Hand-picked', sourced: 'Found by agents', direct: 'Direct',
+};
+/**
+ * Conversion rate of a list = contacted people who became an opportunity (lead-to-opportunity, the CRM standard).
+ * Found is not the base: it includes people who were never a fit and people nobody reached yet.
+ */
+export function conversion(f: ListFunnel): number | null {
+  return f.contacted ? f.opportunity / f.contacted : null;
+}
+/** Step-to-step conversion: each step as a share of the one before it (null for the first step or an empty one). */
+export function stepRates(f: ListFunnel): (number | null)[] {
+  const v = LIST_FUNNEL_STEPS.map(([k]) => f[k]);
+  return v.map((x, i) => (i === 0 || !v[i - 1] ? null : x / v[i - 1]));
+}
+/** The step that loses the most people: the lowest step rate after a step with people in it. */
+export function weakestStep(f: ListFunnel): number | null {
+  const r = stepRates(f);
+  let best: number | null = null;
+  r.forEach((x, i) => { if (x !== null && (best === null || x < (r[best] as number))) best = i; });
+  return best;
+}
+export function rateLabel(n: number, d: number): string {
+  if (!d) return '—';
+  const r = (n * 100) / d;
+  return r > 0 && r < 10 ? `${r.toFixed(1)}%` : `${Math.round(r)}%`;
 }
 
 export interface OverviewPayload {
@@ -53,6 +101,8 @@ export interface OverviewPayload {
   scope: 'mine' | 'all';
   viewer_user_id: string;
   icps: OverviewIcp[];
+  /** Everyone on the visible lists, each person once (a person on two lists counts once). */
+  funnel_total?: ListFunnel | null;
   quota_by_owner: Record<string, OwnerQuota>;
   /** Per-person agent holds (migration 044), owner → agent → human label. Absent = running. */
   holds_by_owner?: Record<string, Record<string, string>>;
@@ -68,9 +118,11 @@ export interface IcpListFilter {
   state: 'all' | 'running' | 'paused' | 'held';
   pendingOnly: boolean;
   noLinkedin: boolean;
+  /** The list's priority (092): any · P1–P3 · any set · not set. */
+  priority: 'all' | 'top' | 'set' | 'none';
 }
 export const EMPTY_ICP_FILTER: IcpListFilter = {
-  q: '', owner: 'all', product: 'all', state: 'all', pendingOnly: false, noLinkedin: false,
+  q: '', owner: 'all', product: 'all', state: 'all', pendingOnly: false, noLinkedin: false, priority: 'all',
 };
 
 function icpState(icp: OverviewIcp, held: boolean): IcpListFilter['state'] {
@@ -90,6 +142,10 @@ export function applyIcpFilters(
     const held = Boolean(holdsByOwner[icp.owner_user_id]?.leads_finder);
     if (filter.state !== 'all' && icpState(icp, held) !== filter.state) return false;
     if (filter.pendingOnly && icp.approvals.pending <= 0) return false;
+    const pr = icp.priority ?? null;
+    if (filter.priority === 'top' && !(pr !== null && pr <= 3)) return false;
+    if (filter.priority === 'set' && pr === null) return false;
+    if (filter.priority === 'none' && pr !== null) return false;
     if (filter.noLinkedin && icp.owner_can_source !== false) return false;
     if (q && !(icp.name.toLowerCase().includes(q) || icp.owner_name.toLowerCase().includes(q)
         || (icp.description ?? '').toLowerCase().includes(q))) return false;
@@ -163,6 +219,8 @@ export interface PanelPayload {
     last_run: AgentRun | null;
   };
   activity: AgentRun[];
+  /** The list's funnel from person_funnel (086), cumulative; null before the projection exists. */
+  funnel?: ListFunnel | null;
 }
 
 /** Stage colours: grey while raw, blue while the machinery works it, green once a human is in the loop, muted when terminal. */

@@ -3,7 +3,9 @@ import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { normalizeCriteria } from '@/lib/icp';
 import { ownerQuotas } from '@/lib/quota-server';
-import type { Coverage, OverviewIcp, OverviewPayload, StageCounts } from '@/lib/icp-panel';
+import type { Coverage, ListFunnel, OverviewIcp, OverviewPayload, StageCounts } from '@/lib/icp-panel';
+
+import { FUNNEL_COUNTS } from '@/lib/funnel-sql';
 
 /**
  * GET /api/icp/overview — the control panel's fleet view: every visible ICP
@@ -27,6 +29,10 @@ export async function GET(req: NextRequest) {
   try {
   const icps = await client.query(
       `SELECT i.*, u.name AS owner_name, u.email AS owner_email,
+              -- who works the list (085): back office = the seat, else the owner; front office = the seat, else back office
+              COALESCE((SELECT name FROM users WHERE id = i.responsible_user_id), u.name) AS back_office_name,
+              COALESCE((SELECT name FROM users WHERE id = i.front_user_id),
+                       (SELECT name FROM users WHERE id = i.responsible_user_id), u.name) AS front_office_name,
               (u.email LIKE '%.service.salesbrain') AS owner_is_external,
               EXISTS(SELECT 1 FROM linkedin_accounts la
                       WHERE la.owner_user_id = i.owner_user_id AND la.revoked_at IS NULL) AS owner_can_source,
@@ -39,7 +45,7 @@ export async function GET(req: NextRequest) {
                  FROM icp_agent_state WHERE icp_profile_id = i.id) s) AS agent_state
          FROM icp_profiles i JOIN users u ON u.id = i.owner_user_id
         WHERE i.is_active AND ${estate ? 'TRUE' : 'i.owner_user_id = $1'}
-        ORDER BY ${estate ? '(SELECT count(*) FROM prospects p WHERE p.icp_profile_id = i.id) DESC,' : ''} i.updated_at DESC`,
+        ORDER BY i.priority NULLS LAST, ${estate ? '(SELECT count(*) FROM prospects p WHERE p.icp_profile_id = i.id) DESC,' : ''} i.updated_at DESC`,
       estate ? [] : [session.userId],
     );
   const rules = await client.query(`SELECT value FROM policy_rules WHERE key = 'agents.enricher'`);
@@ -76,6 +82,20 @@ export async function GET(req: NextRequest) {
   const queued = ids.length === 0 ? none : await client.query(
         `SELECT icp_profile_id, agent, count(*)::int AS n FROM agent_runs
           WHERE icp_profile_id = ANY($1::uuid[]) AND status = 'requested' GROUP BY 1, 2`, [ids]);
+  // The list funnels come from the stored projection (086). Before it exists the cards fall back to "no funnel yet".
+  let funnelBy: Record<string, ListFunnel> = {};
+  let funnelTotal: ListFunnel | null = null;
+  if (ids.length > 0) {
+    try {
+      const per = await client.query(
+        `WITH f AS (SELECT unnest(icp_ids) AS icp, stage, exit, lane FROM person_funnel WHERE icp_ids && $1::uuid[])
+         SELECT icp, ${FUNNEL_COUNTS} FROM f WHERE icp = ANY($1::uuid[]) GROUP BY icp`, [ids]);
+      funnelBy = Object.fromEntries(per.rows.map((r) => [r.icp, { ...r, icp: undefined } as ListFunnel]));
+      const tot = await client.query(
+        `SELECT ${FUNNEL_COUNTS} FROM person_funnel WHERE icp_ids && $1::uuid[]`, [ids]);
+      funnelTotal = (tot.rows[0] as ListFunnel) ?? null;
+    } catch { funnelBy = {}; funnelTotal = null; }
+  }
   const ownerIds = Array.from(new Set(icps.rows.map((r) => r.owner_user_id as string)));
   const quota = await ownerQuotas(ownerIds, client);
   const holds = ownerIds.length === 0 ? none : await client.query(
@@ -114,8 +134,10 @@ export async function GET(req: NextRequest) {
         coverage: { ...zeroCoverage, ...cov, icp_profile_id: undefined } as Coverage,
         approvals: { pending: approvalsBy[r.id]?.pending ?? 0, sent: approvalsBy[r.id]?.sent ?? 0 },
         queued: queuedBy[r.id] ?? { leads_finder: 0, enricher: 0 },
+        funnel: funnelBy[r.id] ?? (funnelTotal ? { found: 0, ready: 0, contacted: 0, answered: 0, meeting: 0, opportunity: 0, unfit: 0, lane: null } : null),
       };
     }),
+    funnel_total: funnelTotal,
     quota_by_owner: quota,
     holds_by_owner: holdsBy,
   };

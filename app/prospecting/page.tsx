@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { Suspense, useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
+import FunnelStrip from '@/components/panel/FunnelStrip';
 import Link from 'next/link';
 import { PROSPECT_STAGES } from '@/lib/prospecting';
 import { relativeTime } from '@/lib/time';
 import ExportButton from '@/components/ExportButton';
+import PriorityPicker from '@/components/PriorityPicker';
 
 interface Prospect {
   id: string;
@@ -22,6 +25,7 @@ interface Prospect {
   title: string | null;
   owner_name: string | null;
   converted_deal_id: string | null;
+  priority: number | null;
 }
 
 const STAGE_COLORS: Record<string, string> = {
@@ -49,7 +53,12 @@ function FitBadge({ score, label }: { score: number | null; label: string | null
 
 const PAGE = 100;
 
+// useSearchParams needs a Suspense boundary for Next's prerender.
 export default function ProspectingPage() {
+  return <Suspense fallback={null}><ProspectingInner /></Suspense>;
+}
+
+function ProspectingInner() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [total, setTotal] = useState(0);
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -58,6 +67,18 @@ export default function ProspectingPage() {
   const [error, setError] = useState<string | null>(null);
   const [stageFilter, setStageFilter] = useState<string | null>(null);
   const [mineOnly, setMineOnly] = useState(false);
+  // Opened from the Lists page: one list, or everyone a teammate knows (?icp_id=, ?warm=1).
+  const search0 = useSearchParams();
+  const [listId, setListId] = useState(search0.get('icp_id') || '');
+  const [warmOnly, setWarmOnly] = useState(search0.get('warm') === '1');
+  const [prio, setPrio] = useState(search0.get('priority') || '');
+  const [lists, setLists] = useState<{ id: string; name: string; prospects: number }[]>([]);
+  useEffect(() => {
+    fetch('/api/icp?scope=all').then((r) => (r.ok ? r.json() : [])).then((d) => {
+      const rows = (Array.isArray(d) ? d : d.profiles ?? []) as { id: string; name: string; prospects?: number }[];
+      setLists(rows.map((x) => ({ id: x.id, name: x.name, prospects: x.prospects ?? 0 })).sort((x, y) => x.name.localeCompare(y.name)));
+    }).catch(() => {});
+  }, []);
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [showNew, setShowNew] = useState(false);
@@ -79,11 +100,14 @@ export default function ProspectingPage() {
     const params = new URLSearchParams({ limit: String(PAGE), offset: String(offset) });
     if (stageFilter) params.set('stage', stageFilter);
     if (mineOnly) params.set('mine', 'true');
+    if (listId) params.set('icp_id', listId);
+    if (warmOnly) params.set('warm', '1');
+    if (prio) params.set('priority', prio);
     if (query) params.set('q', query);
     const res = await fetch(`/api/prospects?${params.toString()}`);
     if (!res.ok) throw new Error(`Could not load prospects (${res.status})`);
     return res.json() as Promise<{ rows: Prospect[]; total: number; counts: Record<string, number> }>;
-  }, [stageFilter, mineOnly, query]);
+  }, [stageFilter, mineOnly, listId, warmOnly, prio, query]);
 
   const fetchProspects = useCallback(async () => {
     setLoading(true);
@@ -140,15 +164,18 @@ export default function ProspectingPage() {
       <div className="flex-1 overflow-y-auto">
         <div className="p-4 border-b flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
           <div>
-            <h1 className="text-lg font-bold">Prospects</h1>
+            <h1 className="text-lg font-bold flex items-center gap-2">
+              <Link href="/icp" className="text-sm font-normal" style={{ color: 'var(--text-muted)' }} title="Lists">←</Link>
+              All prospects
+            </h1>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              {allCount.toLocaleString()} prospects across every list{query ? ` matching “${query}”` : ''}
+              {allCount.toLocaleString()} people{listId ? ` on ${lists.find((l) => l.id === listId)?.name ?? 'this list'}` : ' across every list'}{warmOnly ? ' a teammate knows' : ''}{query ? ` matching “${query}”` : ''}.
+              A prospect becomes a lead at the first touch: a request, a message or an email.
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <Link href="/icp" className="text-xs underline" style={{ color: 'var(--text-muted)' }}>ICP profiles →</Link>
             <ExportButton
-              href={`/api/export/prospects?${new URLSearchParams({ ...(stageFilter ? { stage: stageFilter } : {}), ...(mineOnly ? { mine: '1' } : {}) })}`}
+              href={`/api/export/prospects?${new URLSearchParams({ ...(stageFilter ? { stage: stageFilter } : {}), ...(mineOnly ? { mine: '1' } : {}), ...(listId ? { icp_id: listId } : {}) })}`}
               title="Download these prospects (current stage and Mine filter; the search is not applied) as Excel" />
             <button
               onClick={() => setShowNew(!showNew)}
@@ -158,6 +185,10 @@ export default function ProspectingPage() {
               + New Prospect
             </button>
           </div>
+        </div>
+
+        <div className="px-4 pt-3">
+          <FunnelStrip compact title="Where everyone stands" href="/dashboard" />
         </div>
 
         {/* New prospect form */}
@@ -204,7 +235,21 @@ export default function ProspectingPage() {
               {s.stage.replace('_', '·').slice(0, 12)} ({(counts[s.stage] || 0).toLocaleString()})
             </button>
           ))}
-          <label className="text-xs flex items-center gap-1 ml-2" style={{ color: 'var(--text-muted)' }}>
+          <select value={listId} onChange={(e) => setListId(e.target.value)} aria-label="List"
+            className="ml-2 px-2 py-1 rounded-lg text-xs outline-none max-w-[260px]" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+            <option value="">Every list</option>
+            {lists.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.prospects})</option>)}
+          </select>
+          <select value={prio} onChange={(e) => setPrio(e.target.value)} aria-label="Priority"
+            className="px-2 py-1 rounded-lg text-xs outline-none" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+            <option value="">Any priority</option><option value="top">P1–P3</option><option value="set">Priority set</option><option value="none">No priority</option>
+            {[1,2,3,4,5,6,7,8,9,10].map((n) => <option key={n} value={String(n)}>P{n}</option>)}
+          </select>
+          <label className="text-xs flex items-center gap-1" style={{ color: 'var(--text-muted)' }} title="Someone on the team already talks to them (warm or hot)">
+            <input type="checkbox" checked={warmOnly} onChange={(e) => setWarmOnly(e.target.checked)} />
+            Warm
+          </label>
+          <label className="text-xs flex items-center gap-1" style={{ color: 'var(--text-muted)' }}>
             <input type="checkbox" checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} />
             Mine only
           </label>
@@ -232,6 +277,7 @@ export default function ProspectingPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ background: 'var(--bg-card)', color: 'var(--text-muted)' }}>
+                    <th className="text-left p-2 font-medium text-xs" title="The one person priority: 1 = top; the same number on the lead card and the opportunity">Prio</th>
                     <th className="text-left p-2 font-medium text-xs">Prospect</th>
                     <th className="text-left p-2 font-medium text-xs">Company</th>
                     <th className="text-left p-2 font-medium text-xs">Stage</th>
@@ -244,6 +290,7 @@ export default function ProspectingPage() {
                 <tbody>
                   {prospects.map((p) => (
                     <tr key={p.id} style={{ borderTop: '1px solid var(--border)' }}>
+                      <td className="p-2 align-top"><PriorityPicker value={p.priority} prospectId={p.id} onChanged={() => void fetchProspects()} /></td>
                       <td className="p-2">
                         <Link href={`/prospects/${p.id}`} className="hover:underline">
                           <div className="font-medium">{p.full_name || '—'}</div>

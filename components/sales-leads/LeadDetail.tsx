@@ -519,7 +519,7 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
 
           <div className="flex flex-wrap gap-2 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
             {lead.status !== 'converted' && (
-              <button type="button" onClick={onConvert} disabled={busy} className="text-xs px-3.5 py-1.5 rounded-full font-medium disabled:opacity-50" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>Convert to deal</button>
+              <button type="button" onClick={onConvert} disabled={busy} className="text-xs px-3.5 py-1.5 rounded-full font-medium disabled:opacity-50" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>Convert to opportunity</button>
             )}
             {lead.status === 'new' && <button type="button" disabled={busy} onClick={() => onPatch({ status: 'contacted' })} className="text-xs px-3 py-1.5" style={ghost}>Mark contacted</button>}
             {lead.status === 'contacted' && <button type="button" disabled={busy} onClick={() => onPatch({ status: 'replied' })} className="text-xs px-3 py-1.5" style={ghost}>Mark replied</button>}

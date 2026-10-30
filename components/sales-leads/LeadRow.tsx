@@ -4,6 +4,9 @@ import { contactAge, firstName, linkedInLabel, linkedInState, myRole, nextContac
 import { useEffect, useState } from 'react';
 import { Chevron, LinkedIn, Star } from './icons';
 import LifecycleLine from './LifecycleLine';
+import { WARMTH_BANDS, WARMTH_COLOR, type WarmthBand } from '@/lib/warm';
+
+function warmBand(w: number): WarmthBand { return w >= 0.7 ? 'hot' : w >= 0.4 ? 'warm' : w >= 0.15 ? 'cool' : 'cold'; }
 
 /**
  * One aligned line per lead. Columns: rank · person · status · last / next
@@ -62,6 +65,12 @@ export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy, vie
       <div className="min-w-0">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-sm font-semibold truncate">{lead.full_name}</span>
+          {lead.warmth != null && lead.warmth >= 0.15 && (
+            <span className="text-[10px] px-1.5 rounded-full whitespace-nowrap shrink-0" title={`Warmth ${Math.round(lead.warmth * 100)}: how warm the team's relationship is (conversations, meetings, connections)`}
+              style={{ color: WARMTH_COLOR[warmBand(lead.warmth)], background: `color-mix(in srgb, ${WARMTH_COLOR[warmBand(lead.warmth)]} 14%, transparent)` }}>
+              {WARMTH_BANDS[warmBand(lead.warmth)]}
+            </span>
+          )}
           {lead.must_talk && <Star filled width={13} height={13} style={{ color: 'var(--orange)', flexShrink: 0 }} />}
           {lead.cards_pending > 0 && (
             <span className="text-[10px] px-1.5 rounded-full whitespace-nowrap" title="approval cards waiting on Telegram / /agents"

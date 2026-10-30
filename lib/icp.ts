@@ -45,6 +45,12 @@ export interface IcpProfile {
   owner_can_source?: boolean;
   paused_at?: string | null;
   paused_reason?: string | null;
+  /** What every firm on an investor list is judged against (075); {} on a customer list. */
+  firm_brief?: Record<string, unknown> | null;
+  /** The list's priority (092): 1 = top … 10, null = not set. Agents serve lists top-down; people inherit it for sorting. */
+  priority?: number | null;
+  /** Mateo's cohort this list is (090); null on a list that is not a cohort. */
+  cohort?: import('@/lib/cohorts').CohortInfo | null;
   paused_by_admin?: boolean;
   created_at: string;
   updated_at: string;
@@ -139,7 +145,33 @@ export const ROLE_GROUPS: { group: string; fn?: string; titles: string[] }[] = [
   { group: 'Sales & growth', fn: 'Sales', titles: ['VP Sales', 'Head of Sales', 'Head of Growth', 'Head of Business Development', 'Commercial Director'] },
   { group: 'People', fn: 'Human Resources', titles: ['Chief People Officer', 'VP People', 'Head of HR', 'HR Director'] },
   { group: 'Programs & grants', titles: ['Program Director', 'Program Manager', 'Head of Partnerships', 'Grants Manager', 'Country Director', 'Head of Impact'] },
+  // People who decide at a fund, most senior first. No LinkedIn function: VC teams sit under Finance, Business
+  // Development or none at all, so a function filter would drop most of them.
+  { group: 'Investors (VC)', titles: ['General Partner', 'Managing Partner', 'Founding Partner', 'Partner', 'Venture Partner', 'Principal', 'Investment Director', 'Investment Manager', 'Vice President', 'Associate', 'Analyst', 'Business Angel'] },
 ];
+
+/**
+ * Investor lists (the Zeami raise). A list is an investor list when it carries a firm brief (075): every firm on it
+ * is judged Go / Check / Out against the brief (policy/firms.py::eligibility), and the people found there are ranked
+ * partner first. The words below are what that rule understands; free text works too.
+ */
+export const INVESTOR_TITLES = ['General Partner', 'Managing Partner', 'Founding Partner', 'Partner', 'Principal', 'Investment Director', 'Investment Manager'];
+export const INVESTOR_INDUSTRIES = ['Venture Capital and Private Equity', 'Investment Management'];
+export const INVESTOR_EXCLUDES = ['advisor', 'assistant', 'investor relations', 'talent', 'platform', 'legal', 'fund administration', 'intern', 'student'];
+export const INVESTOR_STAGES = ['Pre-seed', 'Seed', 'Series A', 'Series B', 'Series C', 'Growth'];
+export const INVESTOR_SECTORS = [
+  'B2B', 'SaaS', 'Enterprise software', 'AI', 'Automation', 'Future of work', 'Fintech', 'Industrial tech', 'Climate',
+  'Health', 'Marketplaces', 'Developer tools', 'Data infrastructure', 'Cybersecurity', 'Deep tech', 'Consumer',
+];
+export const INVESTOR_EXCLUDE_SECTORS = ['Crypto', 'Biotech', 'Consumer', 'Real estate', 'Gaming', 'Hardware'];
+export const INVESTOR_REGIONS = ['Europe', 'DACH', 'Germany', 'Nordics', 'UK', 'France', 'Benelux', 'CEE', 'US', 'Global'];
+export const INVESTOR_CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF'];
+
+/** A list is an investor list once it has a firm brief. */
+export function isInvestorList(p: { firm_brief?: unknown } | null | undefined): boolean {
+  const b = p?.firm_brief;
+  return !!b && typeof b === 'object' && Object.keys(b as object).length > 0;
+}
 
 /** LinkedIn-ish industry vocabulary. Free text is allowed too. */
 export const INDUSTRIES: string[] = [

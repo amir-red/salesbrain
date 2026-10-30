@@ -65,6 +65,7 @@ export async function fetchRingCatalog(): Promise<RingToolDef[]> {
 // timer isn't subprocess-bounded; these app/MCP-driven calls are, so give them
 // real headroom or they get SIGKILLed mid-research (run left stuck 'running').
 const LONG_RUNNING_TOOLS = new Set<string>([
+  'whatsapp_import',   // parse + insert + warmth refresh
   // A Gmail push: reads every open thread of one mailbox (one Gmail call each) and records what came back.
   'email_replies_check',
   // The Inbox: a reply goes out at once (LinkedIn send + re-read of the chat, or a Gmail send); a refresh re-reads.

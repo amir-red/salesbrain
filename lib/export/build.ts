@@ -4,6 +4,9 @@ import { JOURNEY_STAGES, LIFECYCLE_LABELS, type LeadSort, type LeadView, type Li
 import { DUE, NEEDS_YOU, OPEN, SORTS } from '@/lib/sales-leads-sql';
 import { visibleIcp } from '@/lib/icp-server';
 import type { ExportKind, ExportRequest } from '@/lib/export/sign';
+import { kernelCall } from '@/lib/mcp/kernel-rpc';
+import type { WarmPeople, WarmPerson } from '@/lib/warm';
+import { FUNNEL_LABELS, type FunnelStage } from '@/lib/funnel';
 
 /**
  * Excel exports — the data behind /sales-leads, the prospect lists and a full ICP. Server only (pg + SheetJS).
@@ -13,8 +16,9 @@ import type { ExportKind, ExportRequest } from '@/lib/export/sign';
  *
  * Visibility is the screen's own rule, enforced here and not trusted from the caller:
  *   sales leads  — org-wide inbox (everyone sees it, like the page);
- *   prospects    — mine + unowned; admins see all (like /api/prospects);
- *   ICP          — any teammate (every list is visible to everyone since 2026-10-26; visibleIcp).
+ *   prospects    — the whole team's (like /api/prospects); mine=1 narrows to your own;
+ *   ICP          — any teammate (every list is visible to everyone since 2026-10-26; visibleIcp);
+ *   warm people  — team-wide, like the page (relationships the TEAM has, as on the shared /network map).
  */
 
 export interface Who { userId: string; role: string }
@@ -78,7 +82,8 @@ interface LeadRow {
 async function salesLeads(args: Record<string, string>, who: Who): Promise<Built> {
   const view = (args.view || 'working') as LeadView;
   if (!VIEWS.has(view)) throw new Error(`Invalid view: ${view}`);
-  const sort = (args.sort || 'priority') as LeadSort;
+  // the export does not select warmth: a 'warmest first' view exports in priority order
+  const sort = (args.sort === 'warmth' ? 'priority' : args.sort || 'priority') as LeadSort;
   if (!SORTS[sort]) throw new Error(`Invalid sort: ${sort}`);
   const role = args.role === 'responsible' ? 'responsible' : args.role === 'front' ? 'front' : 'any';
   const where: string[] = [];
@@ -120,6 +125,7 @@ async function salesLeads(args: Record<string, string>, who: Who): Promise<Built
          LEFT JOIN users r ON r.id = l.responsible_user_id
          LEFT JOIN users f ON f.id = l.front_user_id
          LEFT JOIN prospects p ON p.id = l.prospect_id
+         LEFT JOIN icp_profiles ip ON ip.id = p.icp_profile_id
          LEFT JOIN users ou ON ou.id = p.owner_user_id
          ${clause}
         ORDER BY ${SORTS[sort]} LIMIT ${SHEET_ROW_CAP}`, vals);
@@ -258,11 +264,9 @@ function prospectCols(): Col<ProspectRow>[] {
 }
 
 async function prospects(args: Record<string, string>, who: Who): Promise<Built> {
-  const isAdmin = who.role === 'admin';
   const where: string[] = [];
   const vals: unknown[] = [];
   if (args.mine === '1' || args.mine === 'true') { vals.push(who.userId); where.push(`p.owner_user_id = $${vals.length}`); }
-  else if (!isAdmin) { vals.push(who.userId); where.push(`(p.owner_user_id = $${vals.length} OR p.owner_user_id IS NULL)`); }
   if (args.stage) { vals.push(args.stage); where.push(`p.stage = $${vals.length}`); }
   if (args.reply_status) { vals.push(args.reply_status); where.push(`p.reply_status = $${vals.length}`); }
   if (args.icp_id) { vals.push(args.icp_id); where.push(`p.icp_profile_id = $${vals.length}`); }
@@ -371,6 +375,108 @@ async function icp(args: Record<string, string>, who: Who): Promise<Built> {
   } finally { client.release(); }
 }
 
+// ─── Warm people (funnel Phase C) ──────────────────────────────────
+
+async function warm(args: Record<string, string>, who: Who): Promise<Built> {
+  const band = ['hot', 'warm', 'cool'].includes(args.band) ? args.band : 'warm';
+  const kargs: Record<string, unknown> = { band, include_worked: args.worked === '1' || args.worked === 'true', limit: 500 };
+  if (args.owner) kargs.owner = args.owner;
+  const out = await kernelCall('crm_warm_people', kargs, who.userId) as unknown as WarmPeople & { error?: string };
+  if (out.error) throw new Error(out.error);
+  const li = (h: string | null) => (!h ? '' : h.startsWith('http') ? h : `https://www.linkedin.com/in/${h}`);
+  const peopleCols: Col<WarmPerson>[] = [
+    { h: 'Name', w: 26, v: (r) => r.name }, { h: 'Company', w: 26, v: (r) => r.company },
+    { h: 'Headline', w: 40, v: (r) => r.headline }, { h: 'Band', w: 7, v: (r) => r.band },
+    { h: 'Warmth (0-100)', w: 9, v: (r) => Math.round(r.warmth * 100) },
+    { h: 'Why', w: 60, v: (r) => r.reasons.join(' · ') }, { h: 'Warmest relationship', w: 20, v: (r) => r.via.name },
+    { h: 'They last wrote', w: 16, v: (r) => ts(r.last_two_way_at) }, { h: 'Last contact', w: 16, v: (r) => ts(r.last_touch_at) },
+    { h: 'LinkedIn', w: 40, v: (r) => li(r.linkedin) }, { h: 'Email', w: 28, v: (r) => r.email },
+    { h: 'On list', w: 28, v: (r) => r.list ?? 'not on any list' }, { h: 'Fit', w: 6, v: (r) => r.fit },
+    { h: 'Funnel stage', w: 14, v: (r) => (r.stage ? FUNNEL_LABELS[r.stage as FunnelStage] ?? r.stage : '') },
+    { h: 'Resting', w: 8, v: (r) => yn(r.resting) }, { h: 'Has lead card', w: 9, v: (r) => yn(r.has_card) },
+    { h: 'Being worked', w: 9, v: (r) => yn(r.being_worked) },
+  ];
+  const client = await pool.connect();
+  try {
+    // every teammate × person pair in the band (the page shows each person once, at their warmest relationship)
+    const bands = band === 'hot' ? ['hot'] : band === 'warm' ? ['hot', 'warm'] : ['hot', 'warm', 'cool'];
+    const { rows: pairs } = await client.query(
+      `SELECT pe.full_name, pe.organization, u.name AS teammate, w.band, round(w.warmth * 100)::int AS warmth,
+              w.reasons, w.their_messages, w.our_messages, w.last_two_way_at, w.last_touch_at
+         FROM person_warmth w JOIN people pe ON pe.id = w.person_id JOIN users u ON u.id = w.user_id
+        WHERE w.band = ANY($1) ORDER BY w.warmth DESC LIMIT ${SHEET_ROW_CAP}`, [bands]);
+    type P = (typeof pairs)[number];
+    const pairCols: Col<P>[] = [
+      { h: 'Name', w: 26, v: (r) => r.full_name }, { h: 'Company', w: 26, v: (r) => r.organization },
+      { h: 'Teammate', w: 20, v: (r) => r.teammate }, { h: 'Band', w: 7, v: (r) => r.band },
+      { h: 'Warmth (0-100)', w: 9, v: (r) => r.warmth }, { h: 'Why', w: 60, v: (r) => (r.reasons || []).join(' · ') },
+      { h: 'Their messages', w: 9, v: (r) => r.their_messages }, { h: 'Our messages', w: 9, v: (r) => r.our_messages },
+      { h: 'They last wrote', w: 16, v: (r) => ts(r.last_two_way_at) }, { h: 'Last contact', w: 16, v: (r) => ts(r.last_touch_at) },
+    ];
+    const about: [string, string | number | null][] = [
+      ['What this is', 'People we already talk to, warmest first (funnel Phase C). One row per person on “Warm people”; one row per teammate × person on “Relationships”.'],
+      ['Warmth', '0-100 from real signals that fade with time: they wrote to us (LinkedIn, email, logged WhatsApp or calls), we met, a LinkedIn connection, a saved contact. Hot ≥ 70, warm ≥ 40, cool ≥ 15.'],
+      ['Band shown', band === 'hot' ? 'hot only' : band === 'warm' ? 'hot and warm' : 'hot, warm and cool'],
+      ['People', out.people.length], ['Of them being worked already', out.people.filter((p) => p.being_worked).length],
+      ['Relationships (pairs)', pairs.length], ['Made', new Date().toISOString().slice(0, 16).replace('T', ' ')],
+    ];
+    return finish(`salesbrain-warm-people-${band}`, [
+      { name: 'Warm people', ws: sheetOf(peopleCols, out.people), rows: out.people.length },
+      { name: 'Relationships', ws: sheetOf(pairCols, pairs), rows: pairs.length },
+      { name: 'About', ws: pairsSheet(about), rows: about.length },
+    ], 0);
+  } finally { client.release(); }
+}
+
+// ─── Cohort sort (090): the dry-run sheet ─────────────────────────────
+
+interface CohortRow {
+  full_name: string | null; title: string | null; company: string | null; current_list: string | null;
+  proposed: string | null; guess_key: string | null; confidence: string | null; score: number;
+  person_points: number; company_points: number; warmth_points: number; why: string | null;
+  summary: string | null; reason: string | null; signals: string[] | null; owner: string | null;
+}
+
+/** Admin: everyone the sorter scored, where they are now and where they would go — checked before apply_sort. */
+async function cohorts(_args: Record<string, string>, who: Who): Promise<Built> {
+  if (who.role !== 'admin') throw new Error('Only an admin can export the cohort sort.');
+  const cols: Col<CohortRow>[] = [
+    { h: 'Proposed cohort', w: 34, v: (r) => r.proposed }, { h: 'Score', w: 7, v: (r) => r.score },
+    { h: 'Name', w: 24, v: (r) => r.full_name }, { h: 'Title', w: 36, v: (r) => r.title }, { h: 'Company', w: 26, v: (r) => r.company },
+    { h: 'Why', w: 48, v: (r) => r.why }, { h: 'Sorter confidence', w: 10, v: (r) => r.confidence },
+    { h: 'Best guess (Unsorted)', w: 22, v: (r) => r.guess_key }, { h: 'Reason', w: 50, v: (r) => r.reason },
+    { h: 'Company summary', w: 60, v: (r) => r.summary },
+    { h: 'Signals', w: 30, v: (r) => (r.signals ?? []).join(', ') },
+    { h: 'Person pts (of 50)', w: 9, v: (r) => r.person_points }, { h: 'Company pts (of 50)', w: 9, v: (r) => r.company_points },
+    { h: 'Warmth bonus', w: 8, v: (r) => r.warmth_points }, { h: 'List today', w: 30, v: (r) => r.current_list },
+    { h: 'Owner', w: 18, v: (r) => r.owner },
+  ];
+  const client = await pool.connect();
+  try {
+    const { rows } = await client.query<CohortRow>(
+      `SELECT c.full_name, c.title, a.name AS company, ci.name AS current_list, ti.name AS proposed, s.guess_key,
+              s.confidence, s.score, s.person_points, s.company_points, s.warmth_points, s.why, s.signals,
+              COALESCE(co.profile ->> 'summary', s.verdict ->> 'summary') AS summary,
+              COALESCE(co.profile -> 'cohort_verdict' ->> 'reason', s.verdict ->> 'reason') AS reason, u.name AS owner
+         FROM cohort_scores s JOIN prospects l ON l.id = s.prospect_id
+         LEFT JOIN contacts c ON c.id = l.contact_id
+         LEFT JOIN accounts a ON a.id = l.account_id
+         LEFT JOIN account_profiles co ON co.account_id = l.account_id AND co.kind = 'company'
+         LEFT JOIN icp_profiles ci ON ci.id = l.icp_profile_id
+         LEFT JOIN icp_profiles ti ON ti.id = s.icp_profile_id
+         LEFT JOIN users u ON u.id = l.owner_user_id
+        WHERE l.stage <> 'P9_ARCHIVED' AND s.icp_profile_id IS NOT NULL
+        ORDER BY ti.name, s.score DESC LIMIT ${SHEET_ROW_CAP}`);
+    const counts = new Map<string, number>();
+    for (const r of rows) counts.set(r.proposed ?? '—', (counts.get(r.proposed ?? '—') ?? 0) + 1);
+    const summary: [string, number][] = [...counts.entries()].sort((x, y) => y[1] - x[1]);
+    return finish('salesbrain-cohort-sort', [
+      { name: 'Proposed cohorts', ws: sheetOf(cols, rows), rows: rows.length },
+      { name: 'Per cohort', ws: pairsSheet(summary), rows: summary.length },
+    ], 0);
+  } finally { client.release(); }
+}
+
 // ─── Entry point ───────────────────────────────────────────────────
 
 export async function buildExport(req: ExportRequest, who: Who): Promise<Built> {
@@ -378,6 +484,8 @@ export async function buildExport(req: ExportRequest, who: Who): Promise<Built> 
   if (kind === 'sales-leads') return salesLeads(req.args, who);
   if (kind === 'prospects') return prospects(req.args, who);
   if (kind === 'icp') return icp(req.args, who);
+  if (kind === 'warm') return warm(req.args, who);
+  if (kind === 'cohorts') return cohorts(req.args, who);
   throw new Error(`Unknown export: ${kind}`);
 }
 
@@ -387,6 +495,8 @@ export function cleanArgs(kind: ExportKind, raw: Record<string, unknown>): Recor
     'sales-leads': ['view', 'sort', 'q', 'mine', 'role', 'list'],
     prospects: ['stage', 'mine', 'icp_id', 'reply_status', 'q'],
     icp: ['icp_id'],
+    warm: ['band', 'owner', 'worked'],
+    cohorts: [],
   };
   const out: Record<string, string> = {};
   for (const k of allowed[kind]) {

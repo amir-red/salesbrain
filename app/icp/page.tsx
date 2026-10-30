@@ -1,13 +1,12 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
-import IcpBuilder from '@/components/icp/IcpBuilder';
-import FleetStrip from '@/components/icp/FleetStrip';
-import IcpRow from '@/components/icp/IcpRow';
+import IcpWizard from '@/components/icp/IcpWizard';
+import ListFunnelCard, { AllListsCard, ListTableRow } from '@/components/icp/ListFunnelCard';
+import { LIST_FUNNEL_STEPS } from '@/lib/icp-panel';
 import type { RunMode } from '@/components/icp/IcpRow';
-import IcpFilterBar from '@/components/icp/IcpFilterBar';
 import type { IcpProfile } from '@/lib/icp';
 import { EMPTY_ICP_FILTER, applyIcpFilters } from '@/lib/icp-panel';
 import type { FleetPayload, IcpListFilter, OverviewPayload } from '@/lib/icp-panel';
@@ -17,9 +16,9 @@ import { relativeTime } from '@/lib/time';
 type Mode = { kind: 'list' } | { kind: 'new' } | { kind: 'edit'; profile: IcpProfile };
 
 /**
- * /icp — the control panel's overview: the agent fleet at a glance, then one
- * row per ICP with its funnel, coverage, run state and actions. Each row opens
- * /icp/[id], the per-ICP drill-down. Polls every 45 s while visible.
+ * /icp — the lists overview as funnels (design E, 2026-10-27): a summary card for all lists, then one card per
+ * list with its own small funnel, step conversions and conversion rate; actions sit behind each card's menu. Each card opens /icp/[id].
+ * The agent fleet strip moved off this page (it lives on /agents). Polls every 45 s while visible.
  */
 export default function IcpPage() {
   const [overview, setOverview] = useState<OverviewPayload | null>(null);
@@ -28,6 +27,11 @@ export default function IcpPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [estate, setEstate] = useState(true);        // every teammate's lists (visible to everyone); off = mine only
   const [filter, setFilter] = useState<IcpListFilter>(EMPTY_ICP_FILTER);
+  const [sort, setSort] = useState<'priority' | 'contacted' | 'conversion' | 'found'>('priority');
+  // Grid (cards, the default) or a compact list; remembered per browser (Amir, 2026-10-28).
+  const [layout, setLayoutState] = useState<'grid' | 'list'>('grid');
+  useEffect(() => { try { if (localStorage.getItem('icp.layout') === 'list') setLayoutState('list'); } catch { /* ignore */ } }, []);
+  const setLayout = (l: 'grid' | 'list') => { setLayoutState(l); try { localStorage.setItem('icp.layout', l); } catch { /* ignore */ } };
 
   const load = useCallback(async () => {
     const [a, b] = await Promise.all([fetch(`/api/icp/overview${estate ? '?scope=all' : ''}`), fetch('/api/agents')]);
@@ -71,84 +75,157 @@ export default function IcpPage() {
   const shown = applyIcpFilters(icps, filter, overview?.holds_by_owner ?? {});
   const isAdmin = Boolean(overview?.is_admin);
   const viewer = overview?.viewer_user_id ?? '';
-  const myQuota = overview?.quota_by_owner[viewer] ?? null;
   const fleetFlags = {
     kill_switch: fleet?.kill_switch ?? true,
     leads_finder_enabled: fleet?.agents.find((a) => a.name === 'leads_finder')?.enabled ?? true,
   };
 
+  const sorted = [...shown].sort((a, b) => {
+    const fa = a.funnel, fb = b.funnel;
+    const ea = !fa || fa.found === 0, eb = !fb || fb.found === 0;
+    if (ea !== eb) return ea ? 1 : -1;                       // lists with nobody on them go last
+    if (sort === 'priority') {                               // the list's priority (092), unset last, then most contacted
+      const pa = a.priority ?? 99, pb = b.priority ?? 99;
+      if (pa !== pb) return pa - pb;
+    }
+    if (sort === 'conversion') {
+      // contacted → opportunity first; with no opportunities yet, the deepest step still separates lists
+      const key = (f: typeof fa) => (f && f.contacted
+        ? [f.opportunity / f.contacted, f.meeting / f.contacted, f.answered / f.contacted] : [-1, -1, -1]);
+      const ka = key(fa), kb = key(fb);
+      for (let i = 0; i < 3; i++) if (kb[i] !== ka[i]) return kb[i] - ka[i];
+    }
+    if (sort === 'found') return (fb?.found ?? 0) - (fa?.found ?? 0);
+    return (fb?.contacted ?? 0) - (fa?.contacted ?? 0) || (fb?.found ?? 0) - (fa?.found ?? 0);
+  });
+  const withPeople = icps.filter((i) => (i.funnel?.found ?? 0) > 0).length;
+  const total = overview?.funnel_total ?? null;
+  const inputStyle = { background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' };
+
   return (
     <div className="flex h-screen">
       <Sidebar />
       <div className="flex-1 overflow-y-auto">
-        <div className="p-4 border-b flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
-          <div>
-            <h1 className="text-lg font-bold flex items-center gap-2">
-              {mode.kind !== 'list' && (
-                <button onClick={() => setMode({ kind: 'list' })} className="text-sm" style={{ color: 'var(--text-muted)' }} title="Back">←</button>
-              )}
-              {mode.kind === 'list' ? 'Ideal Customer Profiles' : mode.kind === 'new' ? 'New ICP' : `Edit · ${mode.profile.name}`}
-            </h1>
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              {mode.kind === 'list'
-                ? <>{icps.length} active · who to look for, and what every agent is doing about it{lastAt && <> · updated {relativeTime(lastAt.toISOString())} · <button onClick={() => refresh()} className="underline">refresh</button></>}</>
-                : 'Every prospect sourced or imported is scored against this profile, with reasons.'}
-            </p>
-          </div>
-          {mode.kind === 'list' && (
-            <div className="flex items-center gap-3">
-              <Link href="/prospecting" className="text-xs underline" style={{ color: 'var(--text-muted)' }}>Prospects →</Link>
-              <div className="flex rounded-lg overflow-hidden text-xs" style={{ border: '1px solid var(--border)' }}>
-                {([[true, 'Everyone’s lists'], [false, 'Mine only']] as const).map(([v, label]) => (
-                  <button key={label} onClick={() => { setEstate(v); setFilter((f) => ({ ...f, owner: 'all' })); }} className="px-3 py-1.5"
-                    style={{ background: estate === v ? 'var(--accent)' : 'transparent', color: estate === v ? 'var(--accent-fg)' : 'var(--text-muted)' }}
-                    title={v ? 'Every teammate’s lists, with their owner' : 'Only the lists you own'}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <button onClick={() => setMode({ kind: 'new' })} className="px-3 py-1.5 rounded-lg text-sm font-medium" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
-                + New ICP
-              </button>
-            </div>
-          )}
-        </div>
-
         {(mode.kind === 'new' || mode.kind === 'edit') && (
-          <IcpBuilder
-            initial={mode.kind === 'edit' ? mode.profile : null}
-            onSaved={() => { setMode({ kind: 'list' }); void refresh(); }}
-            onCancel={() => setMode({ kind: 'list' })}
-          />
+          <>
+            <div className="px-8 pt-6 pb-4 flex items-center gap-3">
+              <button onClick={() => setMode({ kind: 'list' })} className="text-sm" style={{ color: 'var(--text-muted)' }}>← Lists</button>
+              <h1 className="text-2xl font-semibold">{mode.kind === 'new' ? 'New list' : `Edit · ${mode.profile.name}`}</h1>
+            </div>
+            <IcpWizard
+              initial={mode.kind === 'edit' ? mode.profile : null}
+              onSaved={() => { setMode({ kind: 'list' }); void refresh(); }}
+              onCancel={() => setMode({ kind: 'list' })}
+            />
+          </>
         )}
 
         {mode.kind === 'list' && (
-          <div className="p-4 space-y-4">
-            {error && <div className="rounded-lg px-3 py-2 text-[11px]" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>Last refresh failed ({error}){overview ? '; showing the previous data.' : '.'}</div>}
-            <FleetStrip fleet={fleet} quota={myQuota} onChanged={refresh} />
-            {icps.length > 0 && (
-              <IcpFilterBar filter={filter} icps={icps} showOwner={estate} shown={shown.length} total={icps.length} onChange={setFilter} />
+          <div className="px-8 py-7 space-y-6 max-w-[1280px]">
+            <header className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h1 className="text-[32px] font-semibold tracking-tight leading-tight">Lists</h1>
+                <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+                  {icps.length} {icps.length === 1 ? 'list' : 'lists'}
+                  {overview && <> · {withPeople} with people · {icps.length - withPeople} not started</>}
+                  {lastAt && <> · <button onClick={() => refresh()} className="hover:underline" title="Refresh">updated {relativeTime(lastAt.toISOString())}</button></>}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Link href="/agents" className="text-sm px-3 py-2 rounded-full hover:underline" style={{ color: 'var(--text-muted)' }}>Agents</Link>
+                <div role="group" aria-label="Layout" className="flex gap-1 p-1 rounded-full" style={{ background: 'color-mix(in srgb, var(--accent) 8%, transparent)' }}>
+                  {(['grid', 'list'] as const).map((l) => (
+                    <button key={l} aria-pressed={layout === l} onClick={() => setLayout(l)} title={l === 'grid' ? 'Cards with a funnel each' : 'One line per list'}
+                            className="px-3 py-1.5 rounded-full text-sm font-medium inline-flex items-center gap-1.5"
+                            style={{ background: layout === l ? 'var(--bg-card)' : 'transparent', color: layout === l ? 'var(--text)' : 'var(--text-muted)' }}>
+                      {l === 'grid'
+                        ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+                        : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>}
+                      {l === 'grid' ? 'Grid' : 'List'}
+                    </button>
+                  ))}
+                </div>
+                <div role="group" aria-label="Whose lists" className="flex gap-1 p-1 rounded-full" style={{ background: 'color-mix(in srgb, var(--accent) 8%, transparent)' }}>
+                  {([[true, 'Everyone'], [false, 'Mine']] as const).map(([v, label]) => (
+                    <button key={label} aria-pressed={estate === v} onClick={() => { setEstate(v); setFilter((f) => ({ ...f, owner: 'all' })); }}
+                            className="px-3.5 py-1.5 rounded-full text-sm font-medium"
+                            style={{ background: estate === v ? 'var(--bg-card)' : 'transparent', color: estate === v ? 'var(--text)' : 'var(--text-muted)' }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => setMode({ kind: 'new' })} className="h-10 px-5 rounded-full text-sm font-medium"
+                        style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
+                  New list
+                </button>
+              </div>
+            </header>
+
+            {error && <div className="rounded-xl px-3 py-2 text-sm" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>Could not refresh ({error}){overview ? '. Showing the last numbers.' : '.'}</div>}
+
+            {icps.length > 3 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <input value={filter.q} onChange={(e) => setFilter((f) => ({ ...f, q: e.target.value }))} placeholder="Search lists or owners"
+                       aria-label="Search lists" className="h-10 px-4 rounded-full text-sm w-72 outline-none" style={inputStyle} />
+                <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Sort lists"
+                        className="h-10 px-3 rounded-full text-sm outline-none" style={inputStyle}>
+                  <option value="priority">Priority first</option>
+                  <option value="contacted">Most contacted</option>
+                  <option value="conversion">Best conversion</option>
+                  <option value="found">Most people</option>
+                </select>
+                <select value={filter.priority} onChange={(e) => setFilter((f) => ({ ...f, priority: e.target.value as IcpListFilter['priority'] }))}
+                        aria-label="Priority filter" className="h-10 px-3 rounded-full text-sm outline-none"
+                        style={filter.priority === 'all' ? inputStyle : { ...inputStyle, border: '1px solid var(--accent)', color: 'var(--accent)' }}>
+                  <option value="all">Any priority</option>
+                  <option value="top">P1–P3</option>
+                  <option value="set">Any set</option>
+                  <option value="none">Not set</option>
+                </select>
+              </div>
             )}
+
             {loading && !overview && <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</p>}
             {overview && icps.length === 0 && (
-              <div className="text-center py-16 space-y-2" style={{ color: 'var(--text-muted)' }}>
-                <p className="text-sm">No ICP yet.</p>
-                <p className="text-xs">Describe who you sell to — or paste your website and let AI draft the first one.</p>
-                <button onClick={() => setMode({ kind: 'new' })} className="mt-2 px-4 py-2 rounded-lg text-sm font-medium" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
-                  Create your first ICP
+              <div className="text-center py-16 space-y-3" style={{ color: 'var(--text-muted)' }}>
+                <p className="text-base">No lists yet.</p>
+                <button onClick={() => setMode({ kind: 'new' })} className="h-10 px-5 rounded-full text-sm font-medium" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
+                  Create your first list
                 </button>
               </div>
             )}
             {overview && icps.length > 0 && shown.length === 0 && (
-              <p className="text-sm py-10 text-center" style={{ color: 'var(--text-muted)' }}>No ICPs match these filters.</p>
+              <p className="text-sm py-10 text-center" style={{ color: 'var(--text-muted)' }}>No list matches “{filter.q}”.</p>
             )}
-            <div className="space-y-3">
-              {shown.map((p) => (
-                <IcpRow key={p.id} icp={p} quota={overview?.quota_by_owner[p.owner_user_id] ?? null} viewerUserId={viewer} isAdmin={isAdmin}
-                        fleet={fleetFlags} hold={overview?.holds_by_owner?.[p.owner_user_id]?.leads_finder ?? null} busy={busy === p.id}
-                        onRun={runAgent(p)} onState={(s) => setState(p, s)} onArchive={() => archive(p)} />
-              ))}
-            </div>
+
+            {overview && shown.length > 0 && layout === 'list' && (
+              <section aria-label="Lists" className="z-panel overflow-x-auto">
+                <table className="w-full text-sm min-w-[900px]">
+                  <thead>
+                    <tr style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>
+                      <th className="text-left p-2 font-medium text-xs" title="The list's priority: 1 = top">Prio</th>
+                      <th className="text-left p-2 font-medium text-xs">List</th>
+                      {LIST_FUNNEL_STEPS.map(([k, label]) => <th key={k} className="text-right p-2 font-medium text-xs">{label}</th>)}
+                      <th className="text-right p-2 font-medium text-xs" title="contacted → opportunity">Conversion</th>
+                      <th className="text-right p-2 font-medium text-xs">Waiting</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sorted.map((p) => <ListTableRow key={p.id} icp={p} viewerUserId={viewer} isAdmin={isAdmin} onChanged={() => void refresh()} />)}
+                  </tbody>
+                </table>
+              </section>
+            )}
+            {overview && shown.length > 0 && layout === 'grid' && (
+              <section aria-label="Lists" className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>
+                {total && !filter.q && <AllListsCard f={total} lists={withPeople} />}
+                {sorted.map((p) => (
+                  <ListFunnelCard key={p.id} icp={p} quota={overview?.quota_by_owner[p.owner_user_id] ?? null} viewerUserId={viewer} isAdmin={isAdmin}
+                                  fleet={fleetFlags} hold={overview?.holds_by_owner?.[p.owner_user_id]?.leads_finder ?? null} busy={busy === p.id}
+                                  onRun={runAgent(p)} onState={(st) => setState(p, st)} onArchive={() => archive(p)} onChanged={() => void refresh()} />
+                ))}
+              </section>
+            )}
           </div>
         )}
       </div>

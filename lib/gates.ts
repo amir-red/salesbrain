@@ -14,18 +14,15 @@ export type DealType = 'sales' | 'grant' | 'ai_credit';
 
 // ─── Sales Pipeline (Zeami deals) ────────────────────────────────
 
+// Six stages since 2026-10-26 (Amir: "shorten them"; was nine). Old → new: G1 Lead Qualification + G2 Demand Analysis
+// → 1 Discovery · G3 → 2 Board review 1 · G4 Offer Strategy + G5 Internal Sign-off + G6 Offer Presentation → 3 Offer ·
+// G7 → 4 Negotiation & board review 2 · G8 → 5 Close · G9 → 6 Won · handover. Core migration 087 moved the live deals.
+// Keep in step with salesbrain-core domain/gates.py (parity-tested).
 export const SALES_GATES: Gate[] = [
   {
     number: 1,
-    name: 'Lead Qualification',
-    slaDays: 3,
-    isBoard: false,
-    description: 'Initial qualification — is this lead even worth pursuing? Capture company basics, contact, and source. Disqualify fast if there\'s no real signal.',
-  },
-  {
-    number: 2,
-    name: 'Demand Analysis',
-    slaDays: 10,
+    name: 'Discovery',
+    slaDays: 13,
     isBoard: false,
     requiredFields: [
       'economic_size',
@@ -36,67 +33,44 @@ export const SALES_GATES: Gate[] = [
       'sales_cycle',
       'pilot_or_full',
     ],
-    description: 'Understand the customer\'s actual problem, budget, decision authority, and timeline. Score solution-fit. Decide pilot vs. full implementation.',
+    description: 'Is this worth pursuing, and what do they really need? Company basics, the actual problem, budget, decision authority and timeline. Score solution fit; decide pilot or full implementation. Disqualify fast if there is no real signal.',
+  },
+  {
+    number: 2,
+    name: 'Board review 1',
+    slaDays: 5,
+    isBoard: true,
+    description: 'First executive checkpoint. The board reviews the discovery findings and votes proceed/stop. 5 of 8 votes required to advance. The opportunity is blocked until a decision lands.',
   },
   {
     number: 3,
-    name: 'Review Board 1',
-    slaDays: 5,
-    isBoard: true,
-    description: 'First executive checkpoint. The board reviews demand-analysis findings and votes proceed/stop. 5 of 8 votes required to advance. Deal is blocked until a decision lands.',
+    name: 'Offer',
+    slaDays: 26,
+    isBoard: false,
+    description: 'Design the offer (pricing, scope, narrative; the pricing-calculator quote), get the team\'s sign-off, and present it to the client. Capture their reactions and objections so the negotiation starts informed.',
   },
   {
     number: 4,
-    name: 'Offer Strategy',
-    slaDays: 14,
-    isBoard: false,
-    description: 'Internal: design the offer, pricing, scope, and narrative. Pricing-calculator quote drafted here. Output: a complete offer ready for team review.',
-  },
-  // G5 was previously the second board gate. Internal Sign-off is now a
-  // normal team-alignment step before client-facing G6 — the actual
-  // executive review moved to G7 where there are real negotiated terms.
-  {
-    number: 5,
-    name: 'Internal Sign-off',
-    slaDays: 5,
-    isBoard: false,
-    description: 'Team agrees the offer is ready to present. Sales lead / PM reviews pricing, scope, and materials. No board vote — soft hygiene check before the offer leaves the building.',
-  },
-  {
-    number: 6,
-    name: 'Offer Presentation',
-    slaDays: 7,
-    isBoard: false,
-    description: 'Present the offer to the client. Pricing, scope, deployment options, timeline. Capture client reactions and objections so the negotiation that follows starts informed.',
-  },
-  {
-    number: 7,
-    // Renamed from "Negotiation" → "Review Board 2" to match the G3
-    // "Review Board 1" labelling convention. The description below still
-    // explains the actual work (negotiate terms + lock deployment plan).
-    name: 'Review Board 2',
+    name: 'Negotiation & board review 2',
     slaDays: 21,
-    // Second sales board gate. The board reviews the negotiated terms
-    // (pricing, payment, scope) AND the deployment plan locked at this
-    // gate, so they're approving infrastructure choice + commercials in
-    // one pass before Close (G8).
+    // The board approves the negotiated terms AND the deployment plan locked here, in one pass before Close.
     isBoard: true,
     requiredFields: ['deployment_plan'],
-    description: 'Negotiate final terms with the client. Lock the deployment plan (on-premise or SaaS cloud). Second board review: 5 of 8 vote on the negotiated deal + infrastructure choice before Close.',
+    description: 'Negotiate final terms with the client. Lock the deployment plan (on-premise or SaaS cloud). Second board review: 5 of 8 vote on the negotiated terms + infrastructure choice before Close.',
   },
   {
-    number: 8,
+    number: 5,
     name: 'Close',
     slaDays: 3,
     isBoard: false,
-    description: 'Contract signed. Last paperwork (legal, procurement, payment terms confirmed). Short SLA — once the board approves G7, finalize fast or risk the deal cooling.',
+    description: 'Contract signed. Last paperwork (legal, procurement, payment terms confirmed). Short SLA — once the board approves, finalize fast or risk the opportunity cooling.',
   },
   {
-    number: 9,
-    name: 'Project Handover',
+    number: 6,
+    name: 'Won · handover',
     slaDays: 5,
     isBoard: false,
-    description: 'Won. Reaching G9 records the win date and fires the "DEAL WON" Telegram notice; within the hour Zeami is told (deal.won with the sales rep) and the client is set up in the Zeami platform, where onboarding and delivery are tracked (PMI). Hand off to the delivery team.',
+    description: 'Won. Reaching this stage records the win date and fires the "DEAL WON" Telegram notice; within the hour Zeami is told (deal.won with the sales rep) and the client is set up in the Zeami platform, where onboarding and delivery are tracked (PMI). Hand off to the delivery team.',
   },
 ];
 

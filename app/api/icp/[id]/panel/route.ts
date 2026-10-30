@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { FUNNEL_COUNTS } from '@/lib/funnel-sql';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { normalizeCriteria } from '@/lib/icp';
 import type { AgentRun } from '@/lib/icp';
 import { visibleIcp } from '@/lib/icp-server';
 import { ownerQuotas } from '@/lib/quota-server';
-import { blockersFor } from '@/lib/icp-panel';
+import { blockersFor, ListFunnel } from '@/lib/icp-panel';
 import type { Coverage, PanelApproval, PanelPayload, StageCounts } from '@/lib/icp-panel';
 
 const RUN_COLS = `r.id, r.agent, r.trigger, r.source, r.status, r.started_at, r.finished_at,
@@ -189,6 +190,13 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       total: a.total, scored: a.scored, matched: a.matched, eligible: a.eligible, employer: a.employer, research: a.research,
       email: a.email, warm: a.warm, routed: a.routed, route_available: a.route_available, engaged: a.engaged, deals: a.deals,
     };
+    // The list's funnel from person_funnel (086), cumulative like /api/icp/overview — null before the projection exists.
+    let funnel: ListFunnel | null = null;
+    try {
+      const f = await q(`SELECT ${FUNNEL_COUNTS} FROM person_funnel WHERE $1::uuid = ANY(icp_ids)`, [params.id]);
+      funnel = (f.rows[0] as ListFunnel) ?? null;
+    } catch { funnel = null; }
+
     const payload: PanelPayload = {
       viewer: { user_id: session.userId, role: session.role },
       icp: { ...(icp as unknown as PanelPayload['icp']), criteria: normalizeCriteria(icp.criteria as never) },
@@ -227,6 +235,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
         last_run: runs.find((r) => r.agent === 'outreach') ?? null,
       },
       activity: runs.slice(0, 40),
+      funnel,
     };
     return NextResponse.json(payload);
   } finally {

@@ -45,6 +45,12 @@ export interface Prospect {
   linkedin_url: string | null;
   owner_name?: string | null;
   owner_user_id?: string | null;
+  icp_profile_id?: string | null; list_name?: string | null;
+  priority?: number | null;
+  // Cohorts (090)
+  cohort_score?: number | null; cohort_why?: string | null; cohort_signals?: string[] | null; warm_via?: string | null;
+  company_summary?: string | null;
+  company_facts?: { industry?: string; size?: string; revenue_estimate?: string; locations?: string; ownership?: string } | null;
 }
 
 /** One entry of prospects.warm_paths. Angles (employer/school/colleague) are

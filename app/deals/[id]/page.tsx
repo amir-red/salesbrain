@@ -12,6 +12,7 @@ import AiCreditPanel from '@/components/AiCreditPanel';
 import ZeamiOnboardingPanel from '@/components/ZeamiOnboardingPanel';
 import Chat from '@/components/Chat';
 import LeadPicker from '@/components/deals/LeadPicker';
+import PriorityPicker from '@/components/PriorityPicker';
 import { getPipeline, SALES_GATES } from '@/lib/gates';
 import { HEALTH_COLOR } from '@/lib/deals-view';
 
@@ -43,6 +44,7 @@ interface Deal {
   status?: 'active' | 'won' | 'lost' | 'cancelled';
   contract_signed_at?: string | null;
   won_at?: string | null;
+  priority?: number | null;
   cancelled_at?: string | null;
   cancelled_reason?: string | null;
   deleted_at?: string | null;
@@ -150,7 +152,7 @@ export default function DealViewPage() {
   async function handleDelete() {
     if (!deal) return;
     const ok = window.confirm(
-      `Delete "${deal.name}"?\n\nThe deal will be hidden everywhere. An admin can restore it later.`,
+      `Delete "${deal.name}"?\n\nThe opportunity will be hidden everywhere. An admin can restore it later.`,
     );
     if (!ok) return;
     setBusy(true);
@@ -206,7 +208,7 @@ export default function DealViewPage() {
     return (
       <div className="flex h-screen">
         <Sidebar />
-        <div className="flex-1 flex items-center justify-center" style={{ color: 'var(--text-muted)' }}>Deal not found</div>
+        <div className="flex-1 flex items-center justify-center" style={{ color: 'var(--text-muted)' }}>Opportunity not found</div>
       </div>
     );
   }
@@ -264,10 +266,11 @@ export default function DealViewPage() {
               className="px-3 py-1.5 rounded-lg text-xs"
               style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}
             >
-              ← Deals
+              ← Opportunities
             </Link>
             <div>
               <div className="flex items-center gap-2">
+                <PriorityPicker value={deal.priority} dealId={deal.id} size="md" onChanged={() => void reload()} />
                 <h1 className="text-xl font-bold">{deal.name}</h1>
                 {isLost && (
                   <span
@@ -389,7 +392,7 @@ export default function DealViewPage() {
               <Chat dealId={deal.id} deal={{ ...deal, value: deal.value ? Number(deal.value) : null }} onDealUpdate={reload} prefill={prefill} />
             ) : (
               <div className="flex-1 flex items-center justify-center p-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
-                {isDeleted ? 'This deal is deleted.' : 'Only the deal’s creator, its lead or an admin can chat with the agent about it.'}
+                {isDeleted ? 'This opportunity is deleted.' : 'Only the opportunity’s creator, its lead or an admin can chat with the agent about it.'}
               </div>
             )}
           </div>
@@ -443,7 +446,7 @@ export default function DealViewPage() {
             {/* Score */}
             <div className="flex flex-col items-center gap-2 rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
               <ScoreRing score={deal.score} />
-              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Deal Score</span>
+              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Opportunity score</span>
             </div>
 
             {/* Risk + Verdict */}

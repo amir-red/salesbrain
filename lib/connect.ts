@@ -44,7 +44,8 @@ export interface ConnectFields {
   invite_source?: string | null;
   invite_error?: string | null;
   connect_approval: string | null;
-  profile_lookup?: ProfileLookup | null;
+  /** The full lookup, or the slim list row's summary (verdict + candidate_count). */
+  profile_lookup?: { result: string; candidates?: unknown[]; candidate_count?: number } | null;
 }
 
 export const NO_ANSWER_AFTER_DAYS = 21;
@@ -61,7 +62,7 @@ export function connectState(l: ConnectFields, noAnswerDays = NO_ANSWER_AFTER_DA
   if (l.linkedin_public_id) return 'not_invited';
   // A search by name that found candidates the rule would not pick alone: a person decides.
   const lk = l.profile_lookup;
-  if (lk && (lk.result === 'ambiguous' || lk.result === 'candidates') && lk.candidates.length > 0) return 'awaiting_pick';
+  if (lk && (lk.result === 'ambiguous' || lk.result === 'candidates') && (lk.candidates?.length ?? lk.candidate_count ?? 0) > 0) return 'awaiting_pick';
   return 'no_profile';
 }
 
