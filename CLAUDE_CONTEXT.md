@@ -2964,7 +2964,14 @@ Plan `~/.claude/plans/quirky-finding-lemon.md`.
   `icp_profiles.criteria.trust_weights`.
 - **095**: `trust_scores` (one row per lead: total, the four parts, held, why, trust_kind / via / hops, value_to_us,
   multiplier, signals, research jsonb + researched_at + research_tier), `score_feedback` (every click kept),
-  agent_definitions `trust_research`. `cohort_scores` keeps the company verdict and the sort placement.
+  agent_definitions `trust_research`. **The old cohort rank is removed, not hidden** (Amir, 2026-10-31: "when we make an
+  improvement we clean up"): 095 drops `cohort_scores.score / person_points / company_points / warmth_points / why /
+  warm_via` and the `person_weight / company_weight / warmth_bonus` keys of `agents.cohorts`; `policy/cohorts.score` and
+  `why` are deleted; `commands/cohorts.score_people` is `place_people` (which list, the guess, the confidence, the
+  signals, the verdict — nothing else); the nightly `cohort-score` job and `crm_cohort_sort` (`action=place`) only place;
+  the app's `cohort_score / cohort_why / warm_via` columns, the cohort pill and the cohort export columns are gone.
+  `cohort_scores` now holds the placement only; `icp_score` stays as the list-definition fit that gates sourcing /
+  enrichment / outreach floors (it is a filter, not the rank).
 - **Kernel** `commands/trust.py`: `load_facts` (ONE query over leads / contacts / accounts / account_profiles /
   cohort_scores / people.facets / person_warmth / person_edges / linkedin_invitations / score_feedback), `rescore`
   (pure recompute + upsert; runs at the end of EVERY `funnel.refresh`, so hourly with the Lead Conductor, and after

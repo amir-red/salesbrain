@@ -149,17 +149,12 @@ export default function ProspectDetailPage() {
               )}
             </div>
           </div>
-          {(prospect.company_summary || prospect.cohort_why || prospect.trust_total != null) && (
+          {(prospect.company_summary || prospect.trust_total != null) && (
             <div className="rounded-xl p-3 text-sm space-y-1" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-              {prospect.trust_total != null ? (
+              {prospect.trust_total != null && (
                 <div className="flex items-center gap-2 text-xs">
                   <ScoreBadge s={prospect} prospectId={prospect.id} size="md" onChanged={() => void fetchData(true)} />
                   <span style={{ color: 'var(--accent)' }}>{prospect.trust_why}</span>
-                </div>
-              ) : prospect.cohort_why && (
-                <div className="flex items-center gap-2 text-xs">
-                  {prospect.cohort_score != null && <span className="font-semibold tabular-nums px-2 py-0.5 rounded-md" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>{prospect.cohort_score}</span>}
-                  <span style={{ color: 'var(--accent)' }}>{prospect.cohort_why}</span>
                 </div>
               )}
               {prospect.company_summary && <p>{prospect.company_summary}</p>}

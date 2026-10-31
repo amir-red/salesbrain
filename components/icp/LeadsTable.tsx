@@ -28,9 +28,8 @@ export interface Lead extends TrustSummary {
   invite_error: string | null; connect_approval: string | null;
   /** The verdict of the newest lookup-by-name and its counts; the candidates come with the detail. */
   profile_lookup: LookupSummary | null;
-  // Cohorts (090): the rank, why, and the company in two sentences + facts
-  cohort_score?: number | null; cohort_why?: string | null; cohort_signals?: string[] | null;
-  cohort_guess?: string | null; cohort_confidence?: string | null; warm_via?: string | null;
+  // Cohorts (090): where the sorter placed the person, and the company in two sentences + facts
+  cohort_signals?: string[] | null; cohort_guess?: string | null; cohort_confidence?: string | null;
   company_summary?: string | null;
   company_facts?: { industry?: string; size?: string; revenue_estimate?: string; locations?: string; ownership?: string } | null;
 }
@@ -275,7 +274,7 @@ export default function LeadsTable({ icpId, signature = '', pageSize = PAGE }: {
                       <td className="p-2">
                         <Link href={`/prospects/${l.id}`} className="font-medium hover:underline">{l.full_name || '—'}</Link>
                         <div className="text-xs truncate max-w-[320px]" style={{ color: 'var(--text-muted)' }}>{l.title || '—'}</div>
-                        {(l.trust_why || l.cohort_why) && <div className="text-[11px] max-w-[320px]" style={{ color: 'var(--accent)' }}>{l.trust_why || l.cohort_why}</div>}
+                        {l.trust_why && <div className="text-[11px] max-w-[320px]" style={{ color: 'var(--accent)' }}>{l.trust_why}</div>}
                         {unsorted && (
                           <div className="mt-1 flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
                             {l.cohort_guess && <span>guess: {cohortName(l.cohort_guess)}</span>}
@@ -303,12 +302,6 @@ export default function LeadsTable({ icpId, signature = '', pageSize = PAGE }: {
                         {l.trust_total != null ? (
                           // the trust score (095): authority · trust path · fit · openness; click = the parts and ✓ / ↓
                           <ScoreBadge s={l} prospectId={l.id} onChanged={() => void load()} />
-                        ) : l.cohort_score != null ? (
-                          <button onClick={() => openWhy(l.id)} className="text-xs font-semibold tabular-nums px-2 py-0.5 rounded-md"
-                            style={{ background: `color-mix(in srgb, ${fitColor(l.cohort_score)} 14%, transparent)`, color: fitColor(l.cohort_score) }}
-                            title="Priority: right person + company fit and early-adopter signals + warmth. Click for details.">
-                            {l.cohort_score}
-                          </button>
                         ) : (
                           <button onClick={() => openWhy(l.id)} className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: `color-mix(in srgb, ${fitColor(l.icp_score)} 14%, transparent)`, color: fitColor(l.icp_score) }} title="why?">
                             {l.icp_score ?? '—'} · {(l.fit_label || 'unscored').replace(/_/g, ' ')}
@@ -360,12 +353,12 @@ export default function LeadsTable({ icpId, signature = '', pageSize = PAGE }: {
                     {open === l.id && (
                       <tr style={{ background: 'var(--bg-card)' }}>
                         <td colSpan={8} className="p-2 text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                          {l.cohort_score != null && (
+                          {(l.cohort_confidence || l.company_summary) && (
                             <div className="mb-1.5 space-y-0.5" style={{ color: 'var(--text)' }}>
                               {l.company_summary && <div>{l.company_summary}</div>}
                               {l.company_facts && <div style={{ color: 'var(--text-muted)' }}>{Object.entries(l.company_facts).filter(([, v]) => v).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`).join(' · ')}</div>}
                               {(l.cohort_signals ?? []).length > 0 && <div>Signals: {(l.cohort_signals ?? []).map((x) => SIGNAL_LABELS[x] ?? x).join(', ')}</div>}
-                              <div style={{ color: 'var(--text-muted)' }}>Sorter confidence: {l.cohort_confidence ?? '—'}{l.warm_via ? ` · ${l.warm_via} knows them` : ''}</div>
+                              {l.cohort_confidence && <div style={{ color: 'var(--text-muted)' }}>Sorter confidence: {l.cohort_confidence}</div>}
                             </div>
                           )}
                           {!full && <div className="h-3 w-48 rounded animate-pulse" style={{ background: 'var(--bg-input)' }} />}

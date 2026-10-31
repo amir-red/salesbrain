@@ -15,10 +15,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   // intro asks below are the sending account's and stay with its owner (admins see all).
   const ownerValues = isAdmin ? [params.id] : [params.id, session.userId];
 
-  // Cohorts (090): the rank and why, and the company in two sentences + facts, for the page's header.
+  // Cohorts (090): the sorter's signals and the company in two sentences + facts, for the page's header.
   const cohorts = await cohortsStored();
   const cohortCols = cohorts
-    ? `, cs.score AS cohort_score, cs.why AS cohort_why, cs.signals AS cohort_signals, cs.warm_via,
+    ? `, cs.signals AS cohort_signals,
          COALESCE(ap.profile ->> 'summary', cs.verdict ->> 'summary') AS company_summary,
          COALESCE(ap.profile -> 'facts', cs.verdict -> 'facts') AS company_facts`
     : '';

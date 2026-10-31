@@ -42,11 +42,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   else if (prio === 'none') filters.push('p.priority IS NULL');
   else if (/^(10|[1-9])$/.test(prio)) { values.push(Number(prio)); filters.push(`p.priority = $${values.length}`); }
 
-  // Cohorts (090): the rank Mateo works by, why, and the company's short summary. Before 090 the old order stays.
+  // Cohorts (090): where the sorter placed the person (its guess and confidence) and the company's short summary.
   const cohorts = await cohortsStored();
   const cohortCols = cohorts
-    ? `cs.score AS cohort_score, cs.why AS cohort_why, cs.signals AS cohort_signals, cs.guess_key AS cohort_guess,
-       cs.confidence AS cohort_confidence, cs.warm_via,
+    ? `cs.signals AS cohort_signals, cs.guess_key AS cohort_guess, cs.confidence AS cohort_confidence,
        COALESCE(ap.profile ->> 'summary', cs.verdict ->> 'summary') AS company_summary,
        COALESCE(ap.profile -> 'facts', cs.verdict -> 'facts') AS company_facts,`
     : '';
@@ -54,14 +53,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     ? `LEFT JOIN cohort_scores cs ON cs.prospect_id = p.id
        LEFT JOIN account_profiles ap ON ap.account_id = p.account_id AND ap.kind = 'company'`
     : '';
-  // The trust score (095) is THE rank: a hand-set priority first, then the score; the cohort score and the fit score
-  // only break ties (and order everything before 095 exists).
+  // The trust score (095) is THE rank: a hand-set priority first, then the score; the list's own order and the fit
+  // score only break ties (and order everything before 095 exists).
   const trust = await trustStored();
   const trustJoin = trust ? 'LEFT JOIN trust_scores ts ON ts.prospect_id = p.id' : '';
   const order = [
     'p.priority NULLS LAST',
     trust ? 'ts.total DESC NULLS LAST' : '',
-    cohorts ? 'cs.score DESC NULLS LAST' : '',
     'p.priority_rank NULLS LAST, p.icp_score DESC NULLS LAST, p.created_at DESC',
   ].filter(Boolean).join(', ');
 
@@ -71,7 +69,6 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     leads = await client.query(
       `WITH base AS (
          SELECT p.* FROM leads p -- the one table (088): the prospects view lacks the card columns such as priority
-         ${cohorts ? 'LEFT JOIN cohort_scores cs ON cs.prospect_id = p.id' : ''}
          ${trustJoin}
          WHERE ${filters.join(' AND ')}
          -- the trust score ranks (authority, trust path, fit, openness); a hand-ranked list in its own order (050)

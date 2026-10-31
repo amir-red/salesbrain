@@ -47,8 +47,8 @@ export interface Prospect {
   owner_user_id?: string | null;
   icp_profile_id?: string | null; list_name?: string | null;
   priority?: number | null;
-  // Cohorts (090)
-  cohort_score?: number | null; cohort_why?: string | null; cohort_signals?: string[] | null; warm_via?: string | null;
+  // Cohorts (090): the sorter's signals (the rank is the trust score below)
+  cohort_signals?: string[] | null;
   // The trust score (095): the rank and its parts; the person page loads the full detail from /trust-score
   trust_total?: number | null; trust_parts?: { authority?: number; trust?: number; fit?: number; openness?: number } | null;
   trust_why?: string | null; trust_via?: string | null; trust_kind?: string | null; value_to_us?: string | null;
