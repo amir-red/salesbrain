@@ -11,7 +11,7 @@
 
 export type LeadStatus = 'new' | 'contacted' | 'replied' | 'converted' | 'archived';
 export type LeadView = 'working' | 'due' | 'must' | 'needs_you' | LeadStatus | 'all';
-export type LeadSort = 'priority' | 'contact' | 'newest' | 'warmth';
+export type LeadSort = 'priority' | 'contact' | 'newest' | 'warmth' | 'score';
 
 /**
  * The stored lifecycle of a lead (core 068, policy/lifecycle.py): where it is, who has to move next, and one
@@ -158,6 +158,11 @@ export interface Lead {
   days_since_contact: number | null;   // from last_contact_at, else created_at
   /** Team warmth 0..1 for this person (core 089: the warmest teammate's relationship); null = unknown. */
   warmth?: number | null;
+  /** The trust score (095) and its parts, from the prospect behind the card; null before it is scored. */
+  trust_total?: number | null;
+  trust_parts?: { authority?: number; trust?: number; fit?: number; openness?: number } | null;
+  trust_why?: string | null; trust_via?: string | null; trust_kind?: string | null; value_to_us?: string | null;
+  multiplier?: number | null; held?: number | null; has_feedback?: boolean | null;
   created_at: string;
   converted_at: string | null;
   converted_deal_id: string | null;

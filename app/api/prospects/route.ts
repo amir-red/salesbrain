@@ -3,6 +3,7 @@ import { z } from 'zod';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { exec_create_or_import_prospect } from '@/lib/prospect-executors';
+import { TRUST_COLS, TRUST_NULL_COLS, trustStored } from '@/lib/trust-server';
 
 const CreateProspectSchema = z.object({
   company_name: z.string().min(1),
@@ -58,10 +59,12 @@ export async function GET(req: NextRequest) {
   if (q) add((n) => `(c.full_name ILIKE $${n} OR a.name ILIKE $${n} OR c.email ILIKE $${n} OR c.title ILIKE $${n})`,
              `%${q.replace(/[%_\\]/g, '\\$&')}%`);
 
+  const trust = await trustStored();  // 095: the trust score ranks after a hand-set priority
   const from = `FROM leads p -- the one table (088): the prospects view lacks the card columns such as priority
      LEFT JOIN accounts a ON a.id = p.account_id
      LEFT JOIN contacts c ON c.id = p.contact_id
-     LEFT JOIN icp_profiles ip ON ip.id = p.icp_profile_id`;
+     LEFT JOIN icp_profiles ip ON ip.id = p.icp_profile_id
+     ${trust ? 'LEFT JOIN trust_scores ts ON ts.prospect_id = p.id' : ''}`;
   const baseWhere = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
   const listFilters = [...filters];
   const listValues = [...values];
@@ -79,11 +82,11 @@ export async function GET(req: NextRequest) {
     const { rows } = await client.query(
       `SELECT p.*, a.name as company_name, a.domain, a.industry, a.company_size,
               c.full_name, c.email, c.title, c.seniority,
-              u.name as owner_name
+              u.name as owner_name, ${trust ? TRUST_COLS : TRUST_NULL_COLS}
        ${from}
        LEFT JOIN users u ON u.id = p.owner_user_id
        ${listWhere}
-       ORDER BY COALESCE(p.priority, ip.priority) NULLS LAST, p.updated_at DESC, p.id
+       ORDER BY COALESCE(p.priority, ip.priority) NULLS LAST, ${trust ? 'ts.total DESC NULLS LAST, ' : ''}p.updated_at DESC, p.id
        LIMIT ${limit} OFFSET ${offset}`,
       listValues
     );

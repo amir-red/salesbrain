@@ -23,6 +23,7 @@ import { getSession } from '@/lib/auth';
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
 import { LIFECYCLE_FUNNEL, type LeadCounts, type LeadSort, type LeadView } from '@/lib/sales-leads';
 import { NOT_CONTACTED, DUE, NEEDS_YOU, OPEN, SORTS, TEAM_USERS_SQL, funnelStored, warmthStored } from '@/lib/sales-leads-sql';
+import { TRUST_COLS, TRUST_NULL_COLS, trustStored } from '@/lib/trust-server';
 
 const VIEWS = new Set<LeadView>(['working', 'due', 'must', 'needs_you', 'new', 'contacted', 'replied', 'converted', 'archived', 'all']);
 export async function GET(req: NextRequest) {
@@ -77,6 +78,7 @@ export async function GET(req: NextRequest) {
   const warmSel = (await warmthStored())
     ? '(SELECT max(w.warmth) FROM person_warmth w WHERE w.person_id = p.person_id) AS warmth'
     : 'NULL::real AS warmth';
+  const trust = await trustStored();  // 095: the score behind the card's prospect
   const client = await pool.connect();
   try {
     const { rows: leads } = await client.query(
@@ -96,7 +98,7 @@ export async function GET(req: NextRequest) {
               COALESCE((SELECT count(*)::int FROM outreach_approvals oa
                          WHERE oa.prospect_id = l.prospect_id AND oa.status = 'pending'
                            AND (oa.expires_at IS NULL OR oa.expires_at > now())), 0) AS cards_pending,
-              l.booking_status, l.booked_at, l.meet_link, ${warmSel},
+              l.booking_status, l.booked_at, l.meet_link, ${warmSel}, ${trust ? TRUST_COLS : TRUST_NULL_COLS},
               l.preferred_demo_date, l.preferred_demo_time, l.preferred_demo_timezone,
               (SELECT jsonb_build_object('kind', e.kind, 'text', left(e.text, 240), 'occurred_at', e.occurred_at)
                  FROM sales_lead_events e WHERE e.lead_id = l.id AND e.kind IN ('met', 'sent', 'reply', 'call', 'meeting', 'note')
@@ -108,6 +110,7 @@ export async function GET(req: NextRequest) {
          LEFT JOIN prospects p ON p.id = l.prospect_id
          LEFT JOIN icp_profiles ip ON ip.id = p.icp_profile_id
          LEFT JOIN users ou ON ou.id = p.owner_user_id
+         ${trust ? 'LEFT JOIN trust_scores ts ON ts.prospect_id = p.id' : ''}
          LEFT JOIN LATERAL (SELECT i.status, i.sent_at, i.accepted_at FROM linkedin_invitations i
                              WHERE i.prospect_id = p.id ORDER BY i.sent_at DESC NULLS LAST LIMIT 1) inv ON true
          LEFT JOIN LATERAL (SELECT count(*) FILTER (WHERE e.kind = 'sent')::int AS sent_count,

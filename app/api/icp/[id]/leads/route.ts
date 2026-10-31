@@ -3,6 +3,7 @@ import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { visibleIcp } from '@/lib/icp-server';
 import { cohortsStored } from '@/lib/cohorts-server';
+import { TRUST_COLS, TRUST_NULL_COLS, trustStored } from '@/lib/trust-server';
 import { connectQuota, type ConnectQuota } from '@/lib/connect-quota-server';
 
 /**
@@ -53,9 +54,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     ? `LEFT JOIN cohort_scores cs ON cs.prospect_id = p.id
        LEFT JOIN account_profiles ap ON ap.account_id = p.account_id AND ap.kind = 'company'`
     : '';
-  const order = cohorts
-    ? 'p.priority NULLS LAST, cs.score DESC NULLS LAST, p.priority_rank NULLS LAST, p.icp_score DESC NULLS LAST, p.created_at DESC'
-    : 'p.priority NULLS LAST, p.priority_rank NULLS LAST, p.icp_score DESC NULLS LAST, p.created_at DESC';
+  // The trust score (095) is THE rank: a hand-set priority first, then the score; the cohort score and the fit score
+  // only break ties (and order everything before 095 exists).
+  const trust = await trustStored();
+  const trustJoin = trust ? 'LEFT JOIN trust_scores ts ON ts.prospect_id = p.id' : '';
+  const order = [
+    'p.priority NULLS LAST',
+    trust ? 'ts.total DESC NULLS LAST' : '',
+    cohorts ? 'cs.score DESC NULLS LAST' : '',
+    'p.priority_rank NULLS LAST, p.icp_score DESC NULLS LAST, p.created_at DESC',
+  ].filter(Boolean).join(', ');
 
   const client = await pool.connect();
   let leads, state, last, counts, pending, connect: ConnectQuota | undefined;
@@ -64,10 +72,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       `WITH base AS (
          SELECT p.* FROM leads p -- the one table (088): the prospects view lacks the card columns such as priority
          ${cohorts ? 'LEFT JOIN cohort_scores cs ON cs.prospect_id = p.id' : ''}
+         ${trustJoin}
          WHERE ${filters.join(' AND ')}
-         -- a cohort is worked by its rank (fit + early-adopter signals + warmth); a hand-ranked list in its own order (050)
+         -- the trust score ranks (authority, trust path, fit, openness); a hand-ranked list in its own order (050)
          ORDER BY ${order} LIMIT 300)
-       SELECT ${cohortCols} p.id, p.stage, p.icp_score, p.fit_label,
+       SELECT ${cohortCols} ${trust ? TRUST_COLS : TRUST_NULL_COLS}, p.id, p.stage, p.icp_score, p.fit_label,
               (p.research_summary IS NOT NULL) AS researched,
               p.source_type, p.source_detail, p.linkedin_public_id, p.candidate_location,
               p.network_degree, p.warm_paths, p.priority_rank, p.priority, p.must_talk,
@@ -103,6 +112,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
           WHERE e.prospect_id = p.id AND e.kind = 'linkedin'
           ORDER BY e.created_at DESC LIMIT 1) lk ON true
        ${cohortJoin}
+       ${trustJoin}
        ORDER BY ${order}`,
       values,
     );

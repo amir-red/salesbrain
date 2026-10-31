@@ -4,6 +4,7 @@ import { contactAge, firstName, linkedInLabel, linkedInState, myRole, nextContac
 import { useEffect, useState } from 'react';
 import { Chevron, LinkedIn, Star } from './icons';
 import LifecycleLine from './LifecycleLine';
+import ScoreBadge from '@/components/ScoreBadge';
 import { WARMTH_BANDS, WARMTH_COLOR, type WarmthBand } from '@/lib/warm';
 
 function warmBand(w: number): WarmthBand { return w >= 0.7 ? 'hot' : w >= 0.4 ? 'warm' : w >= 0.15 ? 'cool' : 'cold'; }
@@ -65,6 +66,9 @@ export default function LeadRow({ lead, rank, open, onToggle, onPatch, busy, vie
       <div className="min-w-0">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-sm font-semibold truncate">{lead.full_name}</span>
+          {lead.trust_total != null && lead.prospect_id && (
+            <ScoreBadge s={lead} prospectId={lead.prospect_id} />
+          )}
           {lead.warmth != null && lead.warmth >= 0.15 && (
             <span className="text-[10px] px-1.5 rounded-full whitespace-nowrap shrink-0" title={`Warmth ${Math.round(lead.warmth * 100)}: how warm the team's relationship is (conversations, meetings, connections)`}
               style={{ color: WARMTH_COLOR[warmBand(lead.warmth)], background: `color-mix(in srgb, ${WARMTH_COLOR[warmBand(lead.warmth)]} 14%, transparent)` }}>

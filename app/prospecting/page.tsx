@@ -9,8 +9,10 @@ import { PROSPECT_STAGES } from '@/lib/prospecting';
 import { relativeTime } from '@/lib/time';
 import ExportButton from '@/components/ExportButton';
 import PriorityPicker from '@/components/PriorityPicker';
+import ScoreBadge from '@/components/ScoreBadge';
+import type { TrustSummary } from '@/lib/trust';
 
-interface Prospect {
+interface Prospect extends TrustSummary {
   id: string;
   stage: string;
   icp_score: number | null;
@@ -310,7 +312,11 @@ function ProspectingInner() {
                           </Link>
                         )}
                       </td>
-                      <td className="p-2"><FitBadge score={p.icp_score} label={p.fit_label} /></td>
+                      <td className="p-2">
+                        {p.trust_total != null
+                          ? <ScoreBadge s={p} prospectId={p.id} onChanged={() => void fetchProspects()} />
+                          : <FitBadge score={p.icp_score} label={p.fit_label} />}
+                      </td>
                       <td className="p-2 text-xs" style={{ color: 'var(--text-muted)' }}>{p.owner_name || '—'}</td>
                       <td className="p-2 text-xs" style={{ color: 'var(--text-muted)' }}>
                         {p.last_contacted_at ? relativeTime(p.last_contacted_at) : '—'}

@@ -849,3 +849,38 @@ CREATE TABLE IF NOT EXISTS zeami_deal_sync (
     failures         INT NOT NULL DEFAULT 0,
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- 095: the trust score — one 100-point rank per person (authority 30 / warmth & trust path 30 / market & P&L fit 20 /
+-- openness & speed 20), computed by the kernel from stored facts + the nightly research pass; ✓ / ↓ feedback.
+CREATE TABLE IF NOT EXISTS trust_scores (
+  prospect_id     UUID PRIMARY KEY REFERENCES leads(id) ON DELETE CASCADE,
+  total           SMALLINT NOT NULL CHECK (total BETWEEN 0 AND 100),
+  authority       SMALLINT NOT NULL DEFAULT 0,
+  trust           SMALLINT NOT NULL DEFAULT 0,
+  fit             SMALLINT NOT NULL DEFAULT 0,
+  openness        SMALLINT NOT NULL DEFAULT 0,
+  held            SMALLINT NOT NULL DEFAULT 0,
+  why             TEXT,
+  trust_kind      TEXT CHECK (trust_kind IN ('own', 'route', 'mutual', 'connected', 'none')),
+  trust_via       TEXT,
+  route_hops      SMALLINT,
+  value_to_us     TEXT CHECK (value_to_us IN ('buyer', 'connector', 'both', 'none')),
+  multiplier      INT NOT NULL DEFAULT 0,
+  signals         JSONB NOT NULL DEFAULT '{}'::jsonb,
+  research        JSONB,
+  researched_at   TIMESTAMPTZ,
+  research_tier   TEXT CHECK (research_tier IS NULL OR research_tier IN ('free', 'grounded')),
+  scored_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_trust_scores_total ON trust_scores (total DESC);
+CREATE INDEX IF NOT EXISTS idx_trust_scores_researched ON trust_scores (researched_at);
+CREATE TABLE IF NOT EXISTS score_feedback (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  prospect_id   UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  user_id       UUID REFERENCES users(id) ON DELETE SET NULL,
+  direction     TEXT NOT NULL CHECK (direction IN ('up', 'down')),
+  before_total  SMALLINT,
+  note          TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_score_feedback_prospect ON score_feedback (prospect_id, created_at DESC);

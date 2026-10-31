@@ -2940,6 +2940,69 @@ pairing store). Now the setting is `decline` (passes the filter; deploy verify r
 `_is_user_authorized_for_source`. If the hook fails, a stranger gets one decline line, never a pairing code. Lesson: test an
 access change by sending a real message from an unknown account, not by reading one gate.
 
+### 5.ch The trust score — one 100-point rank, and the trust-research agent (Mateo's "agent 2") (2026-10-31, feat/trust-scoring, migration 095)
+
+From Mateo's playbook T1 and the 2026-10-30 call: "fit alone did not convert; the trust path and authority decided", "not
+just business value but trust value, then a proper research on this person". What the data said on 31 Oct: 248 warm/hot
+ties, all 45 warm people on lists already engaged; outreach answers only when warm (own network 5/10 answered, a bare
+request 7/214); the fit score did not predict answers; 24 mutual edges, 0 intro requests ever. Amir's decisions: ONE rank
+(the cohort score folds in as the fit part and is no longer shown); research = free sources for everyone + Gemini Google
+grounding (~3.5 c each) only for warm / connected / prioritised people, ~150 a night; ✓ / ↓ moves the person at once, the
+weekly review PROPOSES weights, a person applies; the P&L-owner / not-manufacturing rule applies to every list, NRW too.
+Plan `~/.claude/plans/quirky-finding-lemon.md`.
+- **The score** (`policy/trust_score.py`, pure; `lib/trust.ts` mirrors labels/bands, `test_trust_parity.py`):
+  authority 30 (the cohort's role tiers via `cohorts.person_fit`; research may confirm `full` or demote `low`) ·
+  warmth & trust path 30 (max of our own tie by `person_warmth` band hot 1.0 / warm 0.7 / cool 0.3, a route through a
+  stored `linkedin_mutual` / `email_cothread` connector × how warm we are with them (cap 0.8), mutual connections 3+ 0.35
+  / 1–2 0.25, a bare 1st degree 0.3) · market & P&L fit 20 (60 % the cohort company verdict `company_fit`, 40 % a
+  P&L-owner role; a manufacturer not also distributor/forwarder/software/services keeps 40 % of the company part) ·
+  openness & speed 20 (weighted signals, summed, capped: company verdict signals + person research signals new_in_role,
+  entrepreneurial, interim_or_exit_mandate, posts_on_ai, modernisation_mandate). Also `value_to_us` (buyer | connector |
+  both | none), `multiplier` = people on our active lists this person is connected to, `held` = Σ of each teammate's
+  LATEST ✓ (+8) / ↓ (−15). A hand-set `leads.priority` still sorts first everywhere. Bands top ≥ 70 · good ≥ 50 · fair ≥ 30.
+  Weights + limits in `policy_rules['agents.trust']` (admin-editable from chat, `admin_policy`); per-list overrides in
+  `icp_profiles.criteria.trust_weights`.
+- **095**: `trust_scores` (one row per lead: total, the four parts, held, why, trust_kind / via / hops, value_to_us,
+  multiplier, signals, research jsonb + researched_at + research_tier), `score_feedback` (every click kept),
+  agent_definitions `trust_research`. `cohort_scores` keeps the company verdict and the sort placement.
+- **Kernel** `commands/trust.py`: `load_facts` (ONE query over leads / contacts / accounts / account_profiles /
+  cohort_scores / people.facets / person_warmth / person_edges / linkedin_invitations / score_feedback), `rescore`
+  (pure recompute + upsert; runs at the end of EVERY `funnel.refresh`, so hourly with the Lead Conductor, and after
+  research / feedback / tuning), `trust_score` (one person, readable by every teammate), `feedback` (any teammate; the
+  SERVICE actor refused; audited `score_feedback`), `tuning` / `apply_tuning` (`policy/trust_tuning.py`: per part,
+  mean fraction of the ✓ people vs the ↓ people, lift ≥ 1.3 raises ×1.25, ≤ 0.77 lowers ×0.8, rescaled to 100; needs 6
+  marks with 2 on each side; owner or admin applies, audited `trust_tuning_apply`), `research_plan` (per list sender:
+  not researched in `restale_days`, list priority → person priority → warm / connected / 2nd degree → contacted → fit;
+  `tier` grounded for warm / connected / prioritised / 2nd degree up to `grounded_per_run`), `save_research`
+  (`clean_research` bounds everything; a tenure under 18 months infers `new_in_role`), `status`.
+  **Blue fix** (`warm_paths.blue_map`): a 1st-degree connection on the owner's live account with no chat is reachable
+  (channel linkedin, thread NULL, `first_message: true` — the new-chat lane sends it); Mateo's Marius Fiedler case.
+  The Conductor's `_LIST_SQL` and card facts rank by `COALESCE(ts.total, icp_score)`. `AGENTS` gains `trust_research`.
+- **Ring**: `trust_research.py` — per person: ONE `profile_view` on the sender's account (guard-bound, `profile_fetch_per_run`
+  60, a safe-rate refusal stops fetching for the night; facets written like `route_expand`), one keyless DuckDuckGo
+  search, for grounded people one `llm.grounded()` (feature `trust_research` → `llm_usage`), then one Flash `converse(json_mode)`
+  per 8 people → research JSON → `save_research` → digest to the sender (source `trust-research`, own DM or nothing).
+  **Agent profile `agents/trust-research/`** (Flash; `run` 01:30 nightly = `run_queue.py` gates kill switch /
+  `agents.trust.enabled` / `runs_per_day` and opens one run per sender; `review` Sunday 08:30 = feedback vs parts,
+  research outcomes → ≤ 5 MEMORY lessons). Tools: `crm_trust_research_batch` (agent-only), `crm_trust_score` (read,
+  on MCP), `crm_score_feedback` (write; refused unattended and in agent runs — `role_policy`, `agents_runtime`),
+  `crm_trust_tuning` (read), `crm_trust_apply_tuning` (owner/admin, mcp=None), `crm_trust_status`, `crm_trust_rescore`
+  (admin). App-only RPC `trust_research_one` = "Research now" on the person page. Knowledge: "Trust score: how a person
+  is ranked", "Rank X lower"; persona section "The rank". 178 tools.
+- **App**: `components/ScoreBadge.tsx` (the pill; click = four bars + why + path + ✓ right / ↓ lower →
+  `POST /api/prospects/[id]/score-feedback`) on the list's leads table (replaces the cohort pill), /prospecting (replaces
+  the fit badge when scored), /sales-leads rows (+ sort "Best score first"), the journey queue (small number) and the
+  person page header; `components/prospect/TrustCard.tsx` "Who they are to us" (parts, path, research facts with sources,
+  feedback history, Research now → `POST /api/prospects/[id]/trust-research`, act-as the owner for an admin);
+  `components/icp/TrustTuningPanel.tsx` under "Who belongs" on the list page (`GET/POST /api/icp/[id]/trust-tuning`).
+  Every list / queue / export query joins `trust_scores` (`lib/trust-server.ts` TRUST_COLS; before 095 the old order
+  stays) and orders `priority NULLS LAST, ts.total DESC NULLS LAST, …`; the Excel prospects / ICP sheets gain Score ·
+  Authority · Trust path · Market fit · Openness · Why ranked · Via · Value to us · Knows on lists.
+- **Rollout (integration session)**: apply 095; deploy ring (renders the profile) + app; `crm_trust_rescore` once
+  (no cost) so every list re-sorts; check `llm_usage` feature `trust_research` and the guard after the first night.
+- Not built: the agent 3 network value-matching (needs a financial data provider), a note template / sequence design,
+  Telegram buttons for ✓ / ↓, learning the weights automatically (Amir chose propose + apply).
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

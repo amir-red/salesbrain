@@ -4,6 +4,7 @@ import OwnerControl from '@/components/icp/OwnerControl';
 import SeatsControl from '@/components/icp/SeatsControl';
 import DailyConnectControl from '@/components/icp/DailyConnectControl';
 import TuningPanel from '@/components/icp/TuningPanel';
+import TrustTuningPanel from '@/components/icp/TrustTuningPanel';
 import ListSettings from '@/components/icp/ListSettings';
 import CohortHeader from '@/components/icp/CohortHeader';
 import PriorityPicker from '@/components/PriorityPicker';
@@ -280,6 +281,7 @@ export default function IcpPanelPage() {
               {data.icp.cohort && <CohortHeader cohort={data.icp.cohort} />}
               <DefinitionSection data={data} onEdit={data.can_edit ? () => { setDrawer(null); setEditing(true); } : undefined} />
               <TuningPanel icpId={id} onApplied={(n) => { setNote(n); void refreshAll(); }} />
+              <TrustTuningPanel icpId={id} onApplied={(n) => { setNote(n); void refreshAll(); }} />
             </>}
             {drawer === 'settings' && <>
               <div className="rounded-xl px-4 py-3 space-y-2" style={{ border: '1px solid var(--border)' }}>

@@ -73,6 +73,8 @@ const LONG_RUNNING_TOOLS = new Set<string>([
   'inbox_refresh',
   // Campaign Test run that writes: one model draft per message on the path (up to ~8).
   'campaign_preview',
+  // "Research now" on a person: a profile fetch, a web search, one grounded lookup and a model call.
+  'trust_research_one',
   'crm_leads_finder_run',
   'crm_enrich_prospect',
   'crm_enrich_lead',

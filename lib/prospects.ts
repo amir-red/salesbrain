@@ -49,6 +49,10 @@ export interface Prospect {
   priority?: number | null;
   // Cohorts (090)
   cohort_score?: number | null; cohort_why?: string | null; cohort_signals?: string[] | null; warm_via?: string | null;
+  // The trust score (095): the rank and its parts; the person page loads the full detail from /trust-score
+  trust_total?: number | null; trust_parts?: { authority?: number; trust?: number; fit?: number; openness?: number } | null;
+  trust_why?: string | null; trust_via?: string | null; trust_kind?: string | null; value_to_us?: string | null;
+  multiplier?: number | null; held?: number | null; has_feedback?: boolean | null;
   company_summary?: string | null;
   company_facts?: { industry?: string; size?: string; revenue_estimate?: string; locations?: string; ownership?: string } | null;
 }

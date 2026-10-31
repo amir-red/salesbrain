@@ -16,6 +16,9 @@ export interface LanePerson {
   title: string | null;
   icp_score: number | null;
   priority: number | null;
+  /** The trust score (095) and its one-line why; null before the person is scored. */
+  trust_total?: number | null;
+  trust_why?: string | null;
   /** What happened / why they are here, one short line ("accepted 4 d ago", "“Gern, Donnerstag passt.”"). */
   detail: string | null;
   /** The moment the line refers to (ISO), for relative times. */

@@ -16,8 +16,12 @@ import type { ListFunnel } from '@/lib/icp-panel';
  * Who sees it: anyone signed in (lists are shared, §5.bo); acting on a row still goes through the row's own
  * route, which checks owner/admin and runs as the lead's owner.
  */
-const PEOPLE = `p.id AS prospect_id, c.full_name, c.title, a.name AS company, p.icp_score, p.priority, p.card_id AS lead_id`;
-const JOINS = `LEFT JOIN contacts c ON c.id = p.contact_id LEFT JOIN accounts a ON a.id = p.account_id`;
+// `ts.total` is the trust score (095): within a lane people sort by it after their priority.
+const PEOPLE = `p.id AS prospect_id, c.full_name, c.title, a.name AS company, p.icp_score, p.priority, p.card_id AS lead_id,
+  ts.total AS trust_total, ts.why AS trust_why`;
+const JOINS = `LEFT JOIN contacts c ON c.id = p.contact_id LEFT JOIN accounts a ON a.id = p.account_id
+  LEFT JOIN trust_scores ts ON ts.prospect_id = p.id`;
+const RANK = `ts.total DESC NULLS LAST, p.icp_score DESC NULLS LAST`;
 /** A LinkedIn conversation with this person on an active account of the lead's owner (by person, else by member id). */
 const THREAD_MATCH = `JOIN linkedin_accounts la ON la.id = t.account_id AND la.revoked_at IS NULL AND la.owner_user_id = p.owner_user_id
    WHERE ((p.person_id IS NOT NULL AND t.person_id = p.person_id)
@@ -72,7 +76,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
           AND p.stage NOT IN ('P5_SENT', 'P6_REPLIED', 'P7_QUALIFIED')
           AND (p.network_degree = '1' OR inv.accepted_at IS NOT NULL)
           AND NOT EXISTS (SELECT 1 FROM linkedin_threads t ${THREAD_MATCH})
-        ORDER BY (dr.id IS NOT NULL) DESC, inv.accepted_at DESC NULLS LAST, p.priority NULLS LAST, p.icp_score DESC NULLS LAST
+        ORDER BY (dr.id IS NOT NULL) DESC, inv.accepted_at DESC NULLS LAST, p.priority NULLS LAST, ${RANK}
         LIMIT 50`);
 
     // ── Send: connection requests filed and waiting for the owner's tap ────────────────────────────────────
@@ -80,7 +84,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       `SELECT ${PEOPLE}, oa.id AS approval_id, oa.created_at AS at, oa.message AS note
          FROM outreach_approvals oa JOIN leads p ON p.id = oa.prospect_id ${JOINS}
         WHERE p.icp_profile_id = $1 AND oa.kind = 'connect' AND oa.status = 'pending'
-        ORDER BY p.priority NULLS LAST, p.icp_score DESC NULLS LAST, oa.created_at LIMIT 50`);
+        ORDER BY p.priority NULLS LAST, ${RANK}, oa.created_at LIMIT 50`);
 
     // ── Follow up: messaged, no answer, the cadence timer is due (or a follow-up draft already waits) ──────
     const follow = await q(
@@ -104,7 +108,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
                         WHERE e.prospect_id = p.id AND e.kind = 'linkedin' ORDER BY e.created_at DESC LIMIT 1) lk ON true
         WHERE ${OPEN} AND p.linkedin_public_id IS NULL AND p.linkedin_member_id IS NULL
           AND lk.result IN ('ambiguous', 'candidates')
-        ORDER BY p.priority NULLS LAST, p.icp_score DESC NULLS LAST LIMIT 50`);
+        ORDER BY p.priority NULLS LAST, ${RANK} LIMIT 50`);
 
     // ── Counts behind the lanes ────────────────────────────────────────────────────────────────────────────
     const counts = (await q(

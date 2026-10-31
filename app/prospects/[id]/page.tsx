@@ -14,6 +14,8 @@ import type { ActAs, IntroRequestLite, JourneyKey, Prospect } from '@/lib/prospe
 import { relativeTime, formatDate } from '@/lib/time';
 import { SIGNAL_LABELS } from '@/lib/cohorts';
 import PriorityPicker from '@/components/PriorityPicker';
+import ScoreBadge from '@/components/ScoreBadge';
+import TrustCard from '@/components/prospect/TrustCard';
 
 interface Brief {
   id: string; summary: string | null; pain_hypotheses: string | null; why_now_signals: string | null;
@@ -147,9 +149,14 @@ export default function ProspectDetailPage() {
               )}
             </div>
           </div>
-          {(prospect.company_summary || prospect.cohort_why) && (
+          {(prospect.company_summary || prospect.cohort_why || prospect.trust_total != null) && (
             <div className="rounded-xl p-3 text-sm space-y-1" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-              {prospect.cohort_why && (
+              {prospect.trust_total != null ? (
+                <div className="flex items-center gap-2 text-xs">
+                  <ScoreBadge s={prospect} prospectId={prospect.id} size="md" onChanged={() => void fetchData(true)} />
+                  <span style={{ color: 'var(--accent)' }}>{prospect.trust_why}</span>
+                </div>
+              ) : prospect.cohort_why && (
                 <div className="flex items-center gap-2 text-xs">
                   {prospect.cohort_score != null && <span className="font-semibold tabular-nums px-2 py-0.5 rounded-md" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>{prospect.cohort_score}</span>}
                   <span style={{ color: 'var(--accent)' }}>{prospect.cohort_why}</span>
@@ -168,6 +175,8 @@ export default function ProspectDetailPage() {
         <div className="p-6 grid grid-cols-3 gap-6">
           {/* Left — who they are, fit, enrichment */}
           <div className="space-y-4">
+            {/* the trust score's parts, path, research and ✓ / ↓ history (095) */}
+            <TrustCard prospectId={prospect.id} canResearch />
             <Section k="imported" n={1} title="Who">
               <p className="text-sm font-medium">{prospect.full_name || '—'}</p>
               {prospect.title && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{prospect.title}</p>}

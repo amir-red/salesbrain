@@ -175,6 +175,10 @@ export default function Queue({ icpId, lane, data, onChanged }: {
               <span className="text-xs truncate" style={{ color: finished ? 'var(--text-muted)' : 'var(--text)' }} title={p.detail ?? undefined}>
                 {finished ?? p.detail ?? ''}
                 {!finished && p.priority ? <span className="ml-1.5 px-1 rounded text-[10px]" style={{ background: 'var(--bg-input)' }}>P{p.priority}</span> : null}
+                {!finished && p.trust_total != null ? (
+                  <span className="ml-1.5 px-1 rounded text-[10px] tabular-nums" title={`Trust score ${p.trust_total}${p.trust_why ? `: ${p.trust_why}` : ''}`}
+                    style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>{p.trust_total}</span>
+                ) : null}
               </span>
               <span className="flex items-center gap-1.5 justify-end">
                 {!finished && lane === 'answer' && p.thread_id && p.channel && (

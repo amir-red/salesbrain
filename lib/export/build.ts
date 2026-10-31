@@ -203,22 +203,30 @@ interface ProspectRow {
   last_replied_at: string | null; reply_status: string | null; next_followup_at: string | null; source_type: string | null;
   source_detail: string | null; owner_name: string | null; website: string | null; industry: string | null;
   company_size: string | null; hq_location: string | null; created_at: string; research_summary: string | null;
+  trust_total: number | null; trust_authority: number | null; trust_trust: number | null; trust_fit: number | null;
+  trust_openness: number | null; trust_why: string | null; trust_via: string | null; value_to_us: string | null;
+  multiplier: number | null;
 }
 
+// The trust score (095) rides along as plain columns; the subselects keep the export working before the table exists.
 const PROSPECT_SELECT = `
   SELECT p.id, p.stage, c.full_name, c.title, a.name AS company, c.email, c.phone, c.linkedin_url, p.linkedin_public_id,
          p.candidate_location, p.network_degree, ip.name AS icp_name, p.icp_score, p.fit_label, p.qualification_reason,
          p.priority_rank,
+         ts.total AS trust_total, ts.authority AS trust_authority, ts.trust AS trust_trust, ts.fit AS trust_fit,
+         ts.openness AS trust_openness, ts.why AS trust_why, ts.trust_via, ts.value_to_us, ts.multiplier,
          (SELECT li.status FROM linkedin_invitations li WHERE li.prospect_id = p.id ORDER BY li.sent_at DESC NULLS LAST LIMIT 1) AS invitation_status,
          (SELECT count(*)::int FROM outreach_approvals o WHERE o.prospect_id = p.id AND o.sent_at IS NOT NULL) AS messages_sent,
          p.last_contacted_at, p.touch_count, p.last_replied_at, p.reply_status, p.next_followup_at, p.source_type,
          p.source_detail, u.name AS owner_name, a.website, a.industry, a.company_size, a.hq_location, p.created_at,
          p.research_summary
-    FROM prospects p
+    FROM leads p -- the one table (088): the prospects view lacks the card columns such as priority
     LEFT JOIN contacts c ON c.id = p.contact_id
     LEFT JOIN accounts a ON a.id = p.account_id
     LEFT JOIN users u ON u.id = p.owner_user_id
-    LEFT JOIN icp_profiles ip ON ip.id = p.icp_profile_id`;
+    LEFT JOIN icp_profiles ip ON ip.id = p.icp_profile_id
+    LEFT JOIN trust_scores ts ON ts.prospect_id = p.id`;
+const PROSPECT_ORDER = `ORDER BY p.priority NULLS LAST, ts.total DESC NULLS LAST, p.priority_rank NULLS LAST, p.icp_score DESC NULLS LAST, p.created_at DESC`;
 
 function researchText(raw: string | null): string {
   if (!raw) return '';
@@ -242,6 +250,15 @@ function prospectCols(): Col<ProspectRow>[] {
     { h: 'Location', w: 22, v: (p) => p.candidate_location },
     { h: 'Degree', w: 7, v: (p) => p.network_degree },
     { h: 'Stage', w: 20, v: (p) => p.stage },
+    { h: 'Score', w: 7, v: (p) => p.trust_total },
+    { h: 'Authority', w: 9, v: (p) => p.trust_authority },
+    { h: 'Trust path', w: 9, v: (p) => p.trust_trust },
+    { h: 'Market fit', w: 9, v: (p) => p.trust_fit },
+    { h: 'Openness', w: 9, v: (p) => p.trust_openness },
+    { h: 'Why ranked', w: 50, v: (p) => p.trust_why },
+    { h: 'Via', w: 14, v: (p) => p.trust_via },
+    { h: 'Value to us', w: 14, v: (p) => p.value_to_us },
+    { h: 'Knows on lists', w: 9, v: (p) => p.multiplier },
     { h: 'Fit score', w: 9, v: (p) => p.icp_score },
     { h: 'Fit', w: 14, v: (p) => p.fit_label },
     { h: 'Why', w: 50, v: (p) => p.qualification_reason },
@@ -276,7 +293,7 @@ async function prospects(args: Record<string, string>, who: Who): Promise<Built>
   try {
     const { rows } = await client.query<ProspectRow>(
       `${PROSPECT_SELECT} ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-        ORDER BY p.priority_rank NULLS LAST, p.icp_score DESC NULLS LAST, p.created_at DESC LIMIT ${SHEET_ROW_CAP}`, vals);
+        ${PROSPECT_ORDER} LIMIT ${SHEET_ROW_CAP}`, vals);
     return finish('salesbrain-prospects', [{ name: 'Prospects', ws: sheetOf(prospectCols(), rows), rows: rows.length }], 0);
   } finally { client.release(); }
 }
@@ -301,7 +318,7 @@ async function icp(args: Record<string, string>, who: Who): Promise<Built> {
   try {
     const { rows: leads } = await client.query<ProspectRow>(
       `${PROSPECT_SELECT} WHERE p.icp_profile_id = $1
-        ORDER BY p.priority_rank NULLS LAST, p.icp_score DESC NULLS LAST, p.created_at DESC LIMIT ${SHEET_ROW_CAP}`, [args.icp_id]);
+        ${PROSPECT_ORDER} LIMIT ${SHEET_ROW_CAP}`, [args.icp_id]);
     const { rows: funnel } = await client.query<{ stage: string; n: number; avg_score: number | null; with_email: number; with_profile: number }>(
       `SELECT p.stage, count(*)::int AS n, round(avg(p.icp_score))::int AS avg_score,
               count(c.email) FILTER (WHERE c.email <> '')::int AS with_email,

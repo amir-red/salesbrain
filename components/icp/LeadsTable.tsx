@@ -7,11 +7,13 @@ import { relativeTime } from '@/lib/time';
 import { DegreeWarm } from '@/components/icp/IcpLeads';
 import { COHORTS, SIGNAL_LABELS, cohortName, type CohortInfo } from '@/lib/cohorts';
 import PriorityPicker from '@/components/PriorityPicker';
+import ScoreBadge from '@/components/ScoreBadge';
+import type { TrustSummary } from '@/lib/trust';
 import { CONNECT_COLOR, CONNECT_LABEL, RUNG_LABEL, connectState, describeLookup, type ConnectState, type ProfileLookup } from '@/lib/connect';
 import { SkeletonRows } from '@/components/panel/Skeleton';
 
 /** The slim row GET /api/icp/[id]/leads returns; the heavy parts (`LeadDetail`) load when a row is expanded. */
-export interface Lead {
+export interface Lead extends TrustSummary {
   id: string; stage: string; icp_score: number | null; fit_label: string | null;
   researched: boolean;
   source_type: string | null; source_detail: string | null; created_at: string; scored_at: string | null;
@@ -273,7 +275,7 @@ export default function LeadsTable({ icpId, signature = '', pageSize = PAGE }: {
                       <td className="p-2">
                         <Link href={`/prospects/${l.id}`} className="font-medium hover:underline">{l.full_name || '—'}</Link>
                         <div className="text-xs truncate max-w-[320px]" style={{ color: 'var(--text-muted)' }}>{l.title || '—'}</div>
-                        {l.cohort_why && <div className="text-[11px] max-w-[320px]" style={{ color: 'var(--accent)' }}>{l.cohort_why}</div>}
+                        {(l.trust_why || l.cohort_why) && <div className="text-[11px] max-w-[320px]" style={{ color: 'var(--accent)' }}>{l.trust_why || l.cohort_why}</div>}
                         {unsorted && (
                           <div className="mt-1 flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
                             {l.cohort_guess && <span>guess: {cohortName(l.cohort_guess)}</span>}
@@ -298,7 +300,10 @@ export default function LeadsTable({ icpId, signature = '', pageSize = PAGE }: {
                         {l.company_summary && <div className="mt-0.5 max-w-[340px] line-clamp-2" title={l.company_summary} style={{ color: 'var(--text)' }}>{l.company_summary}</div>}
                       </td>
                       <td className="p-2">
-                        {l.cohort_score != null ? (
+                        {l.trust_total != null ? (
+                          // the trust score (095): authority · trust path · fit · openness; click = the parts and ✓ / ↓
+                          <ScoreBadge s={l} prospectId={l.id} onChanged={() => void load()} />
+                        ) : l.cohort_score != null ? (
                           <button onClick={() => openWhy(l.id)} className="text-xs font-semibold tabular-nums px-2 py-0.5 rounded-md"
                             style={{ background: `color-mix(in srgb, ${fitColor(l.cohort_score)} 14%, transparent)`, color: fitColor(l.cohort_score) }}
                             title="Priority: right person + company fit and early-adopter signals + warmth. Click for details.">

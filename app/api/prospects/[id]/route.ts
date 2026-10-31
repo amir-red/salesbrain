@@ -3,6 +3,7 @@ import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { canSource, parseActAs, resolveActingUser } from '@/lib/act-as';
 import { cohortsStored } from '@/lib/cohorts-server';
+import { TRUST_COLS, TRUST_NULL_COLS, trustStored } from '@/lib/trust-server';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
@@ -25,18 +26,20 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     ? `LEFT JOIN cohort_scores cs ON cs.prospect_id = p.id
        LEFT JOIN account_profiles ap ON ap.account_id = p.account_id AND ap.kind = 'company'`
     : '';
+  const trust = await trustStored();  // 095: the trust score for the header badge
   const client = await pool.connect();
   try {
     const { rows } = await client.query(
       `SELECT p.*, a.name as company_name, a.domain, a.industry, a.company_size, a.hq_location, a.website,
               c.full_name, c.email, c.title, c.seniority, c.persona_type, c.phone, c.linkedin_url,
-              u.name as owner_name, i.name AS list_name ${cohortCols}
+              u.name as owner_name, i.name AS list_name ${cohortCols}, ${trust ? TRUST_COLS : TRUST_NULL_COLS}
        FROM leads p -- the one table (088): the prospects view lacks the card columns such as priority
        LEFT JOIN accounts a ON a.id = p.account_id
        LEFT JOIN contacts c ON c.id = p.contact_id
        LEFT JOIN users u ON u.id = p.owner_user_id
        LEFT JOIN icp_profiles i ON i.id = p.icp_profile_id
        ${cohortJoin}
+       ${trust ? 'LEFT JOIN trust_scores ts ON ts.prospect_id = p.id' : ''}
        WHERE p.id = $1`,
       [params.id]
     );

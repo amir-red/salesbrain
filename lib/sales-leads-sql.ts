@@ -10,6 +10,8 @@ export const SORTS: Record<LeadSort, string> = {
   newest: 'l.created_at DESC',
   // needs the `warmth` output column (the /sales-leads list selects it; the export falls back to priority)
   warmth: 'warmth DESC NULLS LAST, COALESCE(l.priority, ip.priority) NULLS LAST, l.rank NULLS LAST, l.created_at DESC',
+  // needs the `trust_total` output column (095; the list selects it; the export falls back to priority)
+  score: 'trust_total DESC NULLS LAST, COALESCE(l.priority, ip.priority) NULLS LAST, l.rank NULLS LAST, l.created_at DESC',
 };
 
 /** Teammates for the back / front office pickers: real logins, no service stubs. */
