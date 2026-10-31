@@ -2942,6 +2942,16 @@ access change by sending a real message from an unknown account, not by reading 
 
 ### 5.ch The trust score — one 100-point rank, and the trust-research agent (Mateo's "agent 2") (2026-10-31, feat/trust-scoring, migration 095)
 
+**LIVE 2026-10-31 (0.75.0)**: 095 applied (cohort rank columns dropped), app on Production (run 41210224440), ring deployed
+(profile `trust-research` rendered, jobs `agent:trust-research:run` 01:30 + `:review` Sun 08:30, smoke 0.75.0). First
+`crm_trust_rescore` as Amir: 3,959 people scored — top ≥ 70: 7, good 50–69: 141, fair 30–49: 2,084, low: 1,727. The
+distribution is honest about the data: NRW averages 30 (104 of 2,190 with any path), PE growth 43 (43 with a path), the
+VC list 36 with 4 paths. Top of the whole book: Rory Gaston (Saragossa, 90, via Hannes warm), the Accordion partners (76,
+via Mateo cool), Kentaro Nagai (71, via Mateo hot). Nothing researched yet — the first research night fills openness and
+confirms roles. Rehearsals from a laptop: the pooler drops a session-mode connection after ~20 s of one query, and the
+dropped session stays `idle in transaction` holding the uncommitted CREATE TABLE lock until terminated (two had to be
+ended by hand); run heavy rehearsals on the box, never from here.
+
 From Mateo's playbook T1 and the 2026-10-30 call: "fit alone did not convert; the trust path and authority decided", "not
 just business value but trust value, then a proper research on this person". What the data said on 31 Oct: 248 warm/hot
 ties, all 45 warm people on lists already engaged; outreach answers only when warm (own network 5/10 answered, a bare
