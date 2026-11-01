@@ -3020,7 +3020,7 @@ Plan `~/.claude/plans/quirky-finding-lemon.md`.
 - Not built: the agent 3 network value-matching (needs a financial data provider), a note template / sequence design,
   Telegram buttons for ✓ / ↓, learning the weights automatically (Amir chose propose + apply).
 
-### 5.ci The team's LinkedIn networks as a stored asset (2026-11-01, feat/linkedin-network, core/hermes 0.76.0, migration 096)
+### 5.ci The team's LinkedIn networks as a stored asset (2026-11-01, feat/linkedin-network, core/hermes 0.76.3, migration 096)
 
 Amir: "do we have all Mateo's connections?" — no: LinkedIn said 2,096, the graph held 302. Then: "sync Mateo's and
 Matthias's networks (they are not leads), keep syncing new ones, use the stored data instead of the API, feed
@@ -3058,6 +3058,11 @@ re-enabled by a password reset — his data lived under the Zeami stubs and is g
 - **Daily connector**: `conductor._LIST_SQL` also excludes anyone in the sender's / holder's live `linkedin_relations`
   (slug, member id or person) — `network_degree` was measured by whichever account searched the person (the David Rowley
   / Vishal Garg refusals).
+- **LIVE 2026-11-01 (0.76.3, 096 applied; kernel + ring only, app code unchanged so no Production push).** Mateo's mirror ran
+  to the end: 22 pages, 2,043 relations with headlines, 2,043 edges, 0 retired. His warmth: cool 283 → 2,020, warm 21 and hot 21
+  unchanged (a bare connection is only "cool"); the trust rescore moved top 7 → 8, good 141 → 163. Fixed by that first real walk:
+  decayed 0.0 strength became int 0 and psycopg refused the mixed list; `GraphSyncState` lacked `mirror_started_at`; the restart
+  check indexed a dict row by position. **Matthias's CSV and Mateo's CSV are NOT imported yet** (Profile → Imports, or send the file to the bot).
 - Export of the day: `Sales CRM/reports/Mateo LinkedIn connections 2026-11-01.xlsx` (2,043 rows read live, no write).
 - Not built: part 5 (score network people against the cohorts without making leads, `/network` fit filter, "add them"),
   connect caps summed across a member's rows, a deploy check for duplicate member rows (they are wanted now).
