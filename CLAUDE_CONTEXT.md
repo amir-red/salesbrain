@@ -3062,6 +3062,25 @@ re-enabled by a password reset — his data lived under the Zeami stubs and is g
 - Not built: part 5 (score network people against the cohorts without making leads, `/network` fit filter, "add them"),
   connect caps summed across a member's rows, a deploy check for duplicate member rows (they are wanted now).
 
+### 5.cj A waiting connection card comes back to the bottom of the chat (2026-11-01, feat/connect-card-resurface, migration 097)
+
+Amir, on Matthias's Telegram: Tobias Schulte's card (filed Oct 31) sat buried under digests; "too many messages, the user
+might miss it". A card was posted once and never reminded, and while it waited no new batch could be filed for that sender.
+Connection batch cards only (Amir's choice): message drafts, follow-ups and campaign cards are unchanged.
+- **097**: `connect_batches.last_posted_at` (stamped by `attach_batch_message`, NULL = never delivered).
+- **Kernel** (`commands/conductor.py`): `lifecycle_tick` no longer skips a sender with a waiting card; it plans new people once
+  the card was last posted 20+ h ago and nobody joined it in that time. `file_connect_batch` joins the waiting card (still
+  one pending per person; "nobody new to add" no longer deletes anything) and the event carries `replaces {chat_id,
+  message_id}`. `resurface_connect_cards` = the same event for waiting cards not posted for 20 h, after `connect_batch_hour`,
+  with the conductor on and the kill switch not triggered, only for senders with a Telegram link. `_batch_card_text` leaves
+  out expired requests and opens with "⏳ Waiting since Sat 31 Oct · expires …" once the card is 20+ h old.
+  `expire_batches` now closes a card whose requests have all run out.
+- **Ring**: `deliver.py` sends the new card, attaches it, then `_retire_card` deletes the old message (Telegram may refuse an
+  old one: it is edited to "⏳ Moved to the newest message." with no buttons). A failed send leaves the old card and stamps
+  nothing, so the next hourly run retries. `lead_conductor.py` step 1b; `cards_reposted` in the run detail.
+- The send rules are unchanged: nothing goes out without the tap; caps and the once-only gate apply per request.
+- Tests: `test_conductor_db.py` (real Postgres), `test_connect_progress.py`. Not seen live yet: a real repost and delete.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
