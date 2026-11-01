@@ -3039,9 +3039,9 @@ re-enabled by a password reset — his data lived under the Zeami stubs and is g
   since `mirror_started_at` as removed and deletes their `linkedin_relation` edges (seen again later → back). Fixed on the
   way: `mirror_started_at` was overwritten with NULL on every page after the first.
 - **One LinkedIn member, several rows** (Amir: Mateo's three Unipile sessions STAY for Hannes / Amir as back office — one
-  of them sits under Hannes's user): `linkedin.relations_primary` = the OLDEST active row on a `provider_id` holds the
-  network; the graph mirror, the hourly relations poll, invitation reconciliation and `record_relation` skip the other
-  rows ("network held by <owner>"); conversations still sync on every row. Connect caps are NOT yet summed across rows.
+  of them sits under Hannes's user): `linkedin.relations_primary` = the row under the member's own user (name = display name), else the oldest active
+  row on a `provider_id`, holds the network; the graph mirror and `record_relation` skip the other rows ("network held by <owner>"). Every row still reads
+  the relations page and reconciles its OWN request ledger (Hannes's row: 107 pending, 1,287 leads), and syncs conversations. Connect caps are NOT yet summed across rows.
 - **New connections get ONE profile fetch** (`linkedin_sync._profile_new_relation`, ≤ 20 per run, profile_view class):
   current employer → `people.organization` (blank only), title / city / employers / schools / member id → `facets`
   (`graph.apply_relation_profile`). `record_relation` now creates the person node (slug + member-id alias) and matches by
