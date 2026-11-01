@@ -3020,6 +3020,48 @@ Plan `~/.claude/plans/quirky-finding-lemon.md`.
 - Not built: the agent 3 network value-matching (needs a financial data provider), a note template / sequence design,
   Telegram buttons for ✓ / ↓, learning the weights automatically (Amir chose propose + apply).
 
+### 5.ci The team's LinkedIn networks as a stored asset (2026-11-01, feat/linkedin-network, core/hermes 0.76.0, migration 096)
+
+Amir: "do we have all Mateo's connections?" — no: LinkedIn said 2,096, the graph held 302. Then: "sync Mateo's and
+Matthias's networks (they are not leads), keep syncing new ones, use the stored data instead of the API, feed
+relationships / trust / warm." Plan `~/.claude/plans/linkedin-network-as-asset.md` (parts 1–4 + 6 here; part 5 "network fit"
+not built). Same day, data: Yasin / Bruk / Esmail purged (`store/purge_users.py`, FK-driven cascade, dry run by default;
+backup `purge-users-20261101164539` on the box; Esmail's 3 active deals archived, user rows disabled; Bruk's login
+re-enabled by a password reset — his data lived under the Zeami stubs and is gone as asked).
+- **The bug**: `policy/graph.py::mirror_advance` ended the mirror on any page shorter than `relations_page_size`; Unipile
+  returns 93–99 of 100 with a live cursor and the real end is an EMPTY page (Mateo: 22 pages). Now complete only on no
+  cursor or an empty page. `mirror_restart_reason` (pure): a completed mirror is walked again when the owner's own
+  `connections_count` (one `get_profile` on the owner's slug) exceeds `relations_seen` by `restart_growth` (5 %) + 5, or
+  the last full walk is older than `remirror_days` (7). `graph_core.sync_owner` applies it (`kg.restart_mirror`).
+- **096**: `linkedin_relations.headline` (kept now — it was parsed and thrown away), `last_seen_at`, `removed_at` (+ partial
+  indexes); policy keys `remirror_days`, `restart_growth`, `profile_new_relations_per_run` on `agents.graph_sync`.
+  `record_relations_page` stamps `last_seen_at`; when a full walk completes, `retire_unseen_relations` marks rows not seen
+  since `mirror_started_at` as removed and deletes their `linkedin_relation` edges (seen again later → back). Fixed on the
+  way: `mirror_started_at` was overwritten with NULL on every page after the first.
+- **One LinkedIn member, several rows** (Amir: Mateo's three Unipile sessions STAY for Hannes / Amir as back office — one
+  of them sits under Hannes's user): `linkedin.relations_primary` = the OLDEST active row on a `provider_id` holds the
+  network; the graph mirror, the hourly relations poll, invitation reconciliation and `record_relation` skip the other
+  rows ("network held by <owner>"); conversations still sync on every row. Connect caps are NOT yet summed across rows.
+- **New connections get ONE profile fetch** (`linkedin_sync._profile_new_relation`, ≤ 20 per run, profile_view class):
+  current employer → `people.organization` (blank only), title / city / employers / schools / member id → `facets`
+  (`graph.apply_relation_profile`). `record_relation` now creates the person node (slug + member-id alias) and matches by
+  member id as well. **CSV exports are the enrichment layer**: `graph.sync_contact_profiles` (run in every graph sync)
+  copies Company → `people.organization` (blank only) and Position → `facets.title` from `contacts` — a LinkedIn CSV is
+  the only free source of company, position and the few emails (shown only for people who allow it).
+- **Dead accounts revoke themselves**: a Unipile 404 "Account not found" in the hourly sync → `linkedin.record_account_gone`
+  (revoked_at, audit `linkedin_account_gone`; nothing deleted, a reconnect adopts).
+- **Network-first answers**: `lookup.network_lookup(query)` (name / company / title / relation headline / thread headline
+  over the stored networks: which teammate is connected and since when, CSV holders, warmth, last thread, lists) and
+  `lookup.company_network(company)` (everyone at one firm, `connected_by_teammate`). Tools `crm_network_lookup`,
+  `crm_company_network` (crm_people, read, on MCP; 180 tools). Knowledge "Our stored networks: who do we know" + phrase
+  "Do we have an in at <company>"; persona Tool-truth rule: the store first, LinkedIn search only when it has nobody.
+- **Daily connector**: `conductor._LIST_SQL` also excludes anyone in the sender's / holder's live `linkedin_relations`
+  (slug, member id or person) — `network_degree` was measured by whichever account searched the person (the David Rowley
+  / Vishal Garg refusals).
+- Export of the day: `Sales CRM/reports/Mateo LinkedIn connections 2026-11-01.xlsx` (2,043 rows read live, no write).
+- Not built: part 5 (score network people against the cohorts without making leads, `/network` fit filter, "add them"),
+  connect caps summed across a member's rows, a deploy check for duplicate member rows (they are wanted now).
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
