@@ -136,19 +136,10 @@ export async function importContactsText(
     stats.contacts_created += rowCount ?? 0;
   }
 
-  // Imported contacts used to stop here — they became rows and nothing else,
-  // never entering the pipeline (12,932 contacts had produced zero prospects).
-  // Score them against the user's active ICP and promote the fits; anything
-  // below the policy floor stays a contact rather than flooding the queue.
-  // Best-effort: a scoring hiccup must not fail an otherwise good import.
-  let qualified: Record<string, unknown> | null = null;
-  if (stats.contacts_created > 0) {
-    try {
-      qualified = await kernelCall('crm_prospect_auto_qualify', {}, userId);
-    } catch (err) {
-      qualified = { skipped: err instanceof Error ? err.message : 'auto-qualify unavailable' };
-    }
-  }
+  // Imported connections are the owner's network, not prospects: nobody becomes a
+  // prospect or a lead until a person adds them (Amir, 2026-11-02). Scoring them on
+  // upload used to turn every fit into a prospect. crm_prospect_auto_qualify stays
+  // as a tool for when someone asks for it.
 
   // Hand the relationship graph to the timer rather than building it inline: a
   // 13k-row import is minutes of work and would blow the request. Queuing is
@@ -162,5 +153,5 @@ export async function importContactsText(
     }
   }
 
-  return { status: 200, body: { ...stats, qualified, graph } };
+  return { status: 200, body: { ...stats, graph } };
 }
