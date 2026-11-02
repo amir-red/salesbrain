@@ -3064,6 +3064,7 @@ re-enabled by a password reset — his data lived under the Zeami stubs and is g
   decayed 0.0 strength became int 0 and psycopg refused the mixed list; `GraphSyncState` lacked `mirror_started_at`; the restart
   check indexed a dict row by position. **Matthias's CSV and Mateo's CSV are NOT imported yet** (Profile → Imports, or send the file to the bot).
 - Export of the day: `Sales CRM/reports/Mateo LinkedIn connections 2026-11-01.xlsx` (2,043 rows read live, no write).
+- **Imports no longer make prospects (0.76.4, 2026-11-02, Amir)**: `lib/imports/contacts.ts` (Profile → Imports, bot `crm_import_contacts`) adds contacts + queues the graph, nothing else. `crm_prospect_auto_qualify` stays, only when someone asks. Mateo's export (2,018 new contacts) and Matthias's (52) imported the same day, no prospects created.
 - Not built: part 5 (score network people against the cohorts without making leads, `/network` fit filter, "add them"),
   connect caps summed across a member's rows, a deploy check for duplicate member rows (they are wanted now).
 
