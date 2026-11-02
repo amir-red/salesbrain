@@ -3070,6 +3070,8 @@ re-enabled by a password reset — his data lived under the Zeami stubs and is g
 
 ### 5.cj A waiting connection card comes back to the bottom of the chat (2026-11-01, feat/connect-card-resurface, migration 097)
 
+**LIVE 2026-11-02 (0.77.0)**: 097 applied, ring deployed. App code unchanged, no Production push.
+
 Amir, on Matthias's Telegram: Tobias Schulte's card (filed Oct 31) sat buried under digests; "too many messages, the user
 might miss it". A card was posted once and never reminded, and while it waited no new batch could be filed for that sender.
 Connection batch cards only (Amir's choice): message drafts, follow-ups and campaign cards are unchanged.
