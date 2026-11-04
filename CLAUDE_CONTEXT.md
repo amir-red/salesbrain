@@ -3089,7 +3089,9 @@ Connection batch cards only (Amir's choice): message drafts, follow-ups and camp
 - The send rules are unchanged: nothing goes out without the tap; caps and the once-only gate apply per request.
 - Tests: `test_conductor_db.py` (real Postgres), `test_connect_progress.py`. Not seen live yet: a real repost and delete.
 
-### 5.ck The AI learns the sender — one drafter in each sender's measured voice, implicit feedback, trust ladder (2026-11-04, feat/sender-learning, core migrations 098 + 099, NOT yet merged)
+### 5.ck The AI learns the sender — one drafter in each sender's measured voice, implicit feedback, trust ladder (2026-11-04, feat/sender-learning, core migrations 098 + 099)
+
+**LIVE 2026-11-04 (0.78.0)**: 098 + 099 applied, ring deployed (smoke 0.78.0, one gateway, crons sender-learn 02:45, drafting-auto-send, linkedin-backfill 03:05, funnel-refresh */10 created), app on Production (run 41856521529). First full corpus refresh + profiles activated on the box: Amir 26 (LinkedIn 18, email 8), Hannes 50, Mateo 65 (LinkedIn 50, WhatsApp 15), Matthias 56. **Known mislabel:** the LinkedIn account under Hannes's user is Mateo's own member (`mateo-klemmayer-908a7aa`, §5.ci), so Hannes's LinkedIn corpus/profile = Mateo's 50 messages (76 rows duplicated across the two owners). Drafts sent from that account are in the right voice (Mateo's); the Voice tab calls it Hannes's. Fix if wanted: attribute LinkedIn messages to the member's own user (`linkedin.relations_primary`), not the account row's owner. Not yet seen live: a trusted slice auto-sending, the nightly eval's first row, a WhatsApp account connected.
 
 Amir, after "our outreach drafts are too generic, they will know it's AI": "it's not about showing the person — it's about
 the AI learning more, until human approval eventually stops; include Hermes' computer use to import WhatsApp, email and
