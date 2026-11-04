@@ -1,20 +1,26 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { diffWords } from '@/lib/diff-words';
 import type { FeedbackResult, VoiceRule } from '@/lib/voice';
+import { Send, Sparkle } from '@/components/icons';
 
 /**
- * The Before / After review of an AI draft (core 098, Mateo's sketch 2026-11-04). Left: what the AI proposed, read-only.
- * Right: the text that will go out, editable. Between them: how good the proposal was, 1–5. Under the right column:
- * one line on what you changed and what the AI missed; folded under it, why the AI wrote it and the facts it used.
- * Under the left column, folded: the sender's priorities the AI was given.
+ * The Before / After review of an AI draft, in a popup (core 098, Mateo's sketch 2026-11-04). Top: what they wrote.
+ * Two columns: the AI's proposal (read-only) and the text that goes out (editable, "show changes" marks the edits).
+ * Under them: how good the proposal was, 1–5, and one line on what the AI missed. Folded: why the AI wrote it, and the
+ * sender's priorities it was given. Footer: Draft again · Save feedback only · Queue for the sender's approval.
  *
- * Nothing here sends. The parent files `after` (with the AI's text as draft_original) and then sends the rating and the
- * line through `onFeedback`; or, with nothing to file, teaches without filing (`onTeachOnly`).
+ * Nothing here sends. The parent files `after` (the AI's text kept as draft_original) and sends the rating and the line
+ * along, or teaches without filing.
  */
 export interface DraftReviewProps {
-  label: string;                                   // "LinkedIn reply", "first message on LinkedIn", …
+  open: boolean;
+  onClose: () => void;
+  title: string;                                   // "Reply to Jannik Bühring"
+  eyebrow: string;                                 // "LinkedIn reply · from Matthias's account"
+  context?: { who: string; when: string | null; text: string } | null;   // their last message
+  drafting: boolean;
   before: string;
   after: string;
   onAfter: (v: string) => void;
@@ -26,91 +32,191 @@ export interface DraftReviewProps {
   onRating: (n: number | null) => void;
   explanation: string;
   onExplanation: (v: string) => void;
-  disabled?: boolean;
+  onRedraft: () => void;
+  onTeach: () => void;
+  onQueue: () => void;
+  busy: '' | 'draft' | 'teach' | 'queue';
+  canQueue: boolean;
+  queueBlockedWhy?: string | null;
+  error?: string | null;
+  learned?: FeedbackResult | null;
+  teachNote?: string | null;
 }
 
-const RATING_LABEL: Record<number, string> = { 1: 'unusable', 2: 'weak', 3: 'needed work', 4: 'small fixes', 5: 'send as is' };
+const RATINGS: { n: number; label: string }[] = [
+  { n: 1, label: 'Unusable' }, { n: 2, label: 'Weak' }, { n: 3, label: 'Needed work' }, { n: 4, label: 'Small fixes' }, { n: 5, label: 'Send as is' },
+];
 
 export default function DraftReview(p: DraftReviewProps) {
+  const [showDiff, setShowDiff] = useState(false);
   const [showWhy, setShowWhy] = useState(false);
   const [showPrio, setShowPrio] = useState(false);
-  const [showDiff, setShowDiff] = useState(false);
-  const changed = p.after.trim() !== p.before.trim();
-  const box = { background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: '0.5rem' } as const;
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!p.open) return;
+    closeRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') p.onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [p.open, p.onClose]);
+  if (!p.open) return null;
+
   const first = p.senderName.split(' ')[0];
+  const changed = !!p.before && p.after.trim() !== p.before.trim();
+  const hasFeedback = !!p.rating || !!p.explanation.trim() || changed;
+  const pane = 'rounded-xl px-4 py-3 text-[13.5px] leading-relaxed whitespace-pre-wrap h-full min-h-[15rem]';
+  const ghost = { background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text)' } as const;
 
   return (
-    <div className="space-y-2">
-      <div className="text-xs font-medium">Proposed: {p.label}</div>
-      <div className="grid gap-3 md:grid-cols-[1fr_auto_1fr] items-start">
-        {/* Before */}
-        <div className="space-y-1 min-w-0">
-          <div className="z-eyebrow">Before · the AI&apos;s proposal</div>
-          <p className="text-[13px] leading-relaxed whitespace-pre-wrap px-3 py-2 min-h-[8rem]"
-            style={{ ...box, background: 'var(--bg-input)', color: 'var(--text-muted)' }}>{p.before}</p>
-        </div>
+    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-8 overflow-y-auto"
+      style={{ background: 'color-mix(in srgb, var(--text) 40%, transparent)' }}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) p.onClose(); }}>
+      <div role="dialog" aria-modal="true" aria-label={p.title}
+        className="w-full max-w-5xl rounded-2xl shadow-xl flex flex-col" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
 
-        {/* Rating */}
-        <div className="flex md:flex-col items-center gap-1.5 md:pt-6" role="radiogroup" aria-label="How good was the proposal, 1 to 5">
-          <span className="text-[11px] md:text-center md:w-28 leading-tight" style={{ color: 'var(--text-muted)' }}>How good was the proposal?</span>
-          {[1, 2, 3, 4, 5].map((n) => (
-            <button key={n} type="button" role="radio" aria-checked={p.rating === n} disabled={p.disabled}
-              onClick={() => p.onRating(p.rating === n ? null : n)} title={RATING_LABEL[n]}
-              className="w-8 h-8 rounded-full text-xs tabular-nums disabled:opacity-50"
-              style={{ background: p.rating === n ? 'var(--accent)' : 'var(--bg-card)', color: p.rating === n ? 'var(--accent-fg)' : 'var(--text)', border: '1px solid var(--border)' }}>{n}</button>
-          ))}
-          <span className="text-[10px] h-3 md:text-center" style={{ color: 'var(--text-muted)' }}>{p.rating ? RATING_LABEL[p.rating] : ''}</span>
-        </div>
-
-        {/* After */}
-        <div className="space-y-1 min-w-0">
-          <div className="z-eyebrow flex items-center gap-2">After · what goes out
-            {changed && <button type="button" onClick={() => setShowDiff((v) => !v)} className="normal-case tracking-normal underline font-normal" style={{ color: 'var(--text-muted)' }}>{showDiff ? 'hide changes' : 'show changes'}</button>}
+        {/* header */}
+        <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
+          <div className="min-w-0">
+            <div className="z-eyebrow">{p.eyebrow}</div>
+            <h2 className="text-lg font-semibold mt-0.5">{p.title}</h2>
           </div>
-          {showDiff && changed ? (
-            <p className="text-[13px] leading-relaxed whitespace-pre-wrap px-3 py-2 min-h-[8rem]" style={box}>
-              {diffWords(p.before, p.after).map((d, i) => d.op === 'same' ? <span key={i}>{d.text}</span>
-                : d.op === 'del' ? <del key={i} style={{ color: 'var(--red)', opacity: 0.8 }}>{d.text}</del>
-                  : <ins key={i} style={{ color: 'var(--green)', textDecoration: 'none', fontWeight: 600 }}>{d.text}</ins>)}
-            </p>
-          ) : (
-            <textarea value={p.after} onChange={(e) => p.onAfter(e.target.value)} rows={Math.min(14, Math.max(6, p.after.split('\n').length + 2))}
-              disabled={p.disabled} aria-label="The text that goes out — edit it"
-              className="w-full text-[13px] px-3 py-2 leading-relaxed resize-y" style={{ ...box, border: '1px solid var(--accent)' }} />
-          )}
-        </div>
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-2">
-        {/* Priorities (folded) */}
-        <div>
-          <button type="button" onClick={() => setShowPrio((v) => !v)} className="text-[11px] underline" style={{ color: 'var(--text-muted)' }}>
-            {showPrio ? '▾' : '▸'} {first}&apos;s priority list ({p.priorities?.length ?? 0})
+          <button ref={closeRef} type="button" onClick={p.onClose} aria-label="Close"
+            className="w-9 h-9 rounded-full inline-flex items-center justify-center flex-shrink-0 hover:bg-[var(--accent-glow)]" style={{ color: 'var(--text-muted)' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
           </button>
-          {showPrio && (
-            (p.priorities?.length ?? 0) === 0
-              ? <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>No priorities yet — every explanation you write here becomes one. Order them on Brand → Voice.</p>
-              : <ol className="mt-1 space-y-0.5 text-xs list-decimal pl-5">
-                  {p.priorities!.map((r, i) => <li key={i}>{r.kind === 'never_write' ? `Never write “${r.content}”` : r.content}</li>)}
-                </ol>
-          )}
         </div>
 
-        {/* Explanation + why (folded) */}
-        <div className="space-y-1">
-          <textarea value={p.explanation} onChange={(e) => p.onExplanation(e.target.value.slice(0, 500))} rows={2} disabled={p.disabled}
-            placeholder="Short explanation: how you improved the text and what the AI missed"
-            aria-label="How you improved the text and what the AI missed"
-            className="w-full text-xs px-2.5 py-1.5 resize-y" style={box} />
-          <button type="button" onClick={() => setShowWhy((v) => !v)} className="text-[11px] underline" style={{ color: 'var(--text-muted)' }}>
-            {showWhy ? '▾' : '▸'} Why the AI wrote it
-          </button>
-          {showWhy && (
-            <div className="text-[11px] space-y-1 rounded-md p-2" style={{ background: 'var(--bg-input)' }}>
-              <div>{p.reasoning || 'No reason given.'}</div>
-              {(p.usedFacts?.length ?? 0) > 0 && <div style={{ color: 'var(--text-muted)' }}>Facts it used: {p.usedFacts!.join(' · ')}</div>}
+        <div className="px-6 py-5 space-y-5">
+          {/* what they wrote */}
+          {p.context?.text && (
+            <div className="rounded-xl px-4 py-3 text-[13px] leading-relaxed max-h-36 overflow-y-auto"
+              style={{ background: 'var(--bg-input)', borderLeft: '3px solid var(--border)' }}>
+              <div className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>
+                {p.context.who} wrote{p.context.when ? ` · ${p.context.when}` : ''}
+              </div>
+              <div className="whitespace-pre-wrap">{p.context.text}</div>
             </div>
           )}
+
+          {/* before / after */}
+          <div className="grid gap-4 md:grid-cols-2 items-stretch">
+            <section className="flex flex-col gap-1.5 min-w-0">
+              <div className="flex items-center gap-1.5 text-xs font-semibold">
+                <span style={{ color: 'var(--accent)' }}><Sparkle width={14} height={14} /></span>
+                The AI&apos;s proposal
+                <span className="font-normal" style={{ color: 'var(--text-muted)' }}>· before</span>
+              </div>
+              {p.drafting ? (
+                <div className={`${pane} flex flex-col gap-2`} style={{ background: 'var(--bg-input)' }}>
+                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Writing in {first}&apos;s voice…</span>
+                  {[92, 100, 85, 96, 60].map((w, i) => <div key={i} className="h-3 rounded animate-pulse" style={{ width: `${w}%`, background: 'var(--border)' }} />)}
+                </div>
+              ) : (
+                <div className={pane} style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>{p.before}</div>
+              )}
+            </section>
+
+            <section className="flex flex-col gap-1.5 min-w-0">
+              <div className="flex items-center gap-1.5 text-xs font-semibold">
+                <span style={{ color: 'var(--green)' }}><Send width={13} height={13} /></span>
+                What goes out
+                <span className="font-normal" style={{ color: 'var(--text-muted)' }}>· after — edit freely</span>
+                {changed && (
+                  <button type="button" onClick={() => setShowDiff((v) => !v)} className="ml-auto font-normal underline text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                    {showDiff ? 'Edit text' : 'Show my changes'}
+                  </button>
+                )}
+              </div>
+              {showDiff && changed ? (
+                <div className={pane} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                  {diffWords(p.before, p.after).map((d, i) => d.op === 'same' ? <span key={i}>{d.text}</span>
+                    : d.op === 'del' ? <del key={i} style={{ color: 'var(--red)', opacity: 0.75 }}>{d.text}</del>
+                      : <ins key={i} style={{ color: 'var(--green)', textDecoration: 'none', fontWeight: 600, background: 'color-mix(in srgb, var(--green) 10%, transparent)' }}>{d.text}</ins>)}
+                </div>
+              ) : (
+                <textarea value={p.after} onChange={(e) => p.onAfter(e.target.value)} disabled={p.drafting}
+                  aria-label="The text that goes out — edit it"
+                  className={`${pane} w-full resize-y outline-none focus:ring-2`}
+                  style={{ background: 'var(--bg-card)', border: '1.5px solid var(--accent)', color: 'var(--text)' }} />
+              )}
+            </section>
+          </div>
+
+          {/* rating */}
+          <div className="rounded-xl px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2" style={{ background: 'var(--bg-input)' }}>
+            <span className="text-xs font-semibold">How good was the AI&apos;s proposal?</span>
+            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Rating from 1 to 5">
+              {RATINGS.map((r) => {
+                const on = p.rating === r.n;
+                return (
+                  <button key={r.n} type="button" role="radio" aria-checked={on} disabled={p.drafting}
+                    onClick={() => p.onRating(on ? null : r.n)}
+                    className="inline-flex items-center gap-1.5 pl-1.5 pr-3 py-1 rounded-full text-xs transition-colors disabled:opacity-50"
+                    style={{ background: on ? 'var(--accent)' : 'var(--bg-card)', color: on ? 'var(--accent-fg)' : 'var(--text)', border: `1px solid ${on ? 'var(--accent)' : 'var(--border)'}` }}>
+                    <span className="w-5 h-5 rounded-full inline-flex items-center justify-center text-[11px] font-semibold tabular-nums"
+                      style={{ background: on ? 'color-mix(in srgb, var(--accent-fg) 20%, transparent)' : 'var(--bg-input)' }}>{r.n}</span>
+                    {r.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* what the AI missed */}
+          <label className="block space-y-1.5">
+            <span className="text-xs font-semibold">What did you improve, and what did the AI miss?</span>
+            <textarea value={p.explanation} onChange={(e) => p.onExplanation(e.target.value.slice(0, 500))} rows={2} disabled={p.drafting}
+              placeholder="e.g. Too formal for someone who wrote du — and it should mention we met at Fakuma"
+              className="w-full rounded-xl px-3 py-2 text-[13px] resize-y" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+            <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>This becomes a rule in {first}&apos;s voice — the next draft follows it.</span>
+          </label>
+
+          {/* folded details */}
+          <div className="grid gap-3 md:grid-cols-2">
+            <details open={showWhy} onToggle={(e) => setShowWhy((e.target as HTMLDetailsElement).open)} className="rounded-xl px-4 py-2.5" style={{ border: '1px solid var(--border)' }}>
+              <summary className="text-xs font-medium cursor-pointer">Why the AI wrote it</summary>
+              <div className="pt-2 text-xs space-y-1.5">
+                <p>{p.reasoning || 'No reason given.'}</p>
+                {(p.usedFacts?.length ?? 0) > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {p.usedFacts!.map((f, i) => <span key={i} className="px-2 py-0.5 rounded-full text-[11px]" style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>{f}</span>)}
+                  </div>
+                )}
+              </div>
+            </details>
+            <details open={showPrio} onToggle={(e) => setShowPrio((e.target as HTMLDetailsElement).open)} className="rounded-xl px-4 py-2.5" style={{ border: '1px solid var(--border)' }}>
+              <summary className="text-xs font-medium cursor-pointer">{first}&apos;s priorities ({p.priorities?.length ?? 0})</summary>
+              <div className="pt-2 text-xs">
+                {(p.priorities?.length ?? 0) === 0
+                  ? <p style={{ color: 'var(--text-muted)' }}>None yet. Every explanation you write here becomes one; order them on Brand → Voice.</p>
+                  : <ol className="list-decimal pl-5 space-y-0.5">{p.priorities!.map((r, i) => <li key={i}>{r.kind === 'never_write' ? `Never write “${r.content}”` : r.content}</li>)}</ol>}
+              </div>
+            </details>
+          </div>
+
+          {p.learned && <div className="rounded-xl px-4 py-3" style={{ background: 'color-mix(in srgb, var(--green) 8%, transparent)' }}><LearnedLines res={p.learned} /></div>}
+          {p.teachNote && <p className="text-xs" style={{ color: 'var(--green)' }}>{p.teachNote}</p>}
+          {p.error && <p role="alert" className="text-xs font-medium" style={{ color: 'var(--red)' }}>{p.error}</p>}
+        </div>
+
+        {/* footer */}
+        <div className="px-6 py-4 border-t flex flex-wrap items-center gap-2 rounded-b-2xl" style={{ borderColor: 'var(--border)', background: 'var(--bg-input)' }}>
+          <button type="button" onClick={p.onRedraft} disabled={!!p.busy || p.drafting}
+            className="inline-flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-full disabled:opacity-50" style={ghost}>
+            <Sparkle width={13} height={13} />{p.busy === 'draft' ? 'Drafting…' : 'Draft again'}
+          </button>
+          <span className="flex-1" />
+          {!p.canQueue && p.queueBlockedWhy && <span className="text-[11px] max-w-xs text-right" style={{ color: 'var(--text-muted)' }}>{p.queueBlockedWhy}</span>}
+          <button type="button" onClick={p.onTeach} disabled={!!p.busy || p.drafting || !hasFeedback}
+            title={`Saves the rating, your edits and the explanation to ${first}'s voice — files and sends nothing`}
+            className="text-xs px-3.5 py-2 rounded-full disabled:opacity-40" style={ghost}>
+            {p.busy === 'teach' ? 'Saving…' : 'Save feedback only'}
+          </button>
+          <button type="button" onClick={p.onQueue} disabled={!!p.busy || p.drafting || !p.canQueue || !p.after.trim()}
+            className="inline-flex items-center gap-1.5 text-xs px-4 py-2 rounded-full font-semibold disabled:opacity-40"
+            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
+            <Send width={13} height={13} />{p.busy === 'queue' ? 'Filing…' : `Queue for ${first}'s approval`}
+          </button>
         </div>
       </div>
     </div>
@@ -127,7 +233,7 @@ export function LearnedLines({ res }: { res: FeedbackResult }) {
   const learned = res.learned ?? [];
   const again = res.reinforced ?? [];
   if (!learned.length && !again.length && !res.fact_noted) {
-    return <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{res.rating ? `Rated ${res.rating / 2}/5. ` : ''}{res.note || 'Nothing general to learn from this one.'}</p>;
+    return <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{res.rating ? `Rated ${res.rating / 2}/5. ` : ''}{res.note || 'Saved — nothing general to learn from this one.'}</p>;
   }
   return (
     <div className="text-xs space-y-1">

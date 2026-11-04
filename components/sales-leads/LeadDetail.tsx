@@ -258,7 +258,7 @@ export default function LeadDetail({ lead, users, onPatch, onConvert, onRefresh,
           {!d && lead.description ? (<><Eyebrow>Origin</Eyebrow><p className="text-[13px] whitespace-pre-wrap leading-relaxed" style={{ color: 'var(--text-muted)' }}>{lead.description}</p></>) : null}
 
           {/* Connection request / next LinkedIn message — filed for the sender's approval */}
-          <OutreachPanel leadId={lead.id} onChanged={() => { onRefresh?.(); loadEvents(); }} />
+          <OutreachPanel leadId={lead.id} leadName={lead.full_name} onChanged={() => { onRefresh?.(); loadEvents(); }} />
 
           <button type="button" onClick={toggleTrack} aria-expanded={trackOpen}
             className="mt-5 mb-2 w-full flex items-center gap-2 text-left group">
