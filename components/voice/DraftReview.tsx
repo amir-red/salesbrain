@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { diffWords } from '@/lib/diff-words';
 import type { FeedbackResult, VoiceRule } from '@/lib/voice';
-import { Send, Sparkle } from '@/components/icons';
+import { Send, Sparkle, Star } from '@/components/icons';
 
 /**
  * The Before / After review of an AI draft, in a popup (core 098, Mateo's sketch 2026-11-04). Top: what they wrote.
@@ -51,6 +51,7 @@ export default function DraftReview(p: DraftReviewProps) {
   const [showDiff, setShowDiff] = useState(false);
   const [showWhy, setShowWhy] = useState(false);
   const [showPrio, setShowPrio] = useState(false);
+  const [hover, setHover] = useState<number | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!p.open) return;
@@ -142,24 +143,29 @@ export default function DraftReview(p: DraftReviewProps) {
             </section>
           </div>
 
-          {/* rating */}
+          {/* rating — five stars, empty to full */}
           <div className="rounded-xl px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2" style={{ background: 'var(--bg-input)' }}>
             <span className="text-xs font-semibold">How good was the AI&apos;s proposal?</span>
-            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Rating from 1 to 5">
+            <div className="flex items-center gap-0.5" role="radiogroup" aria-label="Rating from 1 to 5 stars"
+              onMouseLeave={() => setHover(null)}>
               {RATINGS.map((r) => {
-                const on = p.rating === r.n;
+                const shown = hover ?? p.rating ?? 0;
+                const lit = r.n <= shown;
                 return (
-                  <button key={r.n} type="button" role="radio" aria-checked={on} disabled={p.drafting}
-                    onClick={() => p.onRating(on ? null : r.n)}
-                    className="inline-flex items-center gap-1.5 pl-1.5 pr-3 py-1 rounded-full text-xs transition-colors disabled:opacity-50"
-                    style={{ background: on ? 'var(--accent)' : 'var(--bg-card)', color: on ? 'var(--accent-fg)' : 'var(--text)', border: `1px solid ${on ? 'var(--accent)' : 'var(--border)'}` }}>
-                    <span className="w-5 h-5 rounded-full inline-flex items-center justify-center text-[11px] font-semibold tabular-nums"
-                      style={{ background: on ? 'color-mix(in srgb, var(--accent-fg) 20%, transparent)' : 'var(--bg-input)' }}>{r.n}</span>
-                    {r.label}
+                  <button key={r.n} type="button" role="radio" aria-checked={p.rating === r.n} aria-label={`${r.n} star${r.n > 1 ? 's' : ''} — ${r.label}`}
+                    title={r.label} disabled={p.drafting}
+                    onMouseEnter={() => setHover(r.n)} onFocus={() => setHover(r.n)} onBlur={() => setHover(null)}
+                    onClick={() => p.onRating(p.rating === r.n ? null : r.n)}
+                    className="p-1 rounded-md transition-transform hover:scale-110 disabled:opacity-50"
+                    style={{ color: lit ? 'var(--yellow)' : 'var(--text-muted)' }}>
+                    <Star filled={lit} width={26} height={26} />
                   </button>
                 );
               })}
             </div>
+            <span className="text-xs font-medium min-w-[6rem]" style={{ color: (hover ?? p.rating) ? 'var(--text)' : 'var(--text-muted)' }}>
+              {(hover ?? p.rating) ? `${RATINGS[(hover ?? p.rating)! - 1].label}` : 'Tap a star'}
+            </span>
           </div>
 
           {/* what the AI missed */}
