@@ -319,7 +319,7 @@ export default function RelationshipsPage() {
                 {dossier.deals.length > 0 && (
                   <Section title="Linked deals" empty="" isEmpty={false}>
                     {dossier.deals.map((d) => (
-                      <Link key={d.id} href={`/?deal=${d.id}`}
+                      <Link key={d.id} href={`/deals/${d.id}`}
                             className="block text-sm py-1.5 hover:underline" style={{ color: 'var(--accent)' }}>
                         {d.name} <span style={{ color: 'var(--text-muted)' }}>· {d.deal_type} · G{d.gate} · {d.status}</span>
                       </Link>

@@ -21,7 +21,7 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    href: '/',
+    href: '/opportunities',
     label: 'Opportunities',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -258,8 +258,9 @@ const GROUPS: { label: string; hrefs: string[]; foldable?: boolean }[] = [
   // Prospects live on the Lists page since 2026-10-28 ("All prospects" on the All-lists card); /prospecting still answers.
   { label: 'Prospects', hrefs: ['/agents'] },
   { label: 'Leads', hrefs: ['/sales-leads', '/followups'] },
-  // Opportunities (`/`) holds the list and the pipeline board since 2026-10-24; /pipeline redirects to it.
-  { label: 'Opportunities', hrefs: ['/'] },
+  // Opportunities holds the list and the pipeline board since 2026-10-24 (/pipeline redirects to it); it moved from
+  // `/` to /opportunities on 2026-11-04 — `/` is the Dashboard.
+  { label: 'Opportunities', hrefs: ['/opportunities'] },
   { label: 'Funding', foldable: true, hrefs: ['/grants', '/credits'] },
   { label: 'Insights', foldable: true, hrefs: ['/reports', '/lessons', '/pricing'] },
   { label: 'Admin', foldable: true, hrefs: ['/admin/costs', '/admin/users', '/admin/learning'] },

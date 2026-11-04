@@ -2308,7 +2308,7 @@ Production (run 40110352501), ring deployed (smoke 0.65.0). Deploy note: this Ma
 
 Amir: "are /deals and /pipeline up to date with our sales process, and merge them into one" → "as it is now, and develop it"
 (the list shows MY deals like the old home page, the board shows EVERYONE's like the old /pipeline).
-- **`/` = Deals** (`app/page.tsx`, server; `components/deals/DealsView.tsx`; data `lib/deals-board.ts::loadDeals`, ONE query with
+- **`/` = Deals** (since 2026-11-04 at **`/opportunities`**, `app/opportunities/page.tsx`; `/` now redirects to `/dashboard`, and an old `/?…` link to `/opportunities?…`) (server; `components/deals/DealsView.tsx`; data `lib/deals-board.ts::loadDeals`, ONE query with
   laterals: lead, creator, sales rep (`lib/zeami` SALES_REP_JOIN), confirmed `delivery_links`, the pending `board_decisions` row
   + vote tally). List / Board switch; tabs All (list only) / Sales / Grants / Credits; Mine / Everyone (list default Mine =
   creator or lead, board default Everyone); status Open & won / Won / Lost / Cancelled / All; flags Overdue / Board vote open /
