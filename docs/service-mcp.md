@@ -921,6 +921,24 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 
 ## 12. Changelog
 
+### 2026-11-04 — the AI learns the sender (098): drafts in the employee's own voice, messages from their devices
+- `crm_draft` (new) — ask SalesBrain to WRITE a message instead of writing it in the app: `situation` (first |
+  followup | reply | intro | connect), `channel`, `prospect_id` or `person_id`, optional `angle` (what the message must
+  do, one line), `goal`, `previous_text`, `linkedin_thread_id`, `language`. The draft is written in the EMPLOYEE's measured
+  voice (length, greeting, sign-off, du/Sie, measured from their own sent messages), with their own best messages as
+  examples, their priorities, the brand context, the person's facts with sources and the playbook (a first touch never
+  pitches). Returns `text`, `subject`, `reasoning` (show it), `used_facts` and `voice` — pass `voice` UNCHANGED to
+  `crm_outreach_propose` / `crm_linkedin_first_message_propose` when filing. Files and sends nothing.
+- `crm_draft_feedback` — new `reasons`: `wrong_step`, `missed_link` (teach WHEN / WHAT: a judgment rule), `not_my_words`
+  (wording), `wrong_facts` + `reason` (corrects the PERSON's facts, never a rule). A draft sent as written is a 10/10
+  recorded by SalesBrain itself; an edited send is learned from its diff — the bot need not ask for a rating.
+- `crm_voice_rule_add` — kind `judgment` ("never ask for a call before they answered once").
+- `crm_messages_import` (new) — push messages from the employee's OWN device or app (iMessage, WhatsApp, SMS):
+  `[{contact_name?, phone?, email?, direction: sent|received, text, sent_at (ISO), message_key}]`, ≤2000 per call,
+  idempotent on `message_key`. Matched to people the CRM already knows; unknown people are DROPPED, never created.
+  `crm_messages_handles` (new) — the phones / emails the CRM knows for this employee, so a device-side script filters
+  BEFORE anything leaves the device. The reference client: `salesbrain-hermes/scripts/imessage_push.py`.
+
 ### 2026-10-24 — import into one prospect list
 `crm_sales_leads_import` takes `icp_id` (from `crm_icp_list`): the new prospects land on that list and are scored against
 it, the list's owner is the default back office, and the response adds `list_name` and `added_to_list` (a person who is

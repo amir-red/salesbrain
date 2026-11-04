@@ -1388,6 +1388,8 @@ const PASSTHROUGH = new Set([
   'crm_path_find', 'crm_propose_intro',
   // Per-person memory: the employee's own notes (identity = X-On-Behalf-Of), team notes shared on approval.
   'crm_memory_save', 'crm_memory_recall', 'crm_memory_forget', 'crm_memory_share',
+  // 098: messages from the employee's own device (iMessage, WhatsApp) and the handles to filter on first.
+  'crm_messages_import', 'crm_messages_handles',
   // Brand & Voice (079): the writing context, checks, ratings and rules — always the employee's OWN voice.
   'crm_voice_context', 'crm_voice_check', 'crm_draft_feedback', 'crm_voice_rules', 'crm_voice_rule_add',
 ]);

@@ -3089,6 +3089,107 @@ Connection batch cards only (Amir's choice): message drafts, follow-ups and camp
 - The send rules are unchanged: nothing goes out without the tap; caps and the once-only gate apply per request.
 - Tests: `test_conductor_db.py` (real Postgres), `test_connect_progress.py`. Not seen live yet: a real repost and delete.
 
+### 5.ck The AI learns the sender — one drafter in each sender's measured voice, implicit feedback, trust ladder (2026-11-04, feat/sender-learning, core migrations 098 + 099, NOT yet merged)
+
+Amir, after "our outreach drafts are too generic, they will know it's AI": "it's not about showing the person — it's about
+the AI learning more, until human approval eventually stops; include Hermes' computer use to import WhatsApp, email and
+iMessage so it understands the person." Plan `~/.claude/plans/quirky-finding-lemon.md`. Measured before: hand-written
+messages got 10/31 replies, AI drafts were never sent (0 ratings, 2 rules in 30 days) — seven prompts each saw only company
+research and the Zeami pitch paragraph. Decisions (AskUserQuestion): ONE drafter now, all seven callers switched; feedback
+IMPLICIT (sent unchanged = top mark; an edit's diff = the lesson; one row of chips only after a skip or an edited send);
+WhatsApp via Unipile first (its hosted auth ACCEPTS `providers: ["WHATSAPP"]`, probed 2026-11-04 — the connect flow is not
+built yet), Hermes browser on WhatsApp Web only as a fallback; iMessage = a script on Mateo's Mac.
+- **The corpus (098 `sender_messages`)** — every message a teammate wrote, gathered by `commands/sender_corpus.refresh`
+  from the mirrors we hold: `linkedin_messages.is_sender` (the owner's accounts; matched to the approval that sent it, so
+  hand-written vs model-drafted vs edited is known), `email_messages.from_me`, `imported_messages` sent (the Gmail sync, a
+  WhatsApp export), `interactions` outbound whatsapp / imessage (full `body` since 098; a 300-char summary that hit the cap
+  is skipped). Each row: situation (`policy/sender_corpus.classify_situation` from the message before ours: first /
+  followup / reply / intro / connect), language, `got_reply` within 30 days, `to_label` ("CFO at Alpha" — no name),
+  `prev_inbound`. `usable` throws out one-liners, out-of-office, forwards, signature-only mails, placeholders. Idempotent on
+  (source, source_ref); owner-keyed and read back ONLY for that owner (`examples`: same situation → got a reply →
+  hand-written / unchanged → same person → newest; `before=` keeps the evaluation blind).
+- **The measured style (`sender_profiles`)** — `policy/sender_style.measure` counts, not guesses: words p25/p75, sentences,
+  paragraphs, greeting and sign-off forms with names masked ("Hallo Herr {name}" 60 %), du/Sie share, question / emoji /
+  exclamation / link rates, openers, closing questions, reply rate by length. `render` = a ≤900-char block ("HOW MATTHIAS
+  ACTUALLY WRITES ON LINKEDIN IN GERMAN (measured from 103 of their own messages) …") per channel × language ('any' + de /
+  en); versions are inactive until activated; a slice needs `min_profile_messages` (15).
+- **ONE drafter** (`salesbrain-hermes/drafter.py`, `DraftSpec` → `draft()`): kernel `sender_style.draft_context` (one read:
+  sender, profile block, ranked rules as PRIORITIES, `voice.render_context` with the product section dropped unless the
+  playbook allows proof, ≤6 own examples with a context line, the person's facts with sources — prospect / card / people
+  facets / person_facts / trust research / warmth / warm paths —, the last 3 messages, the playbook step, checks, trust
+  level, word cap = min(brand limit, p75 × 1.3)) → `policy/drafting.render_prompt` in authority order (1 YOU WRITE AS +
+  profile · 2 priorities · 3 brand · 4 their real messages · 5 what this message is · 6 the person · 7 the conversation · 8
+  goal / instructions / angle · 9 NEVER stock openers, invented claims, links, emojis, em dashes · 10 JSON {message, subject,
+  why, used_facts, blurb}) → one Flash call → clean → `check_draft` → one redraft → refuse on never-write / du-Sie / stock
+  opener / length. Returns text + `voice` (draft_original, drafted_by, voice_rule_ids, draft_reasoning, draft_facts,
+  draft_situation, sender_profile_version, example_ids, trust_level_at_draft) — stamped on the approval by
+  `voice.stamp`. **Playbook** (`policy/drafting.PLAYBOOK`, Mateo's ladder): first touch gives value, never asks or names
+  proof; a 3rd follow-up or a warm person may ask; replies and intro asks may. Callers now wrappers: `lead_drafts`
+  (conductor; the list template still wins), `campaign_runner.draft` (fixed / none kept), `crm_linkedin_draft_reply`,
+  **`crm_draft`** (chat tool, family crm_brand, on MCP + service MCP; allowed in agent runs and automations — files
+  nothing), the app's `draftInVoice` (lead card, follow-up board, intro ask — the routes pass an `angle`, no prompt),
+  Outreach / Attention `AGENTS.md` + skill ("the drafter writes, you judge": `crm_draft(angle=…)` → propose with `voice`
+  as returned; never your own words). Template first messages are stamped `first_message_template` so an edit of one
+  teaches too.
+- **Feedback is implicit** (098 columns on `outreach_approvals`): `mark_approval_result` → `voice.implicit_rating` (sent ∧
+  model draft ∧ edit ≤ 8 % → rating 10, `feedback_source='implicit'`) and `sender_trust.on_outcome`; both in SAVEPOINTS
+  (the DB test caught a parameter-typing error that rolled back the send's own record). Telegram: `voice_feedback.
+  after_decision` — sent unchanged → nothing asked; sent edited → `feedback_and_learn` from the diff at once, then ONE
+  chip row (`pv.CHIP_ROW`: too long · wrong step · didn't use our link · wrong language · wrong facts · not my words, a
+  typed reply works too); skipped → the chips. `wrong_step` / `missed_link` → a `judgment` rule (kind added to
+  `voice_rules`); `not_my_words` → wording; `wrong_facts` + text → `people.record_fact(source='correction')`, never a
+  rule; an explicit chip overrides the implicit 10. The 1–10 prompt stays behind `agents.drafting.ask_rating` (off).
+  Every pending card carries "_Why I wrote this:_ …" (`approval_card`); /agents and the lead panel show it. Priorities:
+  `voice_rules.position` (`reorder_rules`, `crm_voice_rules_reorder`, ▲▼ on /brand → Voice) — the drafter renders the
+  sender's rules in that order.
+- **The trust ladder (`sender_trust`, per sender × situation × channel)**: shadow · draft (default) · trusted · autonomous.
+  Promotion = opted in (`crm_voice_trust_set` / /brand → Voice "Send these without me once they're good") ∧
+  `trust_after` (5) unchanged sends in a row ∧ nightly evaluation ≥ `eval_min` (0.75); one edit, skip or dropped draft
+  resets the streak and drops a trusted slice to draft (the sender hears both moves by DM, source `sender-learn`).
+  Hourly cron **`drafting-auto-send`** → `sender_trust.auto_approve` (pending model drafts on trusted slices, never
+  connect / intro / proposal / campaign cards / waves / flagged / company-held / edited; `decided_by='auto'`, audited as
+  the owner) → the SAME send path as a tapped 👍 (`outreach_agent.approve_and_send`); the send gate re-reads the slice and
+  returns a no-longer-trusted row to pending; an auto-decided send counts as `ask_approved` (the standing decision, like an
+  approved wave). The card ends "🤖 sent without a tap" with ONE button ⏸ Pause (`st:<id>:pause` → `sender_trust.pause`).
+- **Nightly `sender-learn`** (02:45): per sender — corpus refresh (3-day incremental), `rebuild` (new inactive version when
+  the measurement changed), **blind evaluation** (`draft_eval`: the drafter redrafts last month's real messages with
+  examples dated BEFORE each, similarity = 1 − edit ratio, a Flash judge 1–5 "would this person have sent this as is?",
+  score = 0.6 sim + 0.4 judge/5 → `draft_evals`), `keep_or_rollback` (a candidate replaces the live version unless it scores
+  lower by > `eval_drop_tolerance`), the score onto every slice. One operator line. **`linkedin-backfill`** (03:05):
+  walks each conversation's whole history page by page (`unipile.list_messages(cursor)`, `linkedin.backfill_messages`
+  = messages + track record only, no thread state; `backfilled_at` / `backfill_cursor` from 099) within
+  `backfill_inbox_reads_per_run` (150) guard-counted reads, stops at the first refusal.
+- **Other channels (099)**: `crm_messages_import` / `crm_messages_handles` (family crm_people; service MCP) — a device
+  pushes `{contact, direction, text, sent_at, message_key}` from WhatsApp / iMessage / SMS; the kernel
+  (`commands/messages_import`) matches phone / email / unambiguous name to people the sender knows, stores `interactions`
+  with the full body (idempotent on `message_key`), drops unknown people (never creates), refreshes warmth and the corpus.
+  `scripts/imessage_push.py` (runs on the teammate's Mac, stdlib only, Full Disk Access): asks for the known handles, reads
+  `chat.db` one-to-one chats, filters LOCALLY, pushes through the public or service MCP. The WhatsApp export importer now
+  keeps the full `body`. Gmail sent mail already lands in `imported_messages` through the Google sync.
+- **App**: `lib/voice-context.ts::draftInVoice` → `crm_draft`; `components/voice/DraftFeedback.tsx` (Before / After word diff
+  of an edited draft, the chip row, "why it wrote this", the implicit-10 note; 1–10 only with `askRating`);
+  `components/voice/SenderLearning.tsx` on /brand → Voice: **How you write** (corpus counts per channel, the live profiles,
+  "what the drafter reads", Gather messages / Measure now), **When the AI sends without you** (one row per situation ×
+  channel: level, streak n of N, score, needs …, opt in / ⏸ Pause, the nightly checks), **Your priorities** (▲▼ → position);
+  routes `/api/voice/{profile,trust}`, `/api/voice/rules {action:'reorder'}`, `GET /api/drafts/[id]`; app-only RPCs
+  `sender_profile(_rebuild)`, `sender_corpus_refresh/_stats`, `sender_trust(_set/_pause)`, `voice_reorder`, `draft_evals`.
+  Policy `agents.drafting` (admin-editable from chat): enabled, examples, min_profile_messages, implicit_rating, ask_rating,
+  trust_after, eval_n, auto_send_enabled, backfill_inbox_reads_per_run. 185 tools.
+- **Tests**: core `test_sender_learning_policy.py` (17) + `test_sender_learning_db.py` (7, real Postgres: refresh idempotent,
+  owners never see each other's examples, the blind cut, profile + draft_context, implicit 10 → promotion → reset on an
+  edit, skip / pause / reorder, auto-approve + the gate's re-check, eval rows + rollback); ring `test_drafter.py` (9);
+  campaign / conductor / button tests moved onto the drafter stubs. Scratch Postgres recipe: Homebrew `postgresql@15`,
+  `initdb` in the scratchpad, `-k /tmp` (the scratchpad path is too long for a socket), create `users` BY HAND, then
+  `schema.sql` and every migration.
+- **Rollout (integration session)**: apply 098 then 099; deploy ring + app (the crons are created by `deploy-server.sh`);
+  on the box run `sender_corpus.refresh(SERVICE)` and `sender_style.rebuild(…, activate=True)` for Amir, Mateo, Matthias,
+  Hannes and READ the four blocks with them; check `llm_usage` feature `drafter` (~2.5–3.5 k input tokens per draft) and
+  `draft_eval`; every slice starts at `draft` — nothing sends alone until a sender opts in and earns it.
+- **Not built**: the WhatsApp Unipile connect / claim / sync flow (099 prepares `linkedin_accounts.provider`; the hourly
+  sync must skip LinkedIn-only steps for such a row), the Hermes browser fallback (`agents/whatsapp-sync/`), the Outreach
+  agent's weekly review reading the eval trend, a per-turn cap on `crm_draft` calls, re-running the Google sync nightly
+  for sent mail.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
