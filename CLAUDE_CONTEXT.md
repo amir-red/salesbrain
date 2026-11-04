@@ -2429,7 +2429,7 @@ with views was rejected (~60 writers, ~260 readers, ON CONFLICT upserts a view c
   ledgers (request sent, first message, first reply, booking, convert, deal created, won), else now. First run = backfill.
   Advisory lock (one at a time). Live dry run (rolled back): 5,615 people, 16,789 history rows, 5.7 s from a laptop;
   a no-change refresh 3.5 s, 0 events. Run by the hourly `lead_conductor.py` and on read when older than 10 min.
-- **`funnel_summary`** reads the stored rows (a list slice stays live: membership is per list); `period` (kpis periods)
+- **`funnel_summary`** reads the stored rows AS THEY ARE (since 2026-11-04 it never rebuilds on read — that put a 5–18 s rebuild on whoever opened the Dashboard first; Hermes cron `funnel-refresh` rebuilds every 10 min in the background, `evaluated_at` is shown as "updated HH:MM") (a list slice stays live: membership is per list); `period` (kpis periods)
   adds `entered` per stage from the history; `view='companies'` = each account once at its furthest person (direct
   opportunities deduped by account). **Without 086 everything falls back to the live Phase A compute** (`stored()`),
   periods return an error, `refresh` skips.
