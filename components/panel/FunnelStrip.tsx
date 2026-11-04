@@ -28,7 +28,7 @@ export const GROUP_HREF: Record<FunnelGroup, string> = {
   prospect: '/prospecting',
   lead: '/sales-leads',
   opportunity: '/',
-  client: '/?status=won',
+  client: '/opportunities?status=won',
 };
 
 export function useFunnel(query: Record<string, string | undefined>, enabled = true) {

@@ -158,7 +158,7 @@ export default function DealViewPage() {
     setBusy(true);
     const res = await fetch(`/api/deals/${dealId}`, { method: 'DELETE' });
     setBusy(false);
-    if (res.ok) router.push('/');
+    if (res.ok) router.push('/opportunities');
     else alert('Delete failed: ' + (await res.text()));
   }
 
@@ -262,7 +262,7 @@ export default function DealViewPage() {
         <div className="p-6 border-b flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center gap-4">
             <Link
-              href="/"
+              href="/opportunities"
               className="px-3 py-1.5 rounded-lg text-xs"
               style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}
             >

@@ -117,7 +117,7 @@ export default function NetworkDetailPanel({ node, onClose, onUpdate }: Props) {
               <ActionLink
                 href={
                   meta.deal_id
-                    ? `/?deal=${meta.deal_id}`
+                    ? `/deals/${meta.deal_id}`
                     : meta.prospect_id
                     ? `/prospects/${meta.prospect_id}`
                     : null
@@ -137,7 +137,7 @@ export default function NetworkDetailPanel({ node, onClose, onUpdate }: Props) {
               <ActionLink
                 href={
                   meta.deal_id
-                    ? `/?deal=${meta.deal_id}&prefill=${encodeURIComponent(`Draft a first-touch cold email for ${meta.full_name ?? 'this contact'}`)}`
+                    ? `/deals/${meta.deal_id}?tab=chat&prefill=${encodeURIComponent(`Draft a first-touch cold email for ${meta.full_name ?? 'this contact'}`)}`
                     : null
                 }
                 label="Generate outreach"

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-// Merged into Deals on 2026-10-24: the board is the Pipeline view of `/`.
+// Merged into Deals on 2026-10-24: the board is the Pipeline view of /opportunities.
 export default function PipelinePage() {
-  redirect('/?view=pipeline');
+  redirect('/opportunities?view=pipeline');
 }
