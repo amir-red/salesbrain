@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { relativeTime } from '@/lib/time';
-import { FORMALITY, LIMIT_KEYS, SOURCE_LABEL, STEPS, TONES, type BrandPayload, type VoiceRule } from '@/lib/voice';
+import { FORMALITY, LIMIT_KEYS, SOURCE_LABEL, STEPS, TONES, type BrandPayload, type RuleKind, type VoiceRule } from '@/lib/voice';
+import { HowYouWrite, Priorities, TrustLadder } from '@/components/voice/SenderLearning';
 import { api, ChipInput, Help, Section } from './ui';
 
 interface Stats {
@@ -36,7 +37,9 @@ export default function VoiceTab({ data, reload }: { data: BrandPayload; reload:
 
   return (
     <div className="space-y-4">
+      <HowYouWrite />
       <MyVoice rules={rules?.sender ?? null} stats={stats} brandKey={b.key} reload={loadRules} showOld={showOld} setShowOld={setShowOld} />
+      <TrustLadder />
 
       <Section title={`How ${b.name} sounds`} help="The team's voice: every message for this brand, from every sender. A sender's own rules win where they differ.">
         <div className="grid gap-4 md:grid-cols-2">
@@ -93,7 +96,7 @@ function RuleRow({ r, actions }: { r: VoiceRule; actions?: React.ReactNode }) {
   return (
     <li className="rounded-xl p-3 space-y-1" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', opacity: r.status === 'active' ? 1 : 0.6 }}>
       <div className="flex items-start gap-2">
-        <span className="flex-1 text-sm">{r.kind === 'never_write' ? <>Never write “{r.content}”</> : r.content}</span>
+        <span className="flex-1 text-sm">{r.kind === 'never_write' ? <>Never write “{r.content}”</> : r.kind === 'judgment' ? <><span className="text-[10px] px-1 py-0.5 rounded mr-1" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>when / what</span>{r.content}</> : r.content}</span>
         {actions}
       </div>
       <div className="text-[11px] flex flex-wrap gap-x-2" style={{ color: 'var(--text-muted)' }}>
@@ -132,7 +135,7 @@ function MyVoice({ rules, stats, brandKey, reload, showOld, setShowOld }: {
 
   return (
     <Section title="Your voice"
-      help={<>Learned from you: every edit you make to a draft and every 1–10 you give, with the reason, becomes a rule here at once — in your voice only. Rate drafts on the Telegram card or on <a href="/agents" className="underline">Agents</a>.</>}
+      help={<>Learned from you: a draft you send as written counts as a 10 by itself; every edit and every chip you tap (what was wrong) becomes a rule here at once — in your voice only. Decide drafts on the Telegram card or on <a href="/agents" className="underline">Agents</a>.</>}
       aside={<label className="text-[11px] flex items-center gap-1 shrink-0" style={{ color: 'var(--text-muted)' }}>
         <input type="checkbox" checked={showOld} onChange={(e) => setShowOld(e.target.checked)} /> show forgotten</label>}>
       {stats && (
@@ -151,8 +154,9 @@ function MyVoice({ rules, stats, brandKey, reload, showOld, setShowOld }: {
         </div>
       )}
       <AddRule brandKey={brandKey} scope="sender" onAdded={reload} />
+      {rules && rules.filter((r) => r.status === 'active').length >= 2 && <Priorities rules={rules.filter((r) => r.status === 'active')} reload={reload} />}
       {rules === null ? <Help>Loading…</Help> : rules.length === 0 ? (
-        <Help>No rules yet. Rate a draft, correct one, or add a rule above — e.g. “Sign as Matthias, no surname”.</Help>
+        <Help>No rules yet. Correct a draft, tap a chip on one, or add a rule above — e.g. “Sign as Matthias, no surname”.</Help>
       ) : (
         <ul className="space-y-2">
           {rules.map((r) => (
@@ -186,7 +190,7 @@ function TeamRules({ rules, brandKey, brandName, reload }: { rules: VoiceRule[] 
 
 function AddRule({ brandKey, scope, onAdded }: { brandKey: string; scope: 'sender' | 'team'; onAdded: () => void }) {
   const [text, setText] = useState('');
-  const [kind, setKind] = useState<'rule' | 'never_write'>('rule');
+  const [kind, setKind] = useState<RuleKind>('rule');
   const [step, setStep] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
   const add = async () => {
@@ -201,12 +205,13 @@ function AddRule({ brandKey, scope, onAdded }: { brandKey: string; scope: 'sende
   return (
     <div className="space-y-1">
       <div className="flex flex-wrap gap-2">
-        <select value={kind} onChange={(e) => setKind(e.target.value as 'rule' | 'never_write')} className="z-input !w-auto !py-1.5 text-xs" aria-label="Kind of rule">
-          <option value="rule">Rule</option>
+        <select value={kind} onChange={(e) => setKind(e.target.value as RuleKind)} className="z-input !w-auto !py-1.5 text-xs" aria-label="Kind of rule">
+          <option value="rule">Wording</option>
+          <option value="judgment">When / what</option>
           <option value="never_write">Never write</option>
         </select>
         <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
-          placeholder={kind === 'rule' ? (scope === 'team' ? 'e.g. No demo asks in a first message' : 'e.g. Keep LinkedIn first messages to three sentences') : 'The exact phrase'}
+          placeholder={kind === 'rule' ? (scope === 'team' ? 'e.g. No demo asks in a first message' : 'e.g. Keep LinkedIn first messages to three sentences') : kind === 'judgment' ? 'e.g. Never ask for a call before they have answered once' : 'The exact phrase'}
           className="z-input flex-1 min-w-[12rem] !py-1.5" aria-label="New rule" />
         <select value={step} onChange={(e) => setStep(e.target.value)} className="z-input !w-auto !py-1.5 text-xs" aria-label="Applies to">
           <option value="">every message</option>

@@ -1,6 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
+import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
+
+/** GET → the draft as the feedback UI reads it (098): the model's text next to the final, why it was written,
+ * which facts, the rating and chips so far. The sender's own rows, any as admin. */
+export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { rows } = await pool.query(
+    `SELECT id, status, message, draft_original, draft_reasoning, draft_facts, edit_ratio, rating, feedback_source,
+            feedback_keys, decided_by, kind, channel, owner_user_id
+       FROM outreach_approvals WHERE id = $1`, [params.id]);
+  const r = rows[0];
+  if (!r) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  if (session.role !== 'admin' && String(r.owner_user_id) !== session.userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { owner_user_id: _o, ...rest } = r;
+  return NextResponse.json(rest);
+}
 
 /**
  * One draft (an outreach_approvals row) — Brand & Voice, core 079.

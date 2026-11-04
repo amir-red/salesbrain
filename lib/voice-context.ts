@@ -1,86 +1,71 @@
 /**
- * Brand & Voice (core 079) for the app's drafters — server only.
+ * The app's drafting client — server only. Since core 098 there is ONE drafter (salesbrain-hermes/drafter.py):
+ * every message to a person is written there, in the SENDER's own measured voice, with their own messages as
+ * examples, their priorities, the brand context, the person's facts and the playbook step. The app never builds a
+ * prompt any more; it says what the message is (situation, channel, who) and what it must do (angle).
  *
- * Every model draft to a prospect goes through `draftInVoice`: the sender's writing context (brand, the list's
- * product, team rules, the sender's OWN learned rules, highly rated examples) goes in front of the prompt, the draft
- * is checked by the kernel (never-write phrases, language, du/Sie, word cap), redrafted ONCE if it breaks a check,
- * and returned with a `voice` stamp. The UI keeps the stamp and sends it back when the person files the draft, so
- * the kernel stores the model's text next to the person's final text — that pair (plus the 1–10 rating) is what the
- * voice learns from. One implementation of the checks: the kernel's policy/voice.py.
+ * The returned `voice` stamp goes back to the kernel when the person files the draft, so their edit, an untouched
+ * send and the chip they tap all tie to exactly what the model wrote.
  */
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
-import { MODEL } from '@/lib/llm';
-import { createMessage } from '@/lib/llm-usage';
 import type { VoiceFlag, VoiceStamp, VoiceStep } from '@/lib/voice';
 
-interface WritingContext {
-  context?: string;
-  rule_ids?: string[];
-  error?: string;
+export interface DraftRequest {
+  situation: VoiceStep;
+  channel: 'linkedin' | 'email' | 'whatsapp';
+  userId: string;                 // who asks (the kernel takes the prospect's owner as the sender)
+  feature?: string;               // the cost-ledger label (kept on the stamp as drafted_by)
+  prospectId?: string | null;
+  personId?: string | null;
+  angle?: string | null;          // what this message must do, in one line
+  goal?: string | null;
+  previousText?: string | null;
+  linkedinThreadId?: string | null;
+  touchNumber?: number | null;
+  language?: 'de' | 'en' | null;
+  subject?: boolean;
+  connector?: { name: string; role: string; evidence: string } | null;   // intro ask
+  lead?: { name: string; title?: string | null; company?: string | null } | null;
 }
 
-export async function getVoiceContext(
-  args: { prospectId?: string | null; icpId?: string | null; channel?: string; step?: VoiceStep },
-  userId: string,
-): Promise<WritingContext> {
+export interface DraftResult {
+  message: string; subject: string | null; reasoning: string | null; used_facts: string[]; blurb: string | null;
+  voice: VoiceStamp; flags: VoiceFlag[]; linkedin_thread_id: string | null; sender_name: string | null;
+  language: string | null; trust_level: string | null;
+}
+
+/** Draft one message in the sender's voice through the kernel's one drafter. */
+export async function draftInVoice(req: DraftRequest): Promise<DraftResult | { error: string }> {
+  const args: Record<string, unknown> = { situation: req.situation, channel: req.channel };
+  const put = (k: string, v: unknown) => { if (v !== undefined && v !== null && v !== '') args[k] = v; };
+  put('prospect_id', req.prospectId); put('person_id', req.personId); put('angle', req.angle); put('goal', req.goal);
+  put('previous_text', req.previousText); put('linkedin_thread_id', req.linkedinThreadId);
+  put('touch_number', req.touchNumber); put('language', req.language); put('subject', req.subject || undefined);
+  put('connector', req.connector); put('lead', req.lead);
+  let out: Record<string, unknown>;
   try {
-    const out = await kernelCall('crm_voice_context', {
-      ...(args.prospectId ? { prospect_id: args.prospectId } : {}),
-      ...(args.icpId ? { icp_id: args.icpId } : {}),
-      ...(args.channel ? { channel: args.channel } : {}),
-      ...(args.step ? { step: args.step } : {}),
-    }, userId);
-    return out as WritingContext;
-  } catch {
-    return {}; // the voice must never stop a draft
+    out = await kernelCall('crm_draft', args, req.userId) as Record<string, unknown>;
+  } catch (err) {
+    return { error: `The drafter did not answer: ${err instanceof Error ? err.message : String(err)}` };
   }
-}
-
-export function voiceBlock(ctx: WritingContext): string {
-  return ctx.context ? `\n\nHOW WE WRITE (obey this; the sender's own rules win over everything above):\n${ctx.context}` : '';
-}
-
-async function checkDraft(text: string, args: { prospectId?: string | null; icpId?: string | null; channel: string; step: VoiceStep },
-  userId: string): Promise<VoiceFlag[]> {
-  try {
-    const out = await kernelCall('crm_voice_check', {
-      text, channel: args.channel, step: args.step,
-      ...(args.prospectId ? { prospect_id: args.prospectId } : {}), ...(args.icpId ? { icp_id: args.icpId } : {}),
-    }, userId) as { flags?: VoiceFlag[] };
-    return Array.isArray(out.flags) ? out.flags : [];
-  } catch {
-    return [];
-  }
-}
-
-async function generate(prompt: string, feature: string, userId: string, maxTokens: number): Promise<string> {
-  const res = await createMessage({ model: MODEL, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] },
-    { feature, userId });
-  return res.content.map((b) => ('text' in b ? b.text : '')).join('').trim();
-}
-
-/** Draft one message in the sender's voice. Returns the text, the stamp to file it with, and any remaining flags. */
-export async function draftInVoice(opts: {
-  prompt: string; feature: string; userId: string; prospectId?: string | null; icpId?: string | null;
-  channel: 'linkedin' | 'email'; step: VoiceStep; maxTokens?: number;
-}): Promise<{ message: string; voice: VoiceStamp; flags: VoiceFlag[] } | { error: string }> {
-  const where = { prospectId: opts.prospectId, icpId: opts.icpId, channel: opts.channel, step: opts.step };
-  const ctx = await getVoiceContext(where, opts.userId);
-  const maxTokens = opts.maxTokens ?? 500;
-  let text = await generate(opts.prompt + voiceBlock(ctx), opts.feature, opts.userId, maxTokens);
+  if (typeof out.error === 'string') return { error: out.error };
+  const text = typeof out.text === 'string' ? out.text.trim() : '';
   if (!text) return { error: 'The model returned no draft — write it yourself or try again.' };
-  let flags = await checkDraft(text, where, opts.userId);
-  if (flags.length > 0) {
-    const retry = await generate(
-      `${opts.prompt}${voiceBlock(ctx)}\n\nYour previous draft broke these rules: ${flags.map((f) => f.detail).join('; ')}.\n`
-      + `Previous draft:\n"""\n${text}\n"""\nRewrite it so it obeys every rule. Return only the message.`,
-      opts.feature, opts.userId, maxTokens);
-    if (retry) {
-      const again = await checkDraft(retry, where, opts.userId);
-      if (again.length <= flags.length) { text = retry; flags = again; }
-    }
-  }
-  return { message: text, flags, voice: { draft_original: text, drafted_by: opts.feature, voice_rule_ids: ctx.rule_ids ?? [] } };
+  const voice = cleanStamp(out.voice) ?? { draft_original: text, drafted_by: req.feature ?? 'app', voice_rule_ids: [] };
+  if (req.feature && voice.drafted_by === 'drafter:chat') voice.drafted_by = req.feature;
+  return {
+    message: text,
+    subject: typeof out.subject === 'string' ? out.subject : null,
+    reasoning: typeof out.reasoning === 'string' ? out.reasoning : null,
+    used_facts: Array.isArray(out.used_facts) ? out.used_facts.map(String) : [],
+    blurb: typeof out.blurb === 'string' ? out.blurb : null,
+    voice,
+    flags: Array.isArray(out.flags) ? (out.flags as VoiceFlag[]) : [],
+    linkedin_thread_id: typeof out.linkedin_thread_id === 'string' ? out.linkedin_thread_id : null,
+    sender_name: typeof out.sender_name === 'string' ? out.sender_name : null,
+    language: typeof out.language === 'string' ? out.language : null,
+    trust_level: typeof out.trust_level === 'string' ? out.trust_level : null,
+  };
 }
 
 /** A stamp for text that came from a template, not the model (an edit of it is still worth learning from). */
@@ -88,13 +73,26 @@ export function templateStamp(text: string, draftedBy: string): VoiceStamp {
   return { draft_original: text, drafted_by: draftedBy, voice_rule_ids: [] };
 }
 
-/** Accept a stamp the browser sends back — only the three known fields, bounded. */
+const UUID = /^[0-9a-f-]{36}$/i;
+
+/** Accept a stamp the browser sends back — only the known fields, bounded. */
 export function cleanStamp(raw: unknown): VoiceStamp | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const r = raw as Record<string, unknown>;
   const original = typeof r.draft_original === 'string' ? r.draft_original.slice(0, 6000) : '';
   if (!original.trim()) return undefined;
-  const ids = Array.isArray(r.voice_rule_ids)
-    ? r.voice_rule_ids.filter((x): x is string => typeof x === 'string' && /^[0-9a-f-]{36}$/i.test(x)).slice(0, 80) : [];
-  return { draft_original: original, drafted_by: typeof r.drafted_by === 'string' ? r.drafted_by.slice(0, 60) : 'app', voice_rule_ids: ids };
+  const ids = (k: string) => (Array.isArray(r[k]) ? (r[k] as unknown[]).filter((x): x is string => typeof x === 'string' && UUID.test(x)).slice(0, 80) : []);
+  const out: VoiceStamp = {
+    draft_original: original,
+    drafted_by: typeof r.drafted_by === 'string' ? r.drafted_by.slice(0, 60) : 'app',
+    voice_rule_ids: ids('voice_rule_ids'),
+  };
+  if (typeof r.draft_reasoning === 'string' && r.draft_reasoning.trim()) out.draft_reasoning = r.draft_reasoning.slice(0, 300);
+  if (Array.isArray(r.draft_facts)) out.draft_facts = r.draft_facts.map((x) => String(x).slice(0, 60)).slice(0, 12);
+  if (typeof r.draft_situation === 'string' && ['connect', 'first', 'followup', 'reply', 'intro'].includes(r.draft_situation)) out.draft_situation = r.draft_situation as VoiceStep;
+  if (typeof r.sender_profile_version === 'number') out.sender_profile_version = r.sender_profile_version;
+  const ex = ids('example_ids');
+  if (ex.length) out.example_ids = ex;
+  if (typeof r.trust_level_at_draft === 'string') out.trust_level_at_draft = r.trust_level_at_draft.slice(0, 20);
+  return out;
 }

@@ -34,7 +34,8 @@ export async function GET(req: NextRequest) {
             oa.created_at, oa.decided_at, oa.sent_at, oa.expires_at, oa.prospect_id, oa.person_id, oa.owner_user_id,
             pe.full_name AS person_name, c.title, a.name AS company, p.icp_score, i.name AS icp_name,
             u.name AS owner_name, oa.company_conflict, oa.company_override_at,
-            oa.check_flags, oa.edited_at, oa.rating, oa.draft_original IS NOT NULL AS model_drafted
+            oa.check_flags, oa.edited_at, oa.rating, oa.draft_original IS NOT NULL AS model_drafted,
+            oa.draft_reasoning, oa.decided_by
      FROM outreach_approvals oa
      LEFT JOIN people pe ON pe.id = oa.person_id
      LEFT JOIN prospects p ON p.id = oa.prospect_id

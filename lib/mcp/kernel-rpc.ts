@@ -66,6 +66,10 @@ export async function fetchRingCatalog(): Promise<RingToolDef[]> {
 // real headroom or they get SIGKILLed mid-research (run left stuck 'running').
 const LONG_RUNNING_TOOLS = new Set<string>([
   'whatsapp_import',   // parse + insert + warmth refresh
+  // The one drafter (098): one kernel read + one or two model calls; the Voice tab's corpus refresh / profile rebuild.
+  'crm_draft',
+  'sender_corpus_refresh',
+  'sender_profile_rebuild',
   // A Gmail push: reads every open thread of one mailbox (one Gmail call each) and records what came back.
   'email_replies_check',
   // The Inbox: a reply goes out at once (LinkedIn send + re-read of the chat, or a Gmail send); a refresh re-reads.

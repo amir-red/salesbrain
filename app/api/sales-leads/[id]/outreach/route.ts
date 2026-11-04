@@ -81,28 +81,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         return NextResponse.json({ message: text.trim(), source: 'template',
           voice: templateStamp(text.trim(), 'first_message_template') });
       }
-      const convo = f.thread.map((m) => `${m.ours ? 'We' : 'They'}: ${(m.text ?? '').replace(/\s+/g, ' ').slice(0, 600)}`).join('\n');
       const lastFromThem = f.thread.length > 0 && !f.thread[f.thread.length - 1].ours;
-      const points = Array.isArray((f.dossier as { talking_points?: unknown })?.talking_points)
-        ? ((f.dossier as { talking_points: string[] }).talking_points).slice(0, 4).join('; ') : '';
-      const task = f.mode === 'first_message'
-        ? 'Write the FIRST LinkedIn message to this new connection: thank them briefly for connecting, one specific reason we are reaching out, one easy question.'
-        : lastFromThem
-          ? 'Write our REPLY to their last message: answer what they said first, then one clear next step.'
-          : 'Write a short FOLLOW-UP: they have not answered our last message. One new useful thing, no apology for following up, one easy question.';
-      const prompt = `You write short LinkedIn messages for B2B sales, in the first person as ${acting.actingName || 'me'}.
-
-Recipient: ${f.full_name}${f.title ? `, ${f.title}` : ''}${f.company ? ` at ${f.company}` : ''}.
-${task}
-${convo ? `The conversation so far (oldest first):\n"""\n${convo}\n"""` : 'There is no conversation yet.'}
-${f.product ? `What we offer: ${f.product}.` : ''}
-${points ? `Talking points for this person: ${points}.` : ''}
-${f.research ? `About their company: ${f.research.slice(0, 800)}` : ''}
-
-Rules: write in the SAME language as the conversation; with no conversation, in German when the person or company is German-speaking (judge from the names and company), otherwise English. At most ~70 words. No subject line, no signature block beyond the first name. Do not invent facts, meetings or numbers. Plain text.`;
-      const out = await draftInVoice({ prompt, feature: 'lead_card_draft', userId: acting.actingUserId,
-        prospectId: f.prospect_id, channel: 'linkedin',
-        step: f.mode === 'first_message' ? 'first' : lastFromThem ? 'reply' : 'followup' });
+      const situation = f.mode === 'first_message' ? 'first' : lastFromThem ? 'reply' : 'followup';
+      const angle = f.mode === 'first_message'
+        ? 'Thank them briefly for connecting, give one specific reason we are reaching out, ask one easy question.'
+        : lastFromThem ? 'Answer what they said first, then one clear next step.'
+          : 'They have not answered our last message: one new useful thing, no apology for following up, one easy question.';
+      const out = await draftInVoice({ situation, channel: 'linkedin', feature: 'lead_card_draft', userId: acting.actingUserId,
+        prospectId: f.prospect_id, linkedinThreadId: f.thread_id ?? null, angle });
       if ('error' in out) return NextResponse.json({ error: out.error }, { status: 502 });
       return NextResponse.json({ ...out, source: 'model' });
     }

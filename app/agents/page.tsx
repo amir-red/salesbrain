@@ -31,6 +31,7 @@ interface Approval {
   icp_score: number | null; icp_name: string | null; owner_name: string | null;
   kind?: string; intro_lead_name?: string | null; commercial?: boolean;
   check_flags?: VoiceFlag[] | null; edited_at?: string | null; rating?: number | null; decided_at?: string | null;
+  draft_reasoning?: string | null; decided_by?: 'human' | 'auto' | null;
 }
 
 /**
@@ -231,6 +232,7 @@ export default function AgentsPage() {
                     <div className="font-semibold">{ap.kind === 'proposal' ? (ap.subject || 'Proposal') : (ap.person_name || '—')} <span className="font-normal text-xs" style={{ color: 'var(--text-muted)' }}>{[ap.title, ap.company].filter(Boolean).join(' · ')}</span></div>
                     <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{ap.kind === 'proposal' ? '' : `via ${ap.channel}`}{ap.icp_score !== null && ap.icp_score !== undefined ? ` · fit ${ap.icp_score}` : ''}{ap.icp_name ? ` · ${ap.icp_name}` : ''}{ap.owner_name ? ` · for ${ap.owner_name}` : ''} · expires {relativeTime(ap.expires_at)}</div>
                     {ap.rationale && <div className="text-[11px] mt-1 italic" style={{ color: 'var(--text-muted)' }}>{ap.rationale}</div>}
+                    {ap.draft_reasoning && <div className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>💭 Why it wrote this: {ap.draft_reasoning}</div>}
                     {isHeld(ap) && <div className="text-[11px] mt-1" style={{ color: 'var(--orange)' }}>{ap.company_conflict?.warning}</div>}
                   </div>
                   <div className="flex gap-2 shrink-0">
@@ -264,7 +266,7 @@ export default function AgentsPage() {
                 <details key={ap.id} className="rounded-xl p-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
                   <summary className="text-xs cursor-pointer flex flex-wrap gap-x-2">
                     <span className="font-medium">{ap.person_name || '—'}</span>
-                    <span style={{ color: 'var(--text-muted)' }}>{ap.kind === 'followup' ? 'follow-up' : ap.kind === 'intro_request' ? 'intro ask' : ap.kind === 'connect' ? 'connection note' : 'message'} · {ap.status === 'sent' ? 'sent' : 'skipped'} {relativeTime(ap.decided_at || ap.created_at)}</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{ap.kind === 'followup' ? 'follow-up' : ap.kind === 'intro_request' ? 'intro ask' : ap.kind === 'connect' ? 'connection note' : 'message'} · {ap.status === 'sent' ? (ap.decided_by === 'auto' ? '🤖 sent without a tap' : 'sent') : 'skipped'} {relativeTime(ap.decided_at || ap.created_at)}</span>
                   </summary>
                   <pre className="text-xs whitespace-pre-wrap rounded-lg p-2 my-2" style={{ background: 'var(--bg-input)', color: 'var(--text)', fontFamily: 'inherit' }}>{ap.message}</pre>
                   <DraftFeedback approvalId={ap.id} compact />

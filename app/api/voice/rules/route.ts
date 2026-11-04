@@ -6,6 +6,7 @@ import { kernelCall } from '@/lib/mcp/kernel-rpc';
  * Voice rules (core 079). GET ?brand=&icp_id=&all=1 → the viewer's own rules, the brand's team rules and one list's
  * rules (all=1 includes forgotten ones). POST {content, kind?, scope?, brand?, icp_id?, channels?, steps?} → a rule
  * someone states; live at once (own voice by default; team = everyone writing for the brand).
+ * POST {action:'reorder', rule_ids:[…]} → the viewer's priorities (098): the order the drafter reads their rules in.
  */
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -28,6 +29,16 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   let body: Record<string, unknown> = {};
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
+  if (body.action === 'reorder') {
+    // 098: the viewer ranks their own rules — the drafter renders them as priorities in this order.
+    const ids = Array.isArray(body.rule_ids) ? (body.rule_ids as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 60) : [];
+    try {
+      const out = await kernelCall('voice_reorder', { rule_ids: ids }, session.userId);
+      return NextResponse.json(out, { status: out.error ? 400 : 200 });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });
+    }
+  }
   const content = typeof body.content === 'string' ? body.content.trim() : '';
   if (!content) return NextResponse.json({ error: 'Write the rule first' }, { status: 400 });
   const pick = (k: string) => (body[k] !== undefined && body[k] !== '' ? { [k]: body[k] } : {});

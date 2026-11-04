@@ -57,21 +57,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (body.action === 'draft') {
     const last = (r.last_sent ?? {}) as { message?: string; sent_at?: string };
     const days = last.sent_at ? Math.max(1, Math.round((Date.now() - new Date(last.sent_at).getTime()) / 86400000)) : null;
-    const prompt = `You write short LinkedIn follow-up messages for B2B sales. Write in the first person as ${acting.actingName || 'me'}.
-
-Recipient: ${r.full_name}${r.title ? `, ${r.title}` : ''}${r.company ? ` at ${r.company}` : ''}.
-This is touch ${(r.touch_count ?? 1) + 1}: they have not answered the previous message${days ? `, sent ${days} days ago` : ''}.
-Previous message (write the follow-up in the SAME language and register as this):
-"""
-${last.message || '(not on file)'}
-"""
-${r.product ? `What we offer: ${r.product}.` : ''}
-${r.research_summary ? `About their company: ${r.research_summary}` : ''}
-
-Rules: shorter than the previous message (at most ~60 words), no apology for following up, no pressure, one new useful thing (a concrete observation about their company, an offer to send a two-line summary, or a specific time to talk), end with one easy question. Do not repeat the previous message. Do not invent facts. Plain text, no subject line, no signature block beyond the first name.`;
     try {
-      const out = await draftInVoice({ prompt, feature: 'followup_draft', userId: acting.actingUserId,
-        prospectId: params.id, channel: 'linkedin', step: 'followup', maxTokens: 400 });
+      const out = await draftInVoice({ situation: 'followup', channel: 'linkedin', feature: 'followup_draft', userId: acting.actingUserId,
+        prospectId: params.id, linkedinThreadId: r.thread_id ?? null, touchNumber: (r.touch_count ?? 1) + 1,
+        previousText: last.message ?? null,
+        angle: `They have not answered the previous message${days ? `, sent ${days} days ago` : ''}: one new useful thing, no pressure, one easy question.` });
       if ('error' in out) return NextResponse.json({ error: out.error }, { status: 502 });
       return NextResponse.json(out);
     } catch (err) {

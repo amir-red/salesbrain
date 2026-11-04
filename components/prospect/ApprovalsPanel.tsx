@@ -12,7 +12,7 @@ export interface LeadApproval {
   rationale: string | null; created_at: string; decided_at?: string | null; sent_at?: string | null; expires_at: string;
   person_name: string | null; intro_lead_name?: string | null; owner_name?: string | null;
   company_conflict?: CompanyConflict | null; company_override_at?: string | null;
-  check_flags?: VoiceFlag[] | null; edited_at?: string | null; rating?: number | null;
+  check_flags?: VoiceFlag[] | null; edited_at?: string | null; rating?: number | null; draft_reasoning?: string | null;
 }
 
 /**
@@ -63,6 +63,7 @@ export default function ApprovalsPanel({ approvals, onChanged }: { approvals: Le
                 : <div className="text-[10px] mb-0.5 inline-block px-1.5 py-0.5 rounded" style={{ background: 'var(--bg-card)', color: 'var(--text-muted)' }}>✉️ Cold message</div>}
               <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>via {ap.channel} · expires {relativeTime(ap.expires_at)}{ap.owner_name ? ` · for ${ap.owner_name}` : ''}</div>
               {ap.rationale && <div className="text-[11px] mt-1 italic" style={{ color: 'var(--text-muted)' }}>{ap.rationale}</div>}
+              {ap.draft_reasoning && <div className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>💭 Why it wrote this: {ap.draft_reasoning}</div>}
               {isHeld(ap) && <div className="text-[11px] mt-1" style={{ color: 'var(--orange)' }}>{ap.company_conflict?.warning}</div>}
             </div>
             <div className="flex gap-2 shrink-0">

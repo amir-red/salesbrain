@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth';
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
 import { draftIntroRequest } from '@/lib/intro-draft';
 import { parseActAs, resolveActingUser } from '@/lib/act-as';
-import { cleanStamp, getVoiceContext } from '@/lib/voice-context';
+import { cleanStamp } from '@/lib/voice-context';
 
 /**
  * Step 6 — the intro ask. {action:'draft'} writes a proposal text with the
@@ -41,10 +41,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         WHERE p.id = $1 ${own}`, [...vals, body.connector_person_id]);
     if (!rows[0]) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const r = rows[0];
-    const voice = await getVoiceContext({ prospectId: params.id, step: 'intro',
-      channel: body.connector?.channel === 'email' ? 'email' : 'linkedin' }, acting.actingUserId);
     const out = await draftIntroRequest({
-      voice,
+      prospect_id: params.id,
       owner_name: acting.actingName || 'me',
       connector: { name: body.connector?.name || r.connector_name || 'them', role: body.connector?.role || 'connection',
                    evidence: body.connector?.evidence || 'you know each other', why: body.connector?.why, channel: body.connector?.channel },
