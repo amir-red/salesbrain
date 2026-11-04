@@ -141,7 +141,8 @@ export default function SalesLeadsPage() {
   }
 
   function toggle(id: string) {
-    setOpen((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+    // One card open at a time (Amir, 2026-11-04): opening a lead folds the one that was open.
+    setOpen((s) => (s.has(id) ? new Set() : new Set([id])));
   }
 
   const isStatusView = !WORK_VIEWS.some((v) => v.key === view);

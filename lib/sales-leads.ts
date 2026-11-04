@@ -82,6 +82,8 @@ export type OutreachState = {
   pending: { id: string; kind: 'connect' | 'outreach' | 'followup'; status: string; message: string | null; created_at: string }[];
   can_act: boolean;
   why: string | null;
+  /** The prospect behind the card — the Before / After review teaches its owner's voice (098). */
+  prospect_id?: string | null;
 };
 
 /** The lead's journey on the card (migration 060). Index = journey_stage; 0 = not started. */

@@ -31,8 +31,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const f = await facts(client, id, session.userId, session.role === 'admin');
     if (!f) return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
-    const { mode, sender, thread, pending, can_act, why } = f;
-    return NextResponse.json({ mode, sender, thread, pending, can_act, why } satisfies OutreachState);
+    const { mode, sender, thread, pending, can_act, why, prospect_id } = f;
+    return NextResponse.json({ mode, sender, thread, pending, can_act, why, prospect_id } satisfies OutreachState);
   } finally {
     client.release();
   }

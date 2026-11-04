@@ -2,12 +2,18 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { OutreachState } from '@/lib/sales-leads';
+import type { FeedbackResult } from '@/lib/voice';
+import DraftReview, { LearnedLines } from '@/components/voice/DraftReview';
 import { LinkedIn, Send } from './icons';
 
 /**
  * LinkedIn outreach on the lead card: send a connection request, or draft the next message —
  * both FILED for the sender's approval (Telegram card or /agents); nothing goes out from here.
  * The sender is the lead's prospect owner: their LinkedIn account is the one that sends.
+ *
+ * An AI draft opens the Before / After review (098): the AI's text stays on the left, the right is what goes out, a 1–5
+ * and one line on what was missed. Queue files the right side (the left kept as draft_original) and sends the rating
+ * and the line along — the lesson lands in the sender's voice at once. "Teach only" does the same without filing.
  */
 export default function OutreachPanel({ leadId, onChanged }: { leadId: string; onChanged?: () => void }) {
   const [s, setS] = useState<OutreachState | null>(null);
@@ -19,6 +25,15 @@ export default function OutreachPanel({ leadId, onChanged }: { leadId: string; o
   const [msg, setMsg] = useState('');
   const [source, setSource] = useState<'' | 'template' | 'model'>('');
   const [stamp, setStamp] = useState<unknown>(null); // Brand & Voice (079): sent back on propose
+  // 098: the Before / After review of an AI (or template) draft
+  const [before, setBefore] = useState('');
+  const [reasoning, setReasoning] = useState<string | null>(null);
+  const [usedFacts, setUsedFacts] = useState<string[]>([]);
+  const [priorities, setPriorities] = useState<{ content: string; kind: string }[]>([]);
+  const [rating, setRating] = useState<number | null>(null);
+  const [explanation, setExplanation] = useState('');
+  const [learned, setLearned] = useState<FeedbackResult | null>(null);
+  const [teaching, setTeaching] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -42,6 +57,10 @@ export default function OutreachPanel({ leadId, onChanged }: { leadId: string; o
       if (!res.ok || data.error) throw new Error(data.error || 'Failed');
       if (action === 'draft') {
         setMsg(data.message); setSource(data.source); setStamp(data.voice ?? null);
+        setBefore(data.message ?? ''); setReasoning(data.reasoning ?? null);
+        setUsedFacts(Array.isArray(data.used_facts) ? data.used_facts : []);
+        setPriorities(Array.isArray(data.priorities) ? data.priorities : []);
+        setRating(null); setExplanation(''); setLearned(null);
         if (Array.isArray(data.flags) && data.flags.length) {
           setErr(`Check before filing: ${data.flags.map((f: { detail: string }) => f.detail).join(' · ')}`);
         }
@@ -51,11 +70,39 @@ export default function OutreachPanel({ leadId, onChanged }: { leadId: string; o
       setOk(data.duplicate
         ? `Already waiting for ${who}'s decision — nothing new filed.`
         : `Filed for ${who}'s approval (Telegram card or /agents). Nothing goes out until they approve.`);
-      if (action === 'propose') { setMsg(''); setSource(''); setStamp(null); }
+      if (action === 'propose' && before && !data.duplicate && data.approval_id && (rating || explanation.trim())) {
+        // The review rides along: the filed row already holds the AI's text and the edit; add the 1–5 and the line.
+        try {
+          const fb = await fetch(`/api/drafts/${data.approval_id}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'feedback', ...(rating ? { rating: rating * 2 } : {}), ...(explanation.trim() ? { reason: explanation.trim() } : {}) }),
+          });
+          const out = await fb.json();
+          if (fb.ok) setLearned(out as FeedbackResult);
+        } catch { /* the draft is filed; the lesson is best effort */ }
+      }
+      if (action === 'propose') { setMsg(''); setSource(''); setStamp(null); setBefore(''); setRating(null); setExplanation(''); }
       if (action === 'connect') { setNote(''); setShowNote(false); }
       await load(); onChanged?.();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(''); }
+  }
+
+  async function teachOnly() {
+    if (!before) return;
+    setTeaching(true); setErr(null); setOk(null);
+    try {
+      const res = await fetch('/api/drafts/teach', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ before, after: msg, prospect_id: s?.prospect_id ?? undefined, channel: 'linkedin', step,
+          ...(rating ? { rating } : {}), ...(explanation.trim() ? { reason: explanation.trim() } : {}) }),
+      });
+      const out = await res.json();
+      if (!res.ok || out.error) throw new Error(out.error || 'Could not save the feedback');
+      setLearned(out as FeedbackResult);
+      setOk(`Saved to ${s?.sender?.name ?? 'the sender'}'s voice — nothing was filed or sent.`);
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setTeaching(false); }
   }
 
   if (!s) return err ? <p className="text-xs" style={{ color: 'var(--red)' }}>{err}</p> : null;
@@ -68,6 +115,9 @@ export default function OutreachPanel({ leadId, onChanged }: { leadId: string; o
   // One pending request / one pending message per person (the kernel refuses a second): say so, don't offer it.
   const waitingConnect = s.pending.some((p) => p.kind === 'connect');
   const waitingMsg = s.pending.some((p) => p.kind !== 'connect');
+  const step = s.mode === 'first_message' ? 'first' : lastFromThem ? 'reply' : 'followup';
+  const label = s.mode === 'first_message' ? 'first LinkedIn message' : lastFromThem ? 'LinkedIn reply' : 'LinkedIn follow-up';
+  const reviewing = !!before;
 
   return (
     <div className="mt-5 rounded-xl p-3" style={{ border: '1px solid var(--border)' }}>
@@ -122,15 +172,28 @@ export default function OutreachPanel({ leadId, onChanged }: { leadId: string; o
               ))}
             </ol>
           )}
-          <textarea value={msg} onChange={(e) => setMsg(e.target.value)} rows={msg ? 5 : 2}
-            placeholder={s.mode === 'first_message' ? 'The first message to this new connection…' : lastFromThem ? 'Your reply…' : 'Your follow-up…'}
-            className="w-full text-[13px] px-3 py-2 leading-relaxed resize-y" style={field} disabled={!s.can_act} />
+          {reviewing ? (
+            <DraftReview label={label} before={before} after={msg} onAfter={setMsg} reasoning={reasoning} usedFacts={usedFacts}
+              priorities={priorities} senderName={sender} rating={rating} onRating={setRating} explanation={explanation}
+              onExplanation={setExplanation} disabled={!s.can_act || !!busy} />
+          ) : (
+            <textarea value={msg} onChange={(e) => setMsg(e.target.value)} rows={msg ? 5 : 2}
+              placeholder={s.mode === 'first_message' ? 'The first message to this new connection…' : lastFromThem ? 'Your reply…' : 'Your follow-up…'}
+              className="w-full text-[13px] px-3 py-2 leading-relaxed resize-y" style={field} disabled={!s.can_act} />
+          )}
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <button type="button" onClick={() => act('draft')} disabled={!s.can_act || !!busy}
               className="text-xs px-3 py-1.5 rounded-full disabled:opacity-50" style={ghost}>
               {busy === 'draft' ? 'Drafting…' : msg ? 'Draft again' : s.mode === 'first_message' ? 'Draft first message' : lastFromThem ? 'Draft a reply' : 'Draft a follow-up'}
             </button>
             {source && <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{source === 'template' ? "from the list's first-message template" : 'AI draft — read it before you queue it'}</span>}
+            {reviewing && (rating || explanation.trim() || msg.trim() !== before.trim()) && (
+              <button type="button" onClick={teachOnly} disabled={!s.can_act || teaching || !!busy}
+                className="text-xs px-3 py-1.5 rounded-full disabled:opacity-50" style={ghost}
+                title={`Saves the rating, your corrections and the explanation to ${sender}'s voice — files and sends nothing`}>
+                {teaching ? 'Saving…' : 'Save feedback only'}
+              </button>
+            )}
             <span className="flex-1" />
             {waitingMsg && <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>A message already waits for {sender}&apos;s decision — approve or skip it first.</span>}
             <button type="button" onClick={() => act('propose')} disabled={!s.can_act || !!busy || !msg.trim() || waitingMsg}
@@ -142,6 +205,7 @@ export default function OutreachPanel({ leadId, onChanged }: { leadId: string; o
       )}
 
       {ok && <p className="mt-2 text-xs" style={{ color: 'var(--green)' }}>{ok}</p>}
+      {learned && <div className="mt-2"><LearnedLines res={learned} /></div>}
       {err && <p role="alert" className="mt-2 text-xs font-medium" style={{ color: 'var(--red)' }}>{err}</p>}
     </div>
   );
