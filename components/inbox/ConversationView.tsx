@@ -5,6 +5,28 @@ import Button from '@/components/panel/Button';
 import { Pill } from '@/components/panel/PageHeader';
 import type { InboxMessage, InboxThread } from '@/lib/inbox';
 import { CHANNEL_LABEL, initials } from '@/lib/inbox';
+
+/** A written proposal is kept in this browser (with your edits) until it is sent or discarded, so opening the
+ *  conversation again shows it at once instead of drafting a second time. A new message in the thread drops it. */
+const DRAFT_STORE = 'inbox.drafts';
+type StoredDraft = { lastId: string | null; proposal: InboxProposal; text: string; at: string };
+function readDrafts(): Record<string, StoredDraft> {
+  try { return JSON.parse(localStorage.getItem(DRAFT_STORE) || '{}') as Record<string, StoredDraft>; } catch { return {}; }
+}
+function loadDraft(key: string, lastId: string | null): StoredDraft | null {
+  const d = readDrafts()[key];
+  return d && d.lastId === lastId ? d : null;
+}
+function saveDraft(key: string, d: StoredDraft | null) {
+  try {
+    const all = readDrafts();
+    if (d) all[key] = d; else delete all[key];
+    // keep the store small: newest 40 drafts
+    const keys = Object.keys(all).sort((a, b) => (all[b].at || '').localeCompare(all[a].at || '')).slice(40);
+    for (const k of keys) delete all[k];
+    localStorage.setItem(DRAFT_STORE, JSON.stringify(all));
+  } catch { /* storage unavailable: the draft just is not remembered */ }
+}
 import ChannelIcon from './ChannelIcon';
 import { EMPTY_VERDICT, ProposalStrip, RatingStrip, verdictGiven, verdictReason, type InboxProposal, type Verdict } from './InboxDraft';
 import { LearnedLines } from '@/components/voice/DraftReview';
@@ -64,15 +86,31 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
   const boxRef = useRef<HTMLTextAreaElement>(null);
   const key = thread ? `${thread.channel}:${thread.id}` : '';
 
-  useEffect(() => { setText(''); setNote(null); setProposal(null); setRate(null); setVerdict(EMPTY_VERDICT); setLearned(null); setTeachErr(null); }, [key]);
-  // A conversation that needs an answer drafts by itself when it opens (once per conversation per visit).
+  const lastId = thread?.messages.length ? thread.messages[thread.messages.length - 1].id : null;
+  const restored = useRef(false);
+
+  useEffect(() => {
+    setNote(null); setRate(null); setVerdict(EMPTY_VERDICT); setLearned(null); setTeachErr(null);
+    // a proposal written earlier for this conversation (and the edits made to it) comes back as it was
+    const kept = key ? loadDraft(key, lastId) : null;
+    setProposal(kept ? kept.proposal : null); setText(kept ? kept.text : '');
+    restored.current = !!kept;
+  }, [key]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // A conversation that needs an answer drafts by itself when it opens — once; afterwards the kept draft is shown.
   useEffect(() => {
     if (!thread || !thread.can_reply || thread.state !== 'needs_reply' || !thread.last_from_them) return;
-    if (autoDrafted.current.has(key) || proposal || text.trim()) return;
+    if (restored.current || autoDrafted.current.has(key) || proposal || text.trim()) return;
+    if (loadDraft(key, lastId)) return;
     autoDrafted.current.add(key);
     act('draft');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, thread?.can_reply, thread?.state]);
+  // edits to the proposal are remembered with it
+  useEffect(() => {
+    if (!key || !proposal) return;
+    saveDraft(key, { lastId, proposal, text, at: new Date().toISOString() });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, proposal, text]);
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [key, thread?.messages.length]);
   useEffect(() => {
     const el = boxRef.current;
@@ -125,7 +163,7 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
           } else {
             setRate({ approvalId, before: proposal.message, after: text, step: proposal.situation });
           }
-          setProposal(null);
+          setProposal(null); saveDraft(key, null);
         }
         if (data.sent) { setText(''); setNote(null); }
         else if (data.waiting) { setText(''); setNote({ kind: 'info', text: data.note || 'Held by the send rules; it goes out at the next send window.' }); }
@@ -239,7 +277,7 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
               onDiscard={async () => {
                 if (verdictGiven(verdict) && !learned) await teach(text);
                 else if (!learned) setRate({ approvalId: null, before: proposal.message, after: text, step: proposal.situation });
-                setProposal(null); setText('');
+                setProposal(null); setText(''); saveDraft(key, null);
               }} />}
             {!proposal && learned && (
               <div className="rounded-xl px-3 py-2 mb-2 text-xs flex items-start gap-2" style={{ background: 'color-mix(in srgb, var(--green) 8%, transparent)' }}>
