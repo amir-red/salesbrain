@@ -3271,6 +3271,7 @@ so an untouched send is the implicit 10 and an edit is learned from like every o
 `test_the_voice_stamp_reaches_prepare_reply`. Not built: a draft for email threads needs a prospect or person on the
 thread (the kernel's email conversation lookup is person-keyed), the Telegram card for an Inbox reply (the Inbox sends
 at once by design).
+- **Same evening (app-only)**: a conversation in *Needs reply* drafts by itself when opened (once per visit, `autoDrafted`); the stars and two lines (what was right / what went wrong) sit ON the proposal strip, saved with Send (feedback on the approval row), with **Save feedback** alone (`/api/drafts/teach`, nothing sent) or on Discard. First live draft showed the lesson to teach: Jannik wrote du, the draft answered Sie.
 
 ### 5.cn The Leads Finder learns from what its people became (2026-11-05, core/hermes 0.80.0, no migration)
 
