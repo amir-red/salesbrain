@@ -3206,6 +3206,7 @@ built yet), Hermes browser on WhatsApp Web only as a fallback; iMessage = a scri
 ### 5.cl Mateo's voice loaded from his three playbooks + contested rules + situation templates (2026-11-05, feat/mateo-voice, no migration)
 
 **LIVE 2026-11-05 (0.79.0)**: ring deployed (smoke 0.79.0), app on Production (run 42003013314), `load_voice_playbook mateo --apply` run on the box: 29 rules, brand 5 fields, 1 product, 19 templates, 8 knowledge entries, 4 memory notes retired, 1 duplicate archived. Mateo settles the six contested pairs on /brand → Voice (Contested card); every draft for him now carries his rules and the situation template.
+- **v1.1, same day (0.79.1)** — Amir: the 22 Oct playbook file "is not correct": removed as a source. Its five rules archived on production (audit `voice_rule_forget`), the `length` and `proof_in_first` defaults rebuilt from the Deal Playbook (measured length by moment; no unconfirmed figures in a first message, one or two credibility facts), "15 minutes next week" dropped from the brand never-write list, the "Mateo's playbook" knowledge entry rewritten from his own messages. Live: 26 ordered rules + the em-dash rule, six pairs all defaulting to deal_playbook. Sources are now deal_playbook + mateo_method only; `DOCS` keeps 'playbook' so old evidence rows still label.
 
 Amir: "go through these three files and build Mateo's voice and everything." Sources: the 22 Oct *Outreach Message
 Playbook* v1.0 (Hannes + the verified sample), the *Deal Playbook* artifact (built from 2,222 pieces of his own writing:
