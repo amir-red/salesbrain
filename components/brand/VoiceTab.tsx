@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { relativeTime } from '@/lib/time';
-import { FORMALITY, LIMIT_KEYS, SOURCE_LABEL, STEPS, TONES, type BrandPayload, type RuleKind, type VoiceRule } from '@/lib/voice';
+import { CONFLICT_LABEL, DOC_LABEL, FORMALITY, LIMIT_KEYS, SOURCE_LABEL, STEPS, TONES, type BrandPayload, type RuleKind, type VoiceRule } from '@/lib/voice';
 import { HowYouWrite, Priorities, TrustLadder } from '@/components/voice/SenderLearning';
 import { api, ChipInput, Help, Section } from './ui';
 
@@ -100,7 +100,8 @@ function RuleRow({ r, actions }: { r: VoiceRule; actions?: React.ReactNode }) {
         {actions}
       </div>
       <div className="text-[11px] flex flex-wrap gap-x-2" style={{ color: 'var(--text-muted)' }}>
-        <span>{SOURCE_LABEL[r.source] ?? r.source} · {relativeTime(r.created_at)}</span>
+        <span>{ev.doc ? `from ${DOC_LABEL[ev.doc] ?? ev.doc}` : (SOURCE_LABEL[r.source] ?? r.source)} · {relativeTime(r.created_at)}</span>
+        {ev.resolved && <span>· you settled “{CONFLICT_LABEL[ev.resolved.key] ?? ev.resolved.key}” with this one</span>}
         {r.confirmations > 1 && <span>· confirmed {r.confirmations}×</span>}
         {scope && <span>· only for {scope}</span>}
         {ev.rating ? <span>· you rated it {ev.rating}/10{ev.reason ? ` — ${ev.reason}` : ''}</span> : null}
@@ -154,12 +155,13 @@ function MyVoice({ rules, stats, brandKey, reload, showOld, setShowOld }: {
         </div>
       )}
       <AddRule brandKey={brandKey} scope="sender" onAdded={reload} />
-      {rules && rules.filter((r) => r.status === 'active').length >= 2 && <Priorities rules={rules.filter((r) => r.status === 'active')} reload={reload} />}
+      {rules && <Contested rules={rules.filter((r) => r.status === 'active')} reload={reload} />}
+      {rules && rules.filter((r) => r.status === 'active').length >= 2 && <Priorities rules={rules.filter((r) => r.status === 'active' && !isHeldBack(r))} reload={reload} />}
       {rules === null ? <Help>Loading…</Help> : rules.length === 0 ? (
         <Help>No rules yet. Correct a draft, tap a chip on one, or add a rule above — e.g. “Sign as Matthias, no surname”.</Help>
       ) : (
         <ul className="space-y-2">
-          {rules.map((r) => (
+          {rules.filter((r) => !(r.status === 'active' && isContested(r))).map((r) => (
             <RuleRow key={r.id} r={r} actions={r.status === 'active' ? (
               <span className="flex gap-2 shrink-0 text-xs">
                 <button onClick={() => act(r.id, 'share')} disabled={busy === r.id} className="underline" style={{ color: 'var(--text-muted)' }} title="Copy to the team's voice — live for everyone at once">Share with team</button>
@@ -169,6 +171,63 @@ function MyVoice({ rules, stats, brandKey, reload, showOld, setShowOld }: {
         </ul>
       )}
     </Section>
+  );
+}
+
+function isContested(r: VoiceRule): boolean {
+  return Boolean(r.evidence?.conflict?.key);
+}
+/** The contested side the drafter does not read (its twin is the default). It keeps no priority position. */
+function isHeldBack(r: VoiceRule): boolean {
+  return isContested(r) && !r.evidence?.conflict?.default;
+}
+
+/** A loaded playbook can carry two rules that contradict each other (the 22 Oct playbook vs the "Mateo Method" guide).
+ * Both are stored; the drafter follows the DEFAULT side (the one the sender's own messages support) until the person
+ * keeps one. Keeping a side archives the other. */
+function Contested({ rules, reload }: { rules: VoiceRule[]; reload: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const groups = new Map<string, VoiceRule[]>();
+  for (const r of rules) { const k = r.evidence?.conflict?.key; if (k) groups.set(k, [...(groups.get(k) ?? []), r]); }
+  if (groups.size === 0) return null;
+  const keep = async (id: string) => {
+    setBusy(id);
+    await api(`/api/voice/rules/${id}`, { method: 'POST', body: { action: 'resolve' } });
+    setBusy(null); reload();
+  };
+  return (
+    <div className="rounded-xl p-3 space-y-3" style={{ background: 'color-mix(in srgb, var(--yellow) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--yellow) 40%, transparent)' }}>
+      <div>
+        <div className="text-sm font-medium">Contested: pick the one that is you</div>
+        <Help>Your playbooks disagree on these. The drafter follows the side marked “drafting with this one” until you keep one; keeping a side forgets the other.</Help>
+      </div>
+      <ul className="space-y-3">
+        {[...groups.entries()].map(([key, pair]) => (
+          <li key={key} className="space-y-1">
+            <div className="text-xs font-medium">{CONFLICT_LABEL[key] ?? key}</div>
+            <div className="grid gap-2 md:grid-cols-2">
+              {pair.sort((a, b) => Number(Boolean(b.evidence?.conflict?.default)) - Number(Boolean(a.evidence?.conflict?.default))).map((r) => {
+                const isDefault = Boolean(r.evidence?.conflict?.default);
+                return (
+                  <div key={r.id} className="rounded-lg p-2 space-y-1" style={{ background: 'var(--bg-card)', border: `1px solid ${isDefault ? 'var(--accent)' : 'var(--border)'}` }}>
+                    <p className="text-sm">{r.content}</p>
+                    <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                      {r.evidence?.doc ? `from ${DOC_LABEL[r.evidence.doc] ?? r.evidence.doc}` : SOURCE_LABEL[r.source]}
+                      {isDefault ? ' · drafting with this one' : ' · held back'}
+                      {r.evidence?.conflict?.note ? ` · ${r.evidence.conflict.note}` : ''}
+                    </div>
+                    <button onClick={() => keep(r.id)} disabled={busy === r.id} className="px-2 py-1 rounded-md text-xs font-medium disabled:opacity-40"
+                      style={{ background: isDefault ? 'var(--accent)' : 'var(--bg-input)', color: isDefault ? 'var(--accent-fg)' : 'var(--text)', border: '1px solid var(--border)' }}>
+                      Keep this
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

@@ -71,9 +71,24 @@ export interface VoiceRule {
   id: string; scope: 'sender' | 'team' | 'list'; kind: RuleKind; content: string;
   channels: string[] | null; steps: string[] | null; status: 'active' | 'superseded' | 'archived';
   source: 'stated' | 'edit' | 'rating' | 'shared' | 'weekly' | 'app';
-  evidence: { approval_id?: string; before?: string; after?: string | null; rating?: number; reason?: string } | null;
+  evidence: {
+    approval_id?: string; before?: string; after?: string | null; rating?: number; reason?: string;
+    doc?: string; quote?: string;                                    // a loaded playbook: which document, their words
+    conflict?: { key: string; default?: boolean; note?: string };    // contested pair: only the default side drafts
+    resolved?: { key: string };
+  } | null;
   confirmations: number; created_at: string; owner_user_id?: string | null; position?: number | null;
 }
+
+/** Where a loaded rule came from (evidence.doc) — the three documents Mateo's voice was built from (2026-11-05). */
+export const DOC_LABEL: Record<string, string> = {
+  playbook: 'Outreach playbook, 22 Oct', deal_playbook: 'Deal Playbook (his own messages)', mateo_method: 'The Mateo Method',
+  corpus: 'his measured messages',
+};
+export const CONFLICT_LABEL: Record<string, string> = {
+  greeting: 'How a message opens', signoff: 'How a message ends', length: 'How long a message is',
+  du_sie: 'German: du or Sie', proof_in_first: 'Numbers and proof in a first message', cta: 'The ask at the end',
+};
 
 export const SOURCE_LABEL: Record<VoiceRule['source'], string> = {
   stated: 'you said so', app: 'added here', edit: 'learned from your edit', rating: 'learned from your rating',

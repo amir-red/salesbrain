@@ -3203,6 +3203,55 @@ built yet), Hermes browser on WhatsApp Web only as a fallback; iMessage = a scri
   agent's weekly review reading the eval trend, a per-turn cap on `crm_draft` calls, re-running the Google sync nightly
   for sent mail.
 
+### 5.cl Mateo's voice loaded from his three playbooks + contested rules + situation templates (2026-11-05, feat/mateo-voice, no migration)
+
+Amir: "go through these three files and build Mateo's voice and everything." Sources: the 22 Oct *Outreach Message
+Playbook* v1.0 (Hannes + the verified sample), the *Deal Playbook* artifact (built from 2,222 pieces of his own writing:
+voice EN/DE, 24 do + 21 don't rules, 8 situation templates, the offer library) and the *Mateo Method* guide (the OPPOSITE
+on form: "Thomas —", 15 words, fragments, proof figures, strictly Sie). Decisions (Amir): load all three and mark the
+contradictions for Mateo to settle; voice + knowledge only (the Deal Playbook's 3-week update agent is NOT built); proof
+only from the offer library, labelled, no client names, none of the Method's "€420k" examples. Before: corpus 65 messages,
+eval 0.235, 2 voice rules (both the em-dash rule), brand never_write / limits empty, 0 products, 0 templates, 0 ratings on
+62 sends, 4 voice-intent notes sitting in `agent_memories`, which the drafter never reads.
+- **The file** `salesbrain-core/src/salesbrain_core/voice_playbooks/mateo.py` (`PLAYBOOK`; plain Python, no YAML dep):
+  29 ordered sender rules with `doc` (playbook | deal_playbook | mateo_method) and six **contested pairs**
+  (`conflict {key, default, note}`: greeting, signoff, length, du_sie, proof_in_first, cta — the default is always the
+  side his measured messages support, never the Method); brand never_write (19 phrases, team-wide), word limits
+  (LinkedIn first 65, follow-up 60, reply 120; email 120/100/180), the Nov-2026 positioning as description, the donkey-work
+  pain, `language` NULL; one product "Zeami" (4 proof lines by KIND of business, 7 offers, 6 objection answers); 19 guided
+  personal templates (step × language × variant tag `reengage | partner | no`); 8 knowledge entries (7 team + "Mateo's
+  words" personal); the 4 memory notes to retire. `store/load_voice_playbook.py mateo [--apply] [--as <admin>]` validates
+  (`validate()`, pure), prints the plan (dry run default), then writes through the kernel commands only
+  (`kv._add_rule` with evidence + `reorder_rules`, `update_brand` MERGING never_write/limits, `upsert_product`,
+  `upsert_template(owner_user_id=)` — new admin param —, `knowledge.learn`, `memory.forget`; housekeeping archives twin
+  rules at token overlap ≥ 0.5, looser than the kernel's 0.6 because the two em-dash rules scored 0.58). Rerunnable:
+  a second --apply reinforces. Audit `voice_playbook_load`.
+- **Contested rules** (`policy/voice.conflict_of / held_back`, `applies()` skips a held-back rule everywhere:
+  priorities, the context block, the never-write check); `commands/voice.resolve_conflict(keep_rule_id)` (owner or
+  admin; archives the other side, clears the marker, audit `voice_conflict_resolve`); ring `crm_voice_conflict_resolve`
+  (mcp=None, 186 tools); app `POST /api/voice/rules/[id] {action:'resolve'}`; /brand → Voice shows a **"Contested: pick the
+  one that is you"** card per key with "drafting with this one" / "held back" and a Keep-this button, a source badge
+  ("from Deal Playbook (his own messages)") on every loaded rule, and held-back rules outside the priority list.
+- **Situation templates reach the drafter** (they had no Python reader): `sender_style._template_for` picks the owner's
+  active personal `message_templates` row for (step, channel) by tag — asked variant in the draft's language first, a
+  variant nobody asked for never beats the plain one; `render_prompt` adds "HOW MATEO WRITES A FIRST MESSAGE (<name>)"
+  after the examples ("a skeleton, not text to copy", ≤900 chars); `trim` drops it after the first example cut.
+  `DraftSpec.tag` / `crm_draft tag` / `draftInVoice({tag})` = reengage | partner | no.
+- **Two prompt bugs fixed**: sender rules were rendered twice (PRIORITIES and "own rules": `_context(rank_sender=True)`
+  now ranks once and skips those ids), and a German draft carried "Write in en" from the brand default
+  (`_context(language=)` takes the drafter's resolved language).
+- Verified: 663 core tests, 410 ring tests, tsc + build; DB tests `test_voice_playbook_db.py` on a scratch Postgres (dry run
+  writes nothing, apply loads every store, rerun reinforces, template once + rules once in the read, resolve archives the
+  loser); a production DRY RUN (29 create, 1 duplicate to archive, brand 5 fields, 19 templates, 8 knowledge, 4 memory).
+  Prompt snapshot for a German first touch: 6.2k chars, 12 priorities, the DE fair template, "Write in de".
+- **Rollout (integration session)**: merge, deploy ring + app, then on the box
+  `python -m salesbrain_core.store.load_voice_playbook mateo --apply`; ask the bot as Mateo for a first touch and a reply;
+  Mateo settles the six pairs on /brand → Voice; compare the next nightly `draft_evals` score against 0.235.
+- Known tension left in the data: his real post-fair template asks for a slot while the playbook step says a first touch
+  asks for nothing; the task line wins in the prompt. Not built: the 3-week update agent, a golden flag on real messages,
+  links in drafts (the playbook's full messages carry a source URL; the drafter rejects links by design), Gmail sent
+  mail into his corpus (0 email messages: Profile → Google sync), a per-step filter on the Templates tab.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

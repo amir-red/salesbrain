@@ -24,6 +24,7 @@ export interface DraftRequest {
   touchNumber?: number | null;
   language?: 'de' | 'en' | null;
   subject?: boolean;
+  tag?: 'reengage' | 'partner' | 'no' | null;   // a variant of the sender's own situation skeleton
   connector?: { name: string; role: string; evidence: string } | null;   // intro ask
   lead?: { name: string; title?: string | null; company?: string | null } | null;
 }
@@ -42,7 +43,7 @@ export async function draftInVoice(req: DraftRequest): Promise<DraftResult | { e
   put('prospect_id', req.prospectId); put('person_id', req.personId); put('angle', req.angle); put('goal', req.goal);
   put('previous_text', req.previousText); put('linkedin_thread_id', req.linkedinThreadId);
   put('touch_number', req.touchNumber); put('language', req.language); put('subject', req.subject || undefined);
-  put('connector', req.connector); put('lead', req.lead);
+  put('connector', req.connector); put('lead', req.lead); put('tag', req.tag);
   let out: Record<string, unknown>;
   try {
     out = await kernelCall('crm_draft', args, req.userId) as Record<string, unknown>;
