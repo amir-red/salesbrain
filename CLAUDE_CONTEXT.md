@@ -3187,6 +3187,15 @@ built yet), Hermes browser on WhatsApp Web only as a fallback; iMessage = a scri
   on the box run `sender_corpus.refresh(SERVICE)` and `sender_style.rebuild(…, activate=True)` for Amir, Mateo, Matthias,
   Hannes and READ the four blocks with them; check `llm_usage` feature `drafter` (~2.5–3.5 k input tokens per draft) and
   `draft_eval`; every slice starts at `draft` — nothing sends alone until a sender opts in and earns it.
+- **0.78.1 (2026-11-05)**: (1) every Lead Conductor tick since the 0.78.0 deploy hit `QueryCanceled … statement timeout
+  … person_warmth`: the new 10-minute `funnel-refresh` and the hourly conductor both run at :30, and `refresh_warmth`
+  wrote BEFORE the funnel's advisory xact lock while pool connections are not autocommit, so one held its row locks for
+  the whole refresh and the other waited 2 min. Now `store.db.session_lock(conn, REFRESH_LOCK)` (session-level, always
+  released, re-entrant, commits before unlocking) wraps both `funnel.refresh` and `warmth.refresh_warmth`; the second
+  caller returns `{"skipped": "another refresh is running"}`. Rule: take a cross-process lock BEFORE the first write.
+  (2) Telegram draft rating = **1–5 stars** like the web card (`vr:<id>:<n×2>`, `voice_feedback.stars`), and
+  `agents.drafting.ask_rating` is ON (Amir): after every send / edited send / skip the star row comes (an edit is still
+  learned from first; a star tap opens the reason buttons); `rating_wanted` lets a person lower an implicit 10.
 - **Not built**: the WhatsApp Unipile connect / claim / sync flow (099 prepares `linkedin_accounts.provider`; the hourly
   sync must skip LinkedIn-only steps for such a row), the Hermes browser fallback (`agents/whatsapp-sync/`), the Outreach
   agent's weekly review reading the eval trend, a per-turn cap on `crm_draft` calls, re-running the Google sync nightly
