@@ -6,7 +6,9 @@ import { Pill } from '@/components/panel/PageHeader';
 import type { InboxMessage, InboxThread } from '@/lib/inbox';
 import { CHANNEL_LABEL, initials } from '@/lib/inbox';
 import ChannelIcon from './ChannelIcon';
-import { ProposalStrip, RatingStrip, type InboxProposal } from './InboxDraft';
+import { EMPTY_VERDICT, ProposalStrip, RatingStrip, verdictGiven, verdictReason, type InboxProposal, type Verdict } from './InboxDraft';
+import { LearnedLines } from '@/components/voice/DraftReview';
+import type { FeedbackResult } from '@/lib/voice';
 import { Sparkle } from '@/components/icons';
 
 function dayLabel(iso: string | null): string {
@@ -51,13 +53,26 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
   const [text, setText] = useState('');
   const [proposal, setProposal] = useState<InboxProposal | null>(null);   // the AI draft in the box, until sent or dropped
   const [rate, setRate] = useState<{ approvalId: string | null; before: string; after: string; step: 'reply' | 'followup' } | null>(null);
+  const [verdict, setVerdict] = useState<Verdict>(EMPTY_VERDICT);        // stars + right / wrong, filled while reviewing
+  const [learned, setLearned] = useState<FeedbackResult | null>(null);   // what the last Save / Send taught
+  const [teaching, setTeaching] = useState(false);
+  const [teachErr, setTeachErr] = useState<string | null>(null);
+  const autoDrafted = useRef<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<{ kind: 'error' | 'info'; text: string } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLTextAreaElement>(null);
   const key = thread ? `${thread.channel}:${thread.id}` : '';
 
-  useEffect(() => { setText(''); setNote(null); setProposal(null); setRate(null); }, [key]);
+  useEffect(() => { setText(''); setNote(null); setProposal(null); setRate(null); setVerdict(EMPTY_VERDICT); setLearned(null); setTeachErr(null); }, [key]);
+  // A conversation that needs an answer drafts by itself when it opens (once per conversation per visit).
+  useEffect(() => {
+    if (!thread || !thread.can_reply || thread.state !== 'needs_reply' || !thread.last_from_them) return;
+    if (autoDrafted.current.has(key) || proposal || text.trim()) return;
+    autoDrafted.current.add(key);
+    act('draft');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, thread?.can_reply, thread?.state]);
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [key, thread?.messages.length]);
   useEffect(() => {
     const el = boxRef.current;
@@ -92,14 +107,24 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
       if (action === 'draft') {
         setProposal({ message: data.message, reasoning: data.reasoning ?? null, used_facts: data.used_facts ?? [], voice: data.voice,
           situation: data.situation === 'followup' ? 'followup' : 'reply', priorities: data.priorities ?? [] });
-        setRate(null); setText(data.message);
+        setRate(null); setVerdict(EMPTY_VERDICT); setLearned(null); setTeachErr(null); setText(data.message);
         return;
       }
       if (action === 'reply') {
         const sentOrHeld = data.sent || data.waiting;
         if (sentOrHeld && proposal) {
-          // the proposal went out (as is, or edited): the stars rate its approval row
-          setRate({ approvalId: typeof data.approval_id === 'string' ? data.approval_id : null, before: proposal.message, after: text, step: proposal.situation });
+          // the proposal went out (as is, or edited): a verdict already given is recorded on its approval row now,
+          // otherwise the stars are offered once more
+          const approvalId = typeof data.approval_id === 'string' ? data.approval_id : null;
+          if (approvalId && verdictGiven(verdict)) {
+            const r = await fetch(`/api/drafts/${approvalId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'feedback', ...(verdict.rating ? { rating: verdict.rating * 2 } : {}), ...(verdictReason(verdict) ? { reason: verdictReason(verdict) } : {}) }) });
+            const d = await r.json().catch(() => ({}));
+            setLearned(r.ok && !d.error ? (d as FeedbackResult) : { note: d.error || 'Sent; the feedback was not saved.' });
+            setRate(null);
+          } else {
+            setRate({ approvalId, before: proposal.message, after: text, step: proposal.situation });
+          }
           setProposal(null);
         }
         if (data.sent) { setText(''); setNote(null); }
@@ -115,6 +140,27 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
       setNote({ kind: 'error', text: err instanceof Error ? err.message : 'Something went wrong' });
     } finally {
       setBusy(null);
+    }
+  }
+
+  /** Teach from the proposal without sending: the edit so far, the stars and the two lines (draft_teach). */
+  async function teach(after: string) {
+    if (!thread || !proposal) return;
+    setTeaching(true); setTeachErr(null);
+    try {
+      const r = await fetch('/api/drafts/teach', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ before: proposal.message, after, ...(verdict.rating ? { rating: verdict.rating } : {}),
+          ...(verdictReason(verdict) ? { reason: verdictReason(verdict) } : {}), ...(thread.prospect_id ? { prospect_id: thread.prospect_id } : {}),
+          channel: thread.channel, step: proposal.situation }) });
+      const d = await r.json();
+      if (!r.ok || d.error) throw new Error(d.error || 'Not saved');
+      setLearned(d as FeedbackResult);
+      return true;
+    } catch (e) {
+      setTeachErr(e instanceof Error ? e.message : 'Not saved');
+      return false;
+    } finally {
+      setTeaching(false);
     }
   }
 
@@ -188,8 +234,19 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
         )}
         {thread.can_reply ? (
           <>
-            {proposal && <ProposalStrip p={proposal} senderFirst={(thread.owner_name || 'your').split(' ')[0]}
-              onDiscard={() => { setRate({ approvalId: null, before: proposal.message, after: text, step: proposal.situation }); setProposal(null); setText(''); }} />}
+            {proposal && <ProposalStrip p={proposal} senderFirst={(thread.owner_name || 'your').split(' ')[0]} verdict={verdict} onVerdict={setVerdict}
+              onTeach={() => teach(text)} teaching={teaching} learned={learned} error={teachErr}
+              onDiscard={async () => {
+                if (verdictGiven(verdict) && !learned) await teach(text);
+                else if (!learned) setRate({ approvalId: null, before: proposal.message, after: text, step: proposal.situation });
+                setProposal(null); setText('');
+              }} />}
+            {!proposal && learned && (
+              <div className="rounded-xl px-3 py-2 mb-2 text-xs flex items-start gap-2" style={{ background: 'color-mix(in srgb, var(--green) 8%, transparent)' }}>
+                <div className="flex-1"><LearnedLines res={learned} /></div>
+                <button type="button" onClick={() => setLearned(null)} className="underline" style={{ color: 'var(--text-muted)' }}>Close</button>
+              </div>
+            )}
             {rate && <RatingStrip approvalId={rate.approvalId} before={rate.before} after={rate.after} prospectId={thread.prospect_id}
               channel={thread.channel} step={rate.step} senderFirst={(thread.owner_name || 'your').split(' ')[0]} onClose={() => setRate(null)} />}
             <textarea
