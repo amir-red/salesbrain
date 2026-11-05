@@ -3272,7 +3272,7 @@ so an untouched send is the implicit 10 and an edit is learned from like every o
 thread (the kernel's email conversation lookup is person-keyed), the Telegram card for an Inbox reply (the Inbox sends
 at once by design).
 
-### 5.cm The Leads Finder learns from what its people became (2026-11-05, core/hermes 0.80.0, no migration)
+### 5.cn The Leads Finder learns from what its people became (2026-11-05, core/hermes 0.80.0, no migration)
 
 From the 2026-11-05 call with Mateo ("refine what we have, don't build new agents"; Amir's action item "check how the
 scouting agent self-learns"). What the check found: the Leads Finder's daily review saw only search yield (analyzed /
