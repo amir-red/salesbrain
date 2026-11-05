@@ -3255,6 +3255,53 @@ eval 0.235, 2 voice rules (both the em-dash rule), brand never_write / limits em
   links in drafts (the playbook's full messages carry a source URL; the drafter rejects links by design), Gmail sent
   mail into his corpus (0 email messages: Profile → Google sync), a per-step filter on the Templates tab.
 
+### 5.cm Inbox: Draft reply with the one drafter, rated to learn (2026-11-05, feat/inbox-drafter, 0.79.2, no migration)
+
+Amir: "add the drafter in the inbox with AI proposal, the conversation context, the rating to learn from it." The Inbox
+reply box gets **✨ Draft reply**: `POST /api/inbox/[channel]/[id] {action:'draft'}` (owner only) → `draftInVoice`
+(situation `reply` when they wrote last, else `followup`; prospect / person / LinkedIn thread id, feature `inbox_draft`),
+so the kernel's one read brings the last three messages, the person's facts, the owner's rules, profile and situation
+template. The proposal lands in the box, editable, under a strip ("AI proposal in Mateo's voice · why this · Discard").
+**Send carries the stamp**: `{action:'reply', text, voice}` → `inbox_reply(voice=)` → `prepare_reply(voice=)` → `kv.stamp`
+(draft_original = the model's text, edit_ratio, flags; `drafted_by` stays 'inbox' because `pending_replies` keys on it),
+so an untouched send is the implicit 10 and an edit is learned from like every other lane. After Send (or Discard) a
+**rating strip** appears: five stars + one line → `POST /api/drafts/[approval_id] feedback` (sent) or `/api/drafts/teach`
+(dropped: before / after, prospect, step), with the learned rules shown and Undo. `components/inbox/InboxDraft.tsx`
+(`ProposalStrip`, `RatingStrip`), `ConversationView.tsx`; thread rows now carry `person_id`. Ring test
+`test_the_voice_stamp_reaches_prepare_reply`. Not built: a draft for email threads needs a prospect or person on the
+thread (the kernel's email conversation lookup is person-keyed), the Telegram card for an Inbox reply (the Inbox sends
+at once by design).
+
+### 5.cm The Leads Finder learns from what its people became (2026-11-05, core/hermes 0.80.0, no migration)
+
+From the 2026-11-05 call with Mateo ("refine what we have, don't build new agents"; Amir's action item "check how the
+scouting agent self-learns"). What the check found: the Leads Finder's daily review saw only search yield (analyzed /
+matched / new), so it learned which query returns MATCHES — one lesson in its MEMORY.md since 30 Oct — never whether the
+people were any good; trust-score ✓ / ↓ had 0 clicks ever. Its NRW title query had run 63 times for 2,203 people, avg trust
+score 30, 62 at 50+.
+- **Per query, what the people became** (a lead's `source_detail` IS the query keywords — the join key; grouped by query,
+  not by list, because the cohort sort moved people): kernel `agents.query_outcomes(conn, queries, days=60)` = found, good
+  (trust score >= `good_score` 50), avg score, noise (archived or on the Unsorted list), prioritised, requested / accepted
+  (`linkedin_invitations` by prospect / slug / member id), contacted / answered / opportunity (`person_funnel`),
+  decided / skipped connect cards, ✓ / ↓, searches spent in the SAME window and `good_per_search`. Pure
+  `policy/leads_learning.py::verdict` → good | mixed | poor | too_early + why (an answer or opportunity = good; accept rate,
+  a person's skips, ✓ / ↓, good share, noise share; < 20 people = too early). `leads_finder_history` (the run's dossier)
+  carries `outcomes`, `good_per_search`, `verdict`, `why` per query.
+- **Backlog**: `agents.list_backlog(conn, icp_id)` = good people on the list nobody has asked (no request) vs the list
+  sender's weekly connect cap (0 when `daily_connect` is off). `run_queue.py` SKIPS a list whose backlog is >= 4 weeks
+  (`backlog_weeks_full`), or that has good people waiting while nobody sends requests, unless a person asked for the run;
+  the skip lands in the run log with the reason. Off switch: `agents.leads_finder.learning.skip_when_backlog_full = false`.
+  Tunables live under `agents.leads_finder.learning` (defaults in `policy/leads_learning.DEFAULTS`; not in the chat editor).
+- **Rulebook**: the run maximises GOOD people per search: a poor query is not repeated, the best `good_per_search` query
+  with pages left runs, too-early queries run to ~20 people, untried stored variants come next, own keywords sharpen the
+  pattern behind the good people. The daily review input (`review_queue.py`) = per list, queries of 14 days with what their
+  people became over 60 days + backlog; lessons cite the numbers, no names.
+- **Chat**: `crm_leads_finder_learning {icp_id, days?}` (read, family crm_agents, on MCP) — "which searches work / is it
+  learning / why did it stop". Skill `salesbrain-leads-finder` routes those questions to it.
+- Live at build (NRW): titles 2/9 = 0.98 good per search, 4 of 7 accepted → mixed; titles 3/9 = 0 good in 153 → poor; 78 good
+  people waiting ≈ 0.7 weeks at 120 requests / week → not full. Not built: the same loop for the trust-research agent (its
+  weights still move only on ✓ / ↓), a dashboard view of the verdicts, enrichment research questions (waiting for the list).
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
