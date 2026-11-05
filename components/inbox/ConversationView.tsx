@@ -6,6 +6,8 @@ import { Pill } from '@/components/panel/PageHeader';
 import type { InboxMessage, InboxThread } from '@/lib/inbox';
 import { CHANNEL_LABEL, initials } from '@/lib/inbox';
 import ChannelIcon from './ChannelIcon';
+import { ProposalStrip, RatingStrip, type InboxProposal } from './InboxDraft';
+import { Sparkle } from '@/components/icons';
 
 function dayLabel(iso: string | null): string {
   if (!iso) return '';
@@ -47,13 +49,15 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
   thread: InboxThread | null; loading: boolean; onBack: () => void; onChanged: (t: InboxThread | null) => void;
 }) {
   const [text, setText] = useState('');
+  const [proposal, setProposal] = useState<InboxProposal | null>(null);   // the AI draft in the box, until sent or dropped
+  const [rate, setRate] = useState<{ approvalId: string | null; before: string; after: string; step: 'reply' | 'followup' } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<{ kind: 'error' | 'info'; text: string } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLTextAreaElement>(null);
   const key = thread ? `${thread.channel}:${thread.id}` : '';
 
-  useEffect(() => { setText(''); setNote(null); }, [key]);
+  useEffect(() => { setText(''); setNote(null); setProposal(null); setRate(null); }, [key]);
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [key, thread?.messages.length]);
   useEffect(() => {
     const el = boxRef.current;
@@ -75,17 +79,29 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
     );
   }
 
-  async function act(action: 'reply' | 'done' | 'reopen' | 'refresh') {
+  async function act(action: 'reply' | 'done' | 'reopen' | 'refresh' | 'draft') {
     if (!thread) return;
     setBusy(action); setNote(null);
     try {
       const res = await fetch(`/api/inbox/${thread.channel}/${thread.id}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(action === 'reply' ? { action, text } : { action }),
+        body: JSON.stringify(action === 'reply' ? { action, text, ...(proposal ? { voice: proposal.voice } : {}) } : { action }),
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || data.reason || 'Something went wrong');
+      if (action === 'draft') {
+        setProposal({ message: data.message, reasoning: data.reasoning ?? null, used_facts: data.used_facts ?? [], voice: data.voice,
+          situation: data.situation === 'followup' ? 'followup' : 'reply', priorities: data.priorities ?? [] });
+        setRate(null); setText(data.message);
+        return;
+      }
       if (action === 'reply') {
+        const sentOrHeld = data.sent || data.waiting;
+        if (sentOrHeld && proposal) {
+          // the proposal went out (as is, or edited): the stars rate its approval row
+          setRate({ approvalId: typeof data.approval_id === 'string' ? data.approval_id : null, before: proposal.message, after: text, step: proposal.situation });
+          setProposal(null);
+        }
         if (data.sent) { setText(''); setNote(null); }
         else if (data.waiting) { setText(''); setNote({ kind: 'info', text: data.note || 'Held by the send rules; it goes out at the next send window.' }); }
         else throw new Error(data.reason || 'Not sent');
@@ -172,6 +188,10 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
         )}
         {thread.can_reply ? (
           <>
+            {proposal && <ProposalStrip p={proposal} senderFirst={(thread.owner_name || 'your').split(' ')[0]}
+              onDiscard={() => { setRate({ approvalId: null, before: proposal.message, after: text, step: proposal.situation }); setProposal(null); setText(''); }} />}
+            {rate && <RatingStrip approvalId={rate.approvalId} before={rate.before} after={rate.after} prospectId={thread.prospect_id}
+              channel={thread.channel} step={rate.step} senderFirst={(thread.owner_name || 'your').split(' ')[0]} onClose={() => setRate(null)} />}
             <textarea
               ref={boxRef} value={text} onChange={(e) => setText(e.target.value)} rows={2}
               placeholder={thread.channel === 'email' ? `Reply to ${thread.name || 'them'}…` : `Message ${thread.name || 'them'} on LinkedIn…`}
@@ -184,6 +204,9 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
                   ? `From ${thread.mailbox || 'your Gmail'} · in this thread${thread.subject ? ` (Re: ${thread.subject.replace(/^re:\s*/i, '')})` : ''} · your signature is added`
                   : 'From your LinkedIn'} · ⌘/Ctrl + Enter to send
               </p>
+              <Button size="sm" onClick={() => act('draft')} disabled={!!busy} title="An AI proposal in your voice, with this conversation as context — you edit and send">
+                <span className="inline-flex items-center gap-1"><Sparkle width={12} height={12} />{busy === 'draft' ? 'Drafting…' : proposal ? 'Draft again' : 'Draft reply'}</span>
+              </Button>
               <Button variant="primary" onClick={() => act('reply')} disabled={!text.trim() || !!busy}>
                 {busy === 'reply' ? 'Sending…' : 'Send'}
               </Button>

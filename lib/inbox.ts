@@ -24,6 +24,7 @@ export interface InboxItem {
   state: InboxState;
   unread: boolean;
   prospect_id: string | null;
+  person_id: string | null;
   sales_lead_id: string | null;
   campaign_name: string | null;
 }

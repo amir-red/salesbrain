@@ -61,7 +61,7 @@ function linkedinSql(o: ListOpts, vals: unknown[], forCount = false): string {
            (SELECT left(m.text, 180) FROM linkedin_messages m WHERE m.thread_id = t.id
              ORDER BY m.sent_at DESC NULLS LAST LIMIT 1) AS snippet,
            t.last_message_at, COALESCE(t.last_from_them, false) AS last_from_them, t.state,
-           ${LI_UNREAD} AS unread, pr.id::text AS prospect_id, sl.id::text AS sales_lead_id,
+           ${LI_UNREAD} AS unread, pr.id::text AS prospect_id, t.person_id::text AS person_id, sl.id::text AS sales_lead_id,
            (SELECT cc.name FROM campaign_enrollments ce JOIN campaigns cc ON cc.id = ce.campaign_id
              WHERE ce.prospect_id = pr.id ORDER BY ce.status = 'active' DESC, ce.entered_node_at DESC LIMIT 1) AS campaign_name
       FROM linkedin_threads t
@@ -93,7 +93,7 @@ function emailSql(o: ListOpts, vals: unknown[], forCount = false): string {
            COALESCE(c.full_name, t.counterpart_name, t.counterpart_email) AS name, c.title AS headline,
            a.name AS company, t.counterpart_email AS email, t.subject, t.last_snippet AS snippet,
            t.last_message_at, t.last_from_them, t.state, ${EM_UNREAD} AS unread,
-           t.prospect_id::text AS prospect_id, sl.id::text AS sales_lead_id,
+           t.prospect_id::text AS prospect_id, t.person_id::text AS person_id, sl.id::text AS sales_lead_id,
            (SELECT cc.name FROM campaign_enrollments ce JOIN campaigns cc ON cc.id = ce.campaign_id
              WHERE ce.prospect_id = t.prospect_id ORDER BY ce.status = 'active' DESC, ce.entered_node_at DESC LIMIT 1) AS campaign_name
       FROM email_threads t
