@@ -188,7 +188,7 @@ export async function watchMailbox(userId: string, mailbox?: string | null): Pro
 /**
  * Everything in one account's Primary inbox since `since` (core 102, "everything in those inboxes"): the threads with a
  * message newer than that, each with ALL its messages (bodies as readThreads `full`). Promotions / Social / Updates
- * stay out (category:primary). `newest` = the newest message time seen — where the next read starts. Sequential reads,
+ * stay out (the other categories are excluded). `newest` = the newest message time seen — where the next read starts. Sequential reads,
  * at most `max` threads.
  */
 export async function listInboxThreads(userId: string, mailbox: string, since: string, max = 50):
@@ -196,7 +196,9 @@ export async function listInboxThreads(userId: string, mailbox: string, since: s
   const tok = await getValidAccessToken(userId, 'google', mailbox);
   if (!tok) return { error: `The Google connection for ${mailbox} stopped working. Reconnect it on Profile → Google.` };
   const after = Math.max(0, Math.floor(new Date(since).getTime() / 1000) - 60);
-  const q = `in:inbox category:primary after:${after}`;
+  // Not `category:primary`: a Workspace mailbox without inbox tabs never carries that label (live 2026-11-06: 0 threads
+  // for both accounts). Leaving out the other categories works with tabs on or off.
+  const q = `in:inbox -category:promotions -category:social -category:updates -category:forums after:${after}`;
   const ids: string[] = [];
   let pageToken: string | undefined;
   do {
