@@ -99,7 +99,7 @@ export function ProposalStrip({ p, senderFirst, verdict, onVerdict, onDiscard, o
 /** Stars + one line, after the decision. `approvalId` set = the reply went out (rate the row); otherwise the proposal
  * was dropped and `before` / `after` teach without filing. */
 export function RatingStrip({ approvalId, before, after, prospectId, channel, step, senderFirst, onClose }: {
-  approvalId: string | null; before: string; after: string; prospectId: string | null; channel: 'linkedin' | 'email';
+  approvalId: string | null; before: string; after: string; prospectId: string | null; channel: 'linkedin' | 'email' | 'whatsapp';
   step: 'reply' | 'followup'; senderFirst: string; onClose: () => void;
 }) {
   const [rating, setRating] = useState<number | null>(null);

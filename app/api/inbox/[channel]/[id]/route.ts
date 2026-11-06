@@ -3,9 +3,10 @@ import { getSession } from '@/lib/auth';
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
 import { getThread, setThreadState } from '@/lib/inbox-server';
 import { cleanStamp, draftInVoice } from '@/lib/voice-context';
+import type { InboxChannel } from '@/lib/inbox';
 
 /**
- * GET  /api/inbox/{email|linkedin}/{id} — one conversation (messages + who it is); opening it marks it seen for its
+ * GET  /api/inbox/{email|linkedin|chat}/{id} — one conversation (messages + who it is); opening it marks it seen for its
  *      owner.
  * POST {action:'draft'} — an AI proposal for the next message in this conversation, in the OWNER's own voice (the one
  *      drafter, core 098): a reply when they wrote last, a follow-up when we did. Returns message, reasoning, voice.
@@ -17,9 +18,11 @@ import { cleanStamp, draftInVoice } from '@/lib/voice-context';
 type Ctx = { params: { channel: string; id: string } };
 const UUID = /^[0-9a-f-]{36}$/i;
 
-function parse(params: Ctx['params']): { channel: 'email' | 'linkedin'; id: string } | null {
-  if ((params.channel !== 'email' && params.channel !== 'linkedin') || !UUID.test(params.id)) return null;
-  return { channel: params.channel, id: params.id };
+const CHANNELS: readonly InboxChannel[] = ['email', 'linkedin', 'chat'];
+
+function parse(params: Ctx['params']): { channel: InboxChannel; id: string } | null {
+  if (!(CHANNELS as readonly string[]).includes(params.channel) || !UUID.test(params.id)) return null;
+  return { channel: params.channel as InboxChannel, id: params.id };
 }
 
 export async function GET(_req: NextRequest, { params }: Ctx) {
@@ -45,10 +48,12 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     const thread = await getThread(p.channel, p.id, viewer);
     if (!thread) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (thread.owner_user_id !== session.userId) return NextResponse.json({ error: 'Only the owner of this account can draft a reply here.' }, { status: 403 });
+    // A chat is drafted only where it can be answered from here (WhatsApp through Unipile).
+    if (p.channel === 'chat' && !thread.can_reply) return NextResponse.json({ error: 'This conversation is read-only here.' }, { status: 400 });
     const last = thread.messages[thread.messages.length - 1];
     const theirs = last ? !last.from_me : thread.last_from_them;
     const out = await draftInVoice({
-      situation: theirs ? 'reply' : 'followup', channel: p.channel, userId: session.userId, feature: 'inbox_draft',
+      situation: theirs ? 'reply' : 'followup', channel: p.channel === 'chat' ? 'whatsapp' : p.channel, userId: session.userId, feature: 'inbox_draft',
       prospectId: thread.prospect_id, personId: thread.person_id,
       linkedinThreadId: p.channel === 'linkedin' ? p.id : null,
       angle: theirs ? 'Answer what they said first, then one clear next step.'

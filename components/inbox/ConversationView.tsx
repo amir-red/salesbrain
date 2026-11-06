@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Button from '@/components/panel/Button';
 import { Pill } from '@/components/panel/PageHeader';
 import type { InboxMessage, InboxThread } from '@/lib/inbox';
-import { CHANNEL_LABEL, initials } from '@/lib/inbox';
+import { channelLabel, initials } from '@/lib/inbox';
 
 /** A written proposal is kept in this browser (with your edits) until it is sent or discarded, so opening the
  *  conversation again shows it at once instead of drafting a second time. A new message in the thread drops it. */
@@ -224,7 +224,7 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
           <div className="flex items-center gap-2 min-w-0 flex-wrap">
             <h2 className="font-semibold truncate">{thread.name || 'Unknown'}</h2>
             <span className="inline-flex items-center gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>
-              <ChannelIcon channel={thread.channel} size={14} /> {CHANNEL_LABEL[thread.channel]}
+              <ChannelIcon channel={thread.channel} app={thread.app} size={14} /> {channelLabel(thread)}
             </span>
             {thread.state === 'needs_reply' && <Pill color="var(--orange)">Needs reply</Pill>}
             {thread.state === 'done' && <Pill color="var(--green)">Done</Pill>}
@@ -242,7 +242,12 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
           {thread.profile_url && (
             <a href={thread.profile_url} target="_blank" rel="noreferrer" className="px-2.5 py-1 text-xs rounded-lg font-medium" style={{ border: '1px solid var(--border)' }}>Profile ↗</a>
           )}
-          {thread.can_reply && (
+          {thread.channel === 'chat' && thread.open_url && (
+            <a href={thread.open_url} target="_blank" rel="noreferrer" className="px-2.5 py-1 text-xs rounded-lg font-medium" style={{ border: '1px solid var(--border)' }}>
+              Open in {channelLabel(thread)} ↗
+            </a>
+          )}
+          {(thread.can_reply || (thread.channel === 'chat' && thread.mine)) && (
             <Button size="sm" onClick={() => act('refresh')} disabled={!!busy} title="Read this conversation again now">
               {busy === 'refresh' ? 'Checking…' : 'Refresh'}
             </Button>
@@ -256,6 +261,9 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
       <div className="flex-1 overflow-y-auto min-h-0 px-4 py-4 flex flex-col gap-2">
         {!thread.messages.length && (
           <p className="text-sm text-center mt-10" style={{ color: 'var(--text-muted)' }}>No messages stored yet. Press Refresh to read the conversation now.</p>
+        )}
+        {thread.source_note && (
+          <p className="text-[11px] text-center mb-1" style={{ color: 'var(--text-muted)' }}>{thread.source_note}</p>
         )}
         {rows.map((r, i) => ('day' in r
           ? <p key={`d${i}`} className="text-[11px] text-center my-2" style={{ color: 'var(--text-muted)' }}>{r.day}</p>
@@ -286,10 +294,10 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
               </div>
             )}
             {rate && <RatingStrip approvalId={rate.approvalId} before={rate.before} after={rate.after} prospectId={thread.prospect_id}
-              channel={thread.channel} step={rate.step} senderFirst={(thread.owner_name || 'your').split(' ')[0]} onClose={() => setRate(null)} />}
+              channel={thread.channel === 'chat' ? 'whatsapp' : thread.channel} step={rate.step} senderFirst={(thread.owner_name || 'your').split(' ')[0]} onClose={() => setRate(null)} />}
             <textarea
               ref={boxRef} value={text} onChange={(e) => setText(e.target.value)} rows={2}
-              placeholder={thread.channel === 'email' ? `Reply to ${thread.name || 'them'}…` : `Message ${thread.name || 'them'} on LinkedIn…`}
+              placeholder={thread.channel === 'email' ? `Reply to ${thread.name || 'them'}…` : `Message ${thread.name || 'them'} on ${channelLabel(thread)}…`}
               onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && text.trim() && !busy) { e.preventDefault(); act('reply'); } }}
               className="z-input resize-none" style={{ minHeight: 64 }} aria-label="Reply"
             />
@@ -297,7 +305,7 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
               <p className="text-[11px] flex-1 min-w-0 truncate" style={{ color: 'var(--text-muted)' }}>
                 {thread.channel === 'email'
                   ? `From ${thread.mailbox || 'your Gmail'} · in this thread${thread.subject ? ` (Re: ${thread.subject.replace(/^re:\s*/i, '')})` : ''} · your signature is added`
-                  : 'From your LinkedIn'} · ⌘/Ctrl + Enter to send
+                  : `From your ${channelLabel(thread)}`} · ⌘/Ctrl + Enter to send
               </p>
               <Button size="sm" onClick={() => act('draft')} disabled={!!busy} title="An AI proposal in your voice, with this conversation as context — you edit and send">
                 <span className="inline-flex items-center gap-1"><Sparkle width={12} height={12} />{busy === 'draft' ? 'Drafting…' : proposal ? 'Draft again' : 'Draft reply'}</span>

@@ -3313,6 +3313,68 @@ score 30, 62 at 50+.
   people waiting ≈ 0.7 weeks at 120 requests / week → not full. Not built: the same loop for the trust-research agent (its
   weights still move only on ✓ / ↓), a dashboard view of the verdicts, enrichment research questions (waiting for the list).
 
+### 5.co WhatsApp, iMessage and Telegram in the Inbox (2026-11-06, feat/messaging, migration 100)
+
+**LIVE 2026-11-06 (0.81.0)**: 100 applied, ring deployed (smoke 0.81.0, cron `messaging-sync` */10 created, dry run on the box:
+0 sources), app on Production (run 42191669660). Nobody has connected a source yet: not yet seen live a real Zeami link, a
+WhatsApp hosted login, sync or reply.
+
+Amir: "a messaging integration to get WhatsApp and iMessage messages into our inbox" — Zeami's private link
+(https://zhaw.zeami.io/messaging/docs). Read on 2026-11-06: a per-person read-only MCP server (key in the URL, no header,
+30/90-day life, one live link per person, 120 req/min), four tools (`messaging_latest`, `messaging_conversation`,
+`messaging_today`, `messaging_apps`), display names only (no phone / email), no message ids, text cut to 160 characters,
+only the last message per conversation except WhatsApp read as a linked device (20 recent), 20 conversations per app, read
+every 10–30 min. Amir is asking Zeami for phone / email, message ids, full text and longer history; the parser already
+reads those fields (`phone`, `email`, `handle`, `id` / `message_id`, `text`, `truncated`) the day they appear. Amir chose all
+three ways in, and Zeami-link chats read-only in the Inbox + warmth (voice learning only from whole messages).
+Plan `~/.claude/plans/is-the-daily-linkedin-jaunty-nebula.md`.
+- **100**: `messaging_sources` (owner, kind zeami_link | unipile_whatsapp | mac_push, `secret` = the Zeami link, plaintext
+  like `oauth_tokens`, never returned to a browser (`secret_tail`), unipile_account_id, phone, `apps` = Zeami's
+  messaging_apps answer, status ok | expired | error, notified_at; one live per owner + kind), `chat_threads` (owner,
+  source, app whatsapp | whatsapp_business | imessage | telegram | sms, external_key, counterpart name / phone / email,
+  person, prospect, last message, state needs_reply | waiting | done | ignored, inbox_seen_at, only_last_message, open_url,
+  can_reply), `chat_messages` (message_key = provider id, else `h:` + sha1 of conversation | time | sender | text),
+  `reply_events.channel` + whatsapp / imessage / telegram / sms, `outreach.channel_caps.whatsapp` 40/day 200/week.
+  Deliberately NOT `linkedin_threads` / `linkedin_accounts`: every LinkedIn reader joins them without a provider filter
+  (099's `provider` / `attendee_phone` columns stay unused).
+- **Privacy, load-bearing**: only ONE-TO-ONE conversations with a person the owner's CRM already knows are stored (phone →
+  email → unambiguous name, `messages_import._resolve`). Groups and unknown people are counted and dropped, never stored.
+- **Kernel** `commands/chats.py` = the one writer (`store_conversation` as the source's OWNER): thread + messages
+  idempotently; each new message also an `interactions` row (channel = app, `message_key`) → warmth and the voice corpus
+  see it through their existing queries, with `body` only when the text is whole (a Zeami snippet never teaches a voice);
+  the phone as a `channel_handles` whatsapp / phone handle (the send gate's routing needs it); the person's /sales-leads
+  card gets the line (`sales_leads._log_messages(channel=)`); a new inbound from someone at P4/P5 =
+  `replies.record_reply(channel=app, log_interaction=False)`. Plus `sources`, `source_add` (replaces the old source of that
+  kind and moves its threads), `source_revoke`, `sources_to_sync` / `source_status` (service; a source that stops DMs its
+  owner ONCE, source `messaging-sync`, fallback False) / `sync_state`, `record_sent`. Pure rules `policy/chats.py`.
+  `inbox.prepare_reply / mark / pending_replies` take channel `chat` (reply = approval on channel whatsapp, only for a
+  Unipile WhatsApp thread of its owner). `messages_import.import_messages` (the Mac script) now goes through the chat store,
+  so pushed iMessages show in the Inbox (`mac_push` source made on the first push). `sender_style._conversation` reads the
+  WhatsApp chat as the drafter's "conversation so far".
+- **Ring**: `zeami_messaging.py` (JSON-RPC client: POST, both Accept types, parse the `data:` line, `LinkEnded` on 401),
+  `messaging_sync.py` (`sync_zeami`: apps + latest ≤ 3 × 50, skip groups / gmail / unchanged, `messaging_conversation` for
+  WhatsApp-device rows ≤ 40 a run; `sync_whatsapp`: Unipile `list_chats` → attendees (phone from `…@s.whatsapp.net`) →
+  30 messages), Hermes cron **`messaging-sync`** `*/10`, always silent. **`linkedin_guard.exempt()`**: Unipile calls for
+  WhatsApp neither spend nor get refused by LinkedIn's budgets (`unipile._request` skips the guard inside it).
+  `inbox_reply._send_whatsapp`: `record_outreach(channel='whatsapp', for_delivery=True)` → `unipile.send_message` →
+  `chats.record_sent`. App-only RPCs `messaging_sources`, `messaging_zeami_add` (checks the link with one real
+  `messaging_apps` read first), `messaging_whatsapp_add`, `messaging_source_revoke` (deletes the Unipile account),
+  `messaging_sync_now`; `inbox_refresh` takes `chat`. Notification source `messaging-sync`.
+- **App**: Inbox channel `chat` (list branch `chatSql`, counts, one conversation from `chat_messages`, a source note, "Open
+  in WhatsApp / Messages", reply box + Draft reply only when `can_reply`; tables missing before 100 = no chats), Chats tab
+  (shown once there are chats), app icons in `ChannelIcon`. **Profile → Messaging** (`components/profile/MessagingPanel.tsx`):
+  paste / replace / remove the Zeami link (Zeami's read states in words), Connect WhatsApp (`POST /api/messaging/whatsapp` =
+  Unipile hosted auth `providers: ['WHATSAPP']`, back to `?tab=messaging&wa=connected` → `/api/messaging/whatsapp/claim`, the
+  LinkedIn claim rules: fresh, unbound, never two), iMessage status. Routes `/api/messaging` (GET, POST zeami | sync, DELETE
+  ?kind=). `lib/unipile.ts::listWhatsAppAccounts`.
+- Tests: core `test_chats_policy.py` (8), `test_chats_db.py` (7, real Postgres); ring `test_messaging_sync.py` (9); the Inbox
+  and Profile routes walked on a scratch DB through a real login (lists, counts, read-only note, can_reply, wa.me link, done,
+  badge, link refused / unreachable, remove). Not tested: a real Zeami link (needs a teammate's), a real WhatsApp hosted login,
+  sync and send through Unipile (the WhatsApp attendee / message shapes are from Unipile's chat API, unverified for WhatsApp).
+- Rollout (integration session): apply 100; deploy ring (creates `messaging-sync`) + app; a teammate pastes their link on
+  Profile → Messaging; someone connects WhatsApp and sends one reply from the Inbox.
+- Not built: group chats, unknown contacts, Telegram / iMessage / SMS sending, attachments, Zeami's calendar tool.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
