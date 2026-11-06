@@ -3389,6 +3389,7 @@ Plan `~/.claude/plans/is-the-daily-linkedin-jaunty-nebula.md`.
   12:04, Received from X" / "Your message, …, Sent to X") → clean text + who wrote it. Inbox: while an AI proposal is open
   it IS the reply area (After = the editable text with additions marked, Send as is under Before, Send under After, note
   folded).
+- **0.82.4 (LIVE 2026-11-06, ring smoke 0.82.4, app run 42227241684)**: answer anyone from the Inbox — an email to someone not in the CRM makes a bare person with the address (never team-visible); drafts for every own conversation incl. iMessage / Zeami-read chats (`crm_draft` reads a named email / chat thread); calendar notices never need a reply. Deploy note: core `tests/test_replies.py::test_validation` still expected "sms" to be refused (a real channel since core 100) — fixed to an unsupported channel; `uv run pytest` in the root hermes repo cannot resolve core, run `.venv/bin/python -m pytest` there.
 
 ### 5.cp Several Google accounts per person (2026-11-06, feat/mailboxes, migration 102)
 
