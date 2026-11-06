@@ -58,7 +58,7 @@ export default function InboxPage() {
 
   const open = useCallback(async (key: string) => {
     const [ch, id] = key.split(':');
-    if ((ch !== 'email' && ch !== 'linkedin') || !id) return;
+    if ((ch !== 'email' && ch !== 'linkedin' && ch !== 'chat') || !id) return;
     setSelected(key);
     setThreadLoading(true);
     try {
