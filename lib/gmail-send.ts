@@ -210,9 +210,14 @@ export async function listInboxThreads(userId: string, mailbox: string, since: s
     pageToken = ids.length < max ? j.nextPageToken : undefined;
   } while (pageToken);
   if (!ids.length) return { threads: [], newest: null };
-  const read = await readThreads(userId, ids, { full: true, mailbox });
-  if ('error' in read) return read;
+  // readThreads reads at most 50 threads a call: batches, so a first read of up to 200 loses none.
+  const threads: { thread_id: string; messages: ThreadMessage[] }[] = [];
+  for (let i = 0; i < ids.length; i += 50) {
+    const read = await readThreads(userId, ids.slice(i, i + 50), { full: true, mailbox });
+    if ('error' in read) return read;
+    threads.push(...read.threads);
+  }
   let newest: string | null = null;
-  for (const t of read.threads) for (const m of t.messages) if (m.date && (!newest || m.date > newest)) newest = m.date;
-  return { threads: read.threads, newest };
+  for (const t of threads) for (const m of t.messages) if (m.date && (!newest || m.date > newest)) newest = m.date;
+  return { threads, newest };
 }
