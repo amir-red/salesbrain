@@ -61,7 +61,7 @@ function Bubble({ m, channel }: { m: InboxMessage; channel: InboxThread['channel
         )}
         <p className="whitespace-pre-wrap break-words leading-relaxed">{m.text || <em style={{ color: 'var(--text-muted)' }}>(no text)</em>}</p>
         <p className="text-[10px] mt-1 text-right" style={{ color: 'var(--text-muted)' }}>
-          {m.pending ? 'Waiting to be sent' : time(m.sent_at)}
+          {m.pending ? 'Waiting to be sent' : `${m.sender_unknown ? 'sender not shown · ' : ''}${m.read_time ? 'read ' : ''}${time(m.sent_at)}`}
         </p>
       </div>
     </div>

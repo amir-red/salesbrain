@@ -39,7 +39,12 @@ export interface InboxCounts { needs_reply: number; unread: number; email: numbe
 
 export interface InboxMessage {
   id: string;
-  from_me: boolean;
+  /** null = who wrote it is unknown (WhatsApp read by Zeami on a Mac) */
+  from_me: boolean | null;
+  /** chat only: Zeami gave no sender */
+  sender_unknown?: boolean;
+  /** chat only: Zeami gave no time; sent_at is when we read it */
+  read_time?: boolean;
   text: string;
   sent_at: string | null;
   /** email only */

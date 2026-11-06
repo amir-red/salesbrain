@@ -131,7 +131,7 @@ function chatSql(o: ListOpts, vals: unknown[], forCount = false): string {
            COALESCE(c.full_name, pe.full_name, t.counterpart_name, t.title) AS name,
            COALESCE(c.title, pe.facets ->> 'title') AS headline,
            COALESCE(a.name, pe.organization) AS company, t.counterpart_email AS email, NULL::text AS subject,
-           t.last_snippet AS snippet, t.last_message_at, COALESCE(t.last_from_them, false) AS last_from_them, t.state,
+           t.last_snippet AS snippet, t.last_message_at, COALESCE(t.last_from_them, true) AS last_from_them, t.state,
            ${CH_UNREAD} AS unread, t.prospect_id::text AS prospect_id, t.person_id::text AS person_id,
            sl.id::text AS sales_lead_id,
            (SELECT cc.name FROM campaign_enrollments ce JOIN campaigns cc ON cc.id = ce.campaign_id
@@ -233,6 +233,7 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
     let profile_url: string | null = null;
     let mailbox: string | null = null;
     let chat: { can_reply: boolean; only_last_message: boolean; open_url: string | null; kind: string } | null = null;
+    let unknownSender = false;
     if (channel === 'chat') {
       const t = await client.query(
         `SELECT t.can_reply, t.only_last_message, t.open_url, s.kind, s.revoked_at IS NULL AS live
@@ -241,9 +242,11 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
       chat = { can_reply: !!(r?.can_reply && r?.live && r?.kind === 'unipile_whatsapp'), only_last_message: !!r?.only_last_message,
                open_url: r?.open_url ?? null, kind: r?.kind ?? '' };
       const m = await client.query(
-        `SELECT id::text, from_me, COALESCE(text, '') AS text, sent_at, truncated FROM chat_messages
+        `SELECT id::text, from_me, COALESCE(text, '') AS text, sent_at, truncated, time_is_read_time FROM chat_messages
           WHERE thread_id = $1 ORDER BY sent_at NULLS FIRST, created_at LIMIT 500`, [id]);
-      messages = m.rows.map((r) => ({ id: r.id, from_me: r.from_me, text: r.truncated ? `${r.text}…` : r.text, sent_at: iso(r.sent_at) }));
+      messages = m.rows.map((r) => ({ id: r.id, from_me: r.from_me, text: r.truncated ? `${r.text}…` : r.text, sent_at: iso(r.sent_at),
+        ...(r.from_me === null ? { sender_unknown: true } : {}), ...(r.time_is_read_time ? { read_time: true } : {}) }));
+      unknownSender = m.rows.some((r) => r.from_me === null || r.time_is_read_time);
     } else if (channel === 'linkedin') {
       const t = await client.query(`SELECT attendee_profile_url FROM linkedin_threads WHERE id = $1`, [id]);
       profile_url = t.rows[0]?.attendee_profile_url ?? null;
@@ -290,6 +293,7 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
           ? 'Read from Zeami Messaging, which keeps only the last message of this chat: the history here builds up from the times we read it (every 10 minutes).'
           : 'Read from Zeami Messaging every 10 minutes.')
         : chat.kind === 'mac_push' ? 'Pushed from your Mac.' : 'Your WhatsApp, read every 10 minutes.';
+      if (unknownSender) source_note += ' Read on your Mac, Zeami does not say who wrote a message or when: the time shown is when we read it.';
     }
     return {
       ...toItem(head), unread: mine ? false : !!head.unread, profile_url, mailbox, messages, can_reply, reply_note,
