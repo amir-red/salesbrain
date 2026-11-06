@@ -5,6 +5,8 @@ import Sidebar from '@/components/Sidebar';
 import PageHeader from '@/components/panel/PageHeader';
 import ConversationList from '@/components/inbox/ConversationList';
 import ConversationView from '@/components/inbox/ConversationView';
+import AcceptedView, { AcceptedRow } from '@/components/inbox/AcceptedView';
+import type { AcceptedItem } from '@/lib/inbox-accepted';
 import type { InboxChannel, InboxCounts, InboxFilter, InboxItem, InboxThread } from '@/lib/inbox';
 
 /**
@@ -35,6 +37,26 @@ export default function InboxPage() {
   const [thread, setThread] = useState<InboxThread | null>(null);
   const [threadLoading, setThreadLoading] = useState(false);
   const seq = useRef(0);
+  // The "Accepted" tab (2026-11-06): LinkedIn connection requests accepted, with the first message to send.
+  const [accepted, setAccepted] = useState(false);
+  const [acc, setAcc] = useState<AcceptedItem[]>([]);
+  const [accWaiting, setAccWaiting] = useState(0);
+  const [accLoading, setAccLoading] = useState(false);
+  const [accError, setAccError] = useState<string | null>(null);
+  const loadAccepted = useCallback(async () => {
+    setAccLoading(true);
+    try {
+      const p = new URLSearchParams({ scope });
+      if (q.trim()) p.set('q', q.trim());
+      const res = await fetch(`/api/inbox/accepted?${p}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not load');
+      setAcc(data.items || []); setAccWaiting(data.waiting || 0); setAccError(null);
+    } catch (err) {
+      setAccError(err instanceof Error ? err.message : 'Could not load');
+    } finally { setAccLoading(false); }
+  }, [scope, q]);
+  useEffect(() => { const t = setTimeout(loadAccepted, q ? 250 : 0); return () => clearTimeout(t); }, [loadAccepted, q]);
 
   const load = useCallback(async () => {
     const my = ++seq.current;
@@ -67,13 +89,19 @@ export default function InboxPage() {
   }, []);
   // New replies arrive by themselves (Gmail push, the hourly LinkedIn sync): look again every minute while visible.
   useEffect(() => {
-    const t = setInterval(() => { if (document.visibilityState === 'visible') load(); }, 60_000);
+    const t = setInterval(() => { if (document.visibilityState === 'visible') { load(); loadAccepted(); } }, 60_000);
     return () => clearInterval(t);
-  }, [load]);
+  }, [load, loadAccepted]);
 
   const open = useCallback(async (key: string) => {
     const [ch, id] = key.split(':');
+    if (ch === 'accepted' && id) {
+      setAccepted(true); setSelected(key); setThread(null);
+      try { const url = new URL(window.location.href); url.searchParams.set('c', key); window.history.replaceState(null, '', url); } catch { /* ignore */ }
+      return;
+    }
     if ((ch !== 'email' && ch !== 'linkedin' && ch !== 'chat') || !id) return;
+    setAccepted(false);
     setSelected(key);
     setThreadLoading(true);
     try {
@@ -142,12 +170,30 @@ export default function InboxPage() {
             <ConversationList
               items={items} counts={counts} loading={loading} error={error} selected={selected}
               onSelect={(it) => open(`${it.channel}:${it.id}`)}
-              q={q} setQ={setQ} channel={channel} setChannel={setChannel} filter={filter} setFilter={setFilter}
+              q={q} setQ={setQ} channel={channel} setChannel={(c) => { setAccepted(false); setChannel(c); }} filter={filter} setFilter={setFilter}
               showOwner={scope === 'team'}
-            />
+              accepted={accepted} acceptedWaiting={accWaiting} onAccepted={() => { setAccepted(true); back(); }}
+            >
+              {accError && <p className="m-3 text-sm p-3 rounded-lg" style={{ color: 'var(--red)', background: 'color-mix(in srgb, var(--red) 10%, transparent)' }}>{accError}</p>}
+              {accLoading && !acc.length && <p className="p-4 text-xs" style={{ color: 'var(--text-muted)' }}>Loading…</p>}
+              {!accLoading && !accError && !acc.length && (
+                <div className="px-6 py-16 text-center">
+                  <p className="text-sm font-medium">Nobody accepted in the last 30 days.</p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>When someone accepts one of your connection requests, they show here with the first message to send.</p>
+                </div>
+              )}
+              {acc.map((it) => (
+                <AcceptedRow key={it.id} it={it} active={selected === `accepted:${it.id}`} showOwner={scope === 'team'}
+                  onSelect={() => open(`accepted:${it.id}`)} />
+              ))}
+            </ConversationList>
           </div>
           <div className={`${selected ? 'flex' : 'hidden md:flex'} flex-1 min-w-0 flex-col`} style={{ background: 'var(--bg)' }}>
-            <ConversationView thread={thread} loading={threadLoading} onBack={back} onChanged={changed} />
+            {accepted
+              ? <AcceptedView item={acc.find((x) => selected === `accepted:${x.id}`) ?? null} onBack={back}
+                  onChanged={() => { loadAccepted(); load(); }}
+                  onOpenThread={(tid) => { setChannel('linkedin'); open(`linkedin:${tid}`); }} />
+              : <ConversationView thread={thread} loading={threadLoading} onBack={back} onChanged={changed} />}
           </div>
         </div>
       </div>

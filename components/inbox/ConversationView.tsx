@@ -74,7 +74,7 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
 }) {
   const [text, setText] = useState('');
   const [proposal, setProposal] = useState<InboxProposal | null>(null);   // the AI draft in the box, until sent or dropped
-  const [rate, setRate] = useState<{ approvalId: string | null; before: string; after: string; step: 'reply' | 'followup' } | null>(null);
+  const [rate, setRate] = useState<{ approvalId: string | null; before: string; after: string; step: 'reply' | 'followup' | 'first' } | null>(null);
   const [verdict, setVerdict] = useState<Verdict>(EMPTY_VERDICT);        // stars + right / wrong, filled while reviewing
   const [learned, setLearned] = useState<FeedbackResult | null>(null);   // what the last Save / Send taught
   const [teaching, setTeaching] = useState(false);

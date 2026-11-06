@@ -18,7 +18,7 @@ export interface InboxProposal {
   reasoning: string | null;
   used_facts: string[];
   voice: VoiceStamp;
-  situation: 'reply' | 'followup';
+  situation: 'reply' | 'followup' | 'first';
   priorities: { content: string; kind: string }[];
 }
 
@@ -82,7 +82,7 @@ export function ProposalStrip({ p, after, onAfter, senderFirst, verdict, onVerdi
       <div className="flex items-center gap-2 flex-wrap">
         <span style={{ color: 'var(--accent)' }}><Sparkle width={13} height={13} /></span>
         <span className="font-medium">AI proposal in {senderFirst}&apos;s voice</span>
-        <span style={{ color: 'var(--text-muted)' }}>· {p.situation === 'reply' ? 'a reply to what they wrote' : 'a follow-up, they have not answered'}</span>
+        <span style={{ color: 'var(--text-muted)' }}>· {p.situation === 'reply' ? 'a reply to what they wrote' : p.situation === 'first' ? 'a first message — they accepted your request' : 'a follow-up, they have not answered'}</span>
         <span className="flex-1" />
         {p.reasoning && <button type="button" onClick={() => setWhy((v) => !v)} className="underline" style={{ color: 'var(--text-muted)' }}>{why ? 'hide why' : 'why this'}</button>}
         <button type="button" onClick={onRedraft} disabled={!!busy} className="underline disabled:opacity-40" style={{ color: 'var(--text-muted)' }}>
@@ -183,7 +183,7 @@ export function ProposalStrip({ p, after, onAfter, senderFirst, verdict, onVerdi
  * was dropped and `before` / `after` teach without filing. */
 export function RatingStrip({ approvalId, before, after, prospectId, channel, step, senderFirst, onClose }: {
   approvalId: string | null; before: string; after: string; prospectId: string | null; channel: 'linkedin' | 'email' | 'whatsapp';
-  step: 'reply' | 'followup'; senderFirst: string; onClose: () => void;
+  step: 'reply' | 'followup' | 'first'; senderFirst: string; onClose: () => void;
 }) {
   const [rating, setRating] = useState<number | null>(null);
   const [line, setLine] = useState('');

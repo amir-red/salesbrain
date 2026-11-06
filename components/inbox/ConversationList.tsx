@@ -14,6 +14,7 @@ const FILTERS: { key: InboxFilter; label: string }[] = [
 /** The left column: search, channel and state filters, and one line per conversation. */
 export default function ConversationList({
   items, counts, loading, error, selected, onSelect, q, setQ, channel, setChannel, filter, setFilter, showOwner,
+  accepted, acceptedWaiting, onAccepted, children,
 }: {
   items: InboxItem[]; counts: InboxCounts | null; loading: boolean; error: string | null;
   selected: string | null; onSelect: (it: InboxItem) => void;
@@ -21,6 +22,8 @@ export default function ConversationList({
   channel: 'all' | InboxChannel; setChannel: (c: 'all' | InboxChannel) => void;
   filter: InboxFilter; setFilter: (f: InboxFilter) => void;
   showOwner: boolean;
+  /** the "Accepted" tab (LinkedIn connection requests accepted): when on, `children` replace the conversation rows */
+  accepted?: boolean; acceptedWaiting?: number; onAccepted?: () => void; children?: React.ReactNode;
 }) {
   const badge = (f: InboxFilter) => (f === 'needs_reply' ? counts?.needs_reply : f === 'unread' ? counts?.unread : undefined);
   return (
@@ -37,7 +40,7 @@ export default function ConversationList({
         </label>
         <div className="flex items-center gap-1.5" role="group" aria-label="Channel">
           {(['all', 'email', 'linkedin', 'chat'] as const).filter((c) => c !== 'chat' || !!counts?.chat || channel === 'chat').map((c) => {
-            const active = channel === c;
+            const active = channel === c && !accepted;
             const n = c === 'email' ? counts?.email : c === 'linkedin' ? counts?.linkedin : c === 'chat' ? counts?.chat : undefined;
             return (
               <button key={c} type="button" onClick={() => setChannel(c)} aria-pressed={active}
@@ -49,8 +52,17 @@ export default function ConversationList({
               </button>
             );
           })}
+          {onAccepted && (
+            <button type="button" onClick={onAccepted} aria-pressed={!!accepted}
+              title="LinkedIn connection requests accepted in the last 30 days, with the first message to send"
+              className="h-8 px-2.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5"
+              style={{ background: accepted ? 'var(--accent-glow)' : 'transparent', color: accepted ? 'var(--accent)' : 'var(--text-muted)', border: `1px solid ${accepted ? 'transparent' : 'var(--border)'}` }}>
+              <span aria-hidden>🤝</span> Accepted
+              {!!acceptedWaiting && <span className="tabular-nums text-[10px] px-1.5 rounded-full" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>{acceptedWaiting}</span>}
+            </button>
+          )}
         </div>
-        <div className="flex items-center gap-3 text-xs" role="tablist" aria-label="Show">
+        {!accepted && <div className="flex items-center gap-3 text-xs" role="tablist" aria-label="Show">
           {FILTERS.map((f) => {
             const active = filter === f.key;
             const n = badge(f.key);
@@ -63,9 +75,10 @@ export default function ConversationList({
               </button>
             );
           })}
-        </div>
+        </div>}
       </div>
 
+      {accepted ? <div className="flex-1 overflow-y-auto min-h-0">{children}</div> : (
       <div className="flex-1 overflow-y-auto min-h-0">
         {error && <p className="m-3 text-sm p-3 rounded-lg" style={{ color: 'var(--red)', background: 'color-mix(in srgb, var(--red) 10%, transparent)' }}>{error}</p>}
         {loading && !items.length && Array.from({ length: 6 }).map((_, i) => (
@@ -124,7 +137,7 @@ export default function ConversationList({
             </button>
           );
         })}
-      </div>
+      </div>)}
     </div>
   );
 }
