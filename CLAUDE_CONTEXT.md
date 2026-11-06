@@ -3305,6 +3305,10 @@ score 30, 62 at 50+.
 
 ### 5.co WhatsApp, iMessage and Telegram in the Inbox (2026-11-06, feat/messaging, migration 100)
 
+**LIVE 2026-11-06 (0.81.0)**: 100 applied, ring deployed (smoke 0.81.0, cron `messaging-sync` */10 created, dry run on the box:
+0 sources), app on Production (run 42191669660). Nobody has connected a source yet: not yet seen live a real Zeami link, a
+WhatsApp hosted login, sync or reply.
+
 Amir: "a messaging integration to get WhatsApp and iMessage messages into our inbox" — Zeami's private link
 (https://zhaw.zeami.io/messaging/docs). Read on 2026-11-06: a per-person read-only MCP server (key in the URL, no header,
 30/90-day life, one live link per person, 120 req/min), four tools (`messaging_latest`, `messaging_conversation`,
