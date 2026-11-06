@@ -10,7 +10,7 @@
  * version ~12 months after release — bump when it answers 426).
  */
 import pool from '@/lib/db';
-import type { AdRow, CampaignDetail, CampaignRow, DayRow } from '@/lib/marketing';
+import type { AdRow, AudienceRow, CampaignDetail, CampaignRow, DayRow, DetailSection } from '@/lib/marketing';
 import { cached } from './cache';
 
 const SCOPES = ['r_ads', 'r_ads_reporting'];
@@ -241,5 +241,126 @@ export async function linkedInCampaignDetail(token: string, campaignId: string, 
       budget, parent, totals, days: days.map(({ day, spend, impressions, clicks }) => ({ day, spend, impressions, clicks })),
       groups: null, ads, notes,
     };
+  });
+}
+
+// ─── Audience pivots for learning reports (service MCP `marketing_overview include_details`) ─
+
+export const AUDIENCE_PIVOTS = {
+  company: 'MEMBER_COMPANY',
+  industry: 'MEMBER_INDUSTRY',
+  job_title: 'MEMBER_JOB_TITLE',
+  company_size: 'MEMBER_COMPANY_SIZE',
+  creative: 'CREATIVE',
+} as const;
+export type AudienceKey = keyof typeof AUDIENCE_PIVOTS;
+
+const MEMBER_NOTE = 'LinkedIn reports member pivots (company, industry, title, size) approximately and leaves out very small counts.';
+
+/** "SIZE_51_TO_200" → "51–200", "SIZE_10001_OR_MORE" → "10,001+". */
+export function companySizeLabel(v: string): string {
+  const m = v.match(/^SIZE_(\d+)_TO_(\d+)$/);
+  if (m) return `${Number(m[1]).toLocaleString('en-US')}–${Number(m[2]).toLocaleString('en-US')}`;
+  const plus = v.match(/^SIZE_(\d+)_OR_MORE$/);
+  if (plus) return `${Number(plus[1]).toLocaleString('en-US')}+`;
+  return human(v.replace(/^SIZE_/, '')) ?? v;
+}
+
+/** A label from a LinkedIn entity: a plain string, or the localized map ({localized: {en_US: …}}). */
+function entityName(e: unknown): string | null {
+  if (!e || typeof e !== 'object') return null;
+  const o = e as Record<string, unknown>;
+  for (const k of ['localizedName', 'name', 'title']) {
+    const v = o[k];
+    if (typeof v === 'string' && v) return v;
+    if (v && typeof v === 'object') {
+      const loc = (v as { localized?: Record<string, string> }).localized;
+      if (loc) return loc.en_US ?? Object.values(loc)[0] ?? null;
+    }
+  }
+  return null;
+}
+
+/** Batch-get names for one URN family; any failure (often a missing permission) returns an empty map + why. */
+async function resolveNames(token: string, path: string, ids: string[]): Promise<{ names: Map<string, string>; error: string | null }> {
+  const names = new Map<string, string>();
+  const clean = ids.filter((id) => /^\d+$/.test(id));
+  if (!clean.length) return { names, error: null };
+  try {
+    const got = await li<{ results?: Record<string, unknown> }>(`${path}?ids=List(${clean.join(',')})`, token);
+    for (const [id, e] of Object.entries(got.results ?? {})) {
+      const n = entityName(e);
+      if (n) names.set(id, n);
+    }
+    return { names, error: null };
+  } catch (err) {
+    return { names, error: err instanceof Error ? err.message : 'lookup failed' };
+  }
+}
+
+const NAME_LOOKUP: Partial<Record<AudienceKey, string>> = {
+  company: '/organizations',
+  industry: '/industries',
+  job_title: '/titles',
+};
+
+/**
+ * Who saw and clicked the ads: top rows per pivot over [since, until], by impressions.
+ * One adAnalytics call per pivot (timeGranularity ALL — member pivots allow nothing finer), read one after another.
+ * Names are best effort: a URN stays a URN, with a note, when the token may not look the entity up.
+ */
+export async function linkedInAudience(token: string, since: string, until: string, top = 25):
+  Promise<Record<AudienceKey, DetailSection<AudienceRow>>> {
+  const n = Math.min(100, Math.max(1, Math.floor(top)));
+  return cached(`linkedin_ads:audience:${since}:${until}:${n}`, 10 * 60 * 1000, async () => {
+    const acct = accountId();
+    const range = `dateRange=(start:${dr(since)},end:${dr(until)})`;
+    const fields = 'fields=impressions,clicks,costInLocalCurrency,externalWebsiteConversions,oneClickLeads,pivotValues';
+    const rate = (a: number, b: number, places = 2) => (b ? Math.round((a / b) * 10 ** places) / 10 ** places : null);
+    const out = {} as Record<AudienceKey, DetailSection<AudienceRow>>;
+
+    for (const key of Object.keys(AUDIENCE_PIVOTS) as AudienceKey[]) {
+      try {
+        const res = await li<{ elements?: AnalyticsElement[] }>(
+          `/adAnalytics?q=analytics&pivot=${AUDIENCE_PIVOTS[key]}&timeGranularity=ALL&${range}` +
+          `&accounts=List(urn%3Ali%3AsponsoredAccount%3A${acct})&${fields}`, token);
+        const rows: AudienceRow[] = (res.elements ?? []).map((e) => {
+          const spend = Math.round(Number(e.costInLocalCurrency ?? 0) * 100) / 100;
+          const imp = e.impressions ?? 0, clk = e.clicks ?? 0;
+          const urn = e.pivotValues?.[0] ?? '';
+          return { value_urn: urn, name: urn, impressions: imp, clicks: clk, spend, ctr: rate(clk, imp, 4), cpc: rate(spend, clk),
+            website_conversions: e.externalWebsiteConversions ?? 0, leads: e.oneClickLeads ?? 0 };
+        }).sort((a, b) => b.impressions - a.impressions).slice(0, n);
+
+        const notes: string[] = key === 'creative' ? [] : [MEMBER_NOTE];
+        if (key === 'company_size') {
+          for (const r of rows) r.name = companySizeLabel(r.value_urn.split(':').pop() ?? r.value_urn);
+        } else if (key === 'creative') {
+          for (const r of rows) { const id = r.value_urn.split(':').pop() ?? ''; r.name = `Sponsored post …${id.slice(-6)}`; }
+          try {
+            const ids = rows.map((r) => r.value_urn.split(':').pop() ?? '').filter(Boolean);
+            const urns = ids.map((id) => `urn%3Ali%3AsponsoredCreative%3A${id}`).join(',');
+            if (urns) {
+              const got = await li<{ results?: Record<string, { name?: string }> }>(`/adAccounts/${acct}/creatives?ids=List(${urns})`, token);
+              const byId = new Map(Object.entries(got.results ?? {}).map(([k, v]) => [k.split(':').pop() ?? k, v?.name]));
+              for (const r of rows) { const nm = byId.get(r.value_urn.split(':').pop() ?? ''); if (nm) r.name = nm; }
+            }
+          } catch { notes.push('ad names unavailable; ads are labelled by id'); }
+        } else if (NAME_LOOKUP[key]) {
+          const ids = rows.map((r) => r.value_urn.split(':').pop() ?? '');
+          const { names, error } = await resolveNames(token, NAME_LOOKUP[key]!, ids);
+          for (const r of rows) { const nm = names.get(r.value_urn.split(':').pop() ?? ''); if (nm) r.name = nm; }
+          if (error) notes.push(`names unavailable (${error.slice(0, 120)}); rows carry LinkedIn ids`);
+          else {
+            const missing = rows.filter((r) => r.name === r.value_urn).length;
+            if (missing) notes.push(`${missing} of ${rows.length} names not found by LinkedIn; those rows carry the id`);
+          }
+        }
+        out[key] = { ok: true, error: null, rows, notes };
+      } catch (err) {
+        out[key] = { ok: false, error: err instanceof Error ? err.message : 'failed', rows: [] };
+      }
+    }
+    return out;
   });
 }

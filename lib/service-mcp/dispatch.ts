@@ -19,7 +19,7 @@
 
 import pool from '../db';
 import { EXPORT_TOOL_DEFS, EXPORT_TOOL_KIND, exportTool } from '../export/tools';
-import { adsOverview, dayTotals, providerTotals } from '../ads/overview';
+import { adsDetails, adsOverview, dayTotals, providerTotals } from '../ads/overview';
 import { kernelCall } from '../mcp/kernel-rpc';
 import { registerEmployee } from './identity';
 import { linkedinConnectStart, linkedinUnboundAccounts, linkedinLinkAccount } from './linkedin';
@@ -816,11 +816,23 @@ export const SERVICE_TOOLS: ToolDef[] = [
       "connected says so in `error` without hiding the other. `by_day` has one row per provider per day with " +
       "spend, impressions, clicks, CTR, CPM, CPC already computed — for \"13 October: LinkedIn spent X, Y " +
       "impressions, Z clicks, CTR, CPM, CPC\" read that row. Pass `day` (YYYY-MM-DD) for exactly one day. " +
-      "Org-wide; no employee data.",
+      "`include_details: true` adds `details` for learning reports (slower, ~10–60 s first time): Google Ads " +
+      "`campaigns` (setup incl. bidding strategy, daily budget, ad groups, every ad with all responsive-search-ad " +
+      "headlines, descriptions and final URLs; the 10 highest-spend campaigns with impressions), `search_terms` " +
+      "(top 100 by clicks: term, status, campaign, ad group, impressions, clicks, spend, conversions, CTR, CPC) " +
+      "and `conversion_actions` (what Google counts as a conversion); LinkedIn Ads `audience` by `company`, " +
+      "`industry`, `job_title`, `company_size` and `creative` (top 25 each by impressions: clicks, spend, CTR, CPC, " +
+      "website conversions, Lead Gen leads; member pivots are approximate). Each section has its own `ok` / " +
+      "`error`. Org-wide; no employee data.",
     inputSchema: obj({
       days: { type: 'integer', description: 'Closed days to cover, 1–365 (default 7)', default: 7 },
       day: { type: 'string', description: 'One specific day, YYYY-MM-DD (then days defaults to 1)' },
       include_campaigns: { type: 'boolean', description: 'Also list every campaign', default: false },
+      include_details: {
+        type: 'boolean',
+        description: 'Also return `details`: Google campaign setups with every ad headline, top search terms, conversion actions; LinkedIn audience by company, industry, job title, company size and ad',
+        default: false,
+      },
     }),
     needsOwner: true,
   },
@@ -1536,6 +1548,7 @@ export async function dispatchServiceTool(
           totals: providerTotals(o),
           by_day: dayTotals(o),
           ...(args.include_campaigns === true ? { campaigns: o.providers.flatMap((p) => p.campaigns) } : {}),
+          ...(args.include_details === true ? { details: await adsDetails(o.since, o.until, o) } : {}),
           note: 'Spend is platform-reported in the account currency; conversions/leads are as reported by the ' +
                 'platform, not CRM leads.',
         },

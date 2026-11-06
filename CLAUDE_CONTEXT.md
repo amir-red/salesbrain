@@ -1433,6 +1433,16 @@ zeami.io form, daily restated metrics, offline conversions back to the platforms
   only", sortable columns, ad group → its ads. "Active" = would serve now (the ad AND its parents on). LinkedIn ads are
   sponsored posts without names: labelled "Sponsored post …<id>", linked to the post. Closes on ×, Escape, outside click.
   Verified against both live accounts the same day (Search-DE: 3 ad groups / 3 RSAs; LinkedIn: 2 campaigns, 6 ads).
+- **Round 1e (2026-11-06, feat/marketing-details, app-only)** — for Mateo's cohort / search-term learning reports:
+  service-MCP `marketing_overview {include_details: true}` → `details` (`lib/ads/overview.ts::adsDetails`, each section
+  `{ok, error, rows, notes}`): Google `campaigns` (10 highest-spend with impressions, via `googleCampaignDetail`; `AdRow`
+  now carries every RSA `headlines[]` / `descriptions[]` / `final_urls[]`), `search_terms` (`googleSearchTerms`, top 100
+  by clicks from `search_term_view`), `conversion_actions` (`googleConversionActions`); LinkedIn `audience`
+  (`linkedInAudience`: MEMBER_COMPANY / MEMBER_INDUSTRY / MEMBER_JOB_TITLE / MEMBER_COMPANY_SIZE / CREATIVE pivots,
+  timeGranularity ALL, top 25, names best effort). Verified live 2026-11-06 on both accounts (~12 s cold): 2 Google
+  campaigns, 7 ad groups, 15 headlines per RSA, 100 search terms, 8 conversion actions; LinkedIn rows on all five
+  pivots. Company names stay `urn:li:organization:<id>` (our LinkedIn app gets 403 on the organizations batch get);
+  industries / titles mostly resolve. `PER_TOOL_LIMITS.marketing_overview = 10`/min. No UI change.
 - **Rounds 2–4 (planned, not built)**: core migrations 055 (`ad_accounts`, `ad_campaigns`, `ad_metrics_daily`),
   056 (`lead_touchpoints`), 057 (`agents.ads_sync` policy + `ad_conversion_outbox`); OAuth flows (Google: existing client
   + `adwords` scope + developer token + MCC id; LinkedIn: new app, Advertising API approval, `r_ads_reporting`);

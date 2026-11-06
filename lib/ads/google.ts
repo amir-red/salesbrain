@@ -9,7 +9,7 @@
  * after release; bump when the API answers 404 for the version).
  */
 import { createSign } from 'crypto';
-import type { AdGroupRow, AdRow, CampaignDetail, CampaignRow, DayRow } from '@/lib/marketing';
+import type { AdGroupRow, AdRow, CampaignDetail, CampaignRow, ConversionActionRow, DayRow, SearchTermRow } from '@/lib/marketing';
 import { cached } from './cache';
 
 const SCOPE = 'https://www.googleapis.com/auth/adwords';
@@ -236,6 +236,7 @@ export async function googleCampaignDetail(campaignId: string, since: string, un
         detail: descs[0] ?? null, type: label(ad.type), status, active: adOn && groupOn && campaignOn,
         approval: label(r.adGroupAd.policySummary?.approvalStatus), url: ad.finalUrls?.[0] ?? null,
         group_id: r.adGroup.id, group_name: g?.name ?? r.adGroup.name ?? null,
+        headlines: heads, descriptions: descs, final_urls: ad.finalUrls ?? [],
         ...(am.get(ad.id) ?? { spend: 0, impressions: 0, clicks: 0, results: 0 }),
       };
     });
@@ -255,5 +256,48 @@ export async function googleCampaignDetail(campaignId: string, since: string, un
       parent: null, totals, days, groups, ads,
       notes: ['Results = conversions as Google reports them (not CRM leads).'],
     };
+  });
+}
+
+// ─── Learning-report reads (service MCP `marketing_overview include_details`) ─
+
+const rate = (a: number, b: number, places = 2) => (b ? Math.round((a / b) * 10 ** places) / 10 ** places : null);
+
+/** The search terms people typed before an ad showed, most clicked first. */
+export async function googleSearchTerms(since: string, until: string, limit = 100): Promise<SearchTermRow[]> {
+  const n = Math.min(500, Math.max(1, Math.floor(limit)));
+  return cached(`google_ads:search_terms:${since}:${until}:${n}`, 10 * 60 * 1000, async () => {
+    const rows = await searchStream<{ searchTermView: { searchTerm: string; status?: string };
+      campaign: { id: string; name?: string }; adGroup?: { name?: string }; metrics: GMetrics }>(
+      `SELECT search_term_view.search_term, search_term_view.status, campaign.id, campaign.name, ad_group.name,
+              metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions
+         FROM search_term_view
+        WHERE segments.date BETWEEN '${since}' AND '${until}' AND metrics.impressions > 0
+        ORDER BY metrics.clicks DESC
+        LIMIT ${n}`,
+    );
+    return rows.map((r) => {
+      const m = metricsOf(r.metrics);
+      return {
+        search_term: r.searchTermView.searchTerm, status: label(r.searchTermView.status),
+        campaign_id: r.campaign.id, campaign_name: r.campaign.name ?? null, ad_group_name: r.adGroup?.name ?? null,
+        impressions: m.impressions, clicks: m.clicks, spend: Math.round(m.spend * 100) / 100, conversions: m.results,
+        ctr: rate(m.clicks, m.impressions, 4), cpc: rate(m.spend, m.clicks),
+      };
+    });
+  });
+}
+
+/** What Google counts as a conversion for this account (not CRM leads). */
+export async function googleConversionActions(): Promise<ConversionActionRow[]> {
+  return cached('google_ads:conversion_actions', 10 * 60 * 1000, async () => {
+    const rows = await searchStream<{ conversionAction: { id: string; name: string; category?: string; status?: string; primaryForGoal?: boolean } }>(
+      `SELECT conversion_action.id, conversion_action.name, conversion_action.category,
+              conversion_action.status, conversion_action.primary_for_goal
+         FROM conversion_action WHERE conversion_action.status != 'REMOVED'`,
+    );
+    return rows.map(({ conversionAction: c }) => ({
+      id: c.id, name: c.name, category: label(c.category), status: label(c.status), primary_for_goal: c.primaryForGoal ?? null,
+    }));
   });
 }

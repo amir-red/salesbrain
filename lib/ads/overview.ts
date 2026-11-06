@@ -1,6 +1,6 @@
-import type { AdsOverview, ProviderReport } from '@/lib/marketing';
-import { googleAdsEnvMissing, googleCampaignMetrics } from '@/lib/ads/google';
-import { linkedInAccessToken, linkedInAdsEnvMissing, linkedInCampaignMetrics } from '@/lib/ads/linkedin';
+import type { AdsOverview, AudienceRow, CampaignDetail, ConversionActionRow, DetailSection, ProviderReport, SearchTermRow } from '@/lib/marketing';
+import { googleAdsEnvMissing, googleCampaignDetail, googleCampaignMetrics, googleConversionActions, googleSearchTerms } from '@/lib/ads/google';
+import { linkedInAccessToken, linkedInAdsEnvMissing, linkedInAudience, linkedInCampaignMetrics, type AudienceKey } from '@/lib/ads/linkedin';
 
 /**
  * Live campaign performance for the last N days, read straight from the ad
@@ -124,4 +124,67 @@ export function dayTotals(o: AdsOverview): DayTotals[] {
       cpm: r.impressions ? round((r.spend / r.impressions) * 1000) : null,
       cpc: r.clicks ? round(r.spend / r.clicks) : null }))
     .sort((a, b) => (a.day === b.day ? a.provider.localeCompare(b.provider) : (a.day < b.day ? 1 : -1)));
+}
+
+// ─── Details for learning reports ───────────────────────────────────────────
+
+export interface AdsDetails {
+  google_ads: {
+    ok: boolean;
+    error: string | null;
+    campaigns: DetailSection<CampaignDetail>;
+    search_terms: DetailSection<SearchTermRow>;
+    conversion_actions: DetailSection<ConversionActionRow>;
+  };
+  linkedin_ads: {
+    ok: boolean;
+    error: string | null;
+    audience: Partial<Record<AudienceKey, DetailSection<AudienceRow>>>;
+  };
+}
+
+const MAX_DETAIL_CAMPAIGNS = 10;
+const fail = <T,>(err: unknown): DetailSection<T> => ({ ok: false, error: err instanceof Error ? err.message : 'failed', rows: [] });
+const skipped = <T,>(why: string): DetailSection<T> => ({ ok: false, error: why, rows: [] });
+
+/**
+ * Campaign setups (ad groups, ads with every headline), search terms, conversion actions and LinkedIn audience
+ * pivots over [since, until]. Every section carries its own ok / error, so one refused call (a missing LinkedIn
+ * permission, say) never hides the rest. Calls run one after another: the platforms rate-limit bursts.
+ */
+export async function adsDetails(since: string, until: string, overview?: AdsOverview): Promise<AdsDetails> {
+  const out: AdsDetails = {
+    google_ads: { ok: false, error: null, campaigns: skipped('not read'), search_terms: skipped('not read'), conversion_actions: skipped('not read') },
+    linkedin_ads: { ok: false, error: null, audience: {} },
+  };
+
+  if (googleAdsEnvMissing().length) out.google_ads.error = 'not configured';
+  else {
+    out.google_ads.ok = true;
+    try {
+      const ov = overview ?? await adsOverviewRange(since, until);
+      const g = ov.providers.find((p) => p.provider === 'google_ads');
+      if (g && !g.ok) throw new Error(g.error ?? 'Google Ads not readable');
+      const ids = (g?.campaigns ?? []).filter((c) => c.impressions > 0)
+        .sort((a, b) => b.spend - a.spend).map((c) => c.campaign_id);
+      const rows: CampaignDetail[] = [];
+      for (const id of ids.slice(0, MAX_DETAIL_CAMPAIGNS)) rows.push(await googleCampaignDetail(id, since, until));
+      out.google_ads.campaigns = { ok: true, error: null, rows,
+        notes: ids.length > MAX_DETAIL_CAMPAIGNS ? [`showing the ${MAX_DETAIL_CAMPAIGNS} highest-spend campaigns of ${ids.length}`] : [] };
+    } catch (err) { out.google_ads.campaigns = fail(err); }
+    try { out.google_ads.search_terms = { ok: true, error: null, rows: await googleSearchTerms(since, until, 100) }; }
+    catch (err) { out.google_ads.search_terms = fail(err); }
+    try { out.google_ads.conversion_actions = { ok: true, error: null, rows: await googleConversionActions() }; }
+    catch (err) { out.google_ads.conversion_actions = fail(err); }
+  }
+
+  if (linkedInAdsEnvMissing().length) out.linkedin_ads.error = 'not configured';
+  else {
+    try {
+      const tok = await linkedInAccessToken();
+      if (!tok) out.linkedin_ads.error = 'not connected';
+      else { out.linkedin_ads.audience = await linkedInAudience(tok.token, since, until, 25); out.linkedin_ads.ok = true; }
+    } catch (err) { out.linkedin_ads.error = err instanceof Error ? err.message : 'failed'; }
+  }
+  return out;
 }

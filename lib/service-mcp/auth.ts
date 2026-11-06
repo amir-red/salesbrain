@@ -70,6 +70,7 @@ const PER_TOOL_LIMITS: Record<string, number> = {
   crm_outreach_propose: 20,
   linkedin_connect_start: 10,
   suggest_icp: 20,          // one LLM call (+ maybe a site fetch) per invocation
+  marketing_overview: 10,  // include_details reads up to ~70 ad-platform calls (10-min cache absorbs repeats)
 };
 
 export function enforceToolLimit(tokenId: string, toolName: string): boolean {

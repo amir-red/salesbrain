@@ -524,12 +524,26 @@ stage, research summary, reachability.
 
 **`marketing_overview`** · read — Paid-ads performance for the last N closed days, read live from Google Ads and
 LinkedIn Ads (10-minute cache). Org-wide, no employee data.
-- `days` — closed days to cover, 1–365 (default 7) · `day` — one specific day, `YYYY-MM-DD` · `include_campaigns` — also list every campaign
+- `days` — closed days to cover, 1–365 (default 7) · `day` — one specific day, `YYYY-MM-DD` · `include_campaigns` — also list every campaign · `include_details` — also return `details` (below)
 - Returns `totals[]` per provider (`spend`, `impressions`, `clicks`, `ctr`, `cpc`, `platform_conversions`,
   `platform_leads`, `spend_last_day`, `spend_day_before`, `currency`, and `ok` / `error` — "not configured" or "not
   connected" when a provider is not wired yet), and **`by_day[]`** — one row per provider per day with `spend`,
   `impressions`, `clicks`, `ctr`, `cpm`, `cpc` computed, newest first: the daily ads report as-is. Platforms close a
   day late: `until` defaults to yesterday.
+- **`details`** (only with `include_details: true`; slower, 10–60 s on a cold cache, then cached 10 minutes; at most
+  10 calls a minute per app token). Every section is `{ok, error, rows, notes}`, so one refused read never hides the rest.
+  - `google_ads.campaigns` — the 10 highest-spend campaigns with impressions in the range: `setup` (channel, bidding
+    strategy), `budget` (daily), `groups[]` (ad groups with metrics), `ads[]` with **every** responsive-search-ad
+    `headlines[]`, `descriptions[]` and `final_urls[]`, plus status, approval and metrics.
+  - `google_ads.search_terms` — top 100 by clicks: `search_term`, `status` (Added / Excluded / None), `campaign_id`,
+    `campaign_name`, `ad_group_name`, `impressions`, `clicks`, `spend`, `conversions`, `ctr`, `cpc`.
+  - `google_ads.conversion_actions` — what Google counts as a conversion: `id`, `name`, `category`, `status`,
+    `primary_for_goal`. Conversions are platform-reported, not CRM leads.
+  - `linkedin_ads.audience.{company, industry, job_title, company_size, creative}` — top 25 each by impressions:
+    `value_urn`, `name`, `impressions`, `clicks`, `spend`, `ctr`, `cpc`, `website_conversions`, `leads` (Lead Gen).
+    LinkedIn reports member pivots approximately and leaves out very small counts. Company names are not available
+    to our LinkedIn app (no organization-lookup permission): company rows carry `urn:li:organization:<id>`, and a
+    `notes` line says so. Industries and titles resolve by name where LinkedIn knows the id.
 
 **`crm_team_kpis`** · read — `{period?, limit?}` → `teammates[]`, each the `crm_outreach_kpis` shape, for every user
 with a connected LinkedIn account or outreach activity in the last 30 days.
@@ -920,6 +934,13 @@ await call("crm_leads_finder_run", { icp_id: icp.id, limit: 25 }, "emp-4821");
 ---
 
 ## 12. Changelog
+
+### 2026-11-06 — `marketing_overview include_details`: search terms, headlines, conversion actions, LinkedIn audience
+- `marketing_overview` takes `include_details: true` and then also returns `details`: Google Ads campaign setups with
+  every responsive-search-ad headline, description and final URL; the top 100 search terms; the conversion actions;
+  LinkedIn Ads audience by company, industry, job title, company size and ad (creative). Each section carries its own
+  `ok` / `error`. Company names stay LinkedIn ids (no organization-lookup permission). Without the flag the answer is
+  unchanged. New rate limit: 10 `marketing_overview` calls a minute per app token.
 
 ### 2026-11-04 — the AI learns the sender (098): drafts in the employee's own voice, messages from their devices
 - `crm_draft` (new) — ask SalesBrain to WRITE a message instead of writing it in the app: `situation` (first |

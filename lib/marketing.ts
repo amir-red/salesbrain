@@ -199,6 +199,54 @@ export interface AdRow extends Metrics {
   url: string | null;      // landing page (Google) or the sponsored post (LinkedIn)
   group_id: string | null;
   group_name: string | null;
+  /** Google responsive search ads: every headline, description and landing URL (not only the joined name). */
+  headlines?: string[];
+  descriptions?: string[];
+  final_urls?: string[];
+}
+
+// ─── Details for learning reports (service MCP `marketing_overview include_details`) ─
+
+export interface SearchTermRow {
+  search_term: string;
+  status: string | null;       // Google: ADDED / EXCLUDED / NONE …
+  campaign_id: string;
+  campaign_name: string | null;
+  ad_group_name: string | null;
+  impressions: number;
+  clicks: number;
+  spend: number;
+  conversions: number;
+  ctr: number | null;
+  cpc: number | null;
+}
+
+export interface ConversionActionRow {
+  id: string;
+  name: string;
+  category: string | null;
+  status: string | null;
+  primary_for_goal: boolean | null;
+}
+
+export interface AudienceRow {
+  value_urn: string;           // the pivot value as LinkedIn returns it
+  name: string;                // resolved label, else the URN / value itself
+  impressions: number;
+  clicks: number;
+  spend: number;
+  ctr: number | null;
+  cpc: number | null;
+  website_conversions: number;
+  leads: number;
+}
+
+/** One section of a details read: its rows, or why it is missing. A failing section never hides the others. */
+export interface DetailSection<T> {
+  ok: boolean;
+  error: string | null;
+  rows: T[];
+  notes?: string[];
 }
 
 export interface CampaignDetail {
