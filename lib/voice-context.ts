@@ -21,6 +21,8 @@ export interface DraftRequest {
   goal?: string | null;
   previousText?: string | null;
   linkedinThreadId?: string | null;
+  emailThreadId?: string | null;          // an Inbox conversation to answer, person in the CRM or not
+  chatThreadId?: string | null;
   touchNumber?: number | null;
   language?: 'de' | 'en' | null;
   subject?: boolean;
@@ -42,6 +44,7 @@ export async function draftInVoice(req: DraftRequest): Promise<DraftResult | { e
   const put = (k: string, v: unknown) => { if (v !== undefined && v !== null && v !== '') args[k] = v; };
   put('prospect_id', req.prospectId); put('person_id', req.personId); put('angle', req.angle); put('goal', req.goal);
   put('previous_text', req.previousText); put('linkedin_thread_id', req.linkedinThreadId);
+  put('email_thread_id', req.emailThreadId); put('chat_thread_id', req.chatThreadId);
   put('touch_number', req.touchNumber); put('language', req.language); put('subject', req.subject || undefined);
   put('connector', req.connector); put('lead', req.lead); put('tag', req.tag);
   let out: Record<string, unknown>;

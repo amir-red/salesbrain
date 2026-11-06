@@ -89,9 +89,12 @@ function emailSql(o: ListOpts, vals: unknown[], forCount = false): string {
   vals.push(o.viewerId);
   const me = vals.length;
   if (!o.team) where.push(`t.owner_user_id = $${me}`);
-  // Personal mail (a whole-inbox thread with nobody from the CRM in it) is its owner's alone.
-  where.push(`(t.owner_user_id = $${me} OR t.origin = 'outreach' OR t.person_id IS NOT NULL OR t.prospect_id IS NOT NULL)`);
-  if (o.view === 'outreach') where.push(`(t.origin = 'outreach' OR t.person_id IS NOT NULL OR t.prospect_id IS NOT NULL)`);
+  // Personal mail (a whole-inbox thread with nobody from the CRM in it) is its owner's alone. "In the CRM" = a lead or a
+  // contact: a bare person node (made when someone answers a stranger from here) does not open the thread to the team.
+  const known = `(t.origin = 'outreach' OR t.prospect_id IS NOT NULL OR (t.person_id IS NOT NULL AND (
+      EXISTS (SELECT 1 FROM contacts kc WHERE kc.person_id = t.person_id) OR EXISTS (SELECT 1 FROM prospects kp WHERE kp.person_id = t.person_id))))`;
+  where.push(`(t.owner_user_id = $${me} OR ${known})`);
+  if (o.view === 'outreach') where.push(known);
   if (o.mailbox) { vals.push(o.mailbox); where.push(`lower(COALESCE(t.mailbox, '')) = lower($${vals.length})`); }
   if (!forCount) {
     if (o.filter === 'needs_reply') where.push(`t.state = 'needs_reply'`);
@@ -302,15 +305,12 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
     if (emailMeta) {
       // Open the thread in that mailbox's Gmail (core 102: the person may have several accounts).
       open_url = `https://mail.google.com/mail/u/${encodeURIComponent(emailMeta.mailbox || '0')}/#all/${encodeURIComponent(emailMeta.gmail_thread_id)}`;
-      // A whole-inbox thread with nobody from the CRM in it: the send gate needs a person, so it is answered in Gmail.
-      if (mine && !emailMeta.person_id && !emailMeta.prospect_id && emailMeta.origin === 'mailbox') {
-        can_reply = false;
-        reply_note = 'This person is not in the CRM, so answer in Gmail. Add them as a lead to reply from here.';
-      }
+      // Anyone in the mailbox can be answered from here (2026-11-06): someone not in the CRM gets a bare person node
+      // with the address at send time, so the send gate can check it; nothing else is added.
     }
     if (chat) {
       can_reply = mine && chat.can_reply;
-      if (mine && !chat.can_reply) reply_note = 'Read-only here: answer it in the app itself. Replies work for WhatsApp connected on Profile → Messaging.';
+      if (mine && !chat.can_reply) reply_note = 'Sending from here works for WhatsApp connected on Profile → Messaging. Draft a reply, copy it and send it in the app.';
       source_note = chat.kind === 'zeami_link'
         ? (chat.only_last_message
           ? 'Read from Zeami Messaging, which keeps only the last message of this chat: the history here builds up from the times we read it (every 10 minutes).'

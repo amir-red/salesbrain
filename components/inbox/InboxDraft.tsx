@@ -60,11 +60,15 @@ function Stars({ value, onChange, size = 20, disabled }: { value: number | null;
  * you improved it, so the conversation keeps the room. Send records the rating and note on the sent draft; "Save
  * feedback" teaches without sending; Discard teaches from it too. */
 export function ProposalStrip({ p, after, onAfter, senderFirst, verdict, onVerdict, onDiscard, onTeach, teaching, learned, error,
-  onSendAsIs, onSend, onRedraft, busy, fromLine }: {
+  onSendAsIs, onSend, onRedraft, busy, fromLine, copyOnly, openUrl, openLabel }: {
   p: InboxProposal; after: string; onAfter: (t: string) => void; senderFirst: string; verdict: Verdict; onVerdict: (v: Verdict) => void;
   onDiscard: () => void; onTeach: () => void; teaching: boolean; learned: FeedbackResult | null; error: string | null;
   onSendAsIs: () => void; onSend: () => void; onRedraft: () => void; busy: string | null; fromLine: string;
+  /** a chat that cannot be sent from here: the buttons copy the text (and open the app when there is a link) */
+  copyOnly?: boolean; openUrl?: string | null; openLabel?: string;
 }) {
+  const asIsLabel = copyOnly ? (openUrl ? `Copy as is & open ${openLabel}` : 'Copy as is') : 'Send as is';
+  const sendLabel = copyOnly ? (openUrl ? `Copy & open ${openLabel}` : 'Copy') : 'Send';
   const [why, setWhy] = useState(false);
   const diff = diffWords(p.message, after);
   const changed = diff.some((d) => d.op !== 'same');
@@ -96,9 +100,9 @@ export function ProposalStrip({ p, after, onAfter, senderFirst, verdict, onVerdi
               : <del key={i} style={{ color: 'var(--red)', background: 'color-mix(in srgb, var(--red) 8%, transparent)' }}>{d.text}</del>)}
           </div>
           <div className="mt-2 flex justify-center">
-            <button type="button" onClick={onSendAsIs} disabled={!!busy} title="Sends the AI's text exactly as written"
+            <button type="button" onClick={onSendAsIs} disabled={!!busy} title={copyOnly ? "Copies the AI's text exactly as written" : "Sends the AI's text exactly as written"}
               className="px-4 py-1.5 rounded-full text-sm font-medium disabled:opacity-40" style={card}>
-              {busy === 'reply-asis' ? 'Sending…' : 'Send as is'}
+              {busy === 'reply-asis' ? 'Sending…' : asIsLabel}
             </button>
           </div>
         </div>
@@ -133,9 +137,9 @@ export function ProposalStrip({ p, after, onAfter, senderFirst, verdict, onVerdi
               ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; } }} />
           </div>
           <div className="mt-2 flex justify-center">
-            <button type="button" onClick={onSend} disabled={!after.trim() || !!busy} title="Sends the text in the After box"
+            <button type="button" onClick={onSend} disabled={!after.trim() || !!busy} title={copyOnly ? 'Copies the text in the After box' : 'Sends the text in the After box'}
               className="px-5 py-1.5 rounded-full text-sm font-semibold disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
-              {busy === 'reply' ? 'Sending…' : 'Send'}
+              {busy === 'reply' ? 'Sending…' : sendLabel}
             </button>
           </div>
         </div>

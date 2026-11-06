@@ -48,14 +48,16 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     const thread = await getThread(p.channel, p.id, viewer);
     if (!thread) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (thread.owner_user_id !== session.userId) return NextResponse.json({ error: 'Only the owner of this account can draft a reply here.' }, { status: 403 });
-    // A chat is drafted only where it can be answered from here (WhatsApp through Unipile).
-    if (p.channel === 'chat' && !thread.can_reply) return NextResponse.json({ error: 'This conversation is read-only here.' }, { status: 400 });
+    // Every conversation of your own can be drafted (2026-11-06): a chat that cannot be sent from here (iMessage, the
+    // Zeami link) is copied and sent in the app; a person not in the CRM is drafted from the conversation alone.
     const last = thread.messages[thread.messages.length - 1];
     const theirs = last ? !last.from_me : thread.last_from_them;
     const out = await draftInVoice({
       situation: theirs ? 'reply' : 'followup', channel: p.channel === 'chat' ? 'whatsapp' : p.channel, userId: session.userId, feature: 'inbox_draft',
       prospectId: thread.prospect_id, personId: thread.person_id,
       linkedinThreadId: p.channel === 'linkedin' ? p.id : null,
+      emailThreadId: p.channel === 'email' ? p.id : null,
+      chatThreadId: p.channel === 'chat' ? p.id : null,
       angle: theirs ? 'Answer what they said first, then one clear next step.'
         : 'They have not answered our last message: one new useful thing, no apology for following up, one easy question.',
     });

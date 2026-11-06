@@ -85,6 +85,8 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
   const endRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLTextAreaElement>(null);
   const key = thread ? `${thread.channel}:${thread.id}` : '';
+  // Your own chat that cannot be sent from here (iMessage, WhatsApp read through the Zeami link): draft, copy, send in the app.
+  const copyOnly = !!thread && !thread.can_reply && thread.channel === 'chat' && !!thread.mine;
 
   const lastId = thread?.messages.length ? thread.messages[thread.messages.length - 1].id : null;
   const restored = useRef(false);
@@ -98,7 +100,7 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
   }, [key]);   // eslint-disable-line react-hooks/exhaustive-deps
   // A conversation that needs an answer drafts by itself when it opens — once; afterwards the kept draft is shown.
   useEffect(() => {
-    if (!thread || !thread.can_reply || thread.state !== 'needs_reply' || !thread.last_from_them) return;
+    if (!thread || !(thread.can_reply || copyOnly) || thread.state !== 'needs_reply' || !thread.last_from_them) return;
     if (restored.current || autoDrafted.current.has(key) || proposal || text.trim()) return;
     if (loadDraft(key, lastId)) return;
     autoDrafted.current.add(key);
@@ -181,6 +183,19 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
     } finally {
       setBusy(null);
     }
+  }
+
+  /** A chat that cannot be sent from here (iMessage, the Zeami link): the text is copied, the app opened when there
+   *  is a link, and the edit / rating teach the voice like a send would (draft_teach). */
+  async function copyOut(asIs: boolean) {
+    if (!thread || !proposal) return;
+    const out = asIs ? proposal.message : text;
+    try { await navigator.clipboard.writeText(out); } catch { setNote({ kind: 'error', text: 'Could not copy — select the text and copy it yourself.' }); return; }
+    if (thread.open_url) window.open(thread.open_url, '_blank', 'noopener');
+    if (!learned && (verdictGiven(verdict) || out.trim() !== proposal.message.trim())) await teach(out);
+    else if (!learned) setRate({ approvalId: null, before: proposal.message, after: out, step: proposal.situation });
+    setProposal(null); setText(''); saveDraft(key, null);
+    setNote({ kind: 'info', text: `Copied — paste it in ${channelLabel(thread)} and send it there.` });
   }
 
   /** Teach from the proposal without sending: the edit so far, the stars and the two lines (draft_teach). */
@@ -280,13 +295,23 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
             background: note.kind === 'error' ? 'color-mix(in srgb, var(--red) 10%, transparent)' : 'var(--bg-input)',
           }}>{note.text}</p>
         )}
-        {thread.can_reply ? (
+        {thread.can_reply || copyOnly ? (
           <>
             {/* While an AI proposal is open it IS the reply area (2026-11-06): edit in After, send from either column. */}
+            {copyOnly && !proposal && (
+              <div className="flex items-center gap-2">
+                <p className="text-[11px] flex-1" style={{ color: 'var(--text-muted)' }}>{thread.reply_note}</p>
+                <Button size="sm" onClick={() => act('draft')} disabled={!!busy} title="An AI proposal in your voice, with this conversation as context — you edit, copy and send it in the app">
+                  <span className="inline-flex items-center gap-1"><Sparkle width={12} height={12} />{busy === 'draft' ? 'Drafting…' : 'Draft reply'}</span>
+                </Button>
+              </div>
+            )}
             {proposal ? (
               <ProposalStrip p={proposal} after={text} onAfter={setText} senderFirst={(thread.owner_name || 'your').split(' ')[0]}
                 verdict={verdict} onVerdict={setVerdict} onTeach={() => teach(text)} teaching={teaching} learned={learned} error={teachErr}
-                onSendAsIs={() => act('reply', true)} onSend={() => act('reply')} onRedraft={() => act('draft')} busy={busy}
+                onSendAsIs={() => (copyOnly ? copyOut(true) : act('reply', true))} onSend={() => (copyOnly ? copyOut(false) : act('reply'))}
+                onRedraft={() => act('draft')} busy={busy}
+                copyOnly={copyOnly} openUrl={thread.open_url} openLabel={channelLabel(thread)}
                 fromLine={`${thread.channel === 'email'
                   ? `From ${thread.mailbox || 'your Gmail'} · in this thread${thread.subject ? ` (Re: ${thread.subject.replace(/^re:\s*/i, '')})` : ''} · your signature is added`
                   : `From your ${channelLabel(thread)}`} · ⌘/Ctrl + Enter to send`}
@@ -295,7 +320,7 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
                   else if (!learned) setRate({ approvalId: null, before: proposal.message, after: text, step: proposal.situation });
                   setProposal(null); setText(''); saveDraft(key, null);
                 }} />
-            ) : (
+            ) : copyOnly ? null : (
               <>
                 <textarea
                   ref={boxRef} value={text} onChange={(e) => setText(e.target.value)} rows={2}
