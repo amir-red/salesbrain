@@ -3391,6 +3391,16 @@ Plan `~/.claude/plans/is-the-daily-linkedin-jaunty-nebula.md`.
   folded).
 - **0.82.4 (LIVE 2026-11-06, ring smoke 0.82.4, app run 42227241684)**: answer anyone from the Inbox — an email to someone not in the CRM makes a bare person with the address (never team-visible); drafts for every own conversation incl. iMessage / Zeami-read chats (`crm_draft` reads a named email / chat thread); calendar notices never need a reply. Deploy note: core `tests/test_replies.py::test_validation` still expected "sms" to be refused (a real channel since core 100) — fixed to an unsupported channel; `uv run pytest` in the root hermes repo cannot resolve core, run `.venv/bin/python -m pytest` there.
 
+- **0.82.4 (LIVE 2026-11-06)**: answer anyone from the Inbox. Email to someone not in the CRM: `inbox._email_person` makes a
+  bare person + email handle at send time (no contact, no lead); "in the CRM" for the personal-mail privacy rule is now a lead
+  or a contact (`lib/inbox-server.ts` `known`), so such a thread stays owner-only. `crm_draft` / `draft_context` take
+  `email_thread_id` / `chat_thread_id` and read that conversation whoever is on the other side, so every own conversation can be
+  drafted; chats that cannot be sent from here (iMessage, the Zeami link) get Copy / Copy & open instead of Send. Calendar
+  notices ("Accepted:", "Declined:", "Invitation:", German too) never need a reply (`inbox.is_calendar_notice`; 65 old ones
+  moved to waiting). **Accepted tab** (app-only): `lib/inbox-accepted.ts` + `/api/inbox/accepted[/id]` + `AcceptedView` =
+  requests accepted in 30 days with the first message (the waiting card: edit / send / skip; else the list's template or an AI
+  draft; Send = propose/edit + approve through the gate). At launch Matthias had ~74 acceptances never messaged.
+
 ### 5.cp Several Google accounts per person (2026-11-06, feat/mailboxes, migration 102)
 
 **LIVE 2026-11-06 (0.82.0 → 0.82.2)**: 102 applied (both existing mailboxes default, every thread has its mailbox), ring + app
