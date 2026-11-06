@@ -3374,7 +3374,7 @@ Plan `~/.claude/plans/is-the-daily-linkedin-jaunty-nebula.md`.
 - Rollout (integration session): apply 100; deploy ring (creates `messaging-sync`) + app; a teammate pastes their link on
   Profile → Messaging; someone connects WhatsApp and sends one reply from the Inbox.
 - Not built: group chats, unknown contacts, Telegram / iMessage / SMS sending, attachments, Zeami's calendar tool.
-- **0.81.1 (committed on main, NOT yet deployed — waiting for Amir's go-ahead)**: Mateo's first live link showed WhatsApp read
+- **0.81.1 (LIVE 2026-11-06)**: Mateo's first live link showed WhatsApp read
   by Zeami on a Mac comes with NO time and NO sender (`"at": null, "from": ""`); those messages were dropped, leaving empty
   chats the Inbox hides. Now stored with the read time (`chat_messages.time_is_read_time`) and an unknown sender
   (`from_me` NULL, core 101 — APPLIED to production), never a reply, an 'internal' interaction; an unread chat's last message
@@ -3383,6 +3383,15 @@ Plan `~/.claude/plans/is-the-daily-linkedin-jaunty-nebula.md`.
   fixed on main.
 
 ### 5.cp Several Google accounts per person (2026-11-06, feat/mailboxes, migration 102)
+
+**LIVE 2026-11-06 (0.82.0 → 0.82.2)**: 102 applied (both existing mailboxes default, every thread has its mailbox), ring + app
+deployed. First real whole-inbox reads found three bugs, all fixed the same day: (1) `category:primary` returns NOTHING for a
+Workspace mailbox without inbox tabs → the query now leaves out promotions / social / updates / forums instead; (2) an empty
+read set `inbox_cursor` to `-infinity` (GREATEST ignores NULL) and the next read crashed in psycopg → an empty read moves it to
+10 minutes ago; (3) `readThreads` reads at most 50, so a first read lost the oldest → batches of 50; plus Gmail's per-minute
+user quota ("Total Query Cost … Units per minute per user", 403 rateLimitExceeded) — one 20 s wait, then a `partial` result that
+keeps the cursor. Result: mateo@zeami.io 72 conversations (22 with CRM people); amir@zeami.io's inbox holds only automated mail.
+Same day: `chats.source_status` wrote `apps` as json into a jsonb column (every successful Zeami read failed to record) — fixed.
 
 Amir: "support multiple email accounts for the inbox, contacts, to fetch from multiple accounts". Decisions (AskUserQuestion):
 **Google only**; **read + send** — every account feeds the Inbox, contacts and meetings, one is the default sender, a
