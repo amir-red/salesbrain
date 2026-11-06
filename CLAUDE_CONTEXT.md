@@ -3382,6 +3382,14 @@ Plan `~/.claude/plans/is-the-daily-linkedin-jaunty-nebula.md`.
   sync, the graph-sync bug again) — fixed. The Inbox page never opened a chat on click (it only accepted email / linkedin) —
   fixed on main.
 
+- **0.82.3 (LIVE 2026-11-06)**: Mateo had BOTH a Zeami link and Unipile WhatsApp → every chat twice, the Zeami copy dated
+  when we read it (above real times). Now Unipile owns WhatsApp: `sources_to_sync` flags `whatsapp_elsewhere`, the Zeami
+  sync skips that person's WhatsApp and `chats.retire_zeami_whatsapp` removes Zeami copies of chats Unipile holds (with
+  their interactions); Zeami-only chats stay. `policy/chats.mac_label` reads the Mac's bubble label ("message, <text>,
+  12:04, Received from X" / "Your message, …, Sent to X") → clean text + who wrote it. Inbox: while an AI proposal is open
+  it IS the reply area (After = the editable text with additions marked, Send as is under Before, Send under After, note
+  folded).
+
 ### 5.cp Several Google accounts per person (2026-11-06, feat/mailboxes, migration 102)
 
 **LIVE 2026-11-06 (0.82.0 → 0.82.2)**: 102 applied (both existing mailboxes default, every thread has its mailbox), ring + app
