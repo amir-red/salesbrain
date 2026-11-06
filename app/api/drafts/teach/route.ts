@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
       ...(b.reason?.trim() ? { reason: b.reason.trim().slice(0, 500) } : {}),
       ...(Array.isArray(b.reasons) && b.reasons.length ? { reasons: b.reasons.slice(0, 8) } : {}),
       ...(b.prospect_id ? { prospect_id: b.prospect_id } : {}),
-      channel: b.channel === 'email' ? 'email' : 'linkedin',
+      channel: b.channel === 'email' || b.channel === 'whatsapp' ? b.channel : 'linkedin',
       step: ['first', 'followup', 'reply', 'intro', 'connect'].includes(b.step ?? '') ? b.step : 'first',
     }, session.userId);
     return NextResponse.json(out, { status: out.error ? 400 : 200 });

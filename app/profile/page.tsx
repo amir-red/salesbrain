@@ -8,10 +8,11 @@ import MemoryPanel from '@/components/profile/MemoryPanel';
 import LinkedInPanel from '@/components/profile/LinkedInPanel';
 import ImportsPanel from '@/components/profile/ImportsPanel';
 import GooglePanel from '@/components/profile/GooglePanel';
+import MessagingPanel from '@/components/profile/MessagingPanel';
 import McpPanel from '@/components/profile/McpPanel';
 import ServiceTokenPanel from '@/components/profile/ServiceTokenPanel';
 
-type Tab = 'account' | 'memory' | 'telegram' | 'linkedin' | 'google' | 'imports' | 'mcp' | 'service';
+type Tab = 'account' | 'memory' | 'telegram' | 'linkedin' | 'google' | 'messaging' | 'imports' | 'mcp' | 'service';
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: 'account', label: 'Account', hint: 'Who you are signed in as' },
@@ -19,6 +20,7 @@ const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: 'telegram', label: 'Telegram', hint: 'Chat with the assistant' },
   { id: 'linkedin', label: 'LinkedIn', hint: 'Inbox triage and follow-ups' },
   { id: 'google', label: 'Google', hint: 'Contacts, Gmail sync and sending email' },
+  { id: 'messaging', label: 'Messaging', hint: 'WhatsApp and iMessage in the Inbox' },
   { id: 'imports', label: 'Imports', hint: 'LinkedIn contacts, pasted messages' },
   { id: 'mcp', label: 'MCP', hint: 'Access tokens for Claude and other tools' },
   { id: 'service', label: 'Service API', hint: 'Admin: tokens for a sibling app to run outreach' },
@@ -143,6 +145,7 @@ function Profile() {
         {tab === 'telegram' && <TelegramPanel />}
         {tab === 'linkedin' && <LinkedInPanel />}
         {tab === 'google' && <GooglePanel />}
+        {tab === 'messaging' && <MessagingPanel />}
         {tab === 'imports' && <ImportsPanel />}
         {tab === 'mcp' && <McpPanel />}
         {tab === 'service' && me?.role === 'admin' && <ServiceTokenPanel />}

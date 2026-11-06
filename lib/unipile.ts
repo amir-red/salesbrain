@@ -52,9 +52,18 @@ export interface UnipileAccount {
   connection_params?: { im?: Record<string, unknown> };
 }
 
-export async function listLinkedInAccounts(): Promise<UnipileAccount[] | { error: string }> {
+async function listAccounts(type: 'LINKEDIN' | 'WHATSAPP'): Promise<UnipileAccount[] | { error: string }> {
   const res = await unipileFetch('accounts');
   if (res.error) return { error: res.error };
   const items = (res.items as UnipileAccount[]) || [];
-  return items.filter((a) => a.type === 'LINKEDIN');
+  return items.filter((a) => a.type === type);
+}
+
+export function listLinkedInAccounts(): Promise<UnipileAccount[] | { error: string }> {
+  return listAccounts('LINKEDIN');
+}
+
+/** WhatsApp accounts connected through Unipile's hosted auth (core 100: replies from the Inbox). */
+export function listWhatsAppAccounts(): Promise<UnipileAccount[] | { error: string }> {
+  return listAccounts('WHATSAPP');
 }

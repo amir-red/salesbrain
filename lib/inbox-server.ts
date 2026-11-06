@@ -4,17 +4,20 @@
  *
  * What is listed: "outreach" conversations. Email = every Gmail thread a SalesBrain email started (so all of them).
  * LinkedIn = a mirrored chat whose person is a prospect or sales lead, or that a SalesBrain message went into;
- * `view: 'all'` shows every LinkedIn chat of the account. Visibility: your own accounts; an admin may pass
+ * `view: 'all'` shows every LinkedIn chat of the account. Chats (core 100: WhatsApp / iMessage / Telegram) = every
+ * stored one, since the store only keeps one-to-one conversations with people the owner's CRM knows. Visibility: your own accounts; an admin may pass
  * scope 'team' to read everyone's (read-only — only the owner replies from their account).
  */
 import type { PoolClient } from 'pg';
 import pool from '@/lib/db';
-import type { InboxCounts, InboxFilter, InboxItem, InboxMessage, InboxThread } from '@/lib/inbox';
+import type { InboxChannel, InboxCounts, InboxFilter, InboxItem, InboxMessage, InboxThread } from '@/lib/inbox';
+
+const TABLE: Record<InboxChannel, string> = { email: 'email_threads', linkedin: 'linkedin_threads', chat: 'chat_threads' };
 
 export interface ListOpts {
   viewerId: string;
   team: boolean;
-  channel: 'all' | 'email' | 'linkedin';
+  channel: 'all' | 'email' | 'linkedin' | 'chat';
   filter: InboxFilter;
   q: string;
   view: 'outreach' | 'all';
@@ -36,6 +39,7 @@ const LI_PROSPECT = `
 
 const LI_UNREAD = `(t.last_from_them AND t.last_message_at > COALESCE(t.inbox_seen_at, '-infinity'::timestamptz) AND t.state <> 'done')`;
 const EM_UNREAD = `(t.last_from_them AND t.last_message_at > COALESCE(t.inbox_seen_at, '-infinity'::timestamptz) AND t.state <> 'done')`;
+const CH_UNREAD = EM_UNREAD;
 
 function linkedinSql(o: ListOpts, vals: unknown[], forCount = false): string {
   const where: string[] = ['t.is_company = false', 'la.revoked_at IS NULL', 't.last_message_at IS NOT NULL'];
@@ -63,7 +67,8 @@ function linkedinSql(o: ListOpts, vals: unknown[], forCount = false): string {
            t.last_message_at, COALESCE(t.last_from_them, false) AS last_from_them, t.state,
            ${LI_UNREAD} AS unread, pr.id::text AS prospect_id, t.person_id::text AS person_id, sl.id::text AS sales_lead_id,
            (SELECT cc.name FROM campaign_enrollments ce JOIN campaigns cc ON cc.id = ce.campaign_id
-             WHERE ce.prospect_id = pr.id ORDER BY ce.status = 'active' DESC, ce.entered_node_at DESC LIMIT 1) AS campaign_name
+             WHERE ce.prospect_id = pr.id ORDER BY ce.status = 'active' DESC, ce.entered_node_at DESC LIMIT 1) AS campaign_name,
+           NULL::text AS app
       FROM linkedin_threads t
       JOIN linkedin_accounts la ON la.id = t.account_id
       JOIN users u ON u.id = la.owner_user_id
@@ -95,7 +100,8 @@ function emailSql(o: ListOpts, vals: unknown[], forCount = false): string {
            t.last_message_at, t.last_from_them, t.state, ${EM_UNREAD} AS unread,
            t.prospect_id::text AS prospect_id, t.person_id::text AS person_id, sl.id::text AS sales_lead_id,
            (SELECT cc.name FROM campaign_enrollments ce JOIN campaigns cc ON cc.id = ce.campaign_id
-             WHERE ce.prospect_id = t.prospect_id ORDER BY ce.status = 'active' DESC, ce.entered_node_at DESC LIMIT 1) AS campaign_name
+             WHERE ce.prospect_id = t.prospect_id ORDER BY ce.status = 'active' DESC, ce.entered_node_at DESC LIMIT 1) AS campaign_name,
+           NULL::text AS app
       FROM email_threads t
       JOIN users u ON u.id = t.owner_user_id
       LEFT JOIN prospects p ON p.id = t.prospect_id
@@ -103,6 +109,51 @@ function emailSql(o: ListOpts, vals: unknown[], forCount = false): string {
       LEFT JOIN accounts a ON a.id = p.account_id
       LEFT JOIN sales_leads sl ON sl.prospect_id = t.prospect_id
      WHERE ${where.join(' AND ')}`;
+}
+
+function chatSql(o: ListOpts, vals: unknown[], forCount = false): string {
+  const where: string[] = ['t.last_message_at IS NOT NULL'];
+  if (!o.team) { vals.push(o.viewerId); where.push(`t.owner_user_id = $${vals.length}`); }
+  if (!forCount) {
+    if (o.filter === 'needs_reply') where.push(`t.state = 'needs_reply'`);
+    else if (o.filter === 'unread') where.push(CH_UNREAD);
+    else if (o.filter === 'done') where.push(`t.state IN ('done', 'ignored')`);
+    else where.push(`t.state <> 'ignored'`);
+    if (o.q) {
+      vals.push(`%${o.q}%`);
+      const n = vals.length;
+      where.push(`(COALESCE(c.full_name, pe.full_name, t.counterpart_name, t.title) ILIKE $${n}
+                   OR t.counterpart_phone ILIKE $${n} OR a.name ILIKE $${n})`);
+    }
+  }
+  return `
+    SELECT 'chat' AS channel, t.id::text AS id, t.owner_user_id::text AS owner_user_id, u.name AS owner_name,
+           COALESCE(c.full_name, pe.full_name, t.counterpart_name, t.title) AS name,
+           COALESCE(c.title, pe.facets ->> 'title') AS headline,
+           COALESCE(a.name, pe.organization) AS company, t.counterpart_email AS email, NULL::text AS subject,
+           t.last_snippet AS snippet, t.last_message_at, COALESCE(t.last_from_them, false) AS last_from_them, t.state,
+           ${CH_UNREAD} AS unread, t.prospect_id::text AS prospect_id, t.person_id::text AS person_id,
+           sl.id::text AS sales_lead_id,
+           (SELECT cc.name FROM campaign_enrollments ce JOIN campaigns cc ON cc.id = ce.campaign_id
+             WHERE ce.prospect_id = t.prospect_id ORDER BY ce.status = 'active' DESC, ce.entered_node_at DESC LIMIT 1) AS campaign_name,
+           t.app
+      FROM chat_threads t
+      JOIN users u ON u.id = t.owner_user_id
+      LEFT JOIN people pe ON pe.id = t.person_id
+      LEFT JOIN prospects p ON p.id = t.prospect_id
+      LEFT JOIN contacts c ON c.id = p.contact_id
+      LEFT JOIN accounts a ON a.id = p.account_id
+      LEFT JOIN sales_leads sl ON sl.prospect_id = t.prospect_id
+     WHERE ${where.join(' AND ')}`;
+}
+
+let chatsReady = false;
+/** Before core migration 100 the chat tables do not exist: the Inbox then simply has no chats. Cached once true. */
+async function chatsStored(client: PoolClient): Promise<boolean> {
+  if (chatsReady) return true;
+  const { rows } = await client.query(`SELECT to_regclass('public.chat_threads') IS NOT NULL AS ok`);
+  chatsReady = !!rows[0]?.ok;
+  return chatsReady;
 }
 
 function iso(v: unknown): string | null {
@@ -118,8 +169,10 @@ export async function listInbox(o: ListOpts): Promise<{ items: InboxItem[]; coun
   try {
     const vals: unknown[] = [];
     const parts: string[] = [];
-    if (o.channel !== 'email') parts.push(linkedinSql(o, vals));
-    if (o.channel !== 'linkedin') parts.push(emailSql(o, vals));
+    if (o.channel === 'all' || o.channel === 'linkedin') parts.push(linkedinSql(o, vals));
+    if (o.channel === 'all' || o.channel === 'email') parts.push(emailSql(o, vals));
+    if ((o.channel === 'all' || o.channel === 'chat') && await chatsStored(client)) parts.push(chatSql(o, vals));
+    if (!parts.length) return { items: [], counts: await countInbox(client, { ...o, filter: 'all', q: '' }) };
     vals.push(o.limit);
     const { rows } = await client.query(
       `SELECT * FROM (${parts.join(' UNION ALL ')}) x ORDER BY last_message_at DESC NULLS LAST LIMIT $${vals.length}`, vals);
@@ -132,18 +185,20 @@ export async function listInbox(o: ListOpts): Promise<{ items: InboxItem[]; coun
 
 async function countInbox(client: PoolClient, o: ListOpts): Promise<InboxCounts> {
   const vals: unknown[] = [];
-  const li = linkedinSql(o, vals, true);
-  const em = emailSql(o, vals, true);
+  const parts = [linkedinSql(o, vals, true), emailSql(o, vals, true)];
+  if (await chatsStored(client)) parts.push(chatSql(o, vals, true));
   const { rows } = await client.query(
     `SELECT channel, count(*) FILTER (WHERE state = 'needs_reply')::int AS needs_reply,
             count(*) FILTER (WHERE unread)::int AS unread, count(*)::int AS total
-       FROM (${li} UNION ALL ${em}) x WHERE state <> 'ignored' GROUP BY channel`, vals);
+       FROM (${parts.join(' UNION ALL ')}) x WHERE state <> 'ignored' GROUP BY channel`, vals);
   const by = Object.fromEntries(rows.map((r) => [r.channel, r]));
+  const sum = (k: 'needs_reply' | 'unread') => (by.linkedin?.[k] ?? 0) + (by.email?.[k] ?? 0) + (by.chat?.[k] ?? 0);
   return {
-    needs_reply: (by.linkedin?.needs_reply ?? 0) + (by.email?.needs_reply ?? 0),
-    unread: (by.linkedin?.unread ?? 0) + (by.email?.unread ?? 0),
+    needs_reply: sum('needs_reply'),
+    unread: sum('unread'),
     email: by.email?.total ?? 0,
     linkedin: by.linkedin?.total ?? 0,
+    chat: by.chat?.total ?? 0,
   };
 }
 
@@ -159,13 +214,14 @@ export async function needsReplyCount(viewerId: string): Promise<number> {
 }
 
 /** One conversation, or null when it does not exist or the viewer may not see it. Marks it seen for its owner. */
-export async function getThread(channel: 'email' | 'linkedin', id: string, viewer: { userId: string; admin: boolean }):
+export async function getThread(channel: InboxChannel, id: string, viewer: { userId: string; admin: boolean }):
   Promise<InboxThread | null> {
   const client = await pool.connect();
   try {
     const o: ListOpts = { viewerId: viewer.userId, team: true, channel, filter: 'all', q: '', view: 'all', limit: 1 };
     const vals: unknown[] = [];
-    const base = channel === 'linkedin' ? linkedinSql(o, vals, true) : emailSql(o, vals, true);
+    if (channel === 'chat' && !(await chatsStored(client))) return null;
+    const base = channel === 'linkedin' ? linkedinSql(o, vals, true) : channel === 'chat' ? chatSql(o, vals, true) : emailSql(o, vals, true);
     vals.push(id);
     const { rows } = await client.query(`SELECT * FROM (${base}) x WHERE x.id = $${vals.length}`, vals);
     const head = rows[0];
@@ -176,7 +232,19 @@ export async function getThread(channel: 'email' | 'linkedin', id: string, viewe
     let messages: InboxMessage[] = [];
     let profile_url: string | null = null;
     let mailbox: string | null = null;
-    if (channel === 'linkedin') {
+    let chat: { can_reply: boolean; only_last_message: boolean; open_url: string | null; kind: string } | null = null;
+    if (channel === 'chat') {
+      const t = await client.query(
+        `SELECT t.can_reply, t.only_last_message, t.open_url, s.kind, s.revoked_at IS NULL AS live
+           FROM chat_threads t JOIN messaging_sources s ON s.id = t.source_id WHERE t.id = $1`, [id]);
+      const r = t.rows[0];
+      chat = { can_reply: !!(r?.can_reply && r?.live && r?.kind === 'unipile_whatsapp'), only_last_message: !!r?.only_last_message,
+               open_url: r?.open_url ?? null, kind: r?.kind ?? '' };
+      const m = await client.query(
+        `SELECT id::text, from_me, COALESCE(text, '') AS text, sent_at, truncated FROM chat_messages
+          WHERE thread_id = $1 ORDER BY sent_at NULLS FIRST, created_at LIMIT 500`, [id]);
+      messages = m.rows.map((r) => ({ id: r.id, from_me: r.from_me, text: r.truncated ? `${r.text}…` : r.text, sent_at: iso(r.sent_at) }));
+    } else if (channel === 'linkedin') {
       const t = await client.query(`SELECT attendee_profile_url FROM linkedin_threads WHERE id = $1`, [id]);
       profile_url = t.rows[0]?.attendee_profile_url ?? null;
       const m = await client.query(
@@ -196,7 +264,9 @@ export async function getThread(channel: 'email' | 'linkedin', id: string, viewe
       `SELECT o.id::text, o.message, o.created_at FROM outreach_approvals o
         WHERE o.drafted_by = 'inbox' AND o.status = 'approved' AND o.consumed_at IS NULL
           AND ${channel === 'linkedin' ? 'o.linkedin_thread_id = $1::uuid'
-            : `o.email_thread_id = (SELECT gmail_thread_id FROM email_threads WHERE id = $1) AND o.owner_user_id = (SELECT owner_user_id FROM email_threads WHERE id = $1)`}
+            : channel === 'chat'
+              ? `o.channel = 'whatsapp' AND (o.owner_user_id, o.person_id) = (SELECT owner_user_id, person_id FROM chat_threads WHERE id = $1)`
+              : `o.email_thread_id = (SELECT gmail_thread_id FROM email_threads WHERE id = $1) AND o.owner_user_id = (SELECT owner_user_id FROM email_threads WHERE id = $1)`}
         ORDER BY o.created_at`, [id]);
     messages = messages.concat(pend.rows.map((r) => ({ id: `pending:${r.id}`, from_me: true, text: r.message, sent_at: iso(r.created_at), pending: true })));
 
@@ -206,13 +276,26 @@ export async function getThread(channel: 'email' | 'linkedin', id: string, viewe
       stage = s.rows[0]?.stage ?? null;
     }
     if (mine) {
-      await client.query(`UPDATE ${channel === 'linkedin' ? 'linkedin_threads' : 'email_threads'} SET inbox_seen_at = now() WHERE id = $1`, [id]);
+      await client.query(`UPDATE ${TABLE[channel]} SET inbox_seen_at = now() WHERE id = $1`, [id]);
     }
     let reply_note: string | null = null;
-    if (!mine) reply_note = `Sent from ${head.owner_name || 'a teammate'}'s ${channel === 'linkedin' ? 'LinkedIn' : 'mailbox'} — only they can reply.`;
+    if (!mine) reply_note = `Sent from ${head.owner_name || 'a teammate'}'s ${channel === 'linkedin' ? 'LinkedIn' : channel === 'chat' ? 'phone' : 'mailbox'} — only they can reply.`;
+    let can_reply = mine;
+    let source_note: string | null = null;
+    if (chat) {
+      can_reply = mine && chat.can_reply;
+      if (mine && !chat.can_reply) reply_note = 'Read-only here: answer it in the app itself. Replies work for WhatsApp connected on Profile → Messaging.';
+      source_note = chat.kind === 'zeami_link'
+        ? (chat.only_last_message
+          ? 'Read from Zeami Messaging, which keeps only the last message of this chat: the history here builds up from the times we read it (every 10 minutes).'
+          : 'Read from Zeami Messaging every 10 minutes.')
+        : chat.kind === 'mac_push' ? 'Pushed from your Mac.' : 'Your WhatsApp, read every 10 minutes.';
+    }
     return {
-      ...toItem(head), unread: mine ? false : !!head.unread, profile_url, mailbox, messages, can_reply: mine, reply_note,
+      ...toItem(head), unread: mine ? false : !!head.unread, profile_url, mailbox, messages, can_reply, reply_note,
       prospect_stage: stage,
+      mine,
+      ...(chat ? { only_last_message: chat.only_last_message, open_url: chat.open_url, source_note } : {}),
     };
   } finally {
     client.release();
@@ -220,9 +303,9 @@ export async function getThread(channel: 'email' | 'linkedin', id: string, viewe
 }
 
 /** done / reopen — the conversation's owner or an admin. Returns false when not allowed or not found. */
-export async function setThreadState(channel: 'email' | 'linkedin', id: string, action: 'done' | 'reopen',
+export async function setThreadState(channel: InboxChannel, id: string, action: 'done' | 'reopen',
   viewer: { userId: string; admin: boolean }): Promise<boolean> {
-  const table = channel === 'linkedin' ? 'linkedin_threads' : 'email_threads';
+  const table = TABLE[channel];
   const owner = channel === 'linkedin'
     ? `(SELECT la.owner_user_id FROM linkedin_accounts la WHERE la.id = t.account_id)`
     : 't.owner_user_id';

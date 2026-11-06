@@ -36,12 +36,12 @@ export default function ConversationList({
           />
         </label>
         <div className="flex items-center gap-1.5" role="group" aria-label="Channel">
-          {(['all', 'email', 'linkedin'] as const).map((c) => {
+          {(['all', 'email', 'linkedin', 'chat'] as const).filter((c) => c !== 'chat' || !!counts?.chat || channel === 'chat').map((c) => {
             const active = channel === c;
-            const n = c === 'email' ? counts?.email : c === 'linkedin' ? counts?.linkedin : undefined;
+            const n = c === 'email' ? counts?.email : c === 'linkedin' ? counts?.linkedin : c === 'chat' ? counts?.chat : undefined;
             return (
               <button key={c} type="button" onClick={() => setChannel(c)} aria-pressed={active}
-                title={c === 'all' ? 'All channels' : c === 'email' ? 'Email' : 'LinkedIn'}
+                title={c === 'all' ? 'All channels' : c === 'email' ? 'Email' : c === 'linkedin' ? 'LinkedIn' : 'WhatsApp, iMessage and Telegram'}
                 className="h-8 px-2.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5"
                 style={{ background: active ? 'var(--accent-glow)' : 'transparent', color: active ? 'var(--accent)' : 'var(--text-muted)', border: `1px solid ${active ? 'transparent' : 'var(--border)'}` }}>
                 {c === 'all' ? 'All' : <ChannelIcon channel={c} size={16} />}
@@ -80,7 +80,7 @@ export default function ConversationList({
             <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
               {q || filter !== 'all' || channel !== 'all'
                 ? 'Nothing matches these filters.'
-                : 'Replies to your outreach land here — emails from campaigns and waves, and your LinkedIn conversations with leads.'}
+                : 'Replies to your outreach land here — emails from campaigns and waves, your LinkedIn conversations with leads, and WhatsApp / iMessage chats once you connect them on Profile → Messaging.'}
             </p>
           </div>
         )}
@@ -95,7 +95,7 @@ export default function ConversationList({
                 <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold"
                   style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>{initials(it.name)}</div>
                 <span className="absolute -bottom-0.5 -right-0.5 rounded-[5px] p-px" style={{ background: 'var(--bg-card)' }}>
-                  <ChannelIcon channel={it.channel} size={13} />
+                  <ChannelIcon channel={it.channel} app={it.app} size={13} />
                 </span>
               </div>
               <div className="min-w-0 flex-1">

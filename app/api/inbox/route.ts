@@ -4,7 +4,7 @@ import { listInbox } from '@/lib/inbox-server';
 import type { InboxFilter } from '@/lib/inbox';
 
 /**
- * GET /api/inbox?scope=mine|team&channel=all|email|linkedin&filter=all|needs_reply|unread|done&view=outreach|all&q=
+ * GET /api/inbox?scope=mine|team&channel=all|email|linkedin|chat&filter=all|needs_reply|unread|done&view=outreach|all&q=
  * Outreach conversations across email and LinkedIn, newest first, plus the counts for the tabs. `team` is for
  * admins (everyone else always sees their own accounts).
  */
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     const out = await listInbox({
       viewerId: session.userId,
       team: session.role === 'admin' && sp.get('scope') === 'team',
-      channel: pick(sp.get('channel'), ['all', 'email', 'linkedin'] as const, 'all'),
+      channel: pick(sp.get('channel'), ['all', 'email', 'linkedin', 'chat'] as const, 'all'),
       filter: pick<InboxFilter>(sp.get('filter'), ['all', 'needs_reply', 'unread', 'done'] as const, 'all'),
       view: pick(sp.get('view'), ['outreach', 'all'] as const, 'outreach'),
       q: (sp.get('q') || '').trim().slice(0, 100),

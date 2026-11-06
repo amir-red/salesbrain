@@ -77,6 +77,10 @@ const LONG_RUNNING_TOOLS = new Set<string>([
   // The Inbox: a reply goes out at once (LinkedIn send + re-read of the chat, or a Gmail send); a refresh re-reads.
   'inbox_reply',
   'inbox_refresh',
+  // WhatsApp / iMessage in the Inbox (core 100): checking a Zeami link, reading the owner's sources now.
+  'messaging_zeami_add',
+  'messaging_sync_now',
+  'messaging_source_revoke',
   // Campaign Test run that writes: one model draft per message on the path (up to ~8).
   'campaign_preview',
   // "Research now" on a person: a profile fetch, a web search, one grounded lookup and a model call.
