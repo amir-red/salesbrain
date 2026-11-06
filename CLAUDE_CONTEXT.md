@@ -3428,6 +3428,13 @@ token read / send / watch by user only; `account_email` / `sender_address` store
   admin cannot see or open personal mail, Gmail link, default switch). Not tested: a real second Google consent, a real Gmail
   inbox read (first read is 14 days, ≤ 200 threads).
 - Rollout (integration): apply 102, deploy ring + app; someone adds a second account on Profile → Google.
+- **Same branch, Inbox UI (Amir, 2026-11-06)**: the AI proposal's review moved BELOW the reply box and Send and follows his
+  sketch — Before (the AI's text, removed words struck out) · "How good was it?" 1–5 · After (the box's text now, added
+  words marked; `lib/diff-words.ts`), then folded: the sender's priority list, and ONE note "How you improved it and what
+  the AI missed" (`Verdict` = {rating, note}; reason = the note). The reply area scrolls (max 65vh). "Not chronological" was
+  the **"Outreach only" default view hiding the newest LinkedIn chats with people not in the CRM** (checked: every list is
+  sorted newest first, live data in order); the Inbox now opens on **Everything** and remembers the choice
+  (`localStorage inbox.view`).
 
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 

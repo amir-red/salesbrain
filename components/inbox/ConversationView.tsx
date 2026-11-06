@@ -271,7 +271,7 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
         <div ref={endRef} />
       </div>
 
-      <div className="border-t p-3" style={{ borderColor: 'var(--border)' }}>
+      <div className="border-t p-3 max-h-[65vh] overflow-y-auto" style={{ borderColor: 'var(--border)' }}>
         {note && (
           <p className="text-xs mb-2 p-2 rounded-lg" style={{
             color: note.kind === 'error' ? 'var(--red)' : 'var(--text)',
@@ -280,21 +280,6 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
         )}
         {thread.can_reply ? (
           <>
-            {proposal && <ProposalStrip p={proposal} senderFirst={(thread.owner_name || 'your').split(' ')[0]} verdict={verdict} onVerdict={setVerdict}
-              onTeach={() => teach(text)} teaching={teaching} learned={learned} error={teachErr}
-              onDiscard={async () => {
-                if (verdictGiven(verdict) && !learned) await teach(text);
-                else if (!learned) setRate({ approvalId: null, before: proposal.message, after: text, step: proposal.situation });
-                setProposal(null); setText(''); saveDraft(key, null);
-              }} />}
-            {!proposal && learned && (
-              <div className="rounded-xl px-3 py-2 mb-2 text-xs flex items-start gap-2" style={{ background: 'color-mix(in srgb, var(--green) 8%, transparent)' }}>
-                <div className="flex-1"><LearnedLines res={learned} /></div>
-                <button type="button" onClick={() => setLearned(null)} className="underline" style={{ color: 'var(--text-muted)' }}>Close</button>
-              </div>
-            )}
-            {rate && <RatingStrip approvalId={rate.approvalId} before={rate.before} after={rate.after} prospectId={thread.prospect_id}
-              channel={thread.channel === 'chat' ? 'whatsapp' : thread.channel} step={rate.step} senderFirst={(thread.owner_name || 'your').split(' ')[0]} onClose={() => setRate(null)} />}
             <textarea
               ref={boxRef} value={text} onChange={(e) => setText(e.target.value)} rows={2}
               placeholder={thread.channel === 'email' ? `Reply to ${thread.name || 'them'}…` : `Message ${thread.name || 'them'} on ${channelLabel(thread)}…`}
@@ -314,6 +299,22 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
                 {busy === 'reply' ? 'Sending…' : 'Send'}
               </Button>
             </div>
+            {/* The AI proposal's review sits below Send (2026-11-06): before / after, the rating, the note. */}
+            {proposal && <ProposalStrip p={proposal} after={text} senderFirst={(thread.owner_name || 'your').split(' ')[0]} verdict={verdict} onVerdict={setVerdict}
+              onTeach={() => teach(text)} teaching={teaching} learned={learned} error={teachErr}
+              onDiscard={async () => {
+                if (verdictGiven(verdict) && !learned) await teach(text);
+                else if (!learned) setRate({ approvalId: null, before: proposal.message, after: text, step: proposal.situation });
+                setProposal(null); setText(''); saveDraft(key, null);
+              }} />}
+            {!proposal && learned && (
+              <div className="rounded-xl px-3 py-2 mt-3 text-xs flex items-start gap-2" style={{ background: 'color-mix(in srgb, var(--green) 8%, transparent)' }}>
+                <div className="flex-1"><LearnedLines res={learned} /></div>
+                <button type="button" onClick={() => setLearned(null)} className="underline" style={{ color: 'var(--text-muted)' }}>Close</button>
+              </div>
+            )}
+            {rate && <RatingStrip approvalId={rate.approvalId} before={rate.before} after={rate.after} prospectId={thread.prospect_id}
+              channel={thread.channel === 'chat' ? 'whatsapp' : thread.channel} step={rate.step} senderFirst={(thread.owner_name || 'your').split(' ')[0]} onClose={() => setRate(null)} />}
           </>
         ) : (
           <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{thread.reply_note}</p>
