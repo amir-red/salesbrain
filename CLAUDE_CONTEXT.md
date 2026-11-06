@@ -1433,7 +1433,7 @@ zeami.io form, daily restated metrics, offline conversions back to the platforms
   only", sortable columns, ad group → its ads. "Active" = would serve now (the ad AND its parents on). LinkedIn ads are
   sponsored posts without names: labelled "Sponsored post …<id>", linked to the post. Closes on ×, Escape, outside click.
   Verified against both live accounts the same day (Search-DE: 3 ad groups / 3 RSAs; LinkedIn: 2 campaigns, 6 ads).
-- **Round 1e (2026-11-06, feat/marketing-details, app-only)** — for Mateo's cohort / search-term learning reports:
+- **Round 1e (2026-11-06, feat/marketing-details, app-only; LIVE same day, run 42193619572)** — for Mateo's cohort / search-term learning reports:
   service-MCP `marketing_overview {include_details: true}` → `details` (`lib/ads/overview.ts::adsDetails`, each section
   `{ok, error, rows, notes}`): Google `campaigns` (10 highest-spend with impressions, via `googleCampaignDetail`; `AdRow`
   now carries every RSA `headlines[]` / `descriptions[]` / `final_urls[]`), `search_terms` (`googleSearchTerms`, top 100
