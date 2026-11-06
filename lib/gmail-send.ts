@@ -131,10 +131,20 @@ export async function readThreads(userId: string, threadIds: string[], opts: { f
   const q = opts.full ? 'format=full'
     : 'format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date';
   for (const id of threadIds.slice(0, 50)) {   // sequential: no fan-out against Gmail's per-user rate limit
-    const r = await fetch(`${GMAIL}/threads/${encodeURIComponent(id)}?${q}`,
+    let r = await fetch(`${GMAIL}/threads/${encodeURIComponent(id)}?${q}`,
       { headers: { Authorization: `Bearer ${tok.accessToken}` } });
+    // Gmail's per-user, per-minute quota (403 rateLimitExceeded / 429): wait once, then give up for this run.
+    if (r.status === 429 || r.status === 403) {
+      const body = await r.text();
+      if (r.status === 429 || /rateLimitExceeded|userRateLimitExceeded|Quota exceeded/i.test(body)) {
+        await new Promise((ok) => setTimeout(ok, 20_000));
+        r = await fetch(`${GMAIL}/threads/${encodeURIComponent(id)}?${q}`, { headers: { Authorization: `Bearer ${tok.accessToken}` } });
+      } else {
+        return { error: `Gmail refused reading a thread (${r.status}): ${body.replace(/\s+/g, ' ').slice(0, 160)}` };
+      }
+    }
     if (r.status === 404) { out.push({ thread_id: id, messages: [] }); continue; }
-    if (!r.ok) return { error: `Gmail refused reading a thread (${r.status})` };
+    if (!r.ok) return { error: `Gmail refused reading a thread (${r.status}${r.status === 403 || r.status === 429 ? ', rate limit' : ''})` };
     const t = await r.json() as { messages?: GmailMessage[] };
     out.push({
       thread_id: id,
@@ -192,7 +202,7 @@ export async function watchMailbox(userId: string, mailbox?: string | null): Pro
  * at most `max` threads.
  */
 export async function listInboxThreads(userId: string, mailbox: string, since: string, max = 50):
-  Promise<{ threads: { thread_id: string; messages: ThreadMessage[] }[]; newest: string | null } | { error: string }> {
+  Promise<{ threads: { thread_id: string; messages: ThreadMessage[] }[]; newest: string | null; partial?: boolean; error?: string } | { error: string }> {
   const tok = await getValidAccessToken(userId, 'google', mailbox);
   if (!tok) return { error: `The Google connection for ${mailbox} stopped working. Reconnect it on Profile → Google.` };
   const after = Math.max(0, Math.floor(new Date(since).getTime() / 1000) - 60);
@@ -214,7 +224,12 @@ export async function listInboxThreads(userId: string, mailbox: string, since: s
   const threads: { thread_id: string; messages: ThreadMessage[] }[] = [];
   for (let i = 0; i < ids.length; i += 50) {
     const read = await readThreads(userId, ids.slice(i, i + 50), { full: true, mailbox });
-    if ('error' in read) return read;
+    if ('error' in read) {
+      if (!threads.length) return read;
+      // Stopped partway (usually Gmail's per-minute limit): keep what was read; `partial` tells the caller NOT to move
+      // its cursor, so the next run reads the rest (what is stored already is not stored twice).
+      return { threads, newest: null, partial: true, error: read.error };
+    }
     threads.push(...read.threads);
   }
   let newest: string | null = null;
