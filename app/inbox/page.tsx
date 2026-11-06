@@ -22,6 +22,8 @@ export default function InboxPage() {
   const [filter, setFilter] = useState<InboxFilter>('all');
   const [scope, setScope] = useState<'mine' | 'team'>('mine');
   const [view, setView] = useState<'outreach' | 'all'>('outreach');
+  const [mailbox, setMailbox] = useState('');
+  const [mailboxes, setMailboxes] = useState<string[]>([]);
   const [admin, setAdmin] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [thread, setThread] = useState<InboxThread | null>(null);
@@ -34,6 +36,7 @@ export default function InboxPage() {
     try {
       const p = new URLSearchParams({ channel, filter, scope, view });
       if (q.trim()) p.set('q', q.trim());
+      if (mailbox) p.set('mailbox', mailbox);
       const res = await fetch(`/api/inbox?${p}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not load the inbox');
@@ -47,9 +50,15 @@ export default function InboxPage() {
     } finally {
       if (my === seq.current) setLoading(false);
     }
-  }, [channel, filter, scope, view, q]);
+  }, [channel, filter, scope, view, q, mailbox]);
 
   useEffect(() => { const t = setTimeout(load, q ? 250 : 0); return () => clearTimeout(t); }, [load, q]);
+  // core 102: a person may connect several Google accounts — then the Inbox can show one mailbox at a time.
+  useEffect(() => {
+    fetch('/api/integrations/status').then((r) => (r.ok ? r.json() : null))
+      .then((d) => setMailboxes(((d?.google_accounts ?? []) as { account_email: string }[]).map((a) => a.account_email)))
+      .catch(() => undefined);
+  }, []);
   // New replies arrive by themselves (Gmail push, the hourly LinkedIn sync): look again every minute while visible.
   useEffect(() => {
     const t = setInterval(() => { if (document.visibilityState === 'visible') load(); }, 60_000);
@@ -58,7 +67,7 @@ export default function InboxPage() {
 
   const open = useCallback(async (key: string) => {
     const [ch, id] = key.split(':');
-    if ((ch !== 'email' && ch !== 'linkedin') || !id) return;
+    if ((ch !== 'email' && ch !== 'linkedin' && ch !== 'chat') || !id) return;
     setSelected(key);
     setThreadLoading(true);
     try {
@@ -99,13 +108,20 @@ export default function InboxPage() {
       <div className="flex-1 flex flex-col min-w-0">
         <PageHeader
           title="Inbox"
-          subtitle="Replies to your outreach — campaign and wave emails, and LinkedIn conversations with leads."
+          subtitle="Your conversations — outreach email and LinkedIn, chats, and the mail in every Google account you connected."
           actions={
             <>
-              <select value={view} onChange={(e) => setView(e.target.value as 'outreach' | 'all')} className="z-input !w-auto text-sm" aria-label="Which LinkedIn chats">
-                <option value="outreach">Outreach only</option>
-                <option value="all">All LinkedIn chats</option>
+              <select value={view} onChange={(e) => setView(e.target.value as 'outreach' | 'all')} className="z-input !w-auto text-sm"
+                aria-label="Which conversations" title="With people in the CRM, or everything (all mail and all LinkedIn chats)">
+                <option value="outreach">With people in the CRM</option>
+                <option value="all">Everything</option>
               </select>
+              {mailboxes.length > 1 && scope === 'mine' && (
+                <select value={mailbox} onChange={(e) => setMailbox(e.target.value)} className="z-input !w-auto text-sm" aria-label="Which mailbox">
+                  <option value="">All mailboxes</option>
+                  {mailboxes.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              )}
               {admin && (
                 <select value={scope} onChange={(e) => setScope(e.target.value as 'mine' | 'team')} className="z-input !w-auto text-sm" aria-label="Whose conversations">
                   <option value="mine">Mine</option>

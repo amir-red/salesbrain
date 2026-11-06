@@ -242,9 +242,9 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
           {thread.profile_url && (
             <a href={thread.profile_url} target="_blank" rel="noreferrer" className="px-2.5 py-1 text-xs rounded-lg font-medium" style={{ border: '1px solid var(--border)' }}>Profile ↗</a>
           )}
-          {thread.channel === 'chat' && thread.open_url && (
+          {(thread.channel === 'chat' || thread.channel === 'email') && thread.open_url && (
             <a href={thread.open_url} target="_blank" rel="noreferrer" className="px-2.5 py-1 text-xs rounded-lg font-medium" style={{ border: '1px solid var(--border)' }}>
-              Open in {channelLabel(thread)} ↗
+              Open in {thread.channel === 'email' ? 'Gmail' : channelLabel(thread)} ↗
             </a>
           )}
           {(thread.can_reply || (thread.channel === 'chat' && thread.mine)) && (

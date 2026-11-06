@@ -44,7 +44,9 @@ export function getGoogleAuthUrl(state: string, scopes: string[] = GOOGLE_SCOPES
     response_type: 'code',
     scope: scopes.join(' '),
     access_type: 'offline',
-    prompt: 'consent',
+    // The account chooser every time (core 102): connecting a SECOND Google account must not silently reuse the one
+    // the browser is signed into; consent so Google returns a refresh token for each account.
+    prompt: 'select_account consent',
     state,
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
@@ -99,13 +101,30 @@ export async function getGoogleUserEmail(accessToken: string): Promise<string | 
   return data.email || null;
 }
 
-/**
- * Get a valid access token for this user, refreshing if needed.
- */
-export async function getValidAccessToken(userId: string, provider: 'google' | 'gmail_send' = 'google'): Promise<{ accessToken: string; email: string | null } | null> {
+/** Every Google account a person connected (core 102: several per person), the default sending one first. */
+export async function listGoogleAccounts(userId: string): Promise<{ email: string; scopes: string[]; connected_at: string; is_default: boolean; needs_reconnect: boolean }[]> {
   const { rows } = await pool.query(
-    `SELECT * FROM oauth_tokens WHERE user_id = $1 AND provider = $2`,
-    [userId, provider]
+    `SELECT t.account_email AS email, COALESCE(t.scopes, '{}') AS scopes, t.created_at AS connected_at,
+            t.refresh_token IS NULL AS needs_reconnect,
+            COALESCE((SELECT s.is_default FROM email_senders s WHERE s.user_id = t.user_id AND s.revoked_at IS NULL
+                       AND lower(s.address) = lower(t.account_email)), false) AS is_default
+       FROM oauth_tokens t WHERE t.user_id = $1 AND t.provider = 'google' AND t.account_email IS NOT NULL
+      ORDER BY 5 DESC, t.created_at`, [userId]);
+  return rows.map((r) => ({ ...r, connected_at: r.connected_at instanceof Date ? r.connected_at.toISOString() : r.connected_at }));
+}
+
+/**
+ * Get a valid access token for this user, refreshing if needed. `mailbox` picks one of the person's Google accounts
+ * (core 102); without it: the account of their default sending mailbox, else the one connected last.
+ */
+export async function getValidAccessToken(userId: string, provider: 'google' | 'gmail_send' = 'google', mailbox?: string | null): Promise<{ accessToken: string; email: string | null } | null> {
+  const { rows } = await pool.query(
+    mailbox
+      ? `SELECT * FROM oauth_tokens WHERE user_id = $1 AND provider = $2 AND lower(account_email) = lower($3)`
+      : `SELECT t.* FROM oauth_tokens t WHERE t.user_id = $1 AND t.provider = $2
+          ORDER BY EXISTS (SELECT 1 FROM email_senders s WHERE s.user_id = t.user_id AND s.is_default AND s.revoked_at IS NULL
+                             AND lower(s.address) = lower(t.account_email)) DESC, t.updated_at DESC LIMIT 1`,
+    mailbox ? [userId, provider, mailbox] : [userId, provider]
   );
   const row = rows[0];
   if (!row) return null;

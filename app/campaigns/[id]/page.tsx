@@ -657,7 +657,7 @@ function ResultsTab({ results, draft, canEdit, autoSend, onWinner }: {
   );
 }
 
-interface Teammate { id: string; name: string; has_gmail: boolean; has_linkedin: boolean }
+interface Teammate { id: string; name: string; has_gmail: boolean; has_linkedin: boolean; mailboxes?: string[] }
 interface Options { icps: { id: string; name: string; owner_name: string | null; leads: number }[]; sources: { source: string; leads: number }[]; products: { id: string; name: string }[]; teammates?: Teammate[] }
 
 function SettingsTab({ c, onSaved }: { c: Campaign; onSaved: () => Promise<void> }) {
@@ -667,6 +667,7 @@ function SettingsTab({ c, onSaved }: { c: Campaign; onSaved: () => Promise<void>
     auto_enabled: !!c.settings?.auto_send?.enabled, trust_after: c.settings?.auto_send?.trust_after ?? 3,
     allow_unverified: !!c.settings?.allow_unverified,
     send_from: c.settings?.send_from?.mode ?? 'owner', send_from_user: c.settings?.send_from?.user_id ?? '',
+    send_mailbox: (c.settings as { send_mailbox?: string } | undefined)?.send_mailbox ?? '',
     approve_by: c.settings?.approve_by?.mode ?? 'sender', approve_by_user: c.settings?.approve_by?.user_id ?? '' });
   const [lists, setLists] = useState<CampaignList[]>(c.lists);
   const [busy, setBusy] = useState(false);
@@ -682,6 +683,7 @@ function SettingsTab({ c, onSaved }: { c: Campaign; onSaved: () => Promise<void>
           settings: { ...(f.daily_max_per_step ? { daily_max_per_step: Number(f.daily_max_per_step) } : {}),
             auto_send: { enabled: f.auto_enabled, trust_after: Math.max(1, Math.min(10, Number(f.trust_after) || 3)) },
             allow_unverified: f.allow_unverified,
+            send_mailbox: f.send_mailbox || null,
             send_from: f.send_from === 'person' ? { mode: 'person', user_id: f.send_from_user } : { mode: f.send_from },
             approve_by: f.approve_by === 'person' ? { mode: 'person', user_id: f.approve_by_user } : { mode: f.approve_by } } },
         lists: lists.map((l) => (l.icp_id ? { icp_id: l.icp_id, include: l.include } : { source: l.source, include: l.include })),
@@ -730,6 +732,17 @@ function SettingsTab({ c, onSaved }: { c: Campaign; onSaved: () => Promise<void>
             <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
               {SEND_FROM.find((o) => o.mode === f.send_from)?.hint} Applies to people as they join. Someone already written to or sent a
               request stays with that account, and so does anyone whose chosen sender lacks the LinkedIn or Gmail this campaign needs.
+            </span></label>
+          <label className="grid gap-1 text-sm content-start sm:col-span-2"><span className="text-xs font-medium">Emails go out from</span>
+            <select className="z-input" disabled={dis} value={f.send_mailbox} onChange={(e) => setF({ ...f, send_mailbox: e.target.value })}>
+              <option value="">the sender&apos;s default mailbox</option>
+              {(f.send_from === 'person' ? team.filter((t) => t.id === f.send_from_user) : team).flatMap((t) =>
+                (t.mailboxes ?? []).map((m) => <option key={`${t.id}:${m}`} value={m}>{m}{f.send_from === 'person' ? '' : ` · ${t.name}`}</option>))}
+              {f.send_mailbox && !team.some((t) => (t.mailboxes ?? []).includes(f.send_mailbox)) && <option value={f.send_mailbox}>{f.send_mailbox} (no longer connected)</option>}
+            </select>
+            <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+              A person with several Google accounts sends from their default one unless you pick one here. A picked mailbox is used for
+              the people it belongs to; everyone else sends from their default. Follow-ups always go from the mailbox the first email used.
             </span></label>
           <label className="grid gap-1 text-sm content-start"><span className="text-xs font-medium">Approved by</span>
             <select className="z-input" disabled={dis} value={f.approve_by} onChange={(e) => setF({ ...f, approve_by: e.target.value })}>
