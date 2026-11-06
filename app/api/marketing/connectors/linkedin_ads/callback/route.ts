@@ -20,13 +20,15 @@ export async function GET(req: NextRequest) {
     const redirect = publicUrl(req, '/api/marketing/connectors/linkedin_ads/callback').toString();
     const t = await exchangeLinkedInCode(code, redirect);
     const label = await linkedInMemberLabel(t.access_token);
+    // One LinkedIn Ads connection per person: the new one replaces any earlier (core 102 lets oauth_tokens hold several
+    // rows per provider, keyed by account — that is for Google).
+    const prior = await pool.query(`SELECT refresh_token FROM oauth_tokens WHERE user_id = $1 AND provider = 'linkedin_ads'
+                                     ORDER BY updated_at DESC LIMIT 1`, [session.userId]);
+    await pool.query(`DELETE FROM oauth_tokens WHERE user_id = $1 AND provider = 'linkedin_ads'`, [session.userId]);
+    if (!t.refresh_token && prior.rows[0]?.refresh_token) t.refresh_token = prior.rows[0].refresh_token;
     await pool.query(
       `INSERT INTO oauth_tokens (user_id, provider, access_token, refresh_token, expires_at, scopes, account_email)
-       VALUES ($1, 'linkedin_ads', $2, $3, $4, $5, $6)
-       ON CONFLICT (user_id, provider) DO UPDATE SET
-         access_token = EXCLUDED.access_token,
-         refresh_token = COALESCE(EXCLUDED.refresh_token, oauth_tokens.refresh_token),
-         expires_at = EXCLUDED.expires_at, scopes = EXCLUDED.scopes, account_email = EXCLUDED.account_email, updated_at = now()`,
+       VALUES ($1, 'linkedin_ads', $2, $3, $4, $5, $6)`,
       [session.userId, t.access_token, t.refresh_token ?? null, new Date(Date.now() + t.expires_in * 1000).toISOString(), (t.scope || 'r_ads r_ads_reporting').split(/[ ,]+/), label],
     );
     invalidate('linkedin_ads:');

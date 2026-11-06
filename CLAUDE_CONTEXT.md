@@ -3374,6 +3374,67 @@ Plan `~/.claude/plans/is-the-daily-linkedin-jaunty-nebula.md`.
 - Rollout (integration session): apply 100; deploy ring (creates `messaging-sync`) + app; a teammate pastes their link on
   Profile → Messaging; someone connects WhatsApp and sends one reply from the Inbox.
 - Not built: group chats, unknown contacts, Telegram / iMessage / SMS sending, attachments, Zeami's calendar tool.
+- **0.81.1 (committed on main, NOT yet deployed — waiting for Amir's go-ahead)**: Mateo's first live link showed WhatsApp read
+  by Zeami on a Mac comes with NO time and NO sender (`"at": null, "from": ""`); those messages were dropped, leaving empty
+  chats the Inbox hides. Now stored with the read time (`chat_messages.time_is_read_time`) and an unknown sender
+  (`from_me` NULL, core 101 — APPLIED to production), never a reply, an 'internal' interaction; an unread chat's last message
+  counts as theirs. `chats.sync_state` read rows by position on a pooled connection that returns dicts (KeyError 0 on every
+  sync, the graph-sync bug again) — fixed. The Inbox page never opened a chat on click (it only accepted email / linkedin) —
+  fixed on main.
+
+### 5.cp Several Google accounts per person (2026-11-06, feat/mailboxes, migration 102)
+
+Amir: "support multiple email accounts for the inbox, contacts, to fetch from multiple accounts". Decisions (AskUserQuestion):
+**Google only**; **read + send** — every account feeds the Inbox, contacts and meetings, one is the default sender, a
+campaign may pick another, an Inbox reply goes out from the thread's own mailbox; **everything in those inboxes** reaches the
+Inbox. Before: ONE connection per person (`oauth_tokens` UNIQUE (user_id, provider), `email_senders` keyed on user_id, every
+token read / send / watch by user only; `account_email` / `sender_address` stored but never used to pick a token).
+- **102**: `oauth_tokens` UNIQUE (user_id, provider, lower(account_email)) + `inbox_synced_at` / `inbox_cursor` (the
+  whole-inbox read, per Google account); `email_senders` = one row per mailbox (`id` PK, UNIQUE (user_id, lower(address)),
+  `is_default`, one default per person); `email_threads` UNIQUE (owner, lower(mailbox), gmail_thread_id) + `origin` outreach |
+  mailbox. Also `CREATE TABLE IF NOT EXISTS oauth_tokens` (the app had made it by hand; no migration had it). No FK points at
+  either table. The LinkedIn Ads callback upserted on the old key: it now deletes + inserts (one per person).
+- **Kernel**: `waves._sender(conn, user, address?)` (default, else oldest), `default_address`, `_FROM_MAILBOX` (a sent email
+  belongs to its `sender_address`, an old one with none to the default); caps, ramp, bounce pause, resume, settings,
+  `record_email_sent/_error`, `threads_to_check` (grouped per person + mailbox), the outbox (drafts filtered to the mailbox)
+  all per mailbox; follow-ups go from the mailbox the first email used (`_FOLLOW_SQL` + `followups_due.mailbox` →
+  `wave_propose(mailbox=)`). `sender_update(address, is_default)` switches the default. `campaigns.campaign_mailbox`:
+  follow-up → the first email's mailbox; else `settings.send_mailbox` when it is the sender's; else default (signature from
+  that mailbox in `compose_email`). `inbox.store_email_thread(..., mailbox, origin)`: a mailbox thread is matched to a person +
+  prospect by the other side's address; outreach stays outreach; returns origin / person / prospect / stage.
+  `inbox.mailboxes_to_read` / `mailbox_read_done` (first read 14 days). `prepare_reply` signs with and returns the thread's
+  mailbox. `meetings.calendar_users` DISTINCT, `connect.connections_status.google.accounts`, `merge_users` clash = same account
+  twice or two default mailboxes.
+- **Ring** `email_replies.py`: `check` per (person, mailbox); NEW `read_inboxes` = bridge `gmail_inbox` per Google account →
+  `store_email_thread(origin='mailbox')`; a fresh message on an outreach thread is judged exactly like `check`
+  (`_judge_outreach`), a fresh one from a lead at P4/P5 is a `record_reply`; cursor saved. Cron `email-replies` runs both;
+  `check_rpc` (Gmail push) runs both for one mailbox. `renew_watches` per Google account. Outbox / inbox replies pass `mailbox`.
+- **App**: `getValidAccessToken(user, provider, mailbox?)`, `listGoogleAccounts`; connect = Google's account chooser
+  (`prompt=select_account consent`), adds or refreshes ONE account, first = default; `disconnectGoogle(user, mailbox?)` +
+  promote the next default. `runGoogleSync` and `listMeetings` loop every account. `sendGmail` / `readThreads` / `watchMailbox`
+  take the mailbox; NEW `listInboxThreads` (`in:inbox category:primary after:<cursor>`, ≤ 200 first read / 50 after). Bridge
+  tools take `mailbox` (only among the actor's OWN accounts) + NEW `gmail_inbox`. Push maps the notice's address via
+  `oauth_tokens.account_email` → that mailbox. `/api/integrations/status` returns `google_accounts[]`; `/api/email/mailboxes`
+  `my_mailboxes[]`, PATCH `address` / `is_default`, resume `address`; disconnect `{mailbox}`. Profile → Google: one card per
+  account (default pill, permissions, Use for sending by default, Reconnect, Disconnect), **+ Add another account**, sending
+  settings per mailbox. Campaign Settings: "Emails go out from" (mailbox select; `/api/campaigns/options` lists mailboxes).
+- **Inbox**: email view "With people in the CRM" (outreach origin or a known person) | "Everything"; mailbox filter when the
+  person has two or more; **privacy: a whole-inbox thread with nobody from the CRM is visible to its owner only** (team view
+  and direct open both refuse it); such a thread is answered in Gmail ("Open in Gmail" on every email thread), the send gate
+  needs a person.
+- Tests: core `test_mailboxes_db.py` (6: default + caps per mailbox, two mailboxes one thread id, person matching, outreach
+  sticks, cursor, campaign mailbox, reply signature), `test_waves_db` updated; ring `test_email_replies.py` +3 (per-account
+  read from its cursor, P5 reply, outreach reply judged); a scratch-DB walk through a real login (both mailboxes listed, filter,
+  admin cannot see or open personal mail, Gmail link, default switch). Not tested: a real second Google consent, a real Gmail
+  inbox read (first read is 14 days, ≤ 200 threads).
+- Rollout (integration): apply 102, deploy ring + app; someone adds a second account on Profile → Google.
+- **Same branch, Inbox UI (Amir, 2026-11-06)**: the AI proposal's review moved BELOW the reply box and Send and follows his
+  sketch — Before (the AI's text, removed words struck out) · "How good was it?" 1–5 · After (the box's text now, added
+  words marked; `lib/diff-words.ts`), then folded: the sender's priority list, and ONE note "How you improved it and what
+  the AI missed" (`Verdict` = {rating, note}; reason = the note). The reply area scrolls (max 65vh). "Not chronological" was
+  the **"Outreach only" default view hiding the newest LinkedIn chats with people not in the CRM** (checked: every list is
+  sorted newest first, live data in order); the Inbox now opens on **Everything** and remembers the choice
+  (`localStorage inbox.view`).
 
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 

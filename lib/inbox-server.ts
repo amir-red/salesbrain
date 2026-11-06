@@ -5,7 +5,10 @@
  * What is listed: "outreach" conversations. Email = every Gmail thread a SalesBrain email started (so all of them).
  * LinkedIn = a mirrored chat whose person is a prospect or sales lead, or that a SalesBrain message went into;
  * `view: 'all'` shows every LinkedIn chat of the account. Chats (core 100: WhatsApp / iMessage / Telegram) = every
- * stored one, since the store only keeps one-to-one conversations with people the owner's CRM knows. Visibility: your own accounts; an admin may pass
+ * stored one, since the store only keeps one-to-one conversations with people the owner's CRM knows.
+ * Email (core 102): every connected Google account's whole Primary inbox is stored too (origin 'mailbox'). View
+ * 'outreach' = threads our email started or with a person in the CRM; 'all' = everything. A mailbox thread with nobody
+ * from the CRM in it is visible to its OWNER only — an admin's team view never lists a teammate's personal mail. Visibility: your own accounts; an admin may pass
  * scope 'team' to read everyone's (read-only — only the owner replies from their account).
  */
 import type { PoolClient } from 'pg';
@@ -22,6 +25,8 @@ export interface ListOpts {
   q: string;
   view: 'outreach' | 'all';
   limit: number;
+  /** email only: one of the viewer's mailboxes (core 102) */
+  mailbox?: string | null;
 }
 
 /** The prospect behind a LinkedIn chat: member id first, then the slug of the chat's person. Owner's own first. */
@@ -68,7 +73,7 @@ function linkedinSql(o: ListOpts, vals: unknown[], forCount = false): string {
            ${LI_UNREAD} AS unread, pr.id::text AS prospect_id, t.person_id::text AS person_id, sl.id::text AS sales_lead_id,
            (SELECT cc.name FROM campaign_enrollments ce JOIN campaigns cc ON cc.id = ce.campaign_id
              WHERE ce.prospect_id = pr.id ORDER BY ce.status = 'active' DESC, ce.entered_node_at DESC LIMIT 1) AS campaign_name,
-           NULL::text AS app
+           NULL::text AS app, NULL::text AS mailbox
       FROM linkedin_threads t
       JOIN linkedin_accounts la ON la.id = t.account_id
       JOIN users u ON u.id = la.owner_user_id
@@ -81,7 +86,13 @@ function linkedinSql(o: ListOpts, vals: unknown[], forCount = false): string {
 
 function emailSql(o: ListOpts, vals: unknown[], forCount = false): string {
   const where: string[] = ['t.last_message_at IS NOT NULL'];
-  if (!o.team) { vals.push(o.viewerId); where.push(`t.owner_user_id = $${vals.length}`); }
+  vals.push(o.viewerId);
+  const me = vals.length;
+  if (!o.team) where.push(`t.owner_user_id = $${me}`);
+  // Personal mail (a whole-inbox thread with nobody from the CRM in it) is its owner's alone.
+  where.push(`(t.owner_user_id = $${me} OR t.origin = 'outreach' OR t.person_id IS NOT NULL OR t.prospect_id IS NOT NULL)`);
+  if (o.view === 'outreach') where.push(`(t.origin = 'outreach' OR t.person_id IS NOT NULL OR t.prospect_id IS NOT NULL)`);
+  if (o.mailbox) { vals.push(o.mailbox); where.push(`lower(COALESCE(t.mailbox, '')) = lower($${vals.length})`); }
   if (!forCount) {
     if (o.filter === 'needs_reply') where.push(`t.state = 'needs_reply'`);
     else if (o.filter === 'unread') where.push(EM_UNREAD);
@@ -101,7 +112,7 @@ function emailSql(o: ListOpts, vals: unknown[], forCount = false): string {
            t.prospect_id::text AS prospect_id, t.person_id::text AS person_id, sl.id::text AS sales_lead_id,
            (SELECT cc.name FROM campaign_enrollments ce JOIN campaigns cc ON cc.id = ce.campaign_id
              WHERE ce.prospect_id = t.prospect_id ORDER BY ce.status = 'active' DESC, ce.entered_node_at DESC LIMIT 1) AS campaign_name,
-           NULL::text AS app
+           NULL::text AS app, t.mailbox
       FROM email_threads t
       JOIN users u ON u.id = t.owner_user_id
       LEFT JOIN prospects p ON p.id = t.prospect_id
@@ -136,7 +147,7 @@ function chatSql(o: ListOpts, vals: unknown[], forCount = false): string {
            sl.id::text AS sales_lead_id,
            (SELECT cc.name FROM campaign_enrollments ce JOIN campaigns cc ON cc.id = ce.campaign_id
              WHERE ce.prospect_id = t.prospect_id ORDER BY ce.status = 'active' DESC, ce.entered_node_at DESC LIMIT 1) AS campaign_name,
-           t.app
+           t.app, NULL::text AS mailbox
       FROM chat_threads t
       JOIN users u ON u.id = t.owner_user_id
       LEFT JOIN people pe ON pe.id = t.person_id
@@ -234,6 +245,7 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
     let mailbox: string | null = null;
     let chat: { can_reply: boolean; only_last_message: boolean; open_url: string | null; kind: string } | null = null;
     let unknownSender = false;
+    let emailMeta: { mailbox: string | null; gmail_thread_id: string; origin: string; person_id: string | null; prospect_id: string | null } | null = null;
     if (channel === 'chat') {
       const t = await client.query(
         `SELECT t.can_reply, t.only_last_message, t.open_url, s.kind, s.revoked_at IS NULL AS live
@@ -255,8 +267,9 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
           WHERE thread_id = $1 ORDER BY sent_at NULLS FIRST, created_at LIMIT 500`, [id]);
       messages = m.rows.map((r) => ({ id: r.id, from_me: r.from_me, text: r.text, sent_at: iso(r.sent_at) }));
     } else {
-      const t = await client.query(`SELECT mailbox, gmail_thread_id FROM email_threads WHERE id = $1`, [id]);
+      const t = await client.query(`SELECT mailbox, gmail_thread_id, origin, person_id, prospect_id FROM email_threads WHERE id = $1`, [id]);
       mailbox = t.rows[0]?.mailbox ?? null;
+      emailMeta = t.rows[0] ?? null;
       const m = await client.query(
         `SELECT id::text, from_me, COALESCE(body, '') AS text, sent_at, from_header AS "from", subject FROM email_messages
           WHERE thread_id = $1 ORDER BY sent_at NULLS FIRST, created_at LIMIT 500`, [id]);
@@ -285,6 +298,16 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
     if (!mine) reply_note = `Sent from ${head.owner_name || 'a teammate'}'s ${channel === 'linkedin' ? 'LinkedIn' : channel === 'chat' ? 'phone' : 'mailbox'} — only they can reply.`;
     let can_reply = mine;
     let source_note: string | null = null;
+    let open_url: string | null = null;
+    if (emailMeta) {
+      // Open the thread in that mailbox's Gmail (core 102: the person may have several accounts).
+      open_url = `https://mail.google.com/mail/u/${encodeURIComponent(emailMeta.mailbox || '0')}/#all/${encodeURIComponent(emailMeta.gmail_thread_id)}`;
+      // A whole-inbox thread with nobody from the CRM in it: the send gate needs a person, so it is answered in Gmail.
+      if (mine && !emailMeta.person_id && !emailMeta.prospect_id && emailMeta.origin === 'mailbox') {
+        can_reply = false;
+        reply_note = 'This person is not in the CRM, so answer in Gmail. Add them as a lead to reply from here.';
+      }
+    }
     if (chat) {
       can_reply = mine && chat.can_reply;
       if (mine && !chat.can_reply) reply_note = 'Read-only here: answer it in the app itself. Replies work for WhatsApp connected on Profile → Messaging.';
@@ -300,6 +323,7 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
       prospect_stage: stage,
       mine,
       ...(chat ? { only_last_message: chat.only_last_message, open_url: chat.open_url, source_note } : {}),
+      ...(open_url ? { open_url } : {}),
     };
   } finally {
     client.release();

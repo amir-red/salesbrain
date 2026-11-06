@@ -6,6 +6,7 @@
 import pool from '@/lib/db';
 import {
   getValidAccessToken,
+  listGoogleAccounts,
   listGoogleContacts,
   listGmailMessages,
   parseGmailMessage,
@@ -27,8 +28,32 @@ export interface GoogleSyncStats {
  * `{ error }` when the person has not connected Google. Errors during the run are collected in `error_messages`.
  */
 export async function runGoogleSync(userId: string, opts: GoogleSyncOptions = {}): Promise<GoogleSyncStats | { error: string }> {
-  const token = await getValidAccessToken(userId);
-  if (!token) return { error: 'Not connected to Google' };
+  // core 102: every connected Google account (contacts dedupe by email across them, as within one).
+  const accounts = (await listGoogleAccounts(userId)).map((a) => a.email);
+  if (!accounts.length) return { error: 'Not connected to Google' };
+  let total: GoogleSyncStats | null = null;
+  for (const mailbox of accounts) {
+    const one = await syncOneAccount(userId, mailbox, opts);
+    if ('error' in one) {
+      if (accounts.length === 1) return one;
+      total = total ?? { contacts_imported: 0, messages_imported: 0, replies_recorded: 0, errors: 0, error_messages: [], account_email: null, mode: opts.mode || 'both' };
+      total.errors++;
+      total.error_messages.push(`[${mailbox}] ${one.error}`);
+      continue;
+    }
+    if (!total) { total = { ...one, account_email: accounts.join(', ') }; continue; }
+    total.contacts_imported += one.contacts_imported;
+    total.messages_imported += one.messages_imported;
+    total.replies_recorded += one.replies_recorded;
+    total.errors += one.errors;
+    total.error_messages.push(...one.error_messages.map((m) => `[${mailbox}] ${m}`));
+  }
+  return total ?? { error: 'Not connected to Google' };
+}
+
+async function syncOneAccount(userId: string, mailbox: string, opts: GoogleSyncOptions): Promise<GoogleSyncStats | { error: string }> {
+  const token = await getValidAccessToken(userId, 'google', mailbox);
+  if (!token) return { error: `The Google connection for ${mailbox} stopped working` };
 
   const mode = opts.mode || 'both';
   const max = Math.min(opts.max || 10, 50);

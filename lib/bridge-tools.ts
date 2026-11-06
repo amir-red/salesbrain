@@ -14,7 +14,7 @@ import { EXPORT_KINDS, exportUrl, signExport, type ExportKind } from '@/lib/expo
 import { listUserTokens, revokeToken } from '@/lib/mcp/tokens';
 import { sendTelegram } from '@/lib/tg-notify';
 import { syncZeamiDealEvents } from '@/lib/zeami-sync';
-import { readThreads, sendGmail, watchMailbox } from '@/lib/gmail-send';
+import { listInboxThreads, readThreads, sendGmail, watchMailbox } from '@/lib/gmail-send';
 import { listMeetings } from '@/lib/google-calendar';
 
 export interface Who { userId: string; role: string }
@@ -80,23 +80,35 @@ async function zeamiDealSync(who: Who, args: Args) {
 }
 
 // Email waves (core 076): the ring's outbox has already passed the kernel send gate for this email; this only delivers
-// it from the person's own Gmail. The person is the bridge actor, so nobody can send from someone else's mailbox.
+// it from the person's own Gmail. The person is the bridge actor, so nobody can send from someone else's mailbox:
+// `mailbox` (core 102: one of several) only ever picks among the actor's OWN Google accounts.
+const mailboxOf = (args: Args) => (args.mailbox ? String(args.mailbox) : null);
+
 async function gmailSendTool(who: Who, args: Args) {
   return sendGmail(who.userId, {
     to: String(args.to || ''), subject: String(args.subject || ''), body: String(args.body || ''),
     threadId: args.thread_id ? String(args.thread_id) : null, inReplyTo: args.in_reply_to ? String(args.in_reply_to) : null,
+    mailbox: mailboxOf(args),
   });
 }
 
 async function gmailThreadsTool(who: Who, args: Args) {
   const ids = Array.isArray(args.thread_ids) ? args.thread_ids.map(String).filter(Boolean) : [];
   if (!ids.length) return { threads: [] };
-  return readThreads(who.userId, ids, { full: args.full === true });
+  return readThreads(who.userId, ids, { full: args.full === true, mailbox: mailboxOf(args) });
 }
 
-/** Start / renew Gmail push for this person's mailbox (the reply job calls it for every sender). */
-async function gmailWatchTool(who: Who) {
-  return watchMailbox(who.userId);
+/** Start / renew Gmail push for one of this person's Google accounts (the reply job calls it for every account). */
+async function gmailWatchTool(who: Who, args: Args) {
+  return watchMailbox(who.userId, mailboxOf(args));
+}
+
+/** Everything in one of this person's inboxes since `since` (core 102): the ring stores it in the Inbox. */
+async function gmailInboxTool(who: Who, args: Args) {
+  const mailbox = mailboxOf(args);
+  if (!mailbox) return { error: 'mailbox is required' };
+  const since = args.since ? String(args.since) : new Date(Date.now() - 14 * 86400_000).toISOString();
+  return listInboxThreads(who.userId, mailbox, since, Math.min(200, Math.max(1, Number(args.max) || 50)));
 }
 
 /** This person's calendar events with other attendees, for the hourly meetings job (commands/meetings.py). */
@@ -115,6 +127,7 @@ const TOOLS: Record<string, (who: Who, args: Args) => Promise<Record<string, unk
   gmail_send: gmailSendTool,
   gmail_threads: gmailThreadsTool,
   gmail_watch: gmailWatchTool,
+  gmail_inbox: gmailInboxTool,
   calendar_events: calendarEventsTool,
 };
 

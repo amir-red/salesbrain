@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
       filter: pick<InboxFilter>(sp.get('filter'), ['all', 'needs_reply', 'unread', 'done'] as const, 'all'),
       view: pick(sp.get('view'), ['outreach', 'all'] as const, 'outreach'),
       q: (sp.get('q') || '').trim().slice(0, 100),
+      mailbox: (sp.get('mailbox') || '').trim().slice(0, 200) || null,
       limit: 300,
     });
     return NextResponse.json({ ...out, viewer: { id: session.userId, admin: session.role === 'admin' } });

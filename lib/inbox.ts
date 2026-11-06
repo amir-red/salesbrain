@@ -33,6 +33,8 @@ export interface InboxItem {
   campaign_name: string | null;
   /** chat only */
   app?: ChatApp | null;
+  /** email only: which of the owner's mailboxes the thread is in (core 102) */
+  mailbox?: string | null;
 }
 
 export interface InboxCounts { needs_reply: number; unread: number; email: number; linkedin: number; chat: number }

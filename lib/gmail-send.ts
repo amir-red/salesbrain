@@ -40,17 +40,23 @@ export function buildMime(o: { from: string; fromName?: string | null; to: strin
   return `${lines.join('\r\n')}\r\n\r\n${body}`;
 }
 
-async function sender(userId: string) {
+/** One of the person's sending mailboxes (core 102): `mailbox` when given, else their default. */
+async function sender(userId: string, mailbox?: string | null) {
   const { rows } = await pool.query(
-    `SELECT address, display_name FROM email_senders WHERE user_id = $1 AND revoked_at IS NULL`, [userId]);
+    mailbox
+      ? `SELECT address, display_name FROM email_senders WHERE user_id = $1 AND lower(address) = lower($2) AND revoked_at IS NULL`
+      : `SELECT address, display_name FROM email_senders WHERE user_id = $1 AND revoked_at IS NULL
+          ORDER BY is_default DESC, connected_at LIMIT 1`,
+    mailbox ? [userId, mailbox] : [userId]);
   return rows[0] as { address: string; display_name: string | null } | undefined;
 }
 
-export async function sendGmail(userId: string, msg: { to: string; subject: string; body: string; threadId?: string | null; inReplyTo?: string | null }):
+export async function sendGmail(userId: string, msg: { to: string; subject: string; body: string; threadId?: string | null; inReplyTo?: string | null; mailbox?: string | null }):
   Promise<{ message_id: string; thread_id: string; rfc_id: string | null } | { error: string }> {
-  const s = await sender(userId);
-  if (!s) return { error: 'Google is not connected for sending (Profile → Google, allow sending email).' };
-  const tok = await getValidAccessToken(userId);
+  const s = await sender(userId, msg.mailbox);
+  if (!s) return { error: msg.mailbox ? `${msg.mailbox} is not connected for sending (Profile → Google, allow sending email).`
+    : 'Google is not connected for sending (Profile → Google, allow sending email).' };
+  const tok = await getValidAccessToken(userId, 'google', s.address);
   if (!tok) return { error: 'The Google connection stopped working (permission revoked or expired). Reconnect on Profile → Google.' };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(msg.to)) return { error: `not an email address: ${msg.to}` };
   const raw = b64url(buildMime({ from: s.address, fromName: s.display_name, to: msg.to, subject: msg.subject, body: msg.body, inReplyTo: msg.inReplyTo }));
@@ -116,12 +122,11 @@ type GmailMessage = {
  * `full` also the plain-text body (from text/plain, else the HTML part flattened), To and Message-ID — what the
  * Inbox stores (core 082).
  */
-export async function readThreads(userId: string, threadIds: string[], opts: { full?: boolean } = {}):
+export async function readThreads(userId: string, threadIds: string[], opts: { full?: boolean; mailbox?: string | null } = {}):
   Promise<{ threads: { thread_id: string; messages: ThreadMessage[] }[] } | { error: string }> {
-  const tok = await getValidAccessToken(userId);
+  const tok = await getValidAccessToken(userId, 'google', opts.mailbox);
   if (!tok) return { error: 'The Google connection stopped working (permission revoked or expired). Reconnect on Profile → Google.' };
-  const s = await sender(userId);
-  const me = (s?.address || tok.email || '').toLowerCase();
+  const me = (opts.mailbox || tok.email || (await sender(userId))?.address || '').toLowerCase();
   const out: { thread_id: string; messages: ThreadMessage[] }[] = [];
   const q = opts.full ? 'format=full'
     : 'format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date';
@@ -166,10 +171,10 @@ export async function readThreads(userId: string, threadIds: string[], opts: { f
  * detection (/api/gmail/push). Google ends a watch after 7 days; calling again renews it, so the reply job and a new
  * Google connection simply call this. `{ skipped }` when no topic is configured.
  */
-export async function watchMailbox(userId: string): Promise<{ history_id?: string; expires_at?: string; skipped?: string } | { error: string }> {
+export async function watchMailbox(userId: string, mailbox?: string | null): Promise<{ history_id?: string; expires_at?: string; skipped?: string } | { error: string }> {
   const topic = process.env.GMAIL_PUSH_TOPIC;
   if (!topic) return { skipped: 'GMAIL_PUSH_TOPIC is not set' };
-  const tok = await getValidAccessToken(userId);
+  const tok = await getValidAccessToken(userId, 'google', mailbox);
   if (!tok) return { error: 'Google is not connected (or the connection stopped working). Reconnect on Profile → Google.' };
   const res = await fetch(`${GMAIL}/watch`, {
     method: 'POST', headers: { Authorization: `Bearer ${tok.accessToken}`, 'Content-Type': 'application/json' },
@@ -178,4 +183,34 @@ export async function watchMailbox(userId: string): Promise<{ history_id?: strin
   if (!res.ok) return { error: `Gmail refused the watch (${res.status}): ${(await res.text()).replace(/\s+/g, ' ').slice(0, 200)}` };
   const out = await res.json() as { historyId?: string; expiration?: string };
   return { history_id: out.historyId, expires_at: out.expiration ? new Date(Number(out.expiration)).toISOString() : undefined };
+}
+
+/**
+ * Everything in one account's Primary inbox since `since` (core 102, "everything in those inboxes"): the threads with a
+ * message newer than that, each with ALL its messages (bodies as readThreads `full`). Promotions / Social / Updates
+ * stay out (category:primary). `newest` = the newest message time seen — where the next read starts. Sequential reads,
+ * at most `max` threads.
+ */
+export async function listInboxThreads(userId: string, mailbox: string, since: string, max = 50):
+  Promise<{ threads: { thread_id: string; messages: ThreadMessage[] }[]; newest: string | null } | { error: string }> {
+  const tok = await getValidAccessToken(userId, 'google', mailbox);
+  if (!tok) return { error: `The Google connection for ${mailbox} stopped working. Reconnect it on Profile → Google.` };
+  const after = Math.max(0, Math.floor(new Date(since).getTime() / 1000) - 60);
+  const q = `in:inbox category:primary after:${after}`;
+  const ids: string[] = [];
+  let pageToken: string | undefined;
+  do {
+    const url = `${GMAIL}/threads?q=${encodeURIComponent(q)}&maxResults=${Math.min(100, max)}${pageToken ? `&pageToken=${pageToken}` : ''}`;
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${tok.accessToken}` } });
+    if (!r.ok) return { error: `Gmail refused listing the inbox (${r.status})` };
+    const j = await r.json() as { threads?: { id: string }[]; nextPageToken?: string };
+    for (const t of j.threads || []) if (ids.length < max) ids.push(t.id);
+    pageToken = ids.length < max ? j.nextPageToken : undefined;
+  } while (pageToken);
+  if (!ids.length) return { threads: [], newest: null };
+  const read = await readThreads(userId, ids, { full: true, mailbox });
+  if ('error' in read) return read;
+  let newest: string | null = null;
+  for (const t of read.threads) for (const m of t.messages) if (m.date && (!newest || m.date > newest)) newest = m.date;
+  return { threads: read.threads, newest };
 }

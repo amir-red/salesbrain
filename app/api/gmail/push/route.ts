@@ -17,16 +17,17 @@ import { verifyGoogleIdToken } from '@/lib/google-oidc';
 const AUDIENCE = process.env.GMAIL_PUSH_AUDIENCE || `${(process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '')}/api/gmail/push`;
 const running = new Map<string, { again: boolean }>();
 
-function check(userId: string) {
-  const st = running.get(userId);
+function check(userId: string, mailbox: string) {
+  const key = `${userId}|${mailbox.toLowerCase()}`;
+  const st = running.get(key);
   if (st) { st.again = true; return; }
-  running.set(userId, { again: false });
-  void kernelCall('email_replies_check', { sender_user_id: userId }, userId)
+  running.set(key, { again: false });
+  void kernelCall('email_replies_check', { sender_user_id: userId, mailbox }, userId)
     .catch((err) => console.error('[gmail push] reply check failed:', err instanceof Error ? err.message : err))
     .finally(() => {
-      const again = running.get(userId)?.again;
-      running.delete(userId);
-      if (again) setTimeout(() => check(userId), 15_000);
+      const again = running.get(key)?.again;
+      running.delete(key);
+      if (again) setTimeout(() => check(userId, mailbox), 15_000);
     });
 }
 
@@ -44,9 +45,11 @@ export async function POST(req: NextRequest) {
     note = JSON.parse(Buffer.from(body.message?.data || '', 'base64').toString('utf8') || '{}');
   } catch { return new NextResponse(null, { status: 204 }); }       // malformed: acknowledge so it is not retried
   if (note.emailAddress) {
-    const { rows } = await pool.query<{ user_id: string }>(
-      'SELECT user_id FROM email_senders WHERE lower(address) = lower($1) AND revoked_at IS NULL', [note.emailAddress]);
-    for (const r of rows) check(r.user_id);
+    // core 102: the notice names one of possibly several Google accounts of a person — check that one.
+    const { rows } = await pool.query<{ user_id: string; mailbox: string }>(
+      `SELECT user_id, account_email AS mailbox FROM oauth_tokens
+        WHERE provider = 'google' AND lower(account_email) = lower($1)`, [note.emailAddress]);
+    for (const r of rows) check(r.user_id, r.mailbox);
   }
   return new NextResponse(null, { status: 204 });
 }

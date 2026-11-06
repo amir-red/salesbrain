@@ -38,12 +38,16 @@ export async function GET() {
     const owners = ownerIds.length ? (await client.query(
       `SELECT u.id, u.name,
               EXISTS (SELECT 1 FROM email_senders s WHERE s.user_id = u.id AND s.revoked_at IS NULL) AS has_gmail,
+              (SELECT COALESCE(array_agg(s.address ORDER BY s.is_default DESC, s.connected_at), '{}') FROM email_senders s
+                WHERE s.user_id = u.id AND s.revoked_at IS NULL) AS mailboxes,
               EXISTS (SELECT 1 FROM linkedin_accounts a WHERE a.owner_user_id = u.id AND a.revoked_at IS NULL) AS has_linkedin
          FROM users u WHERE u.id = ANY($1::uuid[])`, [ownerIds])).rows : [];
     // Everyone who can be chosen to send or to approve (settings.send_from / approve_by), with their accounts.
     const teammates = (await client.query(
       `SELECT t.id, t.name,
               EXISTS (SELECT 1 FROM email_senders s WHERE s.user_id = t.id AND s.revoked_at IS NULL) AS has_gmail,
+              (SELECT COALESCE(array_agg(s.address ORDER BY s.is_default DESC, s.connected_at), '{}') FROM email_senders s
+                WHERE s.user_id = t.id AND s.revoked_at IS NULL) AS mailboxes,
               EXISTS (SELECT 1 FROM linkedin_accounts a WHERE a.owner_user_id = t.id AND a.revoked_at IS NULL) AS has_linkedin
          FROM (${TEAM_USERS_SQL}) t`)).rows;
     return NextResponse.json({ icps: icps.rows, sources: sources.rows, products: products.rows, owners, teammates, viewer_is_admin: admin });

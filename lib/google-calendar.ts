@@ -7,7 +7,7 @@
  * to leads. Nothing else of the calendar is stored.
  */
 import pool from '@/lib/db';
-import { getValidAccessToken } from '@/lib/google-oauth';
+import { getValidAccessToken, listGoogleAccounts } from '@/lib/google-oauth';
 
 export interface CalendarEvent {
   id: string;
@@ -24,11 +24,25 @@ export async function hasCalendar(userId: string): Promise<boolean> {
   return rows.length > 0;
 }
 
+/** Meetings from every connected Google account with calendar access (core 102), one row per event id. */
 export async function listMeetings(userId: string, daysBack = 14, daysAhead = 30): Promise<{ events?: CalendarEvent[]; error?: string; needs?: string }> {
   if (!(await hasCalendar(userId))) {
     return { error: 'Calendar access is not granted: reconnect Google on Profile → Google', needs: 'calendar' };
   }
-  const tok = await getValidAccessToken(userId);
+  const accounts = (await listGoogleAccounts(userId)).filter((a) => a.scopes.includes('calendar.readonly')).map((a) => a.email);
+  const seen = new Map<string, CalendarEvent>();
+  let firstError: { error?: string; needs?: string } | null = null;
+  for (const mailbox of accounts) {
+    const one = await listAccountMeetings(userId, mailbox, daysBack, daysAhead);
+    if (one.error) { firstError = firstError ?? one; continue; }
+    for (const ev of one.events || []) if (!seen.has(ev.id)) seen.set(ev.id, ev);
+  }
+  if (!seen.size && firstError) return firstError;
+  return { events: Array.from(seen.values()) };
+}
+
+async function listAccountMeetings(userId: string, mailbox: string, daysBack: number, daysAhead: number): Promise<{ events?: CalendarEvent[]; error?: string; needs?: string }> {
+  const tok = await getValidAccessToken(userId, 'google', mailbox);
   if (!tok) return { error: 'Google is not connected (or needs reconnecting)', needs: 'google' };
   const me = (tok.email || '').toLowerCase();
   const now = Date.now();
