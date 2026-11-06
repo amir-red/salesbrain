@@ -54,38 +54,52 @@ function Stars({ value, onChange, size = 20, disabled }: { value: number | null;
   );
 }
 
-/** The review of an AI proposal, BELOW the reply box and Send (2026-11-06, Amir's sketch): Before (what the AI wrote,
- * the words you removed struck out) · how good it was, 1 to 5 · After (what is in the box now, the words you added
- * marked). Under them, folded: the sender's priority list the drafter followed, and one box for how you improved it and
- * what the AI missed. Send records all of it on the sent draft; "Save feedback" teaches now without sending; Discard
- * teaches from it too. */
-export function ProposalStrip({ p, after, senderFirst, verdict, onVerdict, onDiscard, onTeach, teaching, learned, error }: {
-  p: InboxProposal; after: string; senderFirst: string; verdict: Verdict; onVerdict: (v: Verdict) => void; onDiscard: () => void;
-  onTeach: () => void; teaching: boolean; learned: FeedbackResult | null; error: string | null;
+/** The AI proposal (2026-11-06, Amir's sketch): no separate reply box while a proposal is open. Before (what the AI
+ * wrote, the words you removed struck out) with "Send as is" under it · how good it was, 1 to 5 · After = the text you
+ * edit, the words you added marked, with Send under it. Folded below: the sender's priority list and the note on how
+ * you improved it, so the conversation keeps the room. Send records the rating and note on the sent draft; "Save
+ * feedback" teaches without sending; Discard teaches from it too. */
+export function ProposalStrip({ p, after, onAfter, senderFirst, verdict, onVerdict, onDiscard, onTeach, teaching, learned, error,
+  onSendAsIs, onSend, onRedraft, busy, fromLine }: {
+  p: InboxProposal; after: string; onAfter: (t: string) => void; senderFirst: string; verdict: Verdict; onVerdict: (v: Verdict) => void;
+  onDiscard: () => void; onTeach: () => void; teaching: boolean; learned: FeedbackResult | null; error: string | null;
+  onSendAsIs: () => void; onSend: () => void; onRedraft: () => void; busy: string | null; fromLine: string;
 }) {
   const [why, setWhy] = useState(false);
   const diff = diffWords(p.message, after);
   const changed = diff.some((d) => d.op !== 'same');
-  const box = 'rounded-lg px-3 py-2 text-sm whitespace-pre-wrap break-words leading-relaxed min-h-[6rem]';
+  // The After box is a textarea over a copy of its text in which the added words are marked: same font, padding and
+  // wrapping, so the marks sit exactly under the words you typed.
+  const face = 'px-3 py-2 text-sm whitespace-pre-wrap break-words leading-relaxed';
   const label = 'text-[11px] font-semibold uppercase tracking-wide mb-1';
+  const card = { background: 'var(--bg-card)', border: '1px solid var(--border)' };
   return (
-    <div className="rounded-xl p-3 mt-3 text-xs space-y-3" style={{ background: 'var(--accent-soft)' }}>
+    <div className="rounded-xl p-3 text-xs space-y-3" style={{ background: 'var(--accent-soft)' }}>
       <div className="flex items-center gap-2 flex-wrap">
         <span style={{ color: 'var(--accent)' }}><Sparkle width={13} height={13} /></span>
         <span className="font-medium">AI proposal in {senderFirst}&apos;s voice</span>
-        <span style={{ color: 'var(--text-muted)' }}>· {p.situation === 'reply' ? 'a reply to what they wrote' : 'a follow-up, they have not answered'} · edit it in the box above, Send is yours</span>
+        <span style={{ color: 'var(--text-muted)' }}>· {p.situation === 'reply' ? 'a reply to what they wrote' : 'a follow-up, they have not answered'}</span>
         <span className="flex-1" />
         {p.reasoning && <button type="button" onClick={() => setWhy((v) => !v)} className="underline" style={{ color: 'var(--text-muted)' }}>{why ? 'hide why' : 'why this'}</button>}
+        <button type="button" onClick={onRedraft} disabled={!!busy} className="underline disabled:opacity-40" style={{ color: 'var(--text-muted)' }}>
+          {busy === 'draft' ? 'Drafting…' : 'Draft again'}
+        </button>
         <button type="button" onClick={onDiscard} className="underline" style={{ color: 'var(--text-muted)' }}>Discard</button>
       </div>
       {why && p.reasoning && <p style={{ color: 'var(--text-muted)' }}>{p.reasoning}{p.used_facts.length ? ` · used: ${p.used_facts.join(', ')}` : ''}</p>}
 
-      <div className="grid gap-3 md:grid-cols-[1fr_auto_1fr] items-start">
-        <div>
+      <div className="grid gap-3 md:grid-cols-[1fr_auto_1fr] items-stretch">
+        <div className="flex flex-col">
           <p className={label} style={{ color: 'var(--text-muted)' }}>Before · the AI&apos;s text</p>
-          <div className={box} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+          <div className={`${face} rounded-lg flex-1 min-h-[6rem]`} style={card}>
             {diff.filter((d) => d.op !== 'ins').map((d, i) => d.op === 'same' ? <span key={i}>{d.text}</span>
               : <del key={i} style={{ color: 'var(--red)', background: 'color-mix(in srgb, var(--red) 8%, transparent)' }}>{d.text}</del>)}
+          </div>
+          <div className="mt-2 flex justify-center">
+            <button type="button" onClick={onSendAsIs} disabled={!!busy} title="Sends the AI's text exactly as written"
+              className="px-4 py-1.5 rounded-full text-sm font-medium disabled:opacity-40" style={card}>
+              {busy === 'reply-asis' ? 'Sending…' : 'Send as is'}
+            </button>
           </div>
         </div>
         <div className="md:w-40">
@@ -104,43 +118,56 @@ export function ProposalStrip({ p, after, senderFirst, verdict, onVerdict, onDis
             })}
           </div>
         </div>
-        <div>
-          <p className={label} style={{ color: 'var(--text-muted)' }}>After · your text {changed ? '' : '(no edits yet)'}</p>
-          <div className={box} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-            {after.trim() ? diff.filter((d) => d.op !== 'del').map((d, i) => d.op === 'same' ? <span key={i}>{d.text}</span>
-              : <ins key={i} style={{ color: 'var(--green)', textDecoration: 'none', fontWeight: 600, background: 'color-mix(in srgb, var(--green) 10%, transparent)' }}>{d.text}</ins>)
-              : <em style={{ color: 'var(--text-muted)' }}>The reply box is empty.</em>}
+        <div className="flex flex-col">
+          <p className={label} style={{ color: 'var(--text-muted)' }}>After · your text, edit it here {changed ? '' : '(no edits yet)'}</p>
+          <div className="relative rounded-lg flex-1 min-h-[6rem]" style={card}>
+            <div aria-hidden className={`${face} absolute inset-0 overflow-hidden pointer-events-none`} style={{ color: 'transparent' }}>
+              {diff.filter((d) => d.op !== 'del').map((d, i) => d.op === 'same' ? <span key={i}>{d.text}</span>
+                : <mark key={i} style={{ color: 'transparent', background: 'color-mix(in srgb, var(--green) 22%, transparent)', borderRadius: 3 }}>{d.text}</mark>)}
+              {'\n'}
+            </div>
+            <textarea value={after} onChange={(e) => onAfter(e.target.value)} aria-label="Your reply"
+              onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && after.trim() && !busy) { e.preventDefault(); onSend(); } }}
+              className={`${face} relative w-full h-full min-h-[6rem] resize-none bg-transparent outline-none`}
+              style={{ color: 'var(--text)', overflow: 'hidden' }}
+              ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; } }} />
+          </div>
+          <div className="mt-2 flex justify-center">
+            <button type="button" onClick={onSend} disabled={!after.trim() || !!busy} title="Sends the text in the After box"
+              className="px-5 py-1.5 rounded-full text-sm font-semibold disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
+              {busy === 'reply' ? 'Sending…' : 'Send'}
+            </button>
           </div>
         </div>
       </div>
+      <p className="text-[11px] text-center" style={{ color: 'var(--text-muted)' }}>{fromLine}</p>
 
       <div className="grid gap-3 md:grid-cols-2 items-start">
-        <details className="rounded-lg px-3 py-2" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+        <details className="rounded-lg px-3 py-2" style={card}>
           <summary className="cursor-pointer font-medium">{senderFirst}&apos;s priority list ({p.priorities.length})</summary>
           {p.priorities.length ? (
             <ol className="list-decimal pl-5 mt-2 space-y-1" style={{ color: 'var(--text-muted)' }}>
               {p.priorities.map((r, i) => <li key={i}>{r.content}</li>)}
             </ol>
-          ) : <p className="mt-2" style={{ color: 'var(--text-muted)' }}>No priorities yet — what you write on the right becomes one.</p>}
+          ) : <p className="mt-2" style={{ color: 'var(--text-muted)' }}>No priorities yet — what you write in the note becomes one.</p>}
         </details>
-        <details open className="rounded-lg px-3 py-2" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-          <summary className="cursor-pointer font-medium">How you improved it and what the AI missed</summary>
+        <details className="rounded-lg px-3 py-2" style={card} open={!!verdict.note.trim() || undefined}>
+          <summary className="cursor-pointer font-medium">How you improved it and what the AI missed{verdict.note.trim() ? ' ✓' : ''}</summary>
           <textarea value={verdict.note} onChange={(e) => onVerdict({ ...verdict, note: e.target.value.slice(0, 500) })} rows={3}
             disabled={!!learned} className="z-input mt-2 w-full resize-y" aria-label="How you improved it and what the AI missed"
             placeholder="e.g. he wrote du, the draft said Sie · too long · asked for a call too early" />
+          <div className="flex items-center gap-2 mt-2">
+            <p className="text-[11px] flex-1" style={{ color: 'var(--text-muted)' }}>
+              Your edits, the rating and this note become rules in {senderFirst}&apos;s voice — saved with Send, or now without sending.
+            </p>
+            {!learned && (
+              <button type="button" onClick={onTeach} disabled={teaching || !verdictGiven(verdict)} title={`Teaches ${senderFirst}'s voice now, sends nothing`}
+                className="px-3 py-1 rounded-lg font-medium disabled:opacity-40" style={card}>
+                {teaching ? 'Saving…' : 'Save feedback'}
+              </button>
+            )}
+          </div>
         </details>
-      </div>
-
-      <div className="flex items-center gap-2 flex-wrap">
-        <p className="text-[11px] flex-1" style={{ color: 'var(--text-muted)' }}>
-          Your edits, the rating and the note become rules in {senderFirst}&apos;s voice: saved with Send, or with Save feedback alone.
-        </p>
-        {!learned && (
-          <button type="button" onClick={onTeach} disabled={teaching || !verdictGiven(verdict)} title={`Teaches ${senderFirst}'s voice now, sends nothing`}
-            className="px-3 py-1 rounded-lg font-medium disabled:opacity-40" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-            {teaching ? 'Saving…' : 'Save feedback'}
-          </button>
-        )}
       </div>
       {learned && <LearnedLines res={learned} />}
       {error && <p role="alert" style={{ color: 'var(--red)' }}>{error}</p>}

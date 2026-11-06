@@ -132,13 +132,15 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
     );
   }
 
-  async function act(action: 'reply' | 'done' | 'reopen' | 'refresh' | 'draft') {
+  /** `asIs` = send the AI's own text, untouched (the Before column's button). */
+  async function act(action: 'reply' | 'done' | 'reopen' | 'refresh' | 'draft', asIs = false) {
     if (!thread) return;
-    setBusy(action); setNote(null);
+    const out = asIs && proposal ? proposal.message : text;
+    setBusy(asIs ? 'reply-asis' : action); setNote(null);
     try {
       const res = await fetch(`/api/inbox/${thread.channel}/${thread.id}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(action === 'reply' ? { action, text, ...(proposal ? { voice: proposal.voice } : {}) } : { action }),
+        body: JSON.stringify(action === 'reply' ? { action, text: out, ...(proposal ? { voice: proposal.voice } : {}) } : { action }),
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || data.reason || 'Something went wrong');
@@ -161,7 +163,7 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
             setLearned(r.ok && !d.error ? (d as FeedbackResult) : { note: d.error || 'Sent; the feedback was not saved.' });
             setRate(null);
           } else {
-            setRate({ approvalId, before: proposal.message, after: text, step: proposal.situation });
+            setRate({ approvalId, before: proposal.message, after: out, step: proposal.situation });
           }
           setProposal(null); saveDraft(key, null);
         }
@@ -280,33 +282,42 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
         )}
         {thread.can_reply ? (
           <>
-            <textarea
-              ref={boxRef} value={text} onChange={(e) => setText(e.target.value)} rows={2}
-              placeholder={thread.channel === 'email' ? `Reply to ${thread.name || 'them'}…` : `Message ${thread.name || 'them'} on ${channelLabel(thread)}…`}
-              onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && text.trim() && !busy) { e.preventDefault(); act('reply'); } }}
-              className="z-input resize-none" style={{ minHeight: 64 }} aria-label="Reply"
-            />
-            <div className="flex items-center gap-2 mt-2">
-              <p className="text-[11px] flex-1 min-w-0 truncate" style={{ color: 'var(--text-muted)' }}>
-                {thread.channel === 'email'
+            {/* While an AI proposal is open it IS the reply area (2026-11-06): edit in After, send from either column. */}
+            {proposal ? (
+              <ProposalStrip p={proposal} after={text} onAfter={setText} senderFirst={(thread.owner_name || 'your').split(' ')[0]}
+                verdict={verdict} onVerdict={setVerdict} onTeach={() => teach(text)} teaching={teaching} learned={learned} error={teachErr}
+                onSendAsIs={() => act('reply', true)} onSend={() => act('reply')} onRedraft={() => act('draft')} busy={busy}
+                fromLine={`${thread.channel === 'email'
+                  ? `From ${thread.mailbox || 'your Gmail'} · in this thread${thread.subject ? ` (Re: ${thread.subject.replace(/^re:\s*/i, '')})` : ''} · your signature is added`
+                  : `From your ${channelLabel(thread)}`} · ⌘/Ctrl + Enter to send`}
+                onDiscard={async () => {
+                  if (verdictGiven(verdict) && !learned) await teach(text);
+                  else if (!learned) setRate({ approvalId: null, before: proposal.message, after: text, step: proposal.situation });
+                  setProposal(null); setText(''); saveDraft(key, null);
+                }} />
+            ) : (
+              <>
+                <textarea
+                  ref={boxRef} value={text} onChange={(e) => setText(e.target.value)} rows={2}
+                  placeholder={thread.channel === 'email' ? `Reply to ${thread.name || 'them'}…` : `Message ${thread.name || 'them'} on ${channelLabel(thread)}…`}
+                  onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && text.trim() && !busy) { e.preventDefault(); act('reply'); } }}
+                  className="z-input resize-none" style={{ minHeight: 64 }} aria-label="Reply"
+                />
+                <div className="flex items-center gap-2 mt-2">
+                  <p className="text-[11px] flex-1 min-w-0 truncate" style={{ color: 'var(--text-muted)' }}>
+                    {thread.channel === 'email'
                   ? `From ${thread.mailbox || 'your Gmail'} · in this thread${thread.subject ? ` (Re: ${thread.subject.replace(/^re:\s*/i, '')})` : ''} · your signature is added`
                   : `From your ${channelLabel(thread)}`} · ⌘/Ctrl + Enter to send
-              </p>
-              <Button size="sm" onClick={() => act('draft')} disabled={!!busy} title="An AI proposal in your voice, with this conversation as context — you edit and send">
-                <span className="inline-flex items-center gap-1"><Sparkle width={12} height={12} />{busy === 'draft' ? 'Drafting…' : proposal ? 'Draft again' : 'Draft reply'}</span>
-              </Button>
-              <Button variant="primary" onClick={() => act('reply')} disabled={!text.trim() || !!busy}>
-                {busy === 'reply' ? 'Sending…' : 'Send'}
-              </Button>
-            </div>
-            {/* The AI proposal's review sits below Send (2026-11-06): before / after, the rating, the note. */}
-            {proposal && <ProposalStrip p={proposal} after={text} senderFirst={(thread.owner_name || 'your').split(' ')[0]} verdict={verdict} onVerdict={setVerdict}
-              onTeach={() => teach(text)} teaching={teaching} learned={learned} error={teachErr}
-              onDiscard={async () => {
-                if (verdictGiven(verdict) && !learned) await teach(text);
-                else if (!learned) setRate({ approvalId: null, before: proposal.message, after: text, step: proposal.situation });
-                setProposal(null); setText(''); saveDraft(key, null);
-              }} />}
+                  </p>
+                  <Button size="sm" onClick={() => act('draft')} disabled={!!busy} title="An AI proposal in your voice, with this conversation as context — you edit and send">
+                    <span className="inline-flex items-center gap-1"><Sparkle width={12} height={12} />{busy === 'draft' ? 'Drafting…' : 'Draft reply'}</span>
+                  </Button>
+                  <Button variant="primary" onClick={() => act('reply')} disabled={!text.trim() || !!busy}>
+                    {busy === 'reply' ? 'Sending…' : 'Send'}
+                  </Button>
+                </div>
+              </>
+            )}
             {!proposal && learned && (
               <div className="rounded-xl px-3 py-2 mt-3 text-xs flex items-start gap-2" style={{ background: 'color-mix(in srgb, var(--green) 8%, transparent)' }}>
                 <div className="flex-1"><LearnedLines res={learned} /></div>
