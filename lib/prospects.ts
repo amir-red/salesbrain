@@ -47,6 +47,9 @@ export interface Prospect {
   owner_user_id?: string | null;
   icp_profile_id?: string | null; list_name?: string | null;
   priority?: number | null;
+  /** the LinkedIn profile picture, when a profile fetch stored one (people.facets; the CDN link expires) */
+  picture_url?: string | null;
+  person_city?: string | null;
   // Cohorts (090): the sorter's signals (the rank is the trust score below)
   cohort_signals?: string[] | null;
   // The trust score (095): the rank and its parts; the person page loads the full detail from /trust-score

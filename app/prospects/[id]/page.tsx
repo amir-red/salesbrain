@@ -1,53 +1,47 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
+import { useState, useEffect, useCallback } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
-import JourneyStepper from '@/components/prospect/JourneyStepper';
-import RoutePanel from '@/components/prospect/RoutePanel';
-import ApprovalsPanel from '@/components/prospect/ApprovalsPanel';
+import ProfileHero from '@/components/prospect/ProfileHero';
+import LeadBrief from '@/components/prospect/LeadBrief';
+import JourneyTab, { type IntroRequest, type ResearchBrief, type Score } from '@/components/prospect/JourneyTab';
 import type { LeadApproval } from '@/components/prospect/ApprovalsPanel';
-import { PROSPECT_STAGES } from '@/lib/prospecting';
-import { journeyState, routeEntry, warmAngles } from '@/lib/prospects';
-import type { ActAs, IntroRequestLite, JourneyKey, Prospect } from '@/lib/prospects';
-import { relativeTime, formatDate } from '@/lib/time';
-import { SIGNAL_LABELS } from '@/lib/cohorts';
-import PriorityPicker from '@/components/PriorityPicker';
-import ScoreBadge from '@/components/ScoreBadge';
-import TrustCard from '@/components/prospect/TrustCard';
+import type { ActAs, Prospect } from '@/lib/prospects';
+import type { LeadBrief as Brief } from '@/lib/lead-brief';
+import { relativeTime } from '@/lib/time';
+import { Skeleton } from '@/components/panel/Skeleton';
 
-interface Brief {
-  id: string; summary: string | null; pain_hypotheses: string | null; why_now_signals: string | null;
-  outreach_angle: string | null; talking_points: string | null; risks: string | null; created_at: string;
-}
-interface Score { id: string; total_score: number | null; verdict: string | null; reason_codes: string[] | null; disqualifiers: string[] | null; created_at: string }
 interface Event { id: string; event_type: string; from_stage: string | null; to_stage: string | null; reason: string | null; triggered_by: string | null; created_at: string }
-interface IntroRequest extends IntroRequestLite { channel: string | null; path_id: string | null; created_at: string; replied_at: string | null; approval_id: string | null }
 interface Payload {
-  prospect: Prospect; briefs: Brief[]; scores: Score[]; events: Event[];
+  prospect: Prospect; briefs: ResearchBrief[]; scores: Score[]; events: Event[];
   approvals: LeadApproval[]; intro_requests: IntroRequest[]; teammates_with_linkedin: number;
   acting_user_id: string; owner_can_source: boolean; viewer_can_source: boolean;
   viewer: { user_id: string; role: string; name: string };
 }
+type Tab = 'brief' | 'journey' | 'activity';
 
 /**
- * The lead's home — one page, the journey in order. Every stage is a panel;
- * the relationship graph appears exactly once, as step 5 (Route).
+ * A person's page (2026-11-09): a profile, not a stack of boxes. The hero (picture, name, role, how to reach them,
+ * Write message) over three tabs — Brief (the eight questions a seller asks before writing, answered from the data),
+ * Journey (the 2026-09 machinery: fit, enrichment, route, drafts, history) and Activity.
  */
 export default function ProspectDetailPage() {
   const params = useParams();
   const search = useSearchParams();
+  const router = useRouter();
   const prospectId = params.id as string;
   const [data, setData] = useState<Payload | null>(null);
+  const [brief, setBrief] = useState<Brief | null>(null);
+  const [briefErr, setBriefErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [converting, setConverting] = useState(false);
   const [enriching, setEnriching] = useState(false);
+  const [researching, setResearching] = useState(false);
   const [enrichNote, setEnrichNote] = useState<string | null>(null);
-  // Whose graph/LinkedIn the route + enrich + intro actions run with (admins
-  // on someone else's lead default to the owner).
+  const [flash, setFlash] = useState<{ kind: 'error' | 'info'; text: string } | null>(null);
   const [as, setAs] = useState<ActAs>('owner');
-  const refs = useRef<Partial<Record<JourneyKey, HTMLDivElement | null>>>({});
+  const tab = ((search.get('tab') as Tab | null) ?? 'brief');
 
   const fetchData = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -57,244 +51,132 @@ export default function ProspectDetailPage() {
     } catch { /* ignore */ }
     finally { setLoading(false); }
   }, [prospectId, as]);
+  const fetchBrief = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/prospects/${prospectId}/brief`);
+      const d = await res.json();
+      if (!res.ok || d.error) { setBriefErr(d.error || `The brief did not load (${res.status})`); return; }
+      setBrief(d as Brief); setBriefErr(null);
+    } catch (e) { setBriefErr(e instanceof Error ? e.message : String(e)); }
+  }, [prospectId]);
   useEffect(() => { fetchData(); }, [fetchData]);
-  const refresh = () => fetchData(true);
+  useEffect(() => { fetchBrief(); }, [fetchBrief]);
+  const refresh = () => { void fetchData(true); void fetchBrief(); };
+  const setTab = (t: Tab) => {
+    const sp = new URLSearchParams(search.toString());
+    if (t === 'brief') sp.delete('tab'); else sp.set('tab', t);
+    router.replace(`/prospects/${prospectId}${sp.toString() ? `?${sp}` : ''}`);
+  };
 
   const convertToDeal = async () => {
-    setConverting(true);
+    setConverting(true); setFlash(null);
     try {
       const res = await fetch(`/api/prospects/${prospectId}/convert`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
       const result = await res.json();
       if (result.deal_id) window.location.href = `/deals/${result.deal_id}`;
+      else setFlash({ kind: 'error', text: result.error || result.reason || 'Could not convert.' });
     } finally { setConverting(false); }
   };
   const enrichNow = async () => {
-    setEnriching(true); setEnrichNote(null);
+    setEnriching(true); setEnrichNote(null); setFlash(null);
     try {
       const res = await fetch(`/api/prospects/${prospectId}/enrich`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ as }) });
       const out = await res.json();
-      if (out.error) setEnrichNote(String(out.error));
+      if (out.error) { setEnrichNote(String(out.error)); setFlash({ kind: 'error', text: String(out.error) }); }
       else {
         const bits = [];
         if (out.employer) bits.push(`employer: ${typeof out.employer === 'string' ? out.employer : 'set'}`);
         if (out.research?.researched) bits.push(`researched (fit ${out.research.icp_score})`);
         if (out.email?.written) bits.push('email found');
         else if (out.email?.note) bits.push(`email: ${out.email.note}`);
-        setEnrichNote(bits.join(' · ') || 'Nothing new to add.');
+        const line = bits.join(' · ') || 'Nothing new to add.';
+        setEnrichNote(line); setFlash({ kind: 'info', text: `Enriched — ${line}` });
       }
       refresh();
     } finally { setEnriching(false); }
   };
-  const jump = (key: JourneyKey) => refs.current[key]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const researchNow = async () => {
+    setResearching(true); setFlash(null);
+    try {
+      const res = await fetch(`/api/prospects/${prospectId}/trust-research`, { method: 'POST' });
+      const out = await res.json();
+      if (!res.ok || out.error) setFlash({ kind: 'error', text: out.error || 'Research failed' });
+      else setFlash({ kind: 'info', text: `Researched${out.acting_as ? ` as ${out.acting_as}` : ''} — ${out.extracted ? 'the brief is refreshed.' : 'nothing new was found.'}` });
+      refresh();
+    } catch (e) { setFlash({ kind: 'error', text: e instanceof Error ? e.message : String(e) }); }
+    finally { setResearching(false); }
+  };
 
-  if (loading) return <div className="flex h-screen"><Sidebar /><div className="flex-1 flex items-center justify-center" style={{ color: 'var(--text-muted)' }}>Loading...</div></div>;
-  if (!data) return <div className="flex h-screen"><Sidebar /><div className="flex-1 flex items-center justify-center" style={{ color: 'var(--text-muted)' }}>Prospect not found</div></div>;
+  if (loading && !data) {
+    return (
+      <div className="flex h-screen"><Sidebar />
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-6 pt-4 pb-5 border-b" style={{ borderColor: 'var(--border)' }}>
+            <Skeleton className="h-3 w-24 mb-5" />
+            <div className="flex items-center gap-5"><Skeleton className="w-[84px] h-[84px] rounded-full" /><div className="flex-1 space-y-2"><Skeleton className="h-6 w-64" /><Skeleton className="h-4 w-80" /><Skeleton className="h-3 w-56" /></div></div>
+          </div>
+          <div className="p-6 space-y-3"><Skeleton className="h-4 w-1/2" /><Skeleton className="h-4 w-2/3" /><Skeleton className="h-4 w-1/3" /></div>
+        </div>
+      </div>
+    );
+  }
+  if (!data) return <div className="flex h-screen"><Sidebar /><div className="flex-1 flex items-center justify-center" style={{ color: 'var(--text-muted)' }}>Person not found</div></div>;
 
   const { prospect, briefs, scores, events, approvals, intro_requests } = data;
-  // Everything that ever left for this lead went through an approval (core 045).
-  const history = approvals.filter((a) => a.status === 'sent' || a.status === 'failed');
-  const stageSpec = PROSPECT_STAGES.find((s) => s.stage === prospect.stage);
-  const canConvert = !prospect.converted_deal_id && (prospect.icp_score ?? 0) >= 40;
-  const state = journeyState(prospect, approvals, intro_requests);
-  const route = routeEntry(prospect.warm_paths);
-  const angles = warmAngles(prospect.warm_paths);
-  const card = { background: 'var(--bg-card)', border: '1px solid var(--border)' } as const;
-  const h3 = 'text-xs font-medium uppercase tracking-wider mb-2';
-
-  const Section = ({ k, n, title, right, children }: { k: JourneyKey; n: number; title: string; right?: React.ReactNode; children: React.ReactNode }) => (
-    <div ref={(el) => { refs.current[k] = el; }} className="rounded-xl p-4" style={{ ...card, borderColor: state[k] === 'current' ? 'var(--accent)' : 'var(--border)' }}>
-      <div className="flex items-center justify-between mb-2">
-        <h3 className={h3} style={{ color: state[k] === 'done' ? 'var(--green)' : state[k] === 'current' ? 'var(--accent)' : 'var(--text-muted)', marginBottom: 0 }}>{n}. {title}</h3>
-        {right}
-      </div>
-      {children}
-    </div>
-  );
-
-  // Back goes where the person was opened from (?from=), else to their list, else to Prospects (Mateo, 2026-10-27).
   const from = search.get('from');
   const backHref = from && from.startsWith('/') ? from : prospect.icp_profile_id ? `/icp/${prospect.icp_profile_id}` : '/prospecting';
   const backLabel = from && from.startsWith('/') ? 'Back' : prospect.icp_profile_id ? (prospect.list_name || 'List') : 'Prospects';
-  const facts = prospect.company_facts || {};
-  const factLine = [facts.industry || prospect.industry, facts.size || prospect.company_size, facts.revenue_estimate, facts.locations || prospect.hq_location, facts.ownership].filter(Boolean).join(' · ');
+  const tabBtn = (t: Tab, label: string, badge?: number) => (
+    <button type="button" onClick={() => setTab(t)} className="px-3 py-2 text-sm -mb-px border-b-2"
+      style={{ borderColor: tab === t ? 'var(--accent)' : 'transparent', color: tab === t ? 'var(--text)' : 'var(--text-muted)', fontWeight: tab === t ? 600 : 400 }}>
+      {label}{badge ? <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>{badge}</span> : null}
+    </button>
+  );
+  const pendingCount = approvals.filter((a) => a.status === 'pending').length;
 
   return (
     <div className="flex h-screen">
       <Sidebar />
       <div className="flex-1 overflow-y-auto">
-        {/* Header */}
-        <div className="p-6 border-b space-y-3" style={{ borderColor: 'var(--border)' }}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link href={backHref} className="px-3 py-1.5 rounded-lg text-xs" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>← {backLabel}</Link>
-              <div>
-                <h1 className="text-xl font-bold flex items-center gap-2">
-                  <PriorityPicker value={prospect.priority} prospectId={prospect.id} size="md" onChanged={() => void fetchData(true)} />
-                  {prospect.full_name || '—'}{prospect.title ? ` · ${prospect.title}` : ''}
-                </h1>
-                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                  {prospect.company_name || '—'}{prospect.domain ? ` · ${prospect.domain}` : ''}
-                  {prospect.linkedin_url && <> · <a href={prospect.linkedin_url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>LinkedIn ↗</a></>}
-                </p>
-              </div>
+        <ProfileHero p={prospect} backHref={backHref} backLabel={backLabel} onChanged={refresh}
+          researching={researching} onResearch={researchNow} enriching={enriching} onEnrich={enrichNow} converting={converting} onConvert={convertToDeal} />
+        <div className="px-6 border-b flex items-center gap-1" style={{ borderColor: 'var(--border)' }}>
+          {tabBtn('brief', 'Brief')}
+          {tabBtn('journey', 'Journey', pendingCount)}
+          {tabBtn('activity', 'Activity')}
+        </div>
+        {flash && (
+          <p className="mx-6 mt-4 text-xs p-2.5 rounded-lg" style={{ color: flash.kind === 'error' ? 'var(--red)' : 'var(--text)', background: flash.kind === 'error' ? 'color-mix(in srgb, var(--red) 10%, transparent)' : 'var(--bg-input)' }}>{flash.text}</p>
+        )}
+        <div className="px-6 pb-10 max-w-6xl">
+          {tab === 'brief' && (
+            brief ? <LeadBrief b={brief} researching={researching} onResearch={researchNow} enriching={enriching} onEnrich={enrichNow} />
+              : briefErr ? <p className="py-6 text-sm" style={{ color: 'var(--red)' }}>{briefErr}</p>
+              : <div className="py-6 space-y-3"><Skeleton className="h-5 w-1/2" /><Skeleton className="h-4 w-3/4" /><Skeleton className="h-4 w-2/3" /><Skeleton className="h-4 w-1/2" /></div>
+          )}
+          {tab === 'journey' && (
+            <div className="pt-5">
+              <JourneyTab prospect={prospect} briefs={briefs} scores={scores} approvals={approvals} intros={intro_requests}
+                teammatesWithLinkedin={data.teammates_with_linkedin}
+                acting={{ as, setAs, viewer: data.viewer, ownerCanSource: data.owner_can_source, viewerCanSource: data.viewer_can_source }}
+                enriching={enriching} enrichNote={enrichNote} onEnrich={enrichNow} onChanged={refresh} />
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs px-2 py-1 rounded" style={card}>{prospect.stage} · {stageSpec?.label}</span>
-              {prospect.converted_deal_id ? (
-                <Link href={`/deals/${prospect.converted_deal_id}`} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: 'var(--green)', color: 'var(--accent-fg)' }}>View Deal →</Link>
-              ) : (
-                <button onClick={convertToDeal} disabled={!canConvert || converting} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: canConvert ? 'var(--accent)' : 'var(--border)', color: canConvert ? 'var(--accent-fg)' : 'var(--text-muted)', opacity: converting ? 0.6 : 1 }}>
-                  {converting ? 'Converting...' : 'Convert to Deal'}
-                </button>
-              )}
-            </div>
-          </div>
-          {(prospect.company_summary || prospect.trust_total != null) && (
-            <div className="rounded-xl p-3 text-sm space-y-1" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-              {prospect.trust_total != null && (
-                <div className="flex items-center gap-2 text-xs">
-                  <ScoreBadge s={prospect} prospectId={prospect.id} size="md" onChanged={() => void fetchData(true)} />
-                  <span style={{ color: 'var(--accent)' }}>{prospect.trust_why}</span>
-                </div>
-              )}
-              {prospect.company_summary && <p>{prospect.company_summary}</p>}
-              {factLine && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{factLine}</p>}
-              {(prospect.cohort_signals ?? []).length > 0 && (
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Signals: {(prospect.cohort_signals ?? []).map((x) => SIGNAL_LABELS[x] ?? x).join(', ')}</p>
+          )}
+          {tab === 'activity' && (
+            <div className="pt-5 max-w-2xl">
+              {events.length === 0 ? <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No activity yet.</p> : (
+                <ol className="space-y-3">
+                  {events.map((e) => (
+                    <li key={e.id} className="text-sm border-l-2 pl-3" style={{ borderColor: 'var(--accent)' }}>
+                      <div className="flex items-center justify-between gap-3"><span className="font-medium">{e.event_type.replace(/_/g, ' ')}</span><span className="text-xs" style={{ color: 'var(--text-muted)' }}>{relativeTime(e.created_at)}</span></div>
+                      {e.from_stage && e.to_stage && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{e.from_stage} → {e.to_stage}</p>}
+                      {e.reason && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{e.reason}</p>}
+                    </li>
+                  ))}
+                </ol>
               )}
             </div>
           )}
-          <JourneyStepper state={state} onJump={jump} />
-        </div>
-
-        <div className="p-6 grid grid-cols-3 gap-6">
-          {/* Left — who they are, fit, enrichment */}
-          <div className="space-y-4">
-            {/* the trust score's parts, path, research and ✓ / ↓ history (095) */}
-            <TrustCard prospectId={prospect.id} canResearch />
-            <Section k="imported" n={1} title="Who">
-              <p className="text-sm font-medium">{prospect.full_name || '—'}</p>
-              {prospect.title && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{prospect.title}</p>}
-              {prospect.email && <p className="text-xs" style={{ color: 'var(--accent)' }}>{prospect.email}</p>}
-              {prospect.phone && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{prospect.phone}</p>}
-              <div className="mt-2 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
-                <p className="text-sm font-medium">{prospect.company_name || '—'}</p>
-                {prospect.industry && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{prospect.industry}{prospect.company_size ? ` · ${prospect.company_size}` : ''}</p>}
-                {prospect.hq_location && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>HQ: {prospect.hq_location}</p>}
-                {prospect.website && <p className="text-xs" style={{ color: 'var(--accent)' }}>{prospect.website}</p>}
-              </div>
-              <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>Source: {prospect.source_type || '—'}{prospect.source_detail ? ` · ${prospect.source_detail}` : ''} · {formatDate(prospect.created_at)} · owner {prospect.owner_name || '—'}</p>
-            </Section>
-
-            <Section k="icp_fit" n={2} title="ICP fit">
-              <div className="text-2xl font-bold">{prospect.icp_score ?? scores[0]?.total_score ?? '—'}</div>
-              <p className="text-xs mt-1 uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>{(prospect.fit_label || scores[0]?.verdict || 'unscored').replace(/_/g, ' ')}</p>
-              {scores[0]?.reason_codes && scores[0].reason_codes.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1">{scores[0].reason_codes.map((r, i) => <span key={i} className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>{r}</span>)}</div>
-              )}
-              {scores[0]?.disqualifiers && scores[0].disqualifiers.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1">{scores[0].disqualifiers.map((r, i) => <span key={i} className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--red)', color: 'var(--accent-fg)', opacity: 0.8 }}>{r}</span>)}</div>
-              )}
-              {prospect.qualification_reason && <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>{prospect.qualification_reason}</p>}
-            </Section>
-
-            <Section k="enriched" n={3} title="Enriched" right={<button onClick={enrichNow} disabled={enriching} className="px-2.5 py-1 rounded-lg text-[11px] disabled:opacity-40" style={{ border: '1px solid var(--border)', color: 'var(--text)' }}>{enriching ? 'Enriching…' : 'Enrich now'}</button>}>
-              {enrichNote && <p className="text-[11px] mb-2" style={{ color: 'var(--text-muted)' }}>{enrichNote}</p>}
-              <div className="text-xs space-y-1" style={{ color: 'var(--text-muted)' }}>
-                <div>Employer: <b style={{ color: prospect.company_name ? 'var(--text)' : 'inherit' }}>{prospect.company_name || 'unknown'}</b></div>
-                <div>Email: <b style={{ color: prospect.email ? 'var(--text)' : 'inherit' }}>{prospect.email || 'none on file'}</b></div>
-                <div>Research: <b style={{ color: prospect.research_summary ? 'var(--text)' : 'inherit' }}>{prospect.research_summary ? 'done' : 'not yet'}</b></div>
-              </div>
-              {prospect.research_summary && (
-                <details className="mt-2 text-xs"><summary className="cursor-pointer" style={{ color: 'var(--accent)' }}>Full research</summary><p className="mt-1 whitespace-pre-wrap">{prospect.research_summary}</p></details>
-              )}
-              {briefs[0] && (
-                <div className="mt-2 space-y-1">
-                  {briefs[0].outreach_angle && <div><p className="text-[10px] uppercase" style={{ color: 'var(--text-muted)' }}>Angle</p><p className="text-xs">{briefs[0].outreach_angle}</p></div>}
-                  {briefs[0].talking_points && <div><p className="text-[10px] uppercase" style={{ color: 'var(--text-muted)' }}>Talking points</p><p className="text-xs whitespace-pre-wrap">{briefs[0].talking_points}</p></div>}
-                </div>
-              )}
-              {angles.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1">{angles.map((w, i) => <span key={i} className="text-[10px] px-1.5 py-0.5 rounded" title={w.note} style={{ background: 'var(--bg-input)', color: 'var(--green)' }}>🔥 {w.type}{w.value ? `: ${w.value}` : ''}</span>)}</div>
-              )}
-            </Section>
-          </div>
-
-          {/* Middle — the route and the drafts */}
-          <div className="space-y-4">
-            <Section k="route" n={4} title="Route — how to reach them">
-              <RoutePanel
-                prospectId={prospectId} route={route} intros={intro_requests} degree={prospect.network_degree}
-                teammatesWithLinkedin={data.teammates_with_linkedin} onChanged={refresh}
-                acting={{ as, setAs, viewer: data.viewer, owner: { user_id: prospect.owner_user_id ?? null, name: prospect.owner_name ?? null },
-                          ownerCanSource: data.owner_can_source, viewerCanSource: data.viewer_can_source }}
-              />
-            </Section>
-
-            <Section k="drafted" n={5} title="Drafts & approvals">
-              <ApprovalsPanel approvals={approvals} onChanged={refresh} />
-              {intro_requests.length > 0 && (
-                <div className="mt-2 pt-2 border-t space-y-1" style={{ borderColor: 'var(--border)' }}>
-                  <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Intro asks</div>
-                  {intro_requests.map((ir) => (
-                    <div key={ir.id} className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                      🤝 <b style={{ color: 'var(--text)' }}>{ir.connector_name}</b> · {ir.state.replace(/_/g, ' ')}{ir.channel ? ` · ${ir.channel}` : ''} · {relativeTime(ir.sent_at || ir.created_at)}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Section>
-
-            <Section k="sent" n={6} title="Outreach history">
-              {history.length === 0 ? (
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Nothing sent yet. Drafts wait for approval above; every send is an approved card.</p>
-              ) : (
-                <div className="space-y-3">
-                  {history.map((a) => (
-                    <div key={a.id} className="text-xs border-l-2 pl-3" style={{ borderColor: a.status === 'sent' ? 'var(--accent)' : 'var(--red)' }}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-medium" style={{ color: a.status === 'sent' ? 'var(--accent)' : 'var(--red)' }}>{a.kind === 'followup' ? 'follow-up' : a.kind === 'intro_request' ? 'intro ask' : 'outreach'} · {a.channel} · {a.status}</span>
-                        <span style={{ color: 'var(--text-muted)' }}>{formatDate(a.sent_at || a.created_at)}</span>
-                      </div>
-                      {a.subject && <p className="font-medium">{a.subject}</p>}
-                      <p className="whitespace-pre-wrap" style={{ color: 'var(--text-muted)' }}>{a.message.slice(0, 300)}{a.message.length > 300 ? '...' : ''}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Section>
-          </div>
-
-          {/* Right — what happens after */}
-          <div className="space-y-4">
-            <Section k="replied" n={7} title="Reply">
-              {prospect.last_replied_at
-                ? <p className="text-xs">Replied {relativeTime(prospect.last_replied_at)}{prospect.reply_status ? ` · ${prospect.reply_status}` : ''}</p>
-                : <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{prospect.last_contacted_at ? `Waiting since ${relativeTime(prospect.last_contacted_at)}.` : 'Nothing sent yet.'} Replies on LinkedIn and email are picked up automatically within the hour, and the follow-up timer stops when they write back.</p>}
-              {prospect.next_action_at && <p className="text-xs mt-1" style={{ color: 'var(--accent)' }}>Next action: {formatDate(prospect.next_action_at)}</p>}
-            </Section>
-
-            <Section k="deal" n={8} title="Qualified → Deal">
-              {prospect.converted_deal_id
-                ? <Link href={`/deals/${prospect.converted_deal_id}`} className="text-xs underline" style={{ color: 'var(--accent)' }}>Open the deal →</Link>
-                : <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{canConvert ? 'Fit is good enough — convert when they engage.' : 'Needs a fit score of 40+ to convert.'}</p>}
-            </Section>
-
-            <div className="rounded-xl p-4" style={card}>
-              <h3 className={h3} style={{ color: 'var(--text-muted)' }}>Activity</h3>
-              {events.length === 0 ? <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No activity yet</p> : (
-                <div className="space-y-2">
-                  {events.map((e) => (
-                    <div key={e.id} className="text-xs border-l-2 pl-2" style={{ borderColor: 'var(--accent)' }}>
-                      <div className="flex items-center justify-between"><span className="font-medium">{e.event_type}</span><span style={{ color: 'var(--text-muted)' }}>{relativeTime(e.created_at)}</span></div>
-                      {e.from_stage && e.to_stage && <p style={{ color: 'var(--text-muted)' }}>{e.from_stage} → {e.to_stage}</p>}
-                      {e.reason && <p style={{ color: 'var(--text-muted)' }}>{e.reason}</p>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
         </div>
       </div>
     </div>
