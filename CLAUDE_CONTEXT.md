@@ -2570,6 +2570,10 @@ talk to recently and how warm" (Mateo), and "this is what you proposed, this is 
   `crm_icp_tuning`, `crm_icp_apply_tuning` (mcp None); `/api/icp/[id]/tuning`; `components/icp/TuningPanel.tsx` on
   `/icp/[id]`. NRW today: company size 7/109 vs 3/108 → size 15 → 20, title 40 → 35 (not applied).
 - Warm people Excel: kind `warm` export + button on `/warm`.
+- **0.83.1 (2026-11-09)**: a Calendar event's teammate attendees are dropped before matching (`meetings.team_addresses` =
+  users.email + oauth_tokens.account_email + email_senders.address), so an internal call never marks a lead met or
+  booked (the "Amir Test" demo-form card carried amir@chipchip.social and Mateo's calls with Amir "booked" it; card
+  archived). The job's Telegram line now reports only "Calendar API not enabled"; what it recorded stays in the run log.
 
 ### 5.bw /icp = lists as funnels (2026-10-27, app-only, no migration)
 
