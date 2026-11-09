@@ -3464,6 +3464,60 @@ token read / send / watch by user only; `account_email` / `sender_address` store
   sorted newest first, live data in order); the Inbox now opens on **Everything** and remembers the choice
   (`localStorage inbox.view`).
 
+### 5.cq Conversation plans — "no reply now, follow up on …, because …" (2026-11-09, feat/conversation-plans, core 103)
+
+Mateo (2026-11-08, on Anthony Sirica's email): "He answered that he will get back. No need to send another email, it just
+needs a follow-up in 10 days or so. Let me indicate that and set one, two or three follow-ups with the reason — ideally the
+system suggests them. And when I want neither an answer nor a follow-up, let me say why — so for the future the system
+knows when to answer, when to follow up, when to leave it."
+- **Core 103** `conversation_plans`: one row per DECISION on one Inbox conversation (email / linkedin / chat thread):
+  `decision` follow_up | leave, `reason_kind` (`policy/conversation_plans.REASONS`: they_will_get_back, waiting_on_them,
+  they_are_away, not_now, my_turn_later, closed, no_interest, not_a_fit, handled_elsewhere, other), `reason` (their own
+  words), `steps` [{n, due_at, purpose, status pending|filed|notified|sent|skipped|cancelled, approval_id}], `next_due_at`,
+  `status` active|done|cancelled, `outcome` replied|completed|cancelled|superseded, `suggested` + `took_suggestion` (what the
+  system proposed vs what the person chose — the learning signal), `last_their_at`. One active plan per thread; rows are
+  never deleted. Policy row `agents.conversation_plans` (default_days 10, second_step_days 10, max_steps 3,
+  leave_recheck_days 90, history_min 3, file_cards).
+- **Suggestion is deterministic** (`policy/conversation_plans.py`, pure, 15 tests): their last message is read for a signal
+  (EN/DE: "get back / revert / melde mich" → they_will_get_back; "out of office / im Urlaub bis 24.11." → they_are_away
+  with the date; "not now / next year / budget" → not_now, one step at 90 d; "not interested / kein Bedarf" → leave;
+  "Thanks, have a nice weekend" → closed) and the date in it ("in two weeks", "next week", "until 24.11.", "end of month",
+  "in January", "after the holidays"). **The person's habit overrides the default**: with ≥ 3 past decisions of the same
+  reason, the median first-step days is proposed ("you usually wait 12 days here"), never over a date they named. No
+  signal + their turn → "answer", with a follow-up plan ready underneath. Steps are due at 08:00 UTC, weekends roll to Monday.
+- **Kernel** `commands/conversation_plans.py`: `get_plan` (plan + suggestion + habit + reasons; owner or admin), `set_plan`
+  (owner or admin; the SERVICE actor is refused — a plan is a person's decision), `cancel_plan`, `mark_step`, `sweep`,
+  `due_for`, `history`. A plan makes the rest follow: thread → `waiting` (follow_up) / `done` (leave);
+  `prospects.next_followup_at` = first step (so /followups, `followups_due`, the KPIs and the outreach routine's follow-up
+  queue see it) or NULL; the /sales-leads card gets `next_contact_at` + `next_step` + one `status` line; audit
+  `conversation_plan_set` / `_cancel`. **Sweep** (every Lead Conductor tick): a message from them newer than the plan →
+  `done / replied` (timer cleared); a step filed as a card follows its approval (sent / skipped); due steps are returned.
+- **Lead Conductor step 3b** (`lead_conductor.py`): a due step on a LinkedIn conversation → the drafter writes it with the
+  step's purpose + reason as `angle` (`feature='conversation_plan'`) → `propose_outreach kind=followup` in that thread →
+  the owner's card (step `filed`); email / chat → one DM to the owner (source lead-conductor, own DM or nothing, step
+  `notified`) with the Inbox deep link, and the Inbox drafts it from the plan when opened. Nothing is sent by a plan.
+- **Inbox**: header button **No reply needed** (→ **Plan** once one exists) opens `components/inbox/PlanPanel.tsx`:
+  the suggestion with the quoted signal and the habit line, Follow up later | Leave it, reason chips (follow-up reasons
+  vs leave reasons) + "in your words", 1–3 steps (in N days · date · purpose), Set / Leave it; an existing plan shows its
+  steps with their state, Change, Drop the plan. A pill on the header ("Follow-up Thu 19 Nov" / "Left as is"), a `↻ 19 Nov`
+  / `left` chip on the list row, a **Planned** filter with count. The auto-draft on open skips planned conversations; a
+  Draft on a planned one uses the step's purpose as the angle ("Drafted for the follow-up you planned: …").
+  `GET/POST/DELETE /api/inbox/[channel]/[id]/plan` → app-only RPCs `conversation_plan_get/set/cancel` (+ `_history`,
+  `conversation_plans_due`). Before 103 the Inbox shows no plan column (`plansStored`), the Planned filter is empty.
+- **Bot**: `crm_conversation_plans_due {within_days}` (read, family crm_prospecting, on MCP; the asker's own plans);
+  knowledge entry "Conversation plan: no reply now, follow up later, or leave it".
+- Tests: core `test_conversation_plans.py` (15 pure) + `test_conversation_plans_db.py` (8, real Postgres: suggestion →
+  plan → thread / timer / audit, leave, owner-only, supersede + cancel, validation, sweep due → mark → reply closes,
+  a filed step follows its card, the habit feeds the suggestion); ring tool-shape test updated. tsc + build clean.
+  Scratch Postgres recipe that worked today: `postgresql@15` from Homebrew, `initdb` in `/tmp`, create the `users` table
+  BY HAND first (schema.sql references it before creating it), then `db/schema.sql`, then every core migration in order
+  (all 103 applied without error).
+- **Rollout** (integration session): apply 103; deploy ring (conductor step, RPCs, tool, seed) + app. Nothing changes for
+  anyone until a person sets a plan.
+- Not built: the plan on the Telegram card ("follow up in 10 days" as a button after a reply notice), a weekly review of
+  decisions proposing a rule to the person's voice, plans from the bot ("remind me to follow up with X in 10 days" —
+  `crm_conversation_plans_due` reads only), email / chat due steps as cards (the owner is told instead).
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

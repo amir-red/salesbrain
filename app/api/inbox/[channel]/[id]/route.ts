@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
 import { getThread, setThreadState } from '@/lib/inbox-server';
@@ -23,6 +24,21 @@ const CHANNELS: readonly InboxChannel[] = ['email', 'linkedin', 'chat'];
 function parse(params: Ctx['params']): { channel: InboxChannel; id: string } | null {
   if (!(CHANNELS as readonly string[]).includes(params.channel) || !UUID.test(params.id)) return null;
   return { channel: params.channel as InboxChannel, id: params.id };
+}
+
+/** The next pending step of the thread's active plan, as the drafter's angle (null = no plan / before core 103). */
+async function planAngle(channel: string, threadId: string): Promise<{ angle: string; purpose: string } | null> {
+  type Row = { steps: { status: string; purpose: string }[]; reason_kind: string; reason: string | null };
+  const { rows } = await pool.query<Row>(
+    `SELECT cp.steps, cp.reason_kind, cp.reason FROM conversation_plans cp
+      WHERE cp.channel = $1 AND cp.thread_id = $2::uuid AND cp.status = 'active' AND cp.decision = 'follow_up'`,
+    [channel, threadId]).catch(() => ({ rows: [] as Row[] }));
+  const r = rows[0];
+  if (!r) return null;
+  const step = (r.steps || []).find((s) => s.status === 'pending' || s.status === 'notified' || s.status === 'filed');
+  if (!step) return null;
+  const why = `${r.reason_kind.replace(/_/g, ' ')}${r.reason ? ` — ${r.reason}` : ''}`;
+  return { angle: `${step.purpose}. Why now: ${why}. Keep it to a few lines.`, purpose: step.purpose };
 }
 
 export async function GET(_req: NextRequest, { params }: Ctx) {
@@ -52,17 +68,19 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     // Zeami link) is copied and sent in the app; a person not in the CRM is drafted from the conversation alone.
     const last = thread.messages[thread.messages.length - 1];
     const theirs = last ? !last.from_me : thread.last_from_them;
+    // A conversation plan (core 103) names the purpose of the next step: that is the angle, not the generic one.
+    const planned = await planAngle(p.channel, p.id);
     const out = await draftInVoice({
       situation: theirs ? 'reply' : 'followup', channel: p.channel === 'chat' ? 'whatsapp' : p.channel, userId: session.userId, feature: 'inbox_draft',
       prospectId: thread.prospect_id, personId: thread.person_id,
       linkedinThreadId: p.channel === 'linkedin' ? p.id : null,
       emailThreadId: p.channel === 'email' ? p.id : null,
       chatThreadId: p.channel === 'chat' ? p.id : null,
-      angle: theirs ? 'Answer what they said first, then one clear next step.'
+      angle: planned ? planned.angle : theirs ? 'Answer what they said first, then one clear next step.'
         : 'They have not answered our last message: one new useful thing, no apology for following up, one easy question.',
     });
     if ('error' in out) return NextResponse.json({ error: out.error }, { status: 502 });
-    return NextResponse.json({ ...out, situation: theirs ? 'reply' : 'followup' });
+    return NextResponse.json({ ...out, situation: planned ? 'followup' : theirs ? 'reply' : 'followup', planned: planned?.purpose ?? null });
   }
 
   if (body.action === 'done' || body.action === 'reopen') {

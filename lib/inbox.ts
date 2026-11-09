@@ -10,7 +10,30 @@ export type InboxChannel = 'email' | 'linkedin' | 'chat';
 /** Which app a chat came through (channel 'chat' only). */
 export type ChatApp = 'whatsapp' | 'whatsapp_business' | 'imessage' | 'telegram' | 'sms';
 export type InboxState = 'needs_reply' | 'waiting' | 'done' | 'ignored';
-export type InboxFilter = 'all' | 'needs_reply' | 'unread' | 'done';
+export type InboxFilter = 'all' | 'needs_reply' | 'unread' | 'planned' | 'done';
+
+/** A conversation plan (core 103): what the owner decided when no reply was needed. Summary on every list row. */
+export interface PlanSummary {
+  id: string;
+  decision: 'follow_up' | 'leave';
+  reason_kind: string;
+  next_due_at: string | null;
+  steps_left: number;
+}
+export interface PlanStep { n: number; due_at: string; purpose: string; status: 'pending' | 'filed' | 'notified' | 'sent' | 'skipped' | 'cancelled'; approval_id?: string; note?: string }
+export interface ConversationPlan {
+  id: string; decision: 'follow_up' | 'leave'; reason_kind: string; reason_label: string; reason: string | null;
+  steps: PlanStep[]; next_due_at: string | null; status: 'active' | 'done' | 'cancelled'; created_at: string; took_suggestion: boolean | null;
+}
+export interface PlanSuggestion {
+  decision: 'answer' | 'follow_up' | 'leave'; reason_kind: string | null; days: number | null;
+  steps: { days: number; purpose: string }[]; why: string; from_history: boolean;
+  signal: { kind: string | null; days: number | null; quote: string | null };
+}
+export interface PlanPayload {
+  plan: ConversationPlan | null; suggestion: PlanSuggestion; habit: { n?: number; follow_up?: number; leave?: number; median_days?: number | null };
+  reasons: { key: string; label: string; follow_up: boolean }[]; max_steps: number; has_prospect: boolean; has_card: boolean;
+}
 
 export interface InboxItem {
   channel: InboxChannel;
@@ -35,9 +58,11 @@ export interface InboxItem {
   app?: ChatApp | null;
   /** email only: which of the owner's mailboxes the thread is in (core 102) */
   mailbox?: string | null;
+  /** the active conversation plan, when there is one (core 103) */
+  plan?: PlanSummary | null;
 }
 
-export interface InboxCounts { needs_reply: number; unread: number; email: number; linkedin: number; chat: number }
+export interface InboxCounts { needs_reply: number; unread: number; planned: number; email: number; linkedin: number; chat: number }
 
 export interface InboxMessage {
   id: string;
