@@ -3,12 +3,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
-import ProfileHero from '@/components/prospect/ProfileHero';
+import PersonHeader from '@/components/prospect/PersonHeader';
+import PersonOverview from '@/components/prospect/PersonOverview';
 import LeadBrief from '@/components/prospect/LeadBrief';
 import JourneyTab, { type IntroRequest, type ResearchBrief, type Score } from '@/components/prospect/JourneyTab';
 import type { LeadApproval } from '@/components/prospect/ApprovalsPanel';
 import type { ActAs, Prospect } from '@/lib/prospects';
 import type { LeadBrief as Brief } from '@/lib/lead-brief';
+import { journeySteps } from '@/lib/person-page';
 import { relativeTime } from '@/lib/time';
 import { Skeleton } from '@/components/panel/Skeleton';
 
@@ -19,12 +21,13 @@ interface Payload {
   acting_user_id: string; owner_can_source: boolean; viewer_can_source: boolean;
   viewer: { user_id: string; role: string; name: string };
 }
-type Tab = 'brief' | 'journey' | 'activity';
+type Tab = 'overview' | 'brief' | 'journey' | 'activity';
 
 /**
- * A person's page (2026-11-09): a profile, not a stack of boxes. The hero (picture, name, role, how to reach them,
- * Write message) over three tabs — Brief (the eight questions a seller asks before writing, answered from the data),
- * Journey (the 2026-09 machinery: fit, enrichment, route, drafts, history) and Activity.
+ * A person's page (redesign D, 2026-11-09): the header says who they are and where they are on the journey (Met →
+ * Connected → First message → Reply → Meeting → Opportunity). Overview = a short story on the left and the next move on
+ * the right; Full brief = the eight questions in full; Details = the machinery (fit, enrichment, route, drafts,
+ * history); Activity = the event log.
  */
 export default function ProspectDetailPage() {
   const params = useParams();
@@ -41,7 +44,7 @@ export default function ProspectDetailPage() {
   const [enrichNote, setEnrichNote] = useState<string | null>(null);
   const [flash, setFlash] = useState<{ kind: 'error' | 'info'; text: string } | null>(null);
   const [as, setAs] = useState<ActAs>('owner');
-  const tab = ((search.get('tab') as Tab | null) ?? 'brief');
+  const tab = ((search.get('tab') as Tab | null) ?? 'overview');
 
   const fetchData = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -64,7 +67,7 @@ export default function ProspectDetailPage() {
   const refresh = () => { void fetchData(true); void fetchBrief(); };
   const setTab = (t: Tab) => {
     const sp = new URLSearchParams(search.toString());
-    if (t === 'brief') sp.delete('tab'); else sp.set('tab', t);
+    if (t === 'overview') sp.delete('tab'); else sp.set('tab', t);
     router.replace(`/prospects/${prospectId}${sp.toString() ? `?${sp}` : ''}`);
   };
 
@@ -138,17 +141,23 @@ export default function ProspectDetailPage() {
     <div className="flex h-screen">
       <Sidebar />
       <div className="flex-1 overflow-y-auto">
-        <ProfileHero p={prospect} backHref={backHref} backLabel={backLabel} onChanged={refresh}
+        <PersonHeader p={prospect} steps={brief ? journeySteps(brief, prospect.converted_deal_id) : null} backHref={backHref} backLabel={backLabel} onChanged={refresh}
           researching={researching} onResearch={researchNow} enriching={enriching} onEnrich={enrichNow} converting={converting} onConvert={convertToDeal} />
-        <div className="px-6 border-b flex items-center gap-1" style={{ borderColor: 'var(--border)' }}>
-          {tabBtn('brief', 'Brief')}
-          {tabBtn('journey', 'Journey', pendingCount)}
+        <div className="px-6 lg:px-10 border-b flex items-center gap-1" style={{ borderColor: 'var(--border)' }}>
+          {tabBtn('overview', 'Overview')}
+          {tabBtn('brief', 'Full brief')}
+          {tabBtn('journey', 'Details', pendingCount)}
           {tabBtn('activity', 'Activity')}
         </div>
         {flash && (
-          <p className="mx-6 mt-4 text-xs p-2.5 rounded-lg" style={{ color: flash.kind === 'error' ? 'var(--red)' : 'var(--text)', background: flash.kind === 'error' ? 'color-mix(in srgb, var(--red) 10%, transparent)' : 'var(--bg-input)' }}>{flash.text}</p>
+          <p className="mx-6 lg:mx-10 mt-4 text-xs p-2.5 rounded-lg" style={{ color: flash.kind === 'error' ? 'var(--red)' : 'var(--text)', background: flash.kind === 'error' ? 'color-mix(in srgb, var(--red) 10%, transparent)' : 'var(--bg-input)' }}>{flash.text}</p>
         )}
-        <div className="px-6 pb-10 max-w-6xl">
+        <div className="px-6 lg:px-10 pb-10 max-w-[1200px]">
+          {tab === 'overview' && (
+            brief ? <PersonOverview b={brief} p={prospect} onEnrich={enrichNow} enriching={enriching} onResearch={researchNow} researching={researching} onTab={setTab} />
+              : briefErr ? <p className="py-6 text-sm" style={{ color: 'var(--red)' }}>{briefErr}</p>
+              : <div className="py-8 flex gap-10"><div className="flex-1 space-y-4"><Skeleton className="h-6 w-3/4" /><Skeleton className="h-4 w-2/3" /><Skeleton className="h-4 w-1/2" /><Skeleton className="h-4 w-2/3" /></div><Skeleton className="w-[360px] h-56 rounded-2xl" /></div>
+          )}
           {tab === 'brief' && (
             brief ? <LeadBrief b={brief} researching={researching} onResearch={researchNow} enriching={enriching} onEnrich={enrichNow} />
               : briefErr ? <p className="py-6 text-sm" style={{ color: 'var(--red)' }}>{briefErr}</p>
