@@ -8,7 +8,7 @@ import type { LeadBrief } from '@/lib/lead-brief';
 import { agoLabel, dayLabel, initialsOf, SIGNAL_LABEL } from '@/lib/lead-brief';
 import type { Prospect } from '@/lib/prospects';
 import { DEFAULT_WEIGHTS, PART_SHORT, TRUST_PARTS } from '@/lib/trust';
-import { channelWord, clip, firstName, firstSentence, shortSize, standLine, talkingPoints } from '@/lib/person-page';
+import { channelWord, clip, firstName, firstSentence, roleFromTitle, shortSize, standLine, whyNowLines } from '@/lib/person-page';
 
 /**
  * The person page's Overview (redesign E, 2026-11-09): the eight questions a seller asks before writing, each its own
@@ -74,7 +74,11 @@ export default function PersonOverview({ b, p, onEnrich, enriching, onResearch, 
     || [companyName, co.industry, shortSize(co.size), co.hq].filter(Boolean).join(' · ')
     || null;
   const gain = firstSentence(b.gains.why) || firstSentence(b.gains.angle);
-  const points = talkingPoints(b);
+  const pains = (b.gains.pains ?? []).slice(0, 2);
+  const points = whyNowLines(b);
+  const role = roleFromTitle(per.title || p.title);
+  const site = co.website || (co.domain ? `https://${co.domain}` : null);
+  const siteLabel = co.domain || (co.website ? co.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '') : null);
   const shown = allPoints ? points : points.slice(0, 3);
   const researchBtn = (label: string) => (
     <Button size="sm" onClick={onResearch} disabled={researching}><Sparkle width={12} height={12} />{researching ? 'Researching…' : label}</Button>
@@ -110,6 +114,12 @@ export default function PersonOverview({ b, p, onEnrich, enriching, onResearch, 
 
         <Question n={2} title="Who is the person?" note={per.as_of ? `as of ${dayLabel(per.as_of)}` : null}>
           {who ? <p className="text-sm leading-relaxed">{who}</p>
+            : role ? (
+              <>
+                <p className="text-sm leading-relaxed">{role.role}{companyName ? ` at ${companyName}` : ''}.{role.also ? <> Also {role.also}.</> : null}</p>
+                <Empty action={researchBtn('Research now')}>Background not researched yet.</Empty>
+              </>
+            )
             : <Empty action={researchBtn('Research now')}>Nothing researched about {name} yet.</Empty>}
           {(per.tenure_months != null || per.signals.length > 0 || per.role_confirmed === false) && (
             <div className="flex flex-wrap gap-1.5">
@@ -131,11 +141,14 @@ export default function PersonOverview({ b, p, onEnrich, enriching, onResearch, 
         <Question n={3} title="What is the company?" note={co.as_of ? `as of ${dayLabel(co.as_of)}` : null}>
           {company ? <p className="text-sm leading-relaxed">{company}</p>
             : <Empty action={<Button size="sm" onClick={onEnrich} disabled={enriching}>{enriching ? 'Enriching…' : 'Enrich'}</Button>}>No employer on file.</Empty>}
-          {(co.revenue || co.ownership || co.funding) && (
-            <div className="flex flex-wrap gap-1.5">
+          {(shortSize(co.size) || co.industry || co.revenue || co.ownership || co.funding || siteLabel) && (
+            <div className="flex flex-wrap gap-1.5 items-center">
+              {shortSize(co.size) && <Chip tone="muted">{shortSize(co.size)}</Chip>}
+              {co.industry && <Chip tone="muted">{co.industry}</Chip>}
               {co.revenue && <Chip tone="muted">revenue {co.revenue}{co.year ? ` (${co.year})` : ''}</Chip>}
               {co.ownership && <Chip tone="muted">{co.ownership}</Chip>}
               {co.funding && <Chip tone="muted">{co.funding}</Chip>}
+              {site && siteLabel && <a href={site} target="_blank" rel="noreferrer" className="text-[11px] inline-flex items-center gap-0.5 ml-0.5" style={{ color: 'var(--accent)' }}>{siteLabel}<External width={10} height={10} /></a>}
             </div>
           )}
         </Question>
@@ -168,6 +181,14 @@ export default function PersonOverview({ b, p, onEnrich, enriching, onResearch, 
         <Question n={5} title="What do they gain?">
           {gain ? <p className="text-sm leading-relaxed">{gain}</p>
             : <Empty action={researchBtn(b.research.at ? 'Research again' : 'Research now')}>No angle written yet.</Empty>}
+          {pains.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <span className="text-[11px] font-semibold" style={muted}>Likely pains</span>
+              {pains.map((x, i) => (
+                <span key={i} className="text-[13px] flex gap-2 leading-snug"><span aria-hidden style={{ color: 'var(--orange)' }}>•</span>{clip(x, 110)}</span>
+              ))}
+            </div>
+          )}
           {b.gains.angle && firstSentence(b.gains.angle) !== b.gains.angle.trim() && (
             moreGain ? <p className="text-[13px] leading-relaxed" style={muted}>{b.gains.angle}</p>
               : <button type="button" onClick={() => setMoreGain(true)} className="text-xs self-start" style={{ color: 'var(--accent)' }}>The full angle</button>

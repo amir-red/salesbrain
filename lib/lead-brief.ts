@@ -51,8 +51,10 @@ export interface LeadBrief {
     revenue: string | null; year: string | null; ownership: string | null; funding: string | null; hq: string | null;
     aims: string | null; summary: string | null; signals: string[]; source_url: string | null; as_of: string | null;
   };
-  why_now: { facts: DatedFact[]; signals: string[]; legacy: string | null; as_of: string | null };
-  gains: { angle: string | null; why: string | null; partner: Record<string, string>; talking_points: string | null; as_of: string | null };
+  /** notes = undated signals from the company research ("active hiring"), shown when there is no dated fact */
+  why_now: { facts: DatedFact[]; signals: string[]; legacy: string | null; notes?: string[]; as_of: string | null };
+  /** talking_points: a list (company research) or one text (research brief); pains: likely pains, short lines */
+  gains: { angle: string | null; why: string | null; partner: Record<string, string>; talking_points: string | string[] | null; pains?: string[]; as_of: string | null };
   who_in: {
     kind: string; via: string | null; hops: number | null; line: string;
     connected: { owner_user_id: string; owner: string | null; status: 'connected' | 'pending'; since: string | null }[];
@@ -85,8 +87,9 @@ export function agoLabel(iso: string | null | undefined, now = Date.now()): stri
   if (d === 0) return 'today';
   if (d === 1) return 'yesterday';
   if (d < 30) return `${d} days ago`;
-  if (d < 365) return `${Math.round(d / 30)} months ago`;
-  return `${Math.round(d / 365)} years ago`;
+  if (d < 365) { const m = Math.round(d / 30); return m <= 1 ? 'a month ago' : `${m} months ago`; }
+  const y = Math.round(d / 365);
+  return y <= 1 ? 'a year ago' : `${y} years ago`;
 }
 
 export function dayLabel(iso: string | null | undefined): string {
