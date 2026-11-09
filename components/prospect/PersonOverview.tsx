@@ -22,7 +22,7 @@ const SCORE_COLORS = ['var(--accent)', 'var(--blue)', 'var(--highlight)', 'var(-
 
 function Badge({ n, inverse }: { n: number; inverse?: boolean }) {
   return (
-    <span className="w-7 h-7 rounded-full flex items-center justify-center text-[13px] font-bold flex-shrink-0" aria-hidden
+    <span className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0" aria-hidden
       style={inverse ? { background: '#ffffff', color: 'var(--deep-plum)' } : { background: 'var(--accent)', color: 'var(--accent-fg)' }}>{n}</span>
   );
 }
@@ -30,26 +30,26 @@ function Badge({ n, inverse }: { n: number; inverse?: boolean }) {
 /** One question: number, bold title, an optional quiet note on the right, then the answer indented under the title. */
 function Question({ n, title, note, children }: { n: number; title: string; note?: ReactNode; children: ReactNode }) {
   return (
-    <section className="rounded-2xl px-5 py-5 flex flex-col gap-2.5" style={{ border: '1px solid var(--border)', background: 'var(--bg-card)' }}
+    <section className="rounded-xl px-4 py-4 flex flex-col gap-2" style={{ border: '1px solid var(--border)', background: 'var(--bg-card)' }}
       aria-labelledby={`q${n}`}>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5">
         <Badge n={n} />
-        <h2 id={`q${n}`} className="text-lg font-bold leading-tight">{title}</h2>
+        <h2 id={`q${n}`} className="text-[15px] font-semibold leading-tight">{title}</h2>
         {note && <span className="ml-auto text-xs text-right" style={muted}>{note}</span>}
       </div>
-      <div className="sm:pl-10 flex flex-col gap-2.5">{children}</div>
+      <div className="sm:pl-[34px] flex flex-col gap-2">{children}</div>
     </section>
   );
 }
 
 function Chip({ children, tone = 'teal' }: { children: ReactNode; tone?: 'teal' | 'muted' | 'orange' | 'plum' }) {
   const c = tone === 'teal' ? 'var(--cat-teal)' : tone === 'orange' ? 'var(--orange)' : tone === 'plum' ? 'var(--accent)' : 'var(--text-muted)';
-  return <span className="text-xs px-2.5 py-1 rounded-full" style={{ color: c, background: `color-mix(in srgb, ${c} 12%, transparent)`, fontWeight: tone === 'plum' ? 600 : 400 }}>{children}</span>;
+  return <span className="text-[11px] px-2 py-0.5 rounded-full" style={{ color: c, background: `color-mix(in srgb, ${c} 12%, transparent)`, fontWeight: tone === 'plum' ? 600 : 400 }}>{children}</span>;
 }
 
 function Dot({ name, solid }: { name: string | null; solid?: boolean }) {
   return (
-    <span className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0" title={name || undefined}
+    <span className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold flex-shrink-0" title={name || undefined}
       style={solid ? { background: 'var(--accent)', color: 'var(--accent-fg)' } : { background: 'var(--accent-soft)', color: 'var(--accent)' }}>{initialsOf(name)}</span>
   );
 }
@@ -94,11 +94,11 @@ export default function PersonOverview({ b, p, onEnrich, enriching, onResearch, 
   const total = b.trust.total;
 
   return (
-    <div className="flex flex-col lg:flex-row gap-8 lg:gap-10 py-8">
-      <main className="flex-1 min-w-0 flex flex-col gap-3.5">
+    <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 py-6">
+      <main className="flex-1 min-w-0 flex flex-col gap-3">
         <Question n={1} title="Where do we stand?" note={b.stand.days != null ? `${b.stand.days} days since last contact` : null}>
-          <p className="text-base leading-relaxed">{stand.line}</p>
-          {stand.sub && <p className="text-sm" style={muted}>{stand.sub}</p>}
+          <p className="text-sm leading-relaxed">{stand.line}</p>
+          {stand.sub && <p className="text-xs" style={muted}>{stand.sub}</p>}
           {b.stand.open_items.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {b.stand.open_items.slice(0, 4).map((it, i) => (
@@ -109,7 +109,7 @@ export default function PersonOverview({ b, p, onEnrich, enriching, onResearch, 
         </Question>
 
         <Question n={2} title="Who is the person?" note={per.as_of ? `as of ${dayLabel(per.as_of)}` : null}>
-          {who ? <p className="text-base leading-relaxed">{who}</p>
+          {who ? <p className="text-sm leading-relaxed">{who}</p>
             : <Empty action={researchBtn('Research now')}>Nothing researched about {name} yet.</Empty>}
           {(per.tenure_months != null || per.signals.length > 0 || per.role_confirmed === false) && (
             <div className="flex flex-wrap gap-1.5">
@@ -120,7 +120,7 @@ export default function PersonOverview({ b, p, onEnrich, enriching, onResearch, 
           )}
           {(per.prior_roles.length > 0 || (per.mandate && per.background)) && (
             moreWho ? (
-              <div className="text-sm flex flex-col gap-1.5" style={muted}>
+              <div className="text-[13px] flex flex-col gap-1.5" style={muted}>
                 {per.mandate && per.background && <p><span className="font-medium" style={{ color: 'var(--text)' }}>Mandate:</span> {per.mandate}</p>}
                 {per.prior_roles.length > 0 && <p><span className="font-medium" style={{ color: 'var(--text)' }}>Before:</span> {per.prior_roles.slice(0, 4).join(' · ')}</p>}
               </div>
@@ -129,7 +129,7 @@ export default function PersonOverview({ b, p, onEnrich, enriching, onResearch, 
         </Question>
 
         <Question n={3} title="What is the company?" note={co.as_of ? `as of ${dayLabel(co.as_of)}` : null}>
-          {company ? <p className="text-base leading-relaxed">{company}</p>
+          {company ? <p className="text-sm leading-relaxed">{company}</p>
             : <Empty action={<Button size="sm" onClick={onEnrich} disabled={enriching}>{enriching ? 'Enriching…' : 'Enrich'}</Button>}>No employer on file.</Empty>}
           {(co.revenue || co.ownership || co.funding) && (
             <div className="flex flex-wrap gap-1.5">
@@ -145,9 +145,9 @@ export default function PersonOverview({ b, p, onEnrich, enriching, onResearch, 
             <>
               <ul className="flex flex-col gap-2">
                 {shown.map((t, i) => (
-                  <li key={i} className="flex gap-4 text-[15px] leading-snug">
+                  <li key={i} className="flex gap-3 text-sm leading-snug">
                     {t.when !== null
-                      ? <span className="w-[72px] flex-shrink-0 tabular-nums" style={muted}>{t.when}</span>
+                      ? <span className="w-[64px] flex-shrink-0 tabular-nums text-xs pt-px" style={muted}>{t.when}</span>
                       : <span aria-hidden className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0" style={{ background: 'var(--accent)' }} />}
                     <span className="min-w-0">
                       {t.text}
@@ -166,10 +166,10 @@ export default function PersonOverview({ b, p, onEnrich, enriching, onResearch, 
         </Question>
 
         <Question n={5} title="What do they gain?">
-          {gain ? <p className="text-base leading-relaxed">{gain}</p>
+          {gain ? <p className="text-sm leading-relaxed">{gain}</p>
             : <Empty action={researchBtn(b.research.at ? 'Research again' : 'Research now')}>No angle written yet.</Empty>}
           {b.gains.angle && firstSentence(b.gains.angle) !== b.gains.angle.trim() && (
-            moreGain ? <p className="text-sm leading-relaxed" style={muted}>{b.gains.angle}</p>
+            moreGain ? <p className="text-[13px] leading-relaxed" style={muted}>{b.gains.angle}</p>
               : <button type="button" onClick={() => setMoreGain(true)} className="text-xs self-start" style={{ color: 'var(--accent)' }}>The full angle</button>
           )}
         </Question>
@@ -182,22 +182,22 @@ export default function PersonOverview({ b, p, onEnrich, enriching, onResearch, 
         </p>
       </main>
 
-      <aside className="w-full lg:w-[380px] flex-shrink-0 flex flex-col gap-3.5 lg:sticky lg:top-6 self-start">
-        <section className="rounded-2xl p-5 flex flex-col gap-3" style={{ background: 'var(--deep-plum)', color: '#ffffff' }} aria-labelledby="q8">
-          <div className="flex items-center gap-3">
+      <aside className="w-full lg:w-[340px] flex-shrink-0 flex flex-col gap-3 lg:sticky lg:top-6 self-start">
+        <section className="rounded-xl p-4 flex flex-col gap-2" style={{ background: 'var(--deep-plum)', color: '#ffffff' }} aria-labelledby="q8">
+          <div className="flex items-center gap-2.5">
             <Badge n={8} inverse />
-            <h2 id="q8" className="text-lg font-bold">Next step</h2>
+            <h2 id="q8" className="text-[15px] font-semibold">Next step</h2>
           </div>
-          <span className="text-xl font-semibold leading-snug">{move || 'Nothing to do now'}</span>
-          {(byLine || n.suggested?.why) && <span className="text-sm" style={{ color: '#ebdff0' }}>{byLine || n.suggested?.why}</span>}
-          {n.booked_at && n.booking_status !== 'cancelled' && <span className="text-sm" style={{ color: '#ebdff0' }}>Call booked for {dayLabel(n.booked_at)}</span>}
-          {n.ping_at && <span className="text-sm" style={{ color: '#ebdff0' }}>Ping again {dayLabel(n.ping_at)}</span>}
-          <Link href={`/inbox?compose=${p.id}`} className="h-11 mt-1 rounded-full flex items-center justify-center gap-2 text-sm font-semibold"
+          <span className="text-base font-semibold leading-snug sm:pl-[34px]">{move || 'Nothing to do now'}</span>
+          {(byLine || n.suggested?.why) && <span className="text-xs sm:pl-[34px]" style={{ color: '#ebdff0' }}>{byLine || n.suggested?.why}</span>}
+          {n.booked_at && n.booking_status !== 'cancelled' && <span className="text-xs sm:pl-[34px]" style={{ color: '#ebdff0' }}>Call booked for {dayLabel(n.booked_at)}</span>}
+          {n.ping_at && <span className="text-xs sm:pl-[34px]" style={{ color: '#ebdff0' }}>Ping again {dayLabel(n.ping_at)}</span>}
+          <Link href={`/inbox?compose=${p.id}`} className="h-10 mt-2 rounded-full flex items-center justify-center gap-2 text-sm font-semibold"
             style={{ background: '#ffffff', color: 'var(--deep-plum)' }}>
             <Send width={14} height={14} />Write message
           </Link>
           {warmest && warmest.teammate !== n.responsible && (
-            <button type="button" onClick={() => onTab('journey')} className="text-sm hover:underline" style={{ color: '#ffffff' }}>
+            <button type="button" onClick={() => onTab('journey')} className="text-xs hover:underline" style={{ color: '#ffffff' }}>
               or ask {firstName(warmest.teammate)} for an intro
             </button>
           )}
@@ -219,7 +219,7 @@ export default function PersonOverview({ b, p, onEnrich, enriching, onResearch, 
               <Dot name={b.person.name || p.full_name} solid />
             </div>
           )}
-          <p className="text-sm" style={muted}>
+          <p className="text-[13px] leading-relaxed" style={muted}>
             {[
               warmest ? `${firstName(warmest.teammate)} is ${warmest.band} with ${name}.` : null,
               conn ? `${firstName(conn.owner)} is connected on LinkedIn.` : pending ? `${firstName(pending.owner)}'s request is pending.` : null,
@@ -234,7 +234,7 @@ export default function PersonOverview({ b, p, onEnrich, enriching, onResearch, 
             {lang && <Chip tone="muted">{lang}</Chip>}
             {h.address && <Chip tone="muted">{h.address}</Chip>}
           </div>
-          <div className="flex flex-col gap-2 text-sm">
+          <div className="flex flex-col gap-1.5 text-[13px]">
             <div className="flex justify-between gap-3">
               <span>LinkedIn</span>
               {conn ? <span className="font-semibold" style={{ color: 'var(--green)' }}>connected</span>
@@ -258,16 +258,16 @@ export default function PersonOverview({ b, p, onEnrich, enriching, onResearch, 
         </Question>
 
         {total != null && parts && (
-          <section className="rounded-2xl px-5 py-4 flex flex-col gap-2.5" style={{ border: '1px solid var(--border)', background: 'var(--bg-card)' }}>
+          <section className="rounded-xl px-4 py-3.5 flex flex-col gap-2" style={{ border: '1px solid var(--border)', background: 'var(--bg-card)' }}>
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold">Why {name} scores {total}</h2>
-              <span className="text-sm font-semibold" style={{ color: 'var(--green)' }}>{total} / 100</span>
+              <h2 className="text-[13px] font-semibold">Why {name} scores {total}</h2>
+              <span className="text-[13px] font-semibold" style={{ color: 'var(--green)' }}>{total} / 100</span>
             </div>
-            <div className="flex gap-1 h-2.5" role="img" aria-label={TRUST_PARTS.map((k) => `${PART_SHORT[k]} ${parts[k] ?? 0} of ${DEFAULT_WEIGHTS[k]}`).join(', ')}>
+            <div className="flex gap-1 h-2" role="img" aria-label={TRUST_PARTS.map((k) => `${PART_SHORT[k]} ${parts[k] ?? 0} of ${DEFAULT_WEIGHTS[k]}`).join(', ')}>
               {TRUST_PARTS.map((k, i) => <span key={k} className="rounded-sm" style={{ flex: Math.max(0, parts[k] ?? 0), background: SCORE_COLORS[i] }} />)}
               <span className="rounded-sm" style={{ flex: Math.max(0, 100 - TRUST_PARTS.reduce((s, k) => s + (parts[k] ?? 0), 0)), background: 'var(--border)' }} />
             </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs" style={muted}>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]" style={muted}>
               {TRUST_PARTS.map((k, i) => (
                 <span key={k} className="inline-flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-sm" style={{ background: SCORE_COLORS[i] }} />

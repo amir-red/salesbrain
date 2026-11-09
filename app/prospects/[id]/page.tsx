@@ -130,7 +130,7 @@ export default function ProspectDetailPage() {
   const backHref = from && from.startsWith('/') ? from : prospect.icp_profile_id ? `/icp/${prospect.icp_profile_id}` : '/prospecting';
   const backLabel = from && from.startsWith('/') ? 'Back' : prospect.icp_profile_id ? (prospect.list_name || 'List') : 'Prospects';
   const tabBtn = (t: Tab, label: string, badge?: number) => (
-    <button type="button" onClick={() => setTab(t)} className="px-3 py-2 text-sm -mb-px border-b-2"
+    <button type="button" onClick={() => setTab(t)} className="px-3 first:pl-0 py-2.5 text-sm -mb-px border-b-2"
       style={{ borderColor: tab === t ? 'var(--accent)' : 'transparent', color: tab === t ? 'var(--text)' : 'var(--text-muted)', fontWeight: tab === t ? 600 : 400 }}>
       {label}{badge ? <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>{badge}</span> : null}
     </button>
@@ -143,16 +143,18 @@ export default function ProspectDetailPage() {
       <div className="flex-1 overflow-y-auto">
         <PersonHeader p={prospect} steps={brief ? journeySteps(brief, prospect.converted_deal_id) : null} backHref={backHref} backLabel={backLabel} onChanged={refresh}
           researching={researching} onResearch={researchNow} enriching={enriching} onEnrich={enrichNow} converting={converting} onConvert={convertToDeal} />
-        <div className="px-6 lg:px-10 border-b flex items-center gap-1" style={{ borderColor: 'var(--border)' }}>
-          {tabBtn('overview', 'Overview')}
-          {tabBtn('brief', 'Full brief')}
-          {tabBtn('journey', 'Details', pendingCount)}
-          {tabBtn('activity', 'Activity')}
+        <div className="border-b" style={{ borderColor: 'var(--border)' }}>
+          <div className="mx-auto w-full max-w-[1180px] px-6 lg:px-8 flex items-center gap-1">
+            {tabBtn('overview', 'Overview')}
+            {tabBtn('brief', 'Full brief')}
+            {tabBtn('journey', 'Details', pendingCount)}
+            {tabBtn('activity', 'Activity')}
+          </div>
         </div>
         {flash && (
-          <p className="mx-6 lg:mx-10 mt-4 text-xs p-2.5 rounded-lg" style={{ color: flash.kind === 'error' ? 'var(--red)' : 'var(--text)', background: flash.kind === 'error' ? 'color-mix(in srgb, var(--red) 10%, transparent)' : 'var(--bg-input)' }}>{flash.text}</p>
+          <p className="mx-auto w-full max-w-[1180px] px-6 lg:px-8 mt-4 text-xs p-2.5 rounded-lg" style={{ color: flash.kind === 'error' ? 'var(--red)' : 'var(--text)', background: flash.kind === 'error' ? 'color-mix(in srgb, var(--red) 10%, transparent)' : 'var(--bg-input)' }}>{flash.text}</p>
         )}
-        <div className="px-6 lg:px-10 pb-10 max-w-[1200px]">
+        <div className="mx-auto w-full max-w-[1180px] px-6 lg:px-8 pb-10">
           {tab === 'overview' && (
             brief ? <PersonOverview b={brief} p={prospect} onEnrich={enrichNow} enriching={enriching} onResearch={researchNow} researching={researching} onTab={setTab} />
               : briefErr ? <p className="py-6 text-sm" style={{ color: 'var(--red)' }}>{briefErr}</p>
