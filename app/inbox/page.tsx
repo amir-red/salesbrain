@@ -6,13 +6,15 @@ import PageHeader from '@/components/panel/PageHeader';
 import ConversationList from '@/components/inbox/ConversationList';
 import ConversationView from '@/components/inbox/ConversationView';
 import AcceptedView, { AcceptedRow } from '@/components/inbox/AcceptedView';
+import ComposeView from '@/components/inbox/ComposeView';
 import type { AcceptedItem } from '@/lib/inbox-accepted';
 import type { InboxChannel, InboxCounts, InboxFilter, InboxItem, InboxThread } from '@/lib/inbox';
 
 /**
  * /inbox — every outreach conversation in one place: replies to campaign and wave emails, and LinkedIn conversations
  * with leads. Answer from here; the reply goes out from the owner's own LinkedIn or Gmail through the send gate.
- * The selected conversation lives in the URL (?c=linkedin:<id>), so a link opens it.
+ * The selected conversation lives in the URL (?c=linkedin:<id>), so a link opens it. ?compose=<prospect id> (2026-11-09,
+ * "Write message" on a person page) opens a compose view for a first message from the viewer's own account.
  */
 export default function InboxPage() {
   const [items, setItems] = useState<InboxItem[]>([]);
@@ -39,6 +41,7 @@ export default function InboxPage() {
   const seq = useRef(0);
   // The "Accepted" tab (2026-11-06): LinkedIn connection requests accepted, with the first message to send.
   const [accepted, setAccepted] = useState(false);
+  const [compose, setCompose] = useState<string | null>(null);   // a prospect id: writing a first message
   const [acc, setAcc] = useState<AcceptedItem[]>([]);
   const [accWaiting, setAccWaiting] = useState(0);
   const [accLoading, setAccLoading] = useState(false);
@@ -95,6 +98,8 @@ export default function InboxPage() {
 
   const open = useCallback(async (key: string) => {
     const [ch, id] = key.split(':');
+    setCompose(null);
+    try { const url = new URL(window.location.href); url.searchParams.delete('compose'); window.history.replaceState(null, '', url); } catch { /* ignore */ }
     if (ch === 'accepted' && id) {
       setAccepted(true); setSelected(key); setThread(null);
       try { const url = new URL(window.location.href); url.searchParams.set('c', key); window.history.replaceState(null, '', url); } catch { /* ignore */ }
@@ -122,7 +127,10 @@ export default function InboxPage() {
   }, []);
 
   useEffect(() => {
-    const c = new URLSearchParams(window.location.search).get('c');
+    const sp = new URLSearchParams(window.location.search);
+    const c = sp.get('c');
+    const cp = sp.get('compose');
+    if (cp && /^[0-9a-f-]{36}$/i.test(cp)) { setCompose(cp); setSelected(`compose:${cp}`); setAccepted(false); setThread(null); return; }
     if (c) open(c);
   }, [open]);
 
@@ -132,8 +140,8 @@ export default function InboxPage() {
   };
 
   const back = () => {
-    setSelected(null); setThread(null);
-    try { const url = new URL(window.location.href); url.searchParams.delete('c'); window.history.replaceState(null, '', url); } catch { /* ignore */ }
+    setSelected(null); setThread(null); setCompose(null);
+    try { const url = new URL(window.location.href); url.searchParams.delete('c'); url.searchParams.delete('compose'); window.history.replaceState(null, '', url); } catch { /* ignore */ }
   };
 
   return (
@@ -189,7 +197,9 @@ export default function InboxPage() {
             </ConversationList>
           </div>
           <div className={`${selected ? 'flex' : 'hidden md:flex'} flex-1 min-w-0 flex-col`} style={{ background: 'var(--bg)' }}>
-            {accepted
+            {compose
+              ? <ComposeView prospectId={compose} onBack={back} onOpen={(key) => { const ch = key.split(':')[0]; if (ch === 'email' || ch === 'linkedin' || ch === 'chat') setChannel(ch); open(key); load(); }} />
+              : accepted
               ? <AcceptedView item={acc.find((x) => selected === `accepted:${x.id}`) ?? null} onBack={back}
                   onChanged={() => { loadAccepted(); load(); }}
                   onOpenThread={(tid) => { setChannel('linkedin'); open(`linkedin:${tid}`); }} />

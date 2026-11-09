@@ -3526,6 +3526,63 @@ knows when to answer, when to follow up, when to leave it."
   decisions proposing a rule to the person's voice, plans from the bot ("remind me to follow up with X in 10 days" —
   `crm_conversation_plans_due` reads only), email / chat due steps as cards (the owner is told instead).
 
+### 5.cr The person page is a profile: the lead brief, a picture, Write message (2026-11-09, feat/lead-profile, no migration)
+
+Amir, after the brief plan (`~/.claude/plans/lead-brief-mateo-method.md`, artifact WSQsR5T45wjrZEh7hznmpc): "make it look
+like someone's profile, not just boxes; redesign the whole profile with those information, add a profile picture and an
+action button to write a message that leads to the Inbox to compose". Phase 1 of the plan, built: nothing stored needs a
+migration (the research extras live in `trust_scores.research`).
+- **Kernel** `policy/lead_brief.py` (pure, 8 tests): `research_extras` = the bounded stored part of a research result —
+  `dated_facts[{date, fact, kind, source_url}]` (a fact without a date AND a source is dropped), `company{employees, revenue,
+  year, ownership, funding, headquarters, aims, source_url}`, `gains{angle, why, partner_gets/needs/gives}`;
+  `language_of` / `address_of` (de / en and du / Sie from THEIR messages), `stand` (where we stand across every channel),
+  `open_items` (a question of theirs we have not answered — the question sentence itself is quoted —, a promise either side
+  made, plus plans / waiting drafts / the follow-up timer), `write_how` (channel of the last exchange → LinkedIn when
+  connected → email when we hold an address). `clean_research` keeps the extras; old rows read unchanged.
+  `commands/lead_brief.py::lead_brief(actor, prospect_id)` (app-only RPC `lead_brief`, readable by every teammate): ONE
+  connection, sequential queries — the head row (leads + contacts + accounts + people.facets + trust_scores + cohort /
+  account_profiles + the card's seats and journey), every conversation the TEAM holds with the person (LinkedIn threads on
+  any active account matched by person / member id / slug, email threads, chats, met / call lines from the card and
+  `interactions`, each with its last three messages), waiting approvals, active conversation plans, LinkedIn ties per
+  teammate (relations + requests), warmth per teammate, the stored route, the research brief, and `policy/next_step.suggest`
+  for the next step. ~5–6 s from a laptop over the pooler (round trips), well under a second on the box.
+- **Profile picture**: `people.facets.picture_url` — `unipile.picture_of(profile)` (profile_picture_url[_large]), stored by
+  `prospecting_core.profile_facets` (so route_expand and the trust research keep it), `apply_relation_profile` and the
+  hourly sync's new-connection fetch. LinkedIn's CDN link expires: `components/Avatar.tsx` falls back to initials on a
+  load error. Nothing is backfilled — a picture appears after the next profile fetch of a person.
+- **Research prompt** (`trust_research.py`): the extraction asks for `dated_facts`, `company` numbers and `gains` from the
+  material only; the grounded lookup now also asks for the company's numbers, ownership and 2–3 dated news items.
+- **App** `/prospects/[id]` rewritten: `ProfileHero` (84 px picture, name, priority, score badge, stage pill, role at
+  company, where, list, holder, LinkedIn / email / phone / website, the trust "why" line; actions Enrich · Research again ·
+  Convert to opportunity (UI nudge: trust 50+ or fit 40+; the kernel has no score gate) · **Write message**) over tabs
+  **Brief** (`components/prospect/LeadBrief.tsx`: 1 Where do we stand — the line, every channel with "Open in Inbox →",
+  open items, language · 2 Who is the person · 3 What is the company · 4 Why now (dated facts with source links) · 5 What
+  do they gain | aside: 8 Next step (+ Write message) · 6 Who gets us in (ties, warmth, path, bridges) · 7 How do we write
+  (channel / language / du-Sie chips) · Freshness; every researched block says "as of <date>" and an empty one says what
+  fills it with the button), **Journey** (`JourneyTab.tsx` = the 2026-09 sections unchanged: trust card, fit, enrichment,
+  route, drafts, history; the badge counts pending cards) and **Activity**. `GET /api/prospects/[id]/brief`;
+  `/api/prospects/[id]` adds `picture_url` / `person_city`. `/sales-leads` card link "Lead journey →" is now "Profile →".
+- **Write message → `/inbox?compose=<prospect id>`** (`components/inbox/ComposeView.tsx`, `lib/inbox-compose-server.ts`,
+  `GET/POST /api/inbox/compose`): the viewer writes from THEIR OWN account, never on behalf of the owner. A conversation of
+  the viewer's with the person already exists → the Inbox opens it. LinkedIn: `first_message` when the viewer owns the lead
+  and is 1st degree (the kernel's `propose_first_message` rule); connected but not the owner → a note; not connected → "Send
+  connection request" files the request for the owner's approval (`/api/prospects/[id]/connect`); no profile / no account
+  say so. Email: the person's address + the viewer's default Gmail mailbox (`email_senders`). Draft with AI = `crm_draft`
+  situation `first` in the viewer's voice (by prospect when they own it, else by person), the same Before / After review and
+  stars as a reply. **Send sends now** (ring `inbox_reply.compose`, RPC `inbox_compose`): LinkedIn → `propose_first_message`
+  → `decide_outreach(approve)` as the viewer → `outreach_agent.approve_and_send` (start_chat, mirrored) → the new chat opens;
+  email → `propose_outreach(kind outreach, channel email, sender_address = default mailbox, signature appended)` → approve →
+  `_send_email` (gate + Gmail bridge + `record_email_sent`, so the thread shows in the Inbox). A draft already waiting, an
+  existing thread or a kernel refusal never sends (3 ring tests). `scripts/check-compose.mts "<name>"` = read-only check of
+  the facts for the owner and Amir.
+- Verified: core 706 / ring 428 tests, tsc + build (built with `NEXT_FONT_GOOGLE_MOCKED_RESPONSES` because
+  fonts.googleapis.com timed out from Amir's Mac that day — the box fetches fonts itself), the brief read and the compose
+  facts against production (Jannik Bühring: "they wrote last, 11 days ago on LinkedIn — the ball is with us", German, du,
+  Matthias hot; Amir's compose → email from amir@zeami.io). Not seen in a browser (no local session). Not sent live: a
+  compose on either channel.
+- Not built (plan phases 2–3): LinkedIn recent posts, North Data filings, a projection number, refresh before a draft, the
+  partner lens; the enrichment-gate change (free steps for everyone) still waits for Amir's yes.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

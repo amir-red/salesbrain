@@ -77,6 +77,8 @@ const LONG_RUNNING_TOOLS = new Set<string>([
   // The Inbox: a reply goes out at once (LinkedIn send + re-read of the chat, or a Gmail send); a refresh re-reads.
   'inbox_reply',
   'inbox_refresh',
+  // "Write message" from the person page: a LinkedIn first message (profile fetch + start_chat) or a Gmail send.
+  'inbox_compose',
   // WhatsApp / iMessage in the Inbox (core 100): checking a Zeami link, reading the owner's sources now.
   'messaging_zeami_add',
   'messaging_sync_now',
