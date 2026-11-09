@@ -3466,6 +3466,10 @@ token read / send / watch by user only; `account_email` / `sender_address` store
 
 ### 5.cq Conversation plans — "no reply now, follow up on …, because …" (2026-11-09, feat/conversation-plans, core 103)
 
+**LIVE 2026-11-09 (0.83.0)**: 103 applied (table, 5 indexes, policy row), ring deployed (smoke 0.83.0, gateway active, knowledge entry seeded,
+a live `sweep` on the box answered with nothing due), app on Production (run 42589292729). No plan set yet: not yet seen live
+a suggestion on a real thread, a due step filed as a card, a reply closing a plan.
+
 Mateo (2026-11-08, on Anthony Sirica's email): "He answered that he will get back. No need to send another email, it just
 needs a follow-up in 10 days or so. Let me indicate that and set one, two or three follow-ups with the reason — ideally the
 system suggests them. And when I want neither an answer nor a follow-up, let me say why — so for the future the system
