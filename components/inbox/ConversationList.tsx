@@ -12,7 +12,20 @@ const FILTERS: { key: InboxFilter; label: string }[] = [
   { key: 'done', label: 'Done' },
 ];
 
-/** The left column: search, channel and state filters, and one line per conversation. */
+/** The distinct channel marks of a person's conversation (a chat app counts as its own mark), newest first, at most 3. */
+function channelMarks(it: InboxItem): { channel: InboxChannel; app?: InboxItem['app'] }[] {
+  const seen = new Set<string>();
+  const out: { channel: InboxChannel; app?: InboxItem['app'] }[] = [];
+  for (const t of it.threads.length ? it.threads : [{ channel: it.channel, app: it.app }]) {
+    const k = t.channel === 'chat' ? `chat:${t.app ?? ''}` : t.channel;
+    if (seen.has(k)) continue;
+    seen.add(k); out.push({ channel: t.channel, app: t.app });
+    if (out.length === 3) break;
+  }
+  return out;
+}
+
+/** The left column: search, channel and state filters, and one line per PERSON (every channel folded in). */
 export default function ConversationList({
   items, counts, loading, error, selected, onSelect, q, setQ, channel, setChannel, filter, setFilter, showOwner,
   accepted, acceptedWaiting, onAccepted, children,
@@ -99,7 +112,7 @@ export default function ConversationList({
           </div>
         )}
         {items.map((it) => {
-          const key = `${it.channel}:${it.id}`;
+          const key = it.key;
           const active = selected === key;
           return (
             <button key={key} type="button" onClick={() => onSelect(it)} aria-current={active ? 'true' : undefined}
@@ -108,8 +121,11 @@ export default function ConversationList({
               <div className="relative flex-shrink-0">
                 <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold"
                   style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>{initials(it.name)}</div>
-                <span className="absolute -bottom-0.5 -right-0.5 rounded-[5px] p-px" style={{ background: 'var(--bg-card)' }}>
-                  <ChannelIcon channel={it.channel} app={it.app} size={13} />
+                <span className="absolute -bottom-0.5 -right-0.5 rounded-[5px] p-px flex" style={{ background: 'var(--bg-card)' }}
+                  title={it.channels.length > 1 ? `On ${it.channels.map((c) => c === 'chat' ? 'chat' : c === 'email' ? 'email' : 'LinkedIn').join(' and ')}` : undefined}>
+                  {channelMarks(it).map((m, i) => (
+                    <span key={`${m.channel}:${m.app ?? ''}`} style={{ marginLeft: i ? -4 : 0 }}><ChannelIcon channel={m.channel} app={m.app} size={13} /></span>
+                  ))}
                 </span>
               </div>
               <div className="min-w-0 flex-1">

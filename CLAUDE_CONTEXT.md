@@ -3526,6 +3526,41 @@ knows when to answer, when to follow up, when to leave it."
   decisions proposing a rule to the person's voice, plans from the bot ("remind me to follow up with X in 10 days" —
   `crm_conversation_plans_due` reads only), email / chat due steps as cards (the owner is told instead).
 
+### 5.cr Inbox: one conversation per person across channels, a channel icon on every message (2026-11-09, feat/inbox-person, app-only, no migration)
+
+Mateo, with a screenshot: the same person (Arjun Aggarwal on LinkedIn "I answered via email"; Anthony Sirica's calendar decline
+and his "nice to meet you" email) sat as two or three rows. Amir: one thread per person across email, LinkedIn, WhatsApp and
+iMessage, with a little icon saying which channel each message came through; a reply defaults to where they last wrote.
+- **Group key** (`lib/inbox-server.ts::gkeyCol`, computed in each channel query, nothing stored): `person:<id>` (the thread's
+  person, else its prospect's), else `prospect:<id>`, else the one identity the channel gives — `em:<owner>:<address>` (the
+  same address in one owner's mail; what folds Anthony's threads) or `li:<owner>:<member id>` — else the thread's own key.
+  `listInbox` folds the union on it in TS (`fold` / `toItem`: head = the newest thread; `state` needs_reply if any thread needs
+  one, `unread` if any, `plan` the newest one's; ids / name / company taken from whichever thread has them); filters stay
+  per thread in SQL, so a person appears under Needs reply when any of their threads does. `countInbox` counts
+  `DISTINCT gkey` for needs_reply / unread / planned (`GROUP BY ROLLUP (channel)`; the channel tab numbers stay thread
+  counts), so the sidebar badge counts people. Live as Mateo: 138 rows → 91, 23 of them folded.
+- **Person view** `getPerson(key, viewer)` → `GET /api/inbox/person/[key]`: the 12 newest threads of the key the viewer may
+  see (own, or any as an admin; a teammate's personal mail stays hidden exactly as before — the admin sees the group only
+  through the threads the per-thread rule allows), each read with `getThread` (which now tags every message with
+  `channel` / `app` / `thread_id` and marks your own threads seen), merged into one timeline sorted by time, plus
+  `targets[]` (one `ReplyTarget` per thread: can_reply, copy_only for iMessage / Zeami-read chats, mailbox, subject,
+  open_url) and `default_target` = the thread they last wrote in that can be answered from here. `getConversation` = the
+  group a thread belongs to, so `GET /api/inbox/<channel>/<id>` (deep links, the Accepted tab) lands on the person and the
+  page follows its `key`. `POST /api/inbox/person/[key] {done|reopen}` = `setPersonState` over every visible thread.
+  Replies, drafts, refresh and plans stay per thread (the target).
+- **UI**: list row = one line per person, up to three channel marks on the avatar; the view header shows the marks ("2
+  channels"); every bubble's footer carries its channel icon; when a conversation mixes channels a "via LinkedIn" / "via
+  email · <subject>" pill is inserted wherever the channel changes; **Answer on** pills above the reply box (every
+  non-email thread, email threads that need a reply, the newest email thread, the rest in a select) — the draft cache,
+  the from-line, the placeholder, copy-only and the PlanPanel follow the chosen target; Mark done / Reopen act on the
+  whole person. `PlanPanel` takes `{channel, id, last_from_them}`. Contract: `InboxItem.key / channels / threads[]`,
+  `InboxMessage.channel / app / thread_id`, `ReplyTarget`, `InboxThread.targets / default_target`, `threadKey`, `parseKey`.
+- Checked read-only against production (as Mateo for the list, as admin for the view): rows fold, counts agree, timelines
+  sort, a thread key resolves to its person. Not seen in a browser (no local session). Arjun's "answered via email" is not
+  in the store (no email thread with him), so nothing folds there until one is read.
+- Not built: grouping across owners in the team view (keys are owner-scoped for strangers), a per-person plan (plans stay
+  per thread), name-only matching for strangers (deliberately not: two namesakes would merge).
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

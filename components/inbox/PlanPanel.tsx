@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Button from '@/components/panel/Button';
-import type { ConversationPlan, InboxThread, PlanPayload, PlanSummary } from '@/lib/inbox';
+import type { ConversationPlan, InboxChannel, InboxState, PlanPayload, PlanSummary } from '@/lib/inbox';
 
 /**
  * "No reply needed" on a conversation (core 103): follow up on dates with a reason, or leave it with a reason.
@@ -28,10 +28,11 @@ export function planLine(p: PlanSummary | ConversationPlan | null | undefined): 
 }
 
 export default function PlanPanel({ thread, onClose, onSaved }: {
-  thread: InboxThread;
+  /** the one thread the plan is on (a person's conversation picks it with the reply target) */
+  thread: { channel: InboxChannel; id: string; last_from_them: boolean };
   onClose: () => void;
   /** the new thread state + plan summary (null after a cancel) */
-  onSaved: (state: InboxThread['state'], plan: PlanSummary | null) => void;
+  onSaved: (state: InboxState, plan: PlanSummary | null) => void;
 }) {
   const [data, setData] = useState<PlanPayload | null>(null);
   const [err, setErr] = useState<string | null>(null);

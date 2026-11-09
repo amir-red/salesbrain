@@ -8,11 +8,13 @@ import ConversationView from '@/components/inbox/ConversationView';
 import AcceptedView, { AcceptedRow } from '@/components/inbox/AcceptedView';
 import type { AcceptedItem } from '@/lib/inbox-accepted';
 import type { InboxChannel, InboxCounts, InboxFilter, InboxItem, InboxThread } from '@/lib/inbox';
+import { parseKey } from '@/lib/inbox';
 
 /**
  * /inbox — every outreach conversation in one place: replies to campaign and wave emails, and LinkedIn conversations
  * with leads. Answer from here; the reply goes out from the owner's own LinkedIn or Gmail through the send gate.
- * The selected conversation lives in the URL (?c=linkedin:<id>), so a link opens it.
+ * One row per PERSON across channels (2026-11-09): the selected conversation lives in the URL (?c=person:<id>; a
+ * thread key such as linkedin:<id> still opens, landing on the person it belongs to), so a link opens it.
  */
 export default function InboxPage() {
   const [items, setItems] = useState<InboxItem[]>([]);
@@ -93,27 +95,36 @@ export default function InboxPage() {
     return () => clearInterval(t);
   }, [load, loadAccepted]);
 
+  const setUrl = (key: string | null) => {
+    try {
+      const url = new URL(window.location.href);
+      if (key) url.searchParams.set('c', key); else url.searchParams.delete('c');
+      window.history.replaceState(null, '', url);
+    } catch { /* ignore */ }
+  };
+
   const open = useCallback(async (key: string) => {
-    const [ch, id] = key.split(':');
-    if (ch === 'accepted' && id) {
-      setAccepted(true); setSelected(key); setThread(null);
-      try { const url = new URL(window.location.href); url.searchParams.set('c', key); window.history.replaceState(null, '', url); } catch { /* ignore */ }
+    const k = parseKey(key);
+    if (!k) return;
+    if (k.kind === 'accepted') {
+      setAccepted(true); setSelected(key); setThread(null); setUrl(key);
       return;
     }
-    if ((ch !== 'email' && ch !== 'linkedin' && ch !== 'chat') || !id) return;
     setAccepted(false);
     setSelected(key);
     setThreadLoading(true);
+    setUrl(key);
     try {
-      const url = new URL(window.location.href);
-      url.searchParams.set('c', key);
-      window.history.replaceState(null, '', url);
-    } catch { /* ignore */ }
-    try {
-      const res = await fetch(`/api/inbox/${ch}/${id}`);
+      const res = await fetch(k.kind === 'thread' ? `/api/inbox/${k.channel}/${k.id}` : `/api/inbox/person/${encodeURIComponent(key)}`);
       const data = await res.json();
-      setThread(res.ok ? data.thread : null);
-      if (res.ok) setItems((xs) => xs.map((x) => (`${x.channel}:${x.id}` === key ? { ...x, unread: false } : x)));
+      const t: InboxThread | null = res.ok ? data.thread : null;
+      setThread(t);
+      if (t) {
+        // a thread key lands on the person's conversation: the row and the URL follow its key
+        if (t.key && t.key !== key) { setSelected(t.key); setUrl(t.key); }
+        const sel = t.key || key;
+        setItems((xs) => xs.map((x) => (x.key === sel ? { ...x, unread: false } : x)));
+      }
     } catch {
       setThread(null);
     } finally {
@@ -132,8 +143,7 @@ export default function InboxPage() {
   };
 
   const back = () => {
-    setSelected(null); setThread(null);
-    try { const url = new URL(window.location.href); url.searchParams.delete('c'); window.history.replaceState(null, '', url); } catch { /* ignore */ }
+    setSelected(null); setThread(null); setUrl(null);
   };
 
   return (
@@ -142,7 +152,7 @@ export default function InboxPage() {
       <div className="flex-1 flex flex-col min-w-0">
         <PageHeader
           title="Inbox"
-          subtitle="Your conversations — outreach email and LinkedIn, chats, and the mail in every Google account you connected."
+          subtitle="Your conversations — one line per person across email, LinkedIn and chats, and the mail in every Google account you connected."
           actions={
             <>
               <select value={view} onChange={(e) => setView(e.target.value as 'outreach' | 'all')} className="z-input !w-auto text-sm"
@@ -169,7 +179,7 @@ export default function InboxPage() {
           <div className={`${selected ? 'hidden md:flex' : 'flex'} w-full md:w-[340px] flex-shrink-0 border-r flex-col min-h-0`} style={{ borderColor: 'var(--border)' }}>
             <ConversationList
               items={items} counts={counts} loading={loading} error={error} selected={selected}
-              onSelect={(it) => open(`${it.channel}:${it.id}`)}
+              onSelect={(it) => open(it.key)}
               q={q} setQ={setQ} channel={channel} setChannel={(c) => { setAccepted(false); setChannel(c); }} filter={filter} setFilter={setFilter}
               showOwner={scope === 'team'}
               accepted={accepted} acceptedWaiting={accWaiting} onAccepted={() => { setAccepted(true); back(); }}

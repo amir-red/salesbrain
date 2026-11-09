@@ -35,7 +35,32 @@ export interface PlanPayload {
   reasons: { key: string; label: string; follow_up: boolean }[]; max_steps: number; has_prospect: boolean; has_card: boolean;
 }
 
+/** One channel thread inside a person's conversation (the list row and the person view both carry them). */
+export interface InboxThreadRef {
+  channel: InboxChannel;
+  id: string;
+  app?: ChatApp | null;
+  state: InboxState;
+  unread: boolean;
+  last_message_at: string | null;
+  last_from_them: boolean;
+  subject?: string | null;
+  mailbox?: string | null;
+  plan?: PlanSummary | null;
+}
+
+/**
+ * One list row = one PERSON (2026-11-09): every channel thread we hold with them, folded on the group key
+ * `person:<person_id>` (else `prospect:<prospect_id>`, else the thread's own `<channel>:<id>` for strangers).
+ * `channel` / `id` / `subject` / `app` / `mailbox` are the newest thread's; `state` is needs_reply when any thread
+ * needs one; `unread` when any is; `plan` = the newest thread's plan.
+ */
 export interface InboxItem {
+  /** the group key: what the page opens (?c=) and what rows are keyed on */
+  key: string;
+  /** every channel in the conversation, newest first */
+  channels: InboxChannel[];
+  threads: InboxThreadRef[];
   channel: InboxChannel;
   id: string;
   owner_user_id: string;
@@ -79,6 +104,31 @@ export interface InboxMessage {
   subject?: string | null;
   /** a reply typed here that the send gate holds (quiet hours, a cap) */
   pending?: boolean;
+  /** which thread the message came through (every message carries it; the icon on the bubble) */
+  channel: InboxChannel;
+  app?: ChatApp | null;
+  thread_id: string;
+}
+
+/** One thread a reply can go into: the pills above the reply box. */
+export interface ReplyTarget {
+  channel: InboxChannel;
+  id: string;
+  app?: ChatApp | null;
+  label: string;
+  can_reply: boolean;
+  /** your own chat that cannot be sent from here (iMessage, the Zeami link): draft, copy, send in the app */
+  copy_only: boolean;
+  reply_note: string | null;
+  last_from_them: boolean;
+  last_message_at: string | null;
+  state: InboxState;
+  plan?: PlanSummary | null;
+  mailbox?: string | null;
+  subject?: string | null;
+  open_url?: string | null;
+  profile_url?: string | null;
+  mine: boolean;
 }
 
 export interface InboxThread extends InboxItem {
@@ -89,6 +139,9 @@ export interface InboxThread extends InboxItem {
   /** why not, when can_reply is false */
   reply_note: string | null;
   prospect_stage: string | null;
+  /** one per thread of the person; `default_target` = where they last wrote and we can answer */
+  targets: ReplyTarget[];
+  default_target: string | null;
   /** chat only: Zeami keeps just the last message of this conversation (history builds up one sync at a time) */
   only_last_message?: boolean;
   /** chat only: open the conversation in its own app */
@@ -128,4 +181,22 @@ export function shortWhen(iso: string | null, now = Date.now()): string {
 export function initials(name: string | null | undefined): string {
   const parts = (name || '?').trim().split(/\s+/).filter(Boolean);
   return ((parts[0]?.[0] || '?') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+}
+
+/** `<channel>:<id>` — the key of one thread (reply targets, drafts kept in the browser, the plan panel). */
+export function threadKey(t: { channel: InboxChannel; id: string }): string {
+  return `${t.channel}:${t.id}`;
+}
+
+/** A key the page can open: a person's conversation (`person:` / `prospect:`, or the same address / LinkedIn member
+ *  of a stranger: `em:` / `li:`) or one thread (`email:` …). */
+export function parseKey(key: string): { kind: 'person' | 'prospect' | 'same' | 'thread' | 'accepted'; channel?: InboxChannel; id: string } | null {
+  const i = key.indexOf(':');
+  if (i < 1) return null;
+  const head = key.slice(0, i), id = key.slice(i + 1);
+  if (!id) return null;
+  if (head === 'person' || head === 'prospect' || head === 'accepted') return { kind: head, id };
+  if (head === 'em' || head === 'li') return { kind: 'same', id };
+  if (head === 'email' || head === 'linkedin' || head === 'chat') return { kind: 'thread', channel: head, id };
+  return null;
 }
