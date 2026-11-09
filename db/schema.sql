@@ -884,3 +884,37 @@ CREATE TABLE IF NOT EXISTS score_feedback (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_score_feedback_prospect ON score_feedback (prospect_id, created_at DESC);
+
+-- 103: conversation plans (the Inbox's "no reply now / follow up later / leave it" decisions)
+CREATE TABLE IF NOT EXISTS conversation_plans (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_user_id   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,       -- whose conversation (the account / mailbox owner)
+  channel         TEXT NOT NULL CHECK (channel IN ('email', 'linkedin', 'chat')),
+  thread_id       UUID NOT NULL,                                               -- email_threads / linkedin_threads / chat_threads id
+  person_id       UUID REFERENCES people(id) ON DELETE SET NULL,
+  prospect_id     UUID REFERENCES leads(id) ON DELETE SET NULL,
+  decision        TEXT NOT NULL CHECK (decision IN ('follow_up', 'leave')),
+  reason_kind     TEXT NOT NULL,                                               -- policy/conversation_plans.REASONS
+  reason          TEXT,                                                        -- the person's own words
+  steps           JSONB NOT NULL DEFAULT '[]'::jsonb,                          -- [{n, due_at, purpose, status, approval_id, done_at}]
+  next_due_at     TIMESTAMPTZ,                                                 -- the first pending step; NULL for 'leave' / done
+  status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'done', 'cancelled')),
+  outcome         TEXT CHECK (outcome IN ('replied', 'completed', 'cancelled', 'superseded')),
+  suggested       JSONB,                                                       -- what suggest() proposed at the time
+  took_suggestion BOOLEAN,                                                     -- decision + days equal to the suggestion
+  last_their_at   TIMESTAMPTZ,                                                 -- their newest message when the plan was made
+  created_by      UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  done_at         TIMESTAMPTZ
+);
+-- one ACTIVE plan per conversation
+CREATE UNIQUE INDEX IF NOT EXISTS conversation_plans_active_thread
+  ON conversation_plans (channel, thread_id) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS conversation_plans_due
+  ON conversation_plans (next_due_at) WHERE status = 'active' AND next_due_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS conversation_plans_owner
+  ON conversation_plans (owner_user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS conversation_plans_prospect
+  ON conversation_plans (prospect_id) WHERE prospect_id IS NOT NULL;
+

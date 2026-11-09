@@ -27,6 +27,21 @@ export interface ListOpts {
   limit: number;
   /** email only: one of the viewer's mailboxes (core 102) */
   mailbox?: string | null;
+  /** core 103 exists (set by the readers after `plansStored`): the active plan rides on every row */
+  plans?: boolean;
+}
+
+/** The active conversation plan on a thread, as one json column (NULL when none / before core 103). */
+function planCol(channel: InboxChannel, on: boolean | undefined): string {
+  if (!on) return 'NULL::jsonb AS plan';
+  return `(SELECT jsonb_build_object('id', cp.id, 'decision', cp.decision, 'reason_kind', cp.reason_kind,
+             'next_due_at', cp.next_due_at,
+             'steps_left', (SELECT count(*) FROM jsonb_array_elements(cp.steps) s WHERE s->>'status' = 'pending'))
+             FROM conversation_plans cp WHERE cp.channel = '${channel}' AND cp.thread_id = t.id AND cp.status = 'active') AS plan`;
+}
+const PLANNED = `EXISTS (SELECT 1 FROM conversation_plans cp WHERE cp.channel = %CH% AND cp.thread_id = t.id AND cp.status = 'active')`;
+function plannedWhere(channel: InboxChannel, on: boolean | undefined): string {
+  return on ? PLANNED.replace('%CH%', `'${channel}'`) : 'false';
 }
 
 /** The prospect behind a LinkedIn chat: member id first, then the slug of the chat's person. Owner's own first. */
@@ -56,6 +71,7 @@ function linkedinSql(o: ListOpts, vals: unknown[], forCount = false): string {
     if (o.filter === 'needs_reply') where.push(`t.state = 'needs_reply'`);
     else if (o.filter === 'unread') where.push(LI_UNREAD);
     else if (o.filter === 'done') where.push(`t.state IN ('done', 'ignored')`);
+    else if (o.filter === 'planned') where.push(plannedWhere('linkedin', o.plans));
     else where.push(`t.state <> 'ignored'`);
     if (o.q) {
       vals.push(`%${o.q}%`);
@@ -73,7 +89,7 @@ function linkedinSql(o: ListOpts, vals: unknown[], forCount = false): string {
            ${LI_UNREAD} AS unread, pr.id::text AS prospect_id, t.person_id::text AS person_id, sl.id::text AS sales_lead_id,
            (SELECT cc.name FROM campaign_enrollments ce JOIN campaigns cc ON cc.id = ce.campaign_id
              WHERE ce.prospect_id = pr.id ORDER BY ce.status = 'active' DESC, ce.entered_node_at DESC LIMIT 1) AS campaign_name,
-           NULL::text AS app, NULL::text AS mailbox
+           NULL::text AS app, NULL::text AS mailbox, ${planCol('linkedin', o.plans)}
       FROM linkedin_threads t
       JOIN linkedin_accounts la ON la.id = t.account_id
       JOIN users u ON u.id = la.owner_user_id
@@ -100,6 +116,7 @@ function emailSql(o: ListOpts, vals: unknown[], forCount = false): string {
     if (o.filter === 'needs_reply') where.push(`t.state = 'needs_reply'`);
     else if (o.filter === 'unread') where.push(EM_UNREAD);
     else if (o.filter === 'done') where.push(`t.state = 'done'`);
+    else if (o.filter === 'planned') where.push(plannedWhere('email', o.plans));
     if (o.q) {
       vals.push(`%${o.q}%`);
       const n = vals.length;
@@ -115,7 +132,7 @@ function emailSql(o: ListOpts, vals: unknown[], forCount = false): string {
            t.prospect_id::text AS prospect_id, t.person_id::text AS person_id, sl.id::text AS sales_lead_id,
            (SELECT cc.name FROM campaign_enrollments ce JOIN campaigns cc ON cc.id = ce.campaign_id
              WHERE ce.prospect_id = t.prospect_id ORDER BY ce.status = 'active' DESC, ce.entered_node_at DESC LIMIT 1) AS campaign_name,
-           NULL::text AS app, t.mailbox
+           NULL::text AS app, t.mailbox, ${planCol('email', o.plans)}
       FROM email_threads t
       JOIN users u ON u.id = t.owner_user_id
       LEFT JOIN prospects p ON p.id = t.prospect_id
@@ -132,6 +149,7 @@ function chatSql(o: ListOpts, vals: unknown[], forCount = false): string {
     if (o.filter === 'needs_reply') where.push(`t.state = 'needs_reply'`);
     else if (o.filter === 'unread') where.push(CH_UNREAD);
     else if (o.filter === 'done') where.push(`t.state IN ('done', 'ignored')`);
+    else if (o.filter === 'planned') where.push(plannedWhere('chat', o.plans));
     else where.push(`t.state <> 'ignored'`);
     if (o.q) {
       vals.push(`%${o.q}%`);
@@ -150,7 +168,7 @@ function chatSql(o: ListOpts, vals: unknown[], forCount = false): string {
            sl.id::text AS sales_lead_id,
            (SELECT cc.name FROM campaign_enrollments ce JOIN campaigns cc ON cc.id = ce.campaign_id
              WHERE ce.prospect_id = t.prospect_id ORDER BY ce.status = 'active' DESC, ce.entered_node_at DESC LIMIT 1) AS campaign_name,
-           t.app, NULL::text AS mailbox
+           t.app, NULL::text AS mailbox, ${planCol('chat', o.plans)}
       FROM chat_threads t
       JOIN users u ON u.id = t.owner_user_id
       LEFT JOIN people pe ON pe.id = t.person_id
@@ -174,6 +192,15 @@ function iso(v: unknown): string | null {
   return v instanceof Date ? v.toISOString() : (v as string | null) ?? null;
 }
 
+let plansReady = false;
+/** Before core migration 103 there are no conversation plans: rows carry plan = null, the Planned filter is empty. */
+async function plansStored(client: PoolClient): Promise<boolean> {
+  if (plansReady) return true;
+  const { rows } = await client.query(`SELECT to_regclass('public.conversation_plans') IS NOT NULL AS ok`);
+  plansReady = !!rows[0]?.ok;
+  return plansReady;
+}
+
 function toItem(r: Record<string, unknown>): InboxItem {
   return { ...(r as unknown as InboxItem), last_message_at: iso(r.last_message_at), unread: !!r.unread, last_from_them: !!r.last_from_them };
 }
@@ -181,6 +208,7 @@ function toItem(r: Record<string, unknown>): InboxItem {
 export async function listInbox(o: ListOpts): Promise<{ items: InboxItem[]; counts: InboxCounts }> {
   const client = await pool.connect();
   try {
+    o = { ...o, plans: await plansStored(client) };
     const vals: unknown[] = [];
     const parts: string[] = [];
     if (o.channel === 'all' || o.channel === 'linkedin') parts.push(linkedinSql(o, vals));
@@ -198,18 +226,21 @@ export async function listInbox(o: ListOpts): Promise<{ items: InboxItem[]; coun
 }
 
 async function countInbox(client: PoolClient, o: ListOpts): Promise<InboxCounts> {
+  o = { ...o, plans: await plansStored(client) };
   const vals: unknown[] = [];
   const parts = [linkedinSql(o, vals, true), emailSql(o, vals, true)];
   if (await chatsStored(client)) parts.push(chatSql(o, vals, true));
   const { rows } = await client.query(
     `SELECT channel, count(*) FILTER (WHERE state = 'needs_reply')::int AS needs_reply,
-            count(*) FILTER (WHERE unread)::int AS unread, count(*)::int AS total
+            count(*) FILTER (WHERE unread)::int AS unread, count(*) FILTER (WHERE plan IS NOT NULL)::int AS planned,
+            count(*)::int AS total
        FROM (${parts.join(' UNION ALL ')}) x WHERE state <> 'ignored' GROUP BY channel`, vals);
   const by = Object.fromEntries(rows.map((r) => [r.channel, r]));
-  const sum = (k: 'needs_reply' | 'unread') => (by.linkedin?.[k] ?? 0) + (by.email?.[k] ?? 0) + (by.chat?.[k] ?? 0);
+  const sum = (k: 'needs_reply' | 'unread' | 'planned') => (by.linkedin?.[k] ?? 0) + (by.email?.[k] ?? 0) + (by.chat?.[k] ?? 0);
   return {
     needs_reply: sum('needs_reply'),
     unread: sum('unread'),
+    planned: sum('planned'),
     email: by.email?.total ?? 0,
     linkedin: by.linkedin?.total ?? 0,
     chat: by.chat?.total ?? 0,
@@ -232,7 +263,7 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
   Promise<InboxThread | null> {
   const client = await pool.connect();
   try {
-    const o: ListOpts = { viewerId: viewer.userId, team: true, channel, filter: 'all', q: '', view: 'all', limit: 1 };
+    const o: ListOpts = { viewerId: viewer.userId, team: true, channel, filter: 'all', q: '', view: 'all', limit: 1, plans: await plansStored(client) };
     const vals: unknown[] = [];
     if (channel === 'chat' && !(await chatsStored(client))) return null;
     const base = channel === 'linkedin' ? linkedinSql(o, vals, true) : channel === 'chat' ? chatSql(o, vals, true) : emailSql(o, vals, true);

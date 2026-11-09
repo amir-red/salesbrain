@@ -8,6 +8,7 @@ const FILTERS: { key: InboxFilter; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'needs_reply', label: 'Needs reply' },
   { key: 'unread', label: 'Unread' },
+  { key: 'planned', label: 'Planned' },
   { key: 'done', label: 'Done' },
 ];
 
@@ -25,7 +26,7 @@ export default function ConversationList({
   /** the "Accepted" tab (LinkedIn connection requests accepted): when on, `children` replace the conversation rows */
   accepted?: boolean; acceptedWaiting?: number; onAccepted?: () => void; children?: React.ReactNode;
 }) {
-  const badge = (f: InboxFilter) => (f === 'needs_reply' ? counts?.needs_reply : f === 'unread' ? counts?.unread : undefined);
+  const badge = (f: InboxFilter) => (f === 'needs_reply' ? counts?.needs_reply : f === 'unread' ? counts?.unread : f === 'planned' ? counts?.planned || undefined : undefined);
   return (
     <div className="flex flex-col h-full min-h-0">
       <div className="p-3 border-b flex flex-col gap-2.5" style={{ borderColor: 'var(--border)' }}>
@@ -128,6 +129,15 @@ export default function ConversationList({
                   {it.unread && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: 'var(--accent)' }} aria-label="unread" />}
                   {!it.unread && it.state === 'needs_reply' && (
                     <span className="text-[10px] flex-shrink-0 px-1.5 rounded-full" style={{ color: 'var(--orange)', background: 'color-mix(in srgb, var(--orange) 14%, transparent)' }}>reply</span>
+                  )}
+                  {it.plan && (
+                    <span className="text-[10px] flex-shrink-0 px-1.5 rounded-full tabular-nums"
+                      title={it.plan.decision === 'leave' ? 'Left as is, on purpose' : 'A follow-up you planned'}
+                      style={it.plan.decision === 'leave'
+                        ? { color: 'var(--text-muted)', background: 'var(--bg-input)' }
+                        : { color: 'var(--blue)', background: 'color-mix(in srgb, var(--blue) 14%, transparent)' }}>
+                      {it.plan.decision === 'leave' ? 'left' : it.plan.next_due_at ? `↻ ${new Date(it.plan.next_due_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : '↻'}
+                    </span>
                   )}
                 </div>
                 {showOwner && it.owner_name && (

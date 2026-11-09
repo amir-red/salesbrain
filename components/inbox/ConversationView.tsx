@@ -32,6 +32,8 @@ import { EMPTY_VERDICT, ProposalStrip, RatingStrip, verdictGiven, verdictReason,
 import { LearnedLines } from '@/components/voice/DraftReview';
 import type { FeedbackResult } from '@/lib/voice';
 import { Sparkle } from '@/components/icons';
+import PlanPanel, { planLine } from './PlanPanel';
+import type { PlanSummary } from '@/lib/inbox';
 
 function dayLabel(iso: string | null): string {
   if (!iso) return '';
@@ -82,6 +84,7 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
   const autoDrafted = useRef<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<{ kind: 'error' | 'info'; text: string } | null>(null);
+  const [planOpen, setPlanOpen] = useState(false);   // the "No reply needed" panel (core 103)
   const endRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLTextAreaElement>(null);
   const key = thread ? `${thread.channel}:${thread.id}` : '';
@@ -92,7 +95,7 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
   const restored = useRef(false);
 
   useEffect(() => {
-    setNote(null); setRate(null); setVerdict(EMPTY_VERDICT); setLearned(null); setTeachErr(null);
+    setNote(null); setRate(null); setVerdict(EMPTY_VERDICT); setLearned(null); setTeachErr(null); setPlanOpen(false);
     // a proposal written earlier for this conversation (and the edits made to it) comes back as it was
     const kept = key ? loadDraft(key, lastId) : null;
     setProposal(kept ? kept.proposal : null); setText(kept ? kept.text : '');
@@ -100,7 +103,7 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
   }, [key]);   // eslint-disable-line react-hooks/exhaustive-deps
   // A conversation that needs an answer drafts by itself when it opens — once; afterwards the kept draft is shown.
   useEffect(() => {
-    if (!thread || !(thread.can_reply || copyOnly) || thread.state !== 'needs_reply' || !thread.last_from_them) return;
+    if (!thread || !(thread.can_reply || copyOnly) || thread.state !== 'needs_reply' || !thread.last_from_them || thread.plan) return;
     if (restored.current || autoDrafted.current.has(key) || proposal || text.trim()) return;
     if (loadDraft(key, lastId)) return;
     autoDrafted.current.add(key);
@@ -149,6 +152,7 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
       if (action === 'draft') {
         setProposal({ message: data.message, reasoning: data.reasoning ?? null, used_facts: data.used_facts ?? [], voice: data.voice,
           situation: data.situation === 'followup' ? 'followup' : 'reply', priorities: data.priorities ?? [] });
+        if (data.planned) setNote({ kind: 'info', text: `Drafted for the follow-up you planned: ${data.planned}` });
         setRate(null); setVerdict(EMPTY_VERDICT); setLearned(null); setTeachErr(null); setText(data.message);
         return;
       }
@@ -244,7 +248,12 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
               <ChannelIcon channel={thread.channel} app={thread.app} size={14} /> {channelLabel(thread)}
             </span>
             {thread.state === 'needs_reply' && <Pill color="var(--orange)">Needs reply</Pill>}
-            {thread.state === 'done' && <Pill color="var(--green)">Done</Pill>}
+            {thread.state === 'done' && !thread.plan && <Pill color="var(--green)">Done</Pill>}
+            {thread.plan && (
+              <button type="button" onClick={() => setPlanOpen(true)} title="The plan you set on this conversation — click to see or change it">
+                <Pill color={thread.plan.decision === 'leave' ? 'var(--text-muted)' : 'var(--blue)'}>{planLine(thread.plan)}</Pill>
+              </button>
+            )}
             {thread.campaign_name && <Pill color="var(--blue)">{thread.campaign_name}</Pill>}
           </div>
           <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>
@@ -269,6 +278,12 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
               {busy === 'refresh' ? 'Checking…' : 'Refresh'}
             </Button>
           )}
+          {(thread.can_reply || thread.mine) && (
+            <Button size="sm" onClick={() => setPlanOpen((v) => !v)} disabled={!!busy}
+              title="No reply needed: set follow-ups with a reason, or leave it with a reason — the system learns from it">
+              {thread.plan ? 'Plan' : 'No reply needed'}
+            </Button>
+          )}
           {thread.state === 'done'
             ? <Button size="sm" onClick={() => act('reopen')} disabled={!!busy}>Reopen</Button>
             : <Button size="sm" onClick={() => act('done')} disabled={!!busy} title="Nothing to answer — move it out of Needs reply">Mark done</Button>}
@@ -287,6 +302,11 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
           : <Bubble key={r.m.id} m={r.m} channel={thread.channel} />))}
         <div ref={endRef} />
       </div>
+
+      {planOpen && (
+        <PlanPanel thread={thread} onClose={() => setPlanOpen(false)}
+          onSaved={(state, plan: PlanSummary | null) => { setPlanOpen(false); onChanged({ ...thread, state, plan }); }} />
+      )}
 
       <div className="border-t p-3 max-h-[65vh] overflow-y-auto" style={{ borderColor: 'var(--border)' }}>
         {note && (
