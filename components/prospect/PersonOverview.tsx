@@ -11,34 +11,40 @@ import { DEFAULT_WEIGHTS, PART_SHORT, TRUST_PARTS } from '@/lib/trust';
 import { channelWord, clip, firstName, firstSentence, shortSize, standLine, talkingPoints } from '@/lib/person-page';
 
 /**
- * The person page's Overview (redesign D, 2026-11-09): a short story on the left — one or two sentences per question —
- * and on the right the next move with its one button, how we get in, how to reach them and the score. The long
- * research lives on the Full brief tab; nothing here is longer than two lines unless asked.
+ * The person page's Overview (redesign E, 2026-11-09): the eight questions a seller asks before writing, each its own
+ * numbered card with a bold title and a one- or two-sentence answer. Left: 1 Where do we stand, 2 Who is the person,
+ * 3 What is the company, 4 Why now, 5 What do they gain. Right: 8 Next step (the action, on top), 6 Who gets us in,
+ * 7 How do we write, then the score. The long research stays on the Full brief tab.
  */
 
 const muted = { color: 'var(--text-muted)' } as const;
+const SCORE_COLORS = ['var(--accent)', 'var(--blue)', 'var(--highlight)', 'var(--cat-teal)'];
 
-function Story({ label, children }: { label: string; children: ReactNode }) {
+function Badge({ n, inverse }: { n: number; inverse?: boolean }) {
   return (
-    <section className="flex flex-col gap-2">
-      <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: 'var(--blue)' }}>{label}</h2>
-      {children}
+    <span className="w-7 h-7 rounded-full flex items-center justify-center text-[13px] font-bold flex-shrink-0" aria-hidden
+      style={inverse ? { background: '#ffffff', color: 'var(--deep-plum)' } : { background: 'var(--accent)', color: 'var(--accent-fg)' }}>{n}</span>
+  );
+}
+
+/** One question: number, bold title, an optional quiet note on the right, then the answer indented under the title. */
+function Question({ n, title, note, children }: { n: number; title: string; note?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="rounded-2xl px-5 py-5 flex flex-col gap-2.5" style={{ border: '1px solid var(--border)', background: 'var(--bg-card)' }}
+      aria-labelledby={`q${n}`}>
+      <div className="flex items-center gap-3">
+        <Badge n={n} />
+        <h2 id={`q${n}`} className="text-lg font-bold leading-tight">{title}</h2>
+        {note && <span className="ml-auto text-xs text-right" style={muted}>{note}</span>}
+      </div>
+      <div className="sm:pl-10 flex flex-col gap-2.5">{children}</div>
     </section>
   );
 }
 
-function Chip({ children, tone = 'teal' }: { children: ReactNode; tone?: 'teal' | 'muted' | 'orange' }) {
-  const c = tone === 'teal' ? 'var(--cat-teal)' : tone === 'orange' ? 'var(--orange)' : 'var(--text-muted)';
-  return <span className="text-xs px-2.5 py-1 rounded-full" style={{ color: c, background: `color-mix(in srgb, ${c} 12%, transparent)` }}>{children}</span>;
-}
-
-function RailCard({ title, children, right }: { title: string; children: ReactNode; right?: ReactNode }) {
-  return (
-    <section className="rounded-2xl p-5 flex flex-col gap-3" style={{ border: '1px solid var(--border)', background: 'var(--bg-card)' }}>
-      <div className="flex items-center justify-between gap-2"><h2 className="text-sm font-semibold">{title}</h2>{right}</div>
-      {children}
-    </section>
-  );
+function Chip({ children, tone = 'teal' }: { children: ReactNode; tone?: 'teal' | 'muted' | 'orange' | 'plum' }) {
+  const c = tone === 'teal' ? 'var(--cat-teal)' : tone === 'orange' ? 'var(--orange)' : tone === 'plum' ? 'var(--accent)' : 'var(--text-muted)';
+  return <span className="text-xs px-2.5 py-1 rounded-full" style={{ color: c, background: `color-mix(in srgb, ${c} 12%, transparent)`, fontWeight: tone === 'plum' ? 600 : 400 }}>{children}</span>;
 }
 
 function Dot({ name, solid }: { name: string | null; solid?: boolean }) {
@@ -48,22 +54,33 @@ function Dot({ name, solid }: { name: string | null; solid?: boolean }) {
   );
 }
 
+function Empty({ children, action }: { children: ReactNode; action?: ReactNode }) {
+  return <div className="flex items-center gap-3 flex-wrap"><p className="text-sm flex-1" style={muted}>{children}</p>{action}</div>;
+}
+
 export default function PersonOverview({ b, p, onEnrich, enriching, onResearch, researching, onTab }: {
   b: LeadBrief; p: Prospect; onEnrich: () => void; enriching: boolean; onResearch: () => void; researching: boolean;
   onTab: (t: 'brief' | 'journey' | 'activity') => void;
 }) {
   const [allPoints, setAllPoints] = useState(false);
   const [moreWho, setMoreWho] = useState(false);
+  const [moreGain, setMoreGain] = useState(false);
   const name = firstName(b.person.name || p.full_name);
   const stand = standLine(b);
-  const per = b.person; const co = b.company; const w = b.who_in; const n = b.next_step;
+  const per = b.person; const co = b.company; const w = b.who_in; const n = b.next_step; const h = b.how;
   const who = firstSentence(per.background) || firstSentence(per.mandate);
-  const whyNow = firstSentence(b.gains.why) || firstSentence(b.gains.angle);
+  const companyName = co.name || p.company_name;
+  const company = firstSentence(co.summary)
+    || [companyName, co.industry, shortSize(co.size), co.hq].filter(Boolean).join(' · ')
+    || null;
+  const gain = firstSentence(b.gains.why) || firstSentence(b.gains.angle);
   const points = talkingPoints(b);
   const shown = allPoints ? points : points.slice(0, 3);
-  const researched = !!(who || whyNow || points.length);
+  const researchBtn = (label: string) => (
+    <Button size="sm" onClick={onResearch} disabled={researching}><Sparkle width={12} height={12} />{researching ? 'Researching…' : label}</Button>
+  );
 
-  // the rail
+  // 6 · 7 · 8
   const move = n.set || n.suggested?.label || null;
   const byLine = n.responsible ? `From ${firstName(n.responsible)}${n.front && n.front !== n.responsible ? ` · ${firstName(n.front)} takes the call` : ''}` : null;
   const warmest = w.warm_with.find((x) => x.band === 'hot' || x.band === 'warm');
@@ -72,120 +89,105 @@ export default function PersonOverview({ b, p, onEnrich, enriching, onResearch, 
   const email = per.email || p.email;
   const phone = per.phone || p.phone;
   const linkedin = per.linkedin_url || p.linkedin_url;
+  const lang = h.language === 'de' ? 'German' : h.language === 'en' ? 'English' : h.language;
   const parts = b.trust.parts;
   const total = b.trust.total;
 
-  // recent activity: what each channel last saw, newest first
-  const recent = [...b.stand.channels].sort((a, c) => (c.last_at || '').localeCompare(a.last_at || '')).slice(0, 4);
-
   return (
-    <div className="flex flex-col lg:flex-row gap-10 lg:gap-12 py-8">
-      <main className="flex-1 min-w-0 max-w-[700px] flex flex-col gap-8">
-        <Story label="Where we stand">
-          <p className="text-xl font-semibold leading-snug">{stand.line}</p>
+    <div className="flex flex-col lg:flex-row gap-8 lg:gap-10 py-8">
+      <main className="flex-1 min-w-0 flex flex-col gap-3.5">
+        <Question n={1} title="Where do we stand?" note={b.stand.days != null ? `${b.stand.days} days since last contact` : null}>
+          <p className="text-base leading-relaxed">{stand.line}</p>
           {stand.sub && <p className="text-sm" style={muted}>{stand.sub}</p>}
           {b.stand.open_items.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mt-1">
+            <div className="flex flex-wrap gap-1.5">
               {b.stand.open_items.slice(0, 4).map((it, i) => (
                 <Chip key={i} tone={it.side === 'us' ? 'orange' : 'muted'}>{it.side === 'us' ? 'We owe: ' : `${name} owes: `}{clip(it.item, 60)}</Chip>
               ))}
             </div>
           )}
-        </Story>
+        </Question>
 
-        <Story label={`Who ${name} is`}>
+        <Question n={2} title="Who is the person?" note={per.as_of ? `as of ${dayLabel(per.as_of)}` : null}>
           {who ? <p className="text-base leading-relaxed">{who}</p>
-            : <p className="text-sm" style={muted}>Nothing researched about {name} yet.</p>}
-          <div className="flex flex-wrap gap-1.5">
-            {per.tenure_months != null && <Chip>{per.tenure_months} months in role</Chip>}
-            {per.signals.map((s) => <Chip key={s}>{SIGNAL_LABEL[s] ?? s.replace(/_/g, ' ')}</Chip>)}
-            {per.role_confirmed === false && <Chip tone="orange">role not confirmed</Chip>}
-          </div>
+            : <Empty action={researchBtn('Research now')}>Nothing researched about {name} yet.</Empty>}
+          {(per.tenure_months != null || per.signals.length > 0 || per.role_confirmed === false) && (
+            <div className="flex flex-wrap gap-1.5">
+              {per.tenure_months != null && <Chip>{per.tenure_months} months in role</Chip>}
+              {per.signals.map((s) => <Chip key={s}>{SIGNAL_LABEL[s] ?? s.replace(/_/g, ' ')}</Chip>)}
+              {per.role_confirmed === false && <Chip tone="orange">role not confirmed</Chip>}
+            </div>
+          )}
           {(per.prior_roles.length > 0 || (per.mandate && per.background)) && (
             moreWho ? (
-              <div className="text-sm flex flex-col gap-1.5 mt-1" style={muted}>
+              <div className="text-sm flex flex-col gap-1.5" style={muted}>
                 {per.mandate && per.background && <p><span className="font-medium" style={{ color: 'var(--text)' }}>Mandate:</span> {per.mandate}</p>}
                 {per.prior_roles.length > 0 && <p><span className="font-medium" style={{ color: 'var(--text)' }}>Before:</span> {per.prior_roles.slice(0, 4).join(' · ')}</p>}
               </div>
             ) : <button type="button" onClick={() => setMoreWho(true)} className="text-xs self-start" style={{ color: 'var(--accent)' }}>More about {name}</button>
           )}
-        </Story>
+        </Question>
 
-        {whyNow && (
-          <Story label={`Why ${name}, why now`}>
-            <p className="text-base leading-relaxed">{whyNow}</p>
-          </Story>
-        )}
-
-        {points.length > 0 && (
-          <Story label="Talking points">
-            <ul className="flex flex-col gap-2.5">
-              {shown.map((t, i) => (
-                <li key={i} className="flex gap-4 text-[15px] leading-snug">
-                  {t.when !== null && <span className="w-[76px] flex-shrink-0 tabular-nums" style={muted}>{t.when}</span>}
-                  {t.when === null && <span aria-hidden className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0" style={{ background: 'var(--accent)' }} />}
-                  <span className="min-w-0">
-                    {t.text}
-                    {t.source && <a href={t.source} target="_blank" rel="noreferrer" className="ml-1.5 text-[11px] inline-flex items-center gap-0.5" style={{ color: 'var(--accent)' }}>{t.sourceTitle || 'source'}<External width={10} height={10} /></a>}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            {points.length > 3 && (
-              <button type="button" onClick={() => setAllPoints((v) => !v)} className="text-xs self-start" style={{ color: 'var(--accent)' }}>
-                {allPoints ? 'Show fewer' : `Show all ${points.length}`}
-              </button>
-            )}
-          </Story>
-        )}
-
-        {!researched && (
-          <div className="rounded-2xl p-5 flex items-center gap-4" style={{ background: 'var(--bg-input)' }}>
-            <p className="text-sm flex-1">No research yet. One lookup fills in who {name} is, why now and what to talk about.</p>
-            <Button size="sm" onClick={onResearch} disabled={researching}><Sparkle width={12} height={12} />{researching ? 'Researching…' : 'Research now'}</Button>
-          </div>
-        )}
-
-        <div className="grid sm:grid-cols-2 gap-4">
-          <div className="rounded-2xl px-5 py-4 flex flex-col gap-1" style={{ border: '1px solid var(--border)' }}>
-            <span className="text-xs font-semibold" style={muted}>The person</span>
-            <span className="text-sm">{per.title || p.title || 'Role unknown'}</span>
-            <span className="text-sm" style={muted}>{[per.location || p.person_city, per.employers.length > 1 ? `ex ${per.employers.slice(1, 3).join(', ')}` : null].filter(Boolean).join(' · ') || ' '}</span>
-          </div>
-          <div className="rounded-2xl px-5 py-4 flex flex-col gap-1" style={{ border: '1px solid var(--border)' }}>
-            <span className="text-xs font-semibold" style={muted}>The company</span>
-            <span className="text-sm">{[co.name || p.company_name, co.industry].filter(Boolean).join(' · ') || 'Unknown'}</span>
-            <span className="text-sm" style={muted}>{[shortSize(co.size), co.revenue, co.hq].filter(Boolean).join(' · ') || (co.summary ? clip(co.summary, 60) : ' ')}</span>
-          </div>
-        </div>
-
-        <section className="flex flex-col gap-2.5">
-          <div className="flex items-center justify-between border-b pb-2" style={{ borderColor: 'var(--border)' }}>
-            <h2 className="text-sm font-semibold">Recent</h2>
-            <button type="button" onClick={() => onTab('activity')} className="text-xs" style={{ color: 'var(--accent)' }}>All activity</button>
-          </div>
-          {recent.length === 0 && <p className="text-sm" style={muted}>Nothing yet.</p>}
-          {recent.map((c, i) => (
-            <div key={i} className="flex gap-4 text-sm">
-              <span className="w-[64px] flex-shrink-0 tabular-nums" style={muted}>{dayLabel(c.last_at)}</span>
-              <span className="min-w-0">
-                <span className="font-medium">{channelWord(c.channel) ?? c.label}</span>
-                {c.owner_name && <span style={muted}> · {c.owner_name}</span>}
-                {(c.last_text || c.text) && <span style={muted}> — {clip(c.last_text || c.text || '', 90)}</span>}
-              </span>
+        <Question n={3} title="What is the company?" note={co.as_of ? `as of ${dayLabel(co.as_of)}` : null}>
+          {company ? <p className="text-base leading-relaxed">{company}</p>
+            : <Empty action={<Button size="sm" onClick={onEnrich} disabled={enriching}>{enriching ? 'Enriching…' : 'Enrich'}</Button>}>No employer on file.</Empty>}
+          {(co.revenue || co.ownership || co.funding) && (
+            <div className="flex flex-wrap gap-1.5">
+              {co.revenue && <Chip tone="muted">revenue {co.revenue}{co.year ? ` (${co.year})` : ''}</Chip>}
+              {co.ownership && <Chip tone="muted">{co.ownership}</Chip>}
+              {co.funding && <Chip tone="muted">{co.funding}</Chip>}
             </div>
-          ))}
-          <p className="text-xs" style={muted}>
-            {b.research.at ? `Researched ${agoLabel(b.research.at)}${b.research.sources.length ? ` from ${b.research.sources.length} source${b.research.sources.length === 1 ? '' : 's'}` : ''}` : 'Not researched yet'}
-            {' · '}<button type="button" onClick={onResearch} disabled={researching} style={{ color: 'var(--accent)' }}>{researching ? 'Researching…' : 'Research again'}</button>
-            {' · '}<button type="button" onClick={() => onTab('brief')} style={{ color: 'var(--accent)' }}>Full brief</button>
-          </p>
-        </section>
+          )}
+        </Question>
+
+        <Question n={4} title="Why now?" note={b.why_now.as_of && points.length ? `as of ${dayLabel(b.why_now.as_of)}` : null}>
+          {points.length > 0 ? (
+            <>
+              <ul className="flex flex-col gap-2">
+                {shown.map((t, i) => (
+                  <li key={i} className="flex gap-4 text-[15px] leading-snug">
+                    {t.when !== null
+                      ? <span className="w-[72px] flex-shrink-0 tabular-nums" style={muted}>{t.when}</span>
+                      : <span aria-hidden className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0" style={{ background: 'var(--accent)' }} />}
+                    <span className="min-w-0">
+                      {t.text}
+                      {t.source && <a href={t.source} target="_blank" rel="noreferrer" className="ml-1.5 text-[11px] inline-flex items-center gap-0.5" style={{ color: 'var(--accent)' }}>{t.sourceTitle || 'source'}<External width={10} height={10} /></a>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {points.length > 3 && (
+                <button type="button" onClick={() => setAllPoints((v) => !v)} className="text-xs self-start" style={{ color: 'var(--accent)' }}>
+                  {allPoints ? 'Show fewer' : `Show all ${points.length}`}
+                </button>
+              )}
+            </>
+          ) : <Empty action={researchBtn(b.research.at ? 'Research again' : 'Research now')}>No dated news on record yet.</Empty>}
+        </Question>
+
+        <Question n={5} title="What do they gain?">
+          {gain ? <p className="text-base leading-relaxed">{gain}</p>
+            : <Empty action={researchBtn(b.research.at ? 'Research again' : 'Research now')}>No angle written yet.</Empty>}
+          {b.gains.angle && firstSentence(b.gains.angle) !== b.gains.angle.trim() && (
+            moreGain ? <p className="text-sm leading-relaxed" style={muted}>{b.gains.angle}</p>
+              : <button type="button" onClick={() => setMoreGain(true)} className="text-xs self-start" style={{ color: 'var(--accent)' }}>The full angle</button>
+          )}
+        </Question>
+
+        <p className="text-xs mt-1" style={muted}>
+          {b.research.at ? `Researched ${agoLabel(b.research.at)}${b.research.sources.length ? ` from ${b.research.sources.length} source${b.research.sources.length === 1 ? '' : 's'}` : ''}` : 'Not researched yet'}
+          {' · '}<button type="button" onClick={onResearch} disabled={researching} style={{ color: 'var(--accent)' }}>{researching ? 'Researching…' : 'Research again'}</button>
+          {' · '}<button type="button" onClick={() => onTab('brief')} style={{ color: 'var(--accent)' }}>Full brief</button>
+          {' · '}<button type="button" onClick={() => onTab('activity')} style={{ color: 'var(--accent)' }}>Activity</button>
+        </p>
       </main>
 
-      <aside className="w-full lg:w-[360px] flex-shrink-0 flex flex-col gap-4 lg:sticky lg:top-6 self-start">
-        <section className="rounded-2xl p-6 flex flex-col gap-3" style={{ background: 'var(--deep-plum)', color: '#ffffff' }}>
-          <span className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: '#ebdff0' }}>Your next move</span>
+      <aside className="w-full lg:w-[380px] flex-shrink-0 flex flex-col gap-3.5 lg:sticky lg:top-6 self-start">
+        <section className="rounded-2xl p-5 flex flex-col gap-3" style={{ background: 'var(--deep-plum)', color: '#ffffff' }} aria-labelledby="q8">
+          <div className="flex items-center gap-3">
+            <Badge n={8} inverse />
+            <h2 id="q8" className="text-lg font-bold">Next step</h2>
+          </div>
           <span className="text-xl font-semibold leading-snug">{move || 'Nothing to do now'}</span>
           {(byLine || n.suggested?.why) && <span className="text-sm" style={{ color: '#ebdff0' }}>{byLine || n.suggested?.why}</span>}
           {n.booked_at && n.booking_status !== 'cancelled' && <span className="text-sm" style={{ color: '#ebdff0' }}>Call booked for {dayLabel(n.booked_at)}</span>}
@@ -195,7 +197,7 @@ export default function PersonOverview({ b, p, onEnrich, enriching, onResearch, 
             <Send width={14} height={14} />Write message
           </Link>
           {warmest && warmest.teammate !== n.responsible && (
-            <button type="button" onClick={() => onTab('journey')} className="text-sm underline-offset-2 hover:underline" style={{ color: '#ffffff' }}>
+            <button type="button" onClick={() => onTab('journey')} className="text-sm hover:underline" style={{ color: '#ffffff' }}>
               or ask {firstName(warmest.teammate)} for an intro
             </button>
           )}
@@ -206,8 +208,8 @@ export default function PersonOverview({ b, p, onEnrich, enriching, onResearch, 
           )}
         </section>
 
-        <RailCard title="How we get in">
-          {warmest || conn ? (
+        <Question n={6} title="Who gets us in?">
+          {(warmest || conn) && (
             <div className="flex items-center gap-2.5">
               <Dot name={warmest?.teammate ?? conn?.owner ?? null} />
               <span className="flex-1 flex flex-col items-center gap-0.5">
@@ -216,17 +218,22 @@ export default function PersonOverview({ b, p, onEnrich, enriching, onResearch, 
               </span>
               <Dot name={b.person.name || p.full_name} solid />
             </div>
-          ) : null}
+          )}
           <p className="text-sm" style={muted}>
             {[
-              warmest ? `${firstName(warmest.teammate)} is ${warmest.band} with ${name}${warmest.reasons[0] ? ` (${warmest.reasons[0]})` : ''}.` : null,
+              warmest ? `${firstName(warmest.teammate)} is ${warmest.band} with ${name}.` : null,
               conn ? `${firstName(conn.owner)} is connected on LinkedIn.` : pending ? `${firstName(pending.owner)}'s request is pending.` : null,
               w.mutual ? `${w.mutual} mutual connections.` : null,
             ].filter(Boolean).join(' ') || 'Nobody on the team knows them yet.'}
           </p>
-        </RailCard>
+        </Question>
 
-        <RailCard title={`Reach ${name}`}>
+        <Question n={7} title="How do we write?">
+          <div className="flex flex-wrap gap-1.5">
+            {h.channel ? <Chip tone="plum">{channelWord(h.channel)}</Chip> : <Chip tone="muted">no channel yet</Chip>}
+            {lang && <Chip tone="muted">{lang}</Chip>}
+            {h.address && <Chip tone="muted">{h.address}</Chip>}
+          </div>
           <div className="flex flex-col gap-2 text-sm">
             <div className="flex justify-between gap-3">
               <span>LinkedIn</span>
@@ -248,25 +255,27 @@ export default function PersonOverview({ b, p, onEnrich, enriching, onResearch, 
               <a href={linkedin} target="_blank" rel="noreferrer" className="text-xs inline-flex items-center gap-1 self-start" style={{ color: 'var(--accent)' }}>Open LinkedIn profile<External width={10} height={10} /></a>
             )}
           </div>
-        </RailCard>
+        </Question>
 
         {total != null && parts && (
-          <RailCard title={`Why ${total}`} right={<span className="text-sm font-semibold" style={{ color: 'var(--green)' }}>{total} / 100</span>}>
+          <section className="rounded-2xl px-5 py-4 flex flex-col gap-2.5" style={{ border: '1px solid var(--border)', background: 'var(--bg-card)' }}>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold">Why {name} scores {total}</h2>
+              <span className="text-sm font-semibold" style={{ color: 'var(--green)' }}>{total} / 100</span>
+            </div>
             <div className="flex gap-1 h-2.5" role="img" aria-label={TRUST_PARTS.map((k) => `${PART_SHORT[k]} ${parts[k] ?? 0} of ${DEFAULT_WEIGHTS[k]}`).join(', ')}>
-              {TRUST_PARTS.map((k, i) => (
-                <span key={k} className="rounded-sm" style={{ flex: Math.max(0, parts[k] ?? 0), background: ['var(--accent)', 'var(--blue)', 'var(--highlight)', 'var(--cat-teal)'][i] }} />
-              ))}
+              {TRUST_PARTS.map((k, i) => <span key={k} className="rounded-sm" style={{ flex: Math.max(0, parts[k] ?? 0), background: SCORE_COLORS[i] }} />)}
               <span className="rounded-sm" style={{ flex: Math.max(0, 100 - TRUST_PARTS.reduce((s, k) => s + (parts[k] ?? 0), 0)), background: 'var(--border)' }} />
             </div>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs" style={muted}>
               {TRUST_PARTS.map((k, i) => (
                 <span key={k} className="inline-flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-sm" style={{ background: ['var(--accent)', 'var(--blue)', 'var(--highlight)', 'var(--cat-teal)'][i] }} />
+                  <span className="w-2 h-2 rounded-sm" style={{ background: SCORE_COLORS[i] }} />
                   {PART_SHORT[k]} {parts[k] ?? 0}/{DEFAULT_WEIGHTS[k]}
                 </span>
               ))}
             </div>
-          </RailCard>
+          </section>
         )}
       </aside>
     </div>
