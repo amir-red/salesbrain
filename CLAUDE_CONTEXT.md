@@ -3618,6 +3618,31 @@ iMessage, with a little icon saying which channel each message came through; a r
 - Not built: grouping across owners in the team view (keys are owner-scoped for strangers), a per-person plan (plans stay
   per thread), name-only matching for strangers (deliberately not: two namesakes would merge).
 
+### 5.ct The person page, redesign E: journey header, the eight questions as numbered cards (2026-11-09, feat/person-page, no migration)
+
+Amir: "too much text, difficult to grasp". Options A-E drawn on Miten Marvania's real data (canvas
+https://claude.ai/artifact/FKUmum6U2vUP53pXdU2LxE); Amir combined B (story + rail) and C (journey board) into D, then E =
+D with each of the eight questions numbered and titled. `/prospects/[id]`:
+- **Header** (`components/prospect/PersonHeader.tsx`, replaces ProfileHero): name, priority, score, role at company · place,
+  Convert + a ⋯ menu (Enrich, Research again), and the journey Met (or On a list) → Connected → First message → Reply →
+  Meeting → Opportunity with "you are here" (`lib/person-page.ts::journeySteps`; a later step done marks the earlier ones;
+  several messages read "7 sent", never the last send's date).
+- **Overview tab** (default; `components/prospect/PersonOverview.tsx`): left 1 Where do we stand · 2 Who is the person
+  (before research: the role read from the title, `roleFromTitle`) · 3 What is the company (one sentence + size / sector /
+  ownership / website chips) · 4 Why now (dated facts, else the deep research's talking points, else the company
+  research's signals: `whyNowLines`) · 5 What do they gain (the angle + two likely pains); right 8 Next step (plum, Write
+  message) · 6 Who gets us in · 7 How do we write (channel, language, LinkedIn / email / phone) · the score. One or two
+  sentences each; tabs Full brief (the old LeadBrief), Details (the old Journey tab), Activity. One centred column (1180 px)
+  for header, tabs and body; the app's type scale (14 px body, 15 px titles).
+- **Kernel `lead_brief`**: reads `leads.research_summary` (the Enricher's company research: what they do, size, pains,
+  why-now signals, angle, talking points) — it was selected and never used, so the page showed the list sort's one-line
+  sector. Order: person research → research brief → the card's own dossier → company research. New fields
+  `why_now.notes`, `gains.pains`. **What we sent** = max(approvals ledger, our messages in every mirrored thread), last
+  send = the latest of both: hand-written LinkedIn / Gmail messages were invisible ("We wrote once" + a stale "Answer
+  their reply" on Peter Barlog, who had 7 of ours and an answer from us after his reply).
+- Coverage, not a missing deploy, is why most people say "Research now": person research exists for 496 of 4,632 live leads
+  (15 a night), company research for 776; dated why-now facts need the lead-profile research prompt deployed AND a re-research.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,

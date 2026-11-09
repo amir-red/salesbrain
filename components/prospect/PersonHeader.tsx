@@ -80,7 +80,8 @@ export default function PersonHeader({ p, steps, backHref, backLabel, onChanged,
                     {s.done && <Check width={11} height={11} />}
                   </span>
                   <span className="text-xs" style={{ fontWeight: s.done || isHere ? 600 : 400, color: isHere ? 'var(--accent)' : s.done ? 'var(--text)' : 'var(--text-muted)' }}>{s.label}</span>
-                  <span className="text-[11px] leading-tight whitespace-nowrap" style={{ color: isHere ? 'var(--accent)' : 'var(--text-muted)' }}>{isHere ? 'you are here' : s.note || ' '}</span>
+                  <span className="text-[11px] leading-tight whitespace-nowrap overflow-hidden text-ellipsis max-w-[96px]" title={isHere ? undefined : s.note || undefined}
+                    style={{ color: isHere ? 'var(--accent)' : 'var(--text-muted)' }}>{isHere ? 'you are here' : s.note || ' '}</span>
                 </span>
               </li>
             );

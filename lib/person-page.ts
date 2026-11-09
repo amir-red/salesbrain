@@ -42,10 +42,12 @@ export function journeySteps(b: LeadBrief, convertedDealId: string | null): Jour
   const steps: JourneyStep[] = [
     meeting
       ? { key: 'met', label: 'Met', done: true, note: [dayLabel(meeting.last_at), firstPlace(meeting.text)].filter(Boolean).join(' · ') || null }
-      : { key: 'listed', label: 'On a list', done: true, note: b.list.name },
+      : { key: 'listed', label: 'On a list', done: true, note: b.list.name ? clip(b.list.name, 22) : null },
     { key: 'connected', label: 'Connected', done: !!conn || written.some((c) => c.channel === 'linkedin'),
       note: conn ? `${dayLabel(conn.since)} · LinkedIn` : pending ? 'request pending' : null },
-    { key: 'messaged', label: 'First message', done: messaged, note: messaged && b.stand.last_sent_at ? dayLabel(b.stand.last_sent_at) : null },
+    { key: 'messaged', label: 'First message', done: messaged,
+      // several messages: say how many (the last send's date would read as the first one's)
+      note: !messaged ? null : b.stand.sent_count > 1 ? `${b.stand.sent_count} sent` : b.stand.last_sent_at ? dayLabel(b.stand.last_sent_at) : null },
     { key: 'reply', label: 'Reply', done: replied, note: b.stand.last_reply_at ? dayLabel(b.stand.last_reply_at) : null },
     { key: 'meeting', label: 'Meeting', done: booked, note: booked ? dayLabel(b.next_step.booked_at) : null },
     { key: 'opportunity', label: 'Opportunity', done: !!convertedDealId || !!b.converted_deal_id, note: null },
@@ -85,8 +87,12 @@ export function standLine(b: LeadBrief): { line: string; sub: string | null } {
   }
   if (b.stand.sent_count > 0 || last) {
     const n = b.stand.sent_count;
-    return { line: `We wrote ${n > 1 ? `${n} times` : 'once'}, last ${agoLabel(b.stand.last_sent_at || last?.last_at)}${b.stand.last_reply_at ? '' : ' — no answer yet'}.`,
-             sub: last?.last_text ? `Last: “${clip(last.last_text, 120)}”` : null };
+    const where = last ? ` on ${CHAT_WORD[last.channel] ?? last.label}` : '';
+    const lastAt = b.stand.last_sent_at || last?.last_at;
+    const line = b.stand.last_reply_at
+      ? `${name} answered ${agoLabel(b.stand.last_reply_at)}; we wrote last, ${agoLabel(lastAt)}${where}.`
+      : `We wrote ${n > 1 ? `${n} times` : 'once'}${where}, last ${agoLabel(lastAt)} — no answer yet.`;
+    return { line, sub: last?.last_text ? `Our last message: “${clip(last.last_text, 120)}”` : null };
   }
   const meeting = b.stand.channels.find((c) => c.kind === 'meeting' || c.channel === 'meeting');
   const conn = b.who_in.connected.find((c) => c.status === 'connected');
@@ -112,8 +118,36 @@ export function talkingPoints(b: LeadBrief): TalkingPoint[] {
   }
   const raw: unknown = b.gains.talking_points;
   const list = Array.isArray(raw) ? raw.map(String)
-    : typeof raw === 'string' ? raw.split(/\n+|(?:^|\s)[•\-–]\s+/).map((s) => s.trim()) : [];
+    : typeof raw === 'string' ? raw.split(/\n+/).map((s) => s.replace(/^\s*[•\-–*]\s*/, '').trim()) : [];
   return list.filter((s) => s.length > 3).map((text) => ({ when: null, text }));
+}
+
+/**
+ * Why now: dated facts (each with a source) first; else, for a person the deep research has looked at, its talking
+ * points (fresher); else the company research's signals ("active hiring"); else any talking points.
+ */
+export function whyNowLines(b: LeadBrief): TalkingPoint[] {
+  const points = talkingPoints(b);
+  if (b.why_now.facts.length) return points;
+  if (b.research.at && points.length) return points;
+  const notes = (b.why_now.notes ?? []).map((text) => ({ when: null, text }));
+  return notes.length ? notes : points;
+}
+
+/**
+ * The role from a LinkedIn-style title, before any research: "Geschäftsführer bei BARLOG Plastics GmbH
+ * (Vorstandsvorsitzender kunststoffland NRW e.V.)" → role "Geschäftsführer", also "Vorstandsvorsitzender kunststoffland
+ * NRW e.V.". Splits on " bei " / " at " / " @ " / " | " and takes a bracketed part as a second role.
+ */
+export function roleFromTitle(title: string | null | undefined): { role: string; also: string | null } | null {
+  if (!title) return null;
+  const t = title.replace(/\s+/g, ' ').trim();
+  const bracket = t.match(/\(([^)]{3,})\)\s*$/);
+  const head = bracket ? t.slice(0, bracket.index).trim() : t;
+  const role = head.split(/\s+(?:bei|at|@|\|)\s+/i)[0].trim();
+  const pipe = head.split(/\s+\|\s+/);
+  const also = bracket ? bracket[1].trim() : pipe.length > 1 ? pipe.slice(1).join(' · ') : null;
+  return role ? { role, also } : null;
 }
 
 /** "Large (154 employees as of 2023, with over 40 investment pro" → "154 employees". */
