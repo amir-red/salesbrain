@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
-import { getThread, setThreadState } from '@/lib/inbox-server';
+import { getConversation, getThread, setThreadState } from '@/lib/inbox-server';
 import { cleanStamp, draftInVoice } from '@/lib/voice-context';
 import type { InboxChannel } from '@/lib/inbox';
 
 /**
- * GET  /api/inbox/{email|linkedin|chat}/{id} — one conversation (messages + who it is); opening it marks it seen for its
- *      owner.
+ * GET  /api/inbox/{email|linkedin|chat}/{id} — the conversation this thread belongs to: the PERSON's across every
+ *      channel when the thread is grouped (2026-11-09), else the thread alone. Opening it marks it seen for its owner.
  * POST {action:'draft'} — an AI proposal for the next message in this conversation, in the OWNER's own voice (the one
  *      drafter, core 098): a reply when they wrote last, a follow-up when we did. Returns message, reasoning, voice.
  * POST {action:'reply', text, voice?} — sent at once from the owner's own account through the send gate (pressing
@@ -46,7 +46,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const p = parse(params);
   if (!p) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  const thread = await getThread(p.channel, p.id, { userId: session.userId, admin: session.role === 'admin' });
+  const thread = await getConversation(p.channel, p.id, { userId: session.userId, admin: session.role === 'admin' });
   if (!thread) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   return NextResponse.json({ thread });
 }
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       const voice = body.action === 'reply' ? cleanStamp(body.voice) : undefined;
       const out = await kernelCall(body.action === 'reply' ? 'inbox_reply' : 'inbox_refresh',
         { channel: p.channel, thread_id: p.id, ...(body.action === 'reply' ? { text, ...(voice ? { voice } : {}) } : {}) }, session.userId);
-      const thread = await getThread(p.channel, p.id, viewer);
+      const thread = await getConversation(p.channel, p.id, viewer);
       return NextResponse.json({ ...out, thread }, { status: out.error ? 400 : 200 });
     } catch (err) {
       return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });

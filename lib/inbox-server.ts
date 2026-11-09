@@ -13,9 +13,22 @@
  */
 import type { PoolClient } from 'pg';
 import pool from '@/lib/db';
-import type { InboxChannel, InboxCounts, InboxFilter, InboxItem, InboxMessage, InboxThread } from '@/lib/inbox';
+import type { InboxChannel, InboxCounts, InboxFilter, InboxItem, InboxMessage, InboxState, InboxThread, InboxThreadRef, ReplyTarget } from '@/lib/inbox';
+import { channelLabel, parseKey, threadKey } from '@/lib/inbox';
 
 const TABLE: Record<InboxChannel, string> = { email: 'email_threads', linkedin: 'linkedin_threads', chat: 'chat_threads' };
+
+/**
+ * One row per PERSON (2026-11-09): each channel query also yields `gkey`, the group key —
+ * `person:<person id>` when the thread or its prospect has a person node, else `prospect:<prospect id>`, else the
+ * thread's own `<channel>:<id>`. Before that last fallback, a stranger's threads still fold on the one identity the
+ * channel gives: the same address in the same owner's mail (`em:<owner>:<address>` — a calendar decline and a "nice
+ * to meet you" from one person), the same LinkedIn member on one account (`li:<owner>:<member id>`). `listInbox` folds the union on it in TS;
+ * `countInbox` counts distinct keys; `getPerson` loads every thread of one key.
+ */
+function gkeyCol(channel: InboxChannel, personExpr: string, prospectExpr: string, sameExpr?: string): string {
+  return `COALESCE('person:' || (${personExpr})::text, 'prospect:' || (${prospectExpr})::text,${sameExpr ? ` ${sameExpr},` : ''} '${channel}:' || t.id::text) AS gkey`;
+}
 
 export interface ListOpts {
   viewerId: string;
@@ -47,11 +60,11 @@ function plannedWhere(channel: InboxChannel, on: boolean | undefined): string {
 /** The prospect behind a LinkedIn chat: member id first, then the slug of the chat's person. Owner's own first. */
 const LI_PROSPECT = `
   LEFT JOIN LATERAL (
-    SELECT x.id, x.owner_user_id, x.contact_id, x.account_id, x.stage FROM (
-      SELECT p.id, p.owner_user_id, p.contact_id, p.account_id, p.stage FROM prospects p
+    SELECT x.id, x.owner_user_id, x.contact_id, x.account_id, x.stage, x.person_id FROM (
+      SELECT p.id, p.owner_user_id, p.contact_id, p.account_id, p.stage, p.person_id FROM prospects p
        WHERE t.attendee_provider_id IS NOT NULL AND p.linkedin_member_id = t.attendee_provider_id
       UNION ALL
-      SELECT p.id, p.owner_user_id, p.contact_id, p.account_id, p.stage FROM channel_handles h
+      SELECT p.id, p.owner_user_id, p.contact_id, p.account_id, p.stage, p.person_id FROM channel_handles h
         JOIN prospects p ON lower(p.linkedin_public_id) = lower(h.handle)
        WHERE t.person_id IS NOT NULL AND h.person_id = t.person_id AND h.channel = 'linkedin'
     ) x ORDER BY (x.owner_user_id = la.owner_user_id) DESC, (x.stage = 'P9_ARCHIVED') LIMIT 1
@@ -89,7 +102,8 @@ function linkedinSql(o: ListOpts, vals: unknown[], forCount = false): string {
            ${LI_UNREAD} AS unread, pr.id::text AS prospect_id, t.person_id::text AS person_id, sl.id::text AS sales_lead_id,
            (SELECT cc.name FROM campaign_enrollments ce JOIN campaigns cc ON cc.id = ce.campaign_id
              WHERE ce.prospect_id = pr.id ORDER BY ce.status = 'active' DESC, ce.entered_node_at DESC LIMIT 1) AS campaign_name,
-           NULL::text AS app, NULL::text AS mailbox, ${planCol('linkedin', o.plans)}
+           NULL::text AS app, NULL::text AS mailbox, ${planCol('linkedin', o.plans)},
+           ${gkeyCol('linkedin', 'COALESCE(t.person_id, pr.person_id)', 'pr.id', `'li:' || la.owner_user_id::text || ':' || t.attendee_provider_id`)}
       FROM linkedin_threads t
       JOIN linkedin_accounts la ON la.id = t.account_id
       JOIN users u ON u.id = la.owner_user_id
@@ -132,7 +146,8 @@ function emailSql(o: ListOpts, vals: unknown[], forCount = false): string {
            t.prospect_id::text AS prospect_id, t.person_id::text AS person_id, sl.id::text AS sales_lead_id,
            (SELECT cc.name FROM campaign_enrollments ce JOIN campaigns cc ON cc.id = ce.campaign_id
              WHERE ce.prospect_id = t.prospect_id ORDER BY ce.status = 'active' DESC, ce.entered_node_at DESC LIMIT 1) AS campaign_name,
-           NULL::text AS app, t.mailbox, ${planCol('email', o.plans)}
+           NULL::text AS app, t.mailbox, ${planCol('email', o.plans)},
+           ${gkeyCol('email', 'COALESCE(t.person_id, p.person_id)', 't.prospect_id', `'em:' || t.owner_user_id::text || ':' || lower(NULLIF(t.counterpart_email, ''))`)}
       FROM email_threads t
       JOIN users u ON u.id = t.owner_user_id
       LEFT JOIN prospects p ON p.id = t.prospect_id
@@ -168,7 +183,8 @@ function chatSql(o: ListOpts, vals: unknown[], forCount = false): string {
            sl.id::text AS sales_lead_id,
            (SELECT cc.name FROM campaign_enrollments ce JOIN campaigns cc ON cc.id = ce.campaign_id
              WHERE ce.prospect_id = t.prospect_id ORDER BY ce.status = 'active' DESC, ce.entered_node_at DESC LIMIT 1) AS campaign_name,
-           t.app, NULL::text AS mailbox, ${planCol('chat', o.plans)}
+           t.app, NULL::text AS mailbox, ${planCol('chat', o.plans)},
+           ${gkeyCol('chat', 'COALESCE(t.person_id, p.person_id)', 't.prospect_id')}
       FROM chat_threads t
       JOIN users u ON u.id = t.owner_user_id
       LEFT JOIN people pe ON pe.id = t.person_id
@@ -201,8 +217,56 @@ async function plansStored(client: PoolClient): Promise<boolean> {
   return plansReady;
 }
 
-function toItem(r: Record<string, unknown>): InboxItem {
-  return { ...(r as unknown as InboxItem), last_message_at: iso(r.last_message_at), unread: !!r.unread, last_from_them: !!r.last_from_them };
+type Row = Record<string, unknown> & { channel: InboxChannel; id: string; gkey: string };
+
+function toRef(r: Row): InboxThreadRef {
+  return {
+    channel: r.channel, id: r.id, app: (r.app as InboxThreadRef['app']) ?? null, state: r.state as InboxState,
+    unread: !!r.unread, last_message_at: iso(r.last_message_at), last_from_them: !!r.last_from_them,
+    subject: (r.subject as string | null) ?? null, mailbox: (r.mailbox as string | null) ?? null,
+    plan: (r.plan as InboxThreadRef['plan']) ?? null,
+  };
+}
+
+/** One list row from the newest thread of a group plus the others folded in (rows arrive newest first). */
+function toItem(rows: Row[]): InboxItem {
+  const head = rows[0];
+  const threads = rows.map(toRef);
+  const states = threads.map((t) => t.state);
+  const state: InboxState = states.includes('needs_reply') ? 'needs_reply' : states.includes('waiting') ? 'waiting'
+    : states.every((s) => s === 'ignored') ? 'ignored' : 'done';
+  const { gkey: _g, ...rest } = head;
+  void _g;
+  return {
+    ...(rest as unknown as InboxItem),
+    key: head.gkey,
+    channels: [...new Set(threads.map((t) => t.channel))],
+    threads,
+    last_message_at: iso(head.last_message_at),
+    last_from_them: !!head.last_from_them,
+    unread: threads.some((t) => t.unread),
+    state,
+    plan: threads.find((t) => t.plan)?.plan ?? null,
+    // the person's ids: the newest thread may be the one without them
+    prospect_id: (rows.find((r) => r.prospect_id)?.prospect_id as string | null) ?? null,
+    person_id: (rows.find((r) => r.person_id)?.person_id as string | null) ?? null,
+    sales_lead_id: (rows.find((r) => r.sales_lead_id)?.sales_lead_id as string | null) ?? null,
+    campaign_name: (rows.find((r) => r.campaign_name)?.campaign_name as string | null) ?? null,
+    name: (rows.find((r) => r.name)?.name as string | null) ?? null,
+    headline: (rows.find((r) => r.headline)?.headline as string | null) ?? null,
+    company: (rows.find((r) => r.company)?.company as string | null) ?? null,
+    email: (rows.find((r) => r.email)?.email as string | null) ?? null,
+  };
+}
+
+/** Fold thread rows (newest first) into one item per group key, in order of each group's newest thread. */
+function fold(rows: Row[]): InboxItem[] {
+  const groups = new Map<string, Row[]>();
+  for (const r of rows) {
+    const g = groups.get(r.gkey);
+    if (g) g.push(r); else groups.set(r.gkey, [r]);
+  }
+  return [...groups.values()].map(toItem);
 }
 
 export async function listInbox(o: ListOpts): Promise<{ items: InboxItem[]; counts: InboxCounts }> {
@@ -216,31 +280,32 @@ export async function listInbox(o: ListOpts): Promise<{ items: InboxItem[]; coun
     if ((o.channel === 'all' || o.channel === 'chat') && await chatsStored(client)) parts.push(chatSql(o, vals));
     if (!parts.length) return { items: [], counts: await countInbox(client, { ...o, filter: 'all', q: '' }) };
     vals.push(o.limit);
-    const { rows } = await client.query(
+    const { rows } = await client.query<Row>(
       `SELECT * FROM (${parts.join(' UNION ALL ')}) x ORDER BY last_message_at DESC NULLS LAST LIMIT $${vals.length}`, vals);
     const counts = await countInbox(client, { ...o, filter: 'all', q: '' });
-    return { items: rows.map(toItem), counts };
+    return { items: fold(rows), counts };
   } finally {
     client.release();
   }
 }
 
+/** Per channel: threads. Across channels (the rollup row): PEOPLE — a person on two channels counts once. */
 async function countInbox(client: PoolClient, o: ListOpts): Promise<InboxCounts> {
   o = { ...o, plans: await plansStored(client) };
   const vals: unknown[] = [];
   const parts = [linkedinSql(o, vals, true), emailSql(o, vals, true)];
   if (await chatsStored(client)) parts.push(chatSql(o, vals, true));
   const { rows } = await client.query(
-    `SELECT channel, count(*) FILTER (WHERE state = 'needs_reply')::int AS needs_reply,
-            count(*) FILTER (WHERE unread)::int AS unread, count(*) FILTER (WHERE plan IS NOT NULL)::int AS planned,
+    `SELECT channel, count(DISTINCT gkey) FILTER (WHERE state = 'needs_reply')::int AS needs_reply,
+            count(DISTINCT gkey) FILTER (WHERE unread)::int AS unread,
+            count(DISTINCT gkey) FILTER (WHERE plan IS NOT NULL)::int AS planned,
             count(*)::int AS total
-       FROM (${parts.join(' UNION ALL ')}) x WHERE state <> 'ignored' GROUP BY channel`, vals);
-  const by = Object.fromEntries(rows.map((r) => [r.channel, r]));
-  const sum = (k: 'needs_reply' | 'unread' | 'planned') => (by.linkedin?.[k] ?? 0) + (by.email?.[k] ?? 0) + (by.chat?.[k] ?? 0);
+       FROM (${parts.join(' UNION ALL ')}) x WHERE state <> 'ignored' GROUP BY ROLLUP (channel)`, vals);
+  const by = Object.fromEntries(rows.map((r) => [r.channel ?? 'all', r]));
   return {
-    needs_reply: sum('needs_reply'),
-    unread: sum('unread'),
-    planned: sum('planned'),
+    needs_reply: by.all?.needs_reply ?? 0,
+    unread: by.all?.unread ?? 0,
+    planned: by.all?.planned ?? 0,
     email: by.email?.total ?? 0,
     linkedin: by.linkedin?.total ?? 0,
     chat: by.chat?.total ?? 0,
@@ -274,7 +339,7 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
     const mine = head.owner_user_id === viewer.userId;
     if (!mine && !viewer.admin) return null;
 
-    let messages: InboxMessage[] = [];
+    let raw: Array<Omit<InboxMessage, 'channel' | 'app' | 'thread_id'>> = [];
     let profile_url: string | null = null;
     let mailbox: string | null = null;
     let chat: { can_reply: boolean; only_last_message: boolean; open_url: string | null; kind: string } | null = null;
@@ -290,7 +355,7 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
       const m = await client.query(
         `SELECT id::text, from_me, COALESCE(text, '') AS text, sent_at, truncated, time_is_read_time FROM chat_messages
           WHERE thread_id = $1 ORDER BY sent_at NULLS FIRST, created_at LIMIT 500`, [id]);
-      messages = m.rows.map((r) => ({ id: r.id, from_me: r.from_me, text: r.truncated ? `${r.text}…` : r.text, sent_at: iso(r.sent_at),
+      raw = m.rows.map((r) => ({ id: r.id, from_me: r.from_me, text: r.truncated ? `${r.text}…` : r.text, sent_at: iso(r.sent_at),
         ...(r.from_me === null ? { sender_unknown: true } : {}), ...(r.time_is_read_time ? { read_time: true } : {}) }));
       unknownSender = m.rows.some((r) => r.from_me === null || r.time_is_read_time);
     } else if (channel === 'linkedin') {
@@ -299,7 +364,7 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
       const m = await client.query(
         `SELECT id::text, is_sender AS from_me, COALESCE(text, '') AS text, sent_at FROM linkedin_messages
           WHERE thread_id = $1 ORDER BY sent_at NULLS FIRST, created_at LIMIT 500`, [id]);
-      messages = m.rows.map((r) => ({ id: r.id, from_me: r.from_me, text: r.text, sent_at: iso(r.sent_at) }));
+      raw = m.rows.map((r) => ({ id: r.id, from_me: r.from_me, text: r.text, sent_at: iso(r.sent_at) }));
     } else {
       const t = await client.query(`SELECT mailbox, gmail_thread_id, origin, person_id, prospect_id FROM email_threads WHERE id = $1`, [id]);
       mailbox = t.rows[0]?.mailbox ?? null;
@@ -307,7 +372,7 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
       const m = await client.query(
         `SELECT id::text, from_me, COALESCE(body, '') AS text, sent_at, from_header AS "from", subject FROM email_messages
           WHERE thread_id = $1 ORDER BY sent_at NULLS FIRST, created_at LIMIT 500`, [id]);
-      messages = m.rows.map((r) => ({ id: r.id, from_me: r.from_me, text: r.text, sent_at: iso(r.sent_at), from: r.from, subject: r.subject }));
+      raw = m.rows.map((r) => ({ id: r.id, from_me: r.from_me, text: r.text, sent_at: iso(r.sent_at), from: r.from, subject: r.subject }));
     }
     // Replies typed here that the send gate is holding (quiet hours, a cap): shown as "waiting to be sent".
     const pend = await client.query(
@@ -318,7 +383,10 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
               ? `o.channel = 'whatsapp' AND (o.owner_user_id, o.person_id) = (SELECT owner_user_id, person_id FROM chat_threads WHERE id = $1)`
               : `o.email_thread_id = (SELECT gmail_thread_id FROM email_threads WHERE id = $1) AND o.owner_user_id = (SELECT owner_user_id FROM email_threads WHERE id = $1)`}
         ORDER BY o.created_at`, [id]);
-    messages = messages.concat(pend.rows.map((r) => ({ id: `pending:${r.id}`, from_me: true, text: r.message, sent_at: iso(r.created_at), pending: true })));
+    raw = raw.concat(pend.rows.map((r) => ({ id: `pending:${r.id}`, from_me: true, text: r.message, sent_at: iso(r.created_at), pending: true })));
+    // every message says which thread it came through (the icon on the bubble; the person view merges threads)
+    const app = (head.app as InboxMessage['app']) ?? null;
+    const messages: InboxMessage[] = raw.map((m) => ({ ...m, channel, app, thread_id: id }));
 
     let stage: string | null = null;
     if (head.prospect_id) {
@@ -349,13 +417,17 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
         : chat.kind === 'mac_push' ? 'Pushed from your Mac.' : 'Your WhatsApp, read every 10 minutes.';
       if (unknownSender) source_note += ' Read on your Mac, Zeami does not say who wrote a message or when: the time shown is when we read it.';
     }
-    return {
-      ...toItem(head), unread: mine ? false : !!head.unread, profile_url, mailbox, messages, can_reply, reply_note,
+    const one: InboxThread = {
+      ...toItem([head as Row]), unread: mine ? false : !!head.unread, profile_url, mailbox, messages, can_reply, reply_note,
       prospect_stage: stage,
       mine,
+      targets: [], default_target: null,
       ...(chat ? { only_last_message: chat.only_last_message, open_url: chat.open_url, source_note } : {}),
       ...(open_url ? { open_url } : {}),
     };
+    one.targets = [targetOf(one)];
+    one.default_target = threadKey(one);
+    return one;
   } finally {
     client.release();
   }
@@ -372,4 +444,122 @@ export async function setThreadState(channel: InboxChannel, id: string, action: 
   const { rowCount } = await pool.query(
     `UPDATE ${table} t SET state = ${set} WHERE t.id = $1 AND ($2::boolean OR ${owner} = $3)`, [id, viewer.admin, viewer.userId]);
   return (rowCount ?? 0) > 0;
+}
+
+/** The reply target one thread offers (the pill above the reply box). */
+function targetOf(t: InboxThread): ReplyTarget {
+  return {
+    channel: t.channel, id: t.id, app: t.app ?? null, label: channelLabel(t), can_reply: t.can_reply,
+    copy_only: !t.can_reply && t.channel === 'chat' && !!t.mine, reply_note: t.reply_note,
+    last_from_them: t.last_from_them, last_message_at: t.last_message_at, state: t.state, plan: t.plan ?? null,
+    mailbox: t.mailbox, subject: t.subject, open_url: t.open_url ?? null, profile_url: t.profile_url, mine: !!t.mine,
+  };
+}
+
+/** The threads of one group key the viewer may list (their own, or any as an admin), newest first, at most 12 —
+ *  each costs a round of queries, and a teammate with twenty email threads is read for the newest ones. */
+async function threadsOfKey(client: PoolClient, key: string, viewer: { userId: string; admin: boolean }): Promise<Row[]> {
+  const o: ListOpts = { viewerId: viewer.userId, team: true, channel: 'all', filter: 'all', q: '', view: 'all', limit: 50, plans: await plansStored(client) };
+  const vals: unknown[] = [];
+  const parts = [linkedinSql(o, vals, true), emailSql(o, vals, true)];
+  if (await chatsStored(client)) parts.push(chatSql(o, vals, true));
+  vals.push(key);
+  const { rows } = await client.query<Row>(
+    `SELECT * FROM (${parts.join(' UNION ALL ')}) x WHERE x.gkey = $${vals.length} ORDER BY last_message_at DESC NULLS LAST LIMIT 12`, vals);
+  return rows.filter((r) => viewer.admin || r.owner_user_id === viewer.userId);
+}
+
+/** The group key of one thread (null when it does not exist). */
+async function keyOfThread(client: PoolClient, channel: InboxChannel, id: string): Promise<string | null> {
+  const o: ListOpts = { viewerId: '', team: true, channel, filter: 'all', q: '', view: 'all', limit: 1, plans: false };
+  const vals: unknown[] = [];
+  if (channel === 'chat' && !(await chatsStored(client))) return null;
+  const base = channel === 'linkedin' ? linkedinSql(o, vals, true) : channel === 'chat' ? chatSql(o, vals, true) : emailSql(o, vals, true);
+  vals.push(id);
+  const { rows } = await client.query<Row>(`SELECT x.gkey FROM (${base}) x WHERE x.id = $${vals.length}`, vals);
+  return rows[0]?.gkey ?? null;
+}
+
+/**
+ * One PERSON's conversation (2026-11-09): every thread of a `person:` / `prospect:` key the viewer may see, merged
+ * into one timeline (each message tagged with its channel), with one reply target per thread. The default target is
+ * the thread they last wrote in that can be answered from here, else the newest one that can. A `<channel>:<id>` key
+ * gives the one thread. Null when nothing is visible.
+ */
+export async function getPerson(key: string, viewer: { userId: string; admin: boolean }): Promise<InboxThread | null> {
+  const k = parseKey(key);
+  if (!k || k.kind === 'accepted') return null;
+  if (k.kind === 'thread') return getThread(k.channel!, k.id, viewer);
+  const client = await pool.connect();
+  let rows: Row[];
+  try {
+    rows = await threadsOfKey(client, key, viewer);
+  } finally {
+    client.release();
+  }
+  if (!rows.length) return null;
+  const threads: InboxThread[] = [];
+  for (const r of rows) {
+    const t = await getThread(r.channel, r.id, viewer);   // one client at a time; marks each of your own seen
+    if (t) threads.push(t);
+  }
+  if (!threads.length) return null;
+  if (threads.length === 1) return { ...threads[0], key };
+  const item = toItem(rows.filter((r) => threads.some((t) => t.id === r.id)));
+  const messages = threads.flatMap((t) => t.messages)
+    .sort((a, b) => (a.sent_at ?? '').localeCompare(b.sent_at ?? ''));
+  const targets = threads.map(targetOf);
+  const usable = targets.filter((t) => t.can_reply || t.copy_only);
+  const theirs = usable.filter((t) => t.last_from_them).sort((a, b) => (b.last_message_at ?? '').localeCompare(a.last_message_at ?? ''));
+  const def = theirs[0] ?? usable[0] ?? targets[0];
+  const head = threads.find((t) => t.id === def.id) ?? threads[0];
+  const li = threads.find((t) => t.channel === 'linkedin');
+  const em = threads.find((t) => t.channel === 'email');
+  return {
+    ...head,
+    ...item,
+    key,
+    messages,
+    targets,
+    default_target: threadKey(def),
+    can_reply: targets.some((t) => t.can_reply),
+    mine: threads.some((t) => t.mine),
+    reply_note: def.reply_note,
+    unread: threads.some((t) => t.unread),
+    profile_url: li?.profile_url ?? null,
+    mailbox: em?.mailbox ?? null,
+    open_url: head.open_url ?? em?.open_url ?? null,
+    source_note: threads.map((t) => t.source_note).filter(Boolean).join(' ') || null,
+    prospect_stage: threads.find((t) => t.prospect_stage)?.prospect_stage ?? null,
+  };
+}
+
+/** The conversation one thread belongs to: the person's when it is grouped, else the thread alone. */
+export async function getConversation(channel: InboxChannel, id: string, viewer: { userId: string; admin: boolean }): Promise<InboxThread | null> {
+  const client = await pool.connect();
+  let key: string | null;
+  try {
+    key = await keyOfThread(client, channel, id);
+  } finally {
+    client.release();
+  }
+  if (!key) return null;
+  return getPerson(key, viewer);
+}
+
+/** done / reopen on every thread of a person the viewer may act on. Returns how many changed. */
+export async function setPersonState(key: string, action: 'done' | 'reopen', viewer: { userId: string; admin: boolean }): Promise<number> {
+  const k = parseKey(key);
+  if (!k || k.kind === 'accepted') return 0;
+  if (k.kind === 'thread') return (await setThreadState(k.channel!, k.id, action, viewer)) ? 1 : 0;
+  const client = await pool.connect();
+  let rows: Row[];
+  try {
+    rows = await threadsOfKey(client, key, viewer);
+  } finally {
+    client.release();
+  }
+  let n = 0;
+  for (const r of rows) if (await setThreadState(r.channel, r.id, action, viewer)) n++;
+  return n;
 }

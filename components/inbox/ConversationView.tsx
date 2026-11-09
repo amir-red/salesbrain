@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Button from '@/components/panel/Button';
 import { Pill } from '@/components/panel/PageHeader';
-import type { InboxMessage, InboxThread } from '@/lib/inbox';
-import { channelLabel, initials } from '@/lib/inbox';
+import type { InboxMessage, InboxThread, ReplyTarget } from '@/lib/inbox';
+import { channelLabel, initials, parseKey, threadKey } from '@/lib/inbox';
 
 /** A written proposal is kept in this browser (with your edits) until it is sent or discarded, so opening the
  *  conversation again shows it at once instead of drafting a second time. A new message in the thread drops it. */
@@ -49,7 +49,8 @@ function time(iso: string | null): string {
   return iso ? new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '';
 }
 
-function Bubble({ m, channel }: { m: InboxMessage; channel: InboxThread['channel'] }) {
+/** One message. The footer carries the channel it came through — a person's conversation mixes them. */
+function Bubble({ m }: { m: InboxMessage }) {
   return (
     <div className={`flex ${m.from_me ? 'justify-end' : 'justify-start'}`}>
       <div className="max-w-[78%] rounded-2xl px-3.5 py-2.5 text-sm"
@@ -58,11 +59,13 @@ function Bubble({ m, channel }: { m: InboxMessage; channel: InboxThread['channel
           borderBottomRightRadius: m.from_me ? 6 : undefined, borderBottomLeftRadius: m.from_me ? undefined : 6,
           opacity: m.pending ? 0.75 : 1,
         }}>
-        {channel === 'email' && m.from && !m.from_me && (
+        {m.channel === 'email' && m.from && !m.from_me && (
           <p className="text-[11px] mb-1 truncate" style={{ color: 'var(--text-muted)' }}>{m.from}</p>
         )}
         <p className="whitespace-pre-wrap break-words leading-relaxed">{m.text || <em style={{ color: 'var(--text-muted)' }}>(no text)</em>}</p>
-        <p className="text-[10px] mt-1 text-right" style={{ color: 'var(--text-muted)' }}>
+        <p className="text-[10px] mt-1 flex items-center justify-end gap-1" style={{ color: 'var(--text-muted)' }}
+          title={channelLabel(m)}>
+          <ChannelIcon channel={m.channel} app={m.app} size={11} />
           {m.pending ? 'Waiting to be sent' : `${m.sender_unknown ? 'sender not shown · ' : ''}${m.read_time ? 'read ' : ''}${time(m.sent_at)}`}
         </p>
       </div>
@@ -70,7 +73,14 @@ function Bubble({ m, channel }: { m: InboxMessage; channel: InboxThread['channel
   );
 }
 
-/** The right side: who it is, the conversation, and the reply box (only on your own account). */
+/** The line a reply goes out on, for one target. */
+function fromLine(t: ReplyTarget): string {
+  return `${t.channel === 'email'
+    ? `From ${t.mailbox || 'your Gmail'} · in this thread${t.subject ? ` (Re: ${t.subject.replace(/^re:\s*/i, '')})` : ''} · your signature is added`
+    : `From your ${t.label}`} · ⌘/Ctrl + Enter to send`;
+}
+
+/** The right side: who it is, the whole conversation across channels, and the reply box (only on your own account). */
 export default function ConversationView({ thread, loading, onBack, onChanged }: {
   thread: InboxThread | null; loading: boolean; onBack: () => void; onChanged: (t: InboxThread | null) => void;
 }) {
@@ -85,15 +95,30 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<{ kind: 'error' | 'info'; text: string } | null>(null);
   const [planOpen, setPlanOpen] = useState(false);   // the "No reply needed" panel (core 103)
+  // Which thread a reply goes into (2026-11-09): a person's conversation offers one target per channel thread; the
+  // default is where they last wrote and we can answer. Chosen per conversation, reset when another one opens.
+  const [targetKey, setTargetKey] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLTextAreaElement>(null);
-  const key = thread ? `${thread.channel}:${thread.id}` : '';
+  const convKey = thread ? (thread.key || threadKey(thread)) : '';
+  const targets: ReplyTarget[] = useMemo(() => (thread?.targets?.length ? thread.targets : thread ? [{
+    channel: thread.channel, id: thread.id, app: thread.app ?? null, label: channelLabel(thread), can_reply: thread.can_reply,
+    copy_only: !thread.can_reply && thread.channel === 'chat' && !!thread.mine, reply_note: thread.reply_note,
+    last_from_them: thread.last_from_them, last_message_at: thread.last_message_at, state: thread.state, plan: thread.plan ?? null,
+    mailbox: thread.mailbox, subject: thread.subject, open_url: thread.open_url ?? null, profile_url: thread.profile_url, mine: !!thread.mine,
+  }] : []), [thread]);
+  const cur: ReplyTarget | null = targets.find((t) => threadKey(t) === targetKey) ?? targets.find((t) => threadKey(t) === thread?.default_target) ?? targets[0] ?? null;
+  // the draft key is the TARGET thread: a proposal written for LinkedIn is not the email's
+  const key = cur ? threadKey(cur) : '';
   // Your own chat that cannot be sent from here (iMessage, WhatsApp read through the Zeami link): draft, copy, send in the app.
-  const copyOnly = !!thread && !thread.can_reply && thread.channel === 'chat' && !!thread.mine;
+  const copyOnly = !!cur && cur.copy_only;
+  const canReply = !!cur && cur.can_reply;
+  const grouped = !!thread && parseKey(convKey)?.kind !== 'thread';
 
   const lastId = thread?.messages.length ? thread.messages[thread.messages.length - 1].id : null;
   const restored = useRef(false);
 
+  useEffect(() => { setTargetKey(null); }, [convKey]);
   useEffect(() => {
     setNote(null); setRate(null); setVerdict(EMPTY_VERDICT); setLearned(null); setTeachErr(null); setPlanOpen(false);
     // a proposal written earlier for this conversation (and the edits made to it) comes back as it was
@@ -103,20 +128,20 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
   }, [key]);   // eslint-disable-line react-hooks/exhaustive-deps
   // A conversation that needs an answer drafts by itself when it opens — once; afterwards the kept draft is shown.
   useEffect(() => {
-    if (!thread || !(thread.can_reply || copyOnly) || thread.state !== 'needs_reply' || !thread.last_from_them || thread.plan) return;
+    if (!thread || !cur || !(canReply || copyOnly) || cur.state !== 'needs_reply' || !cur.last_from_them || cur.plan) return;
     if (restored.current || autoDrafted.current.has(key) || proposal || text.trim()) return;
     if (loadDraft(key, lastId)) return;
     autoDrafted.current.add(key);
     act('draft');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, thread?.can_reply, thread?.state]);
+  }, [key, canReply, cur?.state]);
   // edits to the proposal are remembered with it
   useEffect(() => {
     if (!key || !proposal) return;
     saveDraft(key, { lastId, proposal, text, at: new Date().toISOString() });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, proposal, text]);
-  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [key, thread?.messages.length]);
+  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [convKey, thread?.messages.length]);
   useEffect(() => {
     const el = boxRef.current;
     if (el) { el.style.height = 'auto'; el.style.height = `${Math.min(el.scrollHeight, 220)}px`; }
@@ -125,25 +150,28 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
   if (loading && !thread) {
     return <div className="h-full flex items-center justify-center text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</div>;
   }
-  if (!thread) {
+  if (!thread || !cur) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-center px-8">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" style={{ color: 'var(--text-muted)' }}>
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
         <p className="mt-3 text-sm font-medium">Pick a conversation</p>
-        <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Read it and answer from here — the reply goes out from your own LinkedIn or Gmail.</p>
+        <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Read it and answer from here — the reply goes out from your own LinkedIn, Gmail or WhatsApp.</p>
       </div>
     );
   }
 
-  /** `asIs` = send the AI's own text, untouched (the Before column's button). */
+  /** `asIs` = send the AI's own text, untouched (the Before column's button). Replies, drafts and refreshes go to the
+   *  TARGET thread; done / reopen to the whole person. */
   async function act(action: 'reply' | 'done' | 'reopen' | 'refresh' | 'draft', asIs = false) {
-    if (!thread) return;
+    if (!thread || !cur) return;
     const out = asIs && proposal ? proposal.message : text;
     setBusy(asIs ? 'reply-asis' : action); setNote(null);
     try {
-      const res = await fetch(`/api/inbox/${thread.channel}/${thread.id}`, {
+      const url = (action === 'done' || action === 'reopen') && grouped
+        ? `/api/inbox/person/${encodeURIComponent(convKey)}` : `/api/inbox/${cur.channel}/${cur.id}`;
+      const res = await fetch(url, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(action === 'reply' ? { action, text: out, ...(proposal ? { voice: proposal.voice } : {}) } : { action }),
       });
@@ -178,7 +206,10 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
         else throw new Error(data.reason || 'Not sent');
       }
       if (action === 'done' || action === 'reopen') {
-        onChanged({ ...thread, state: action === 'done' ? 'done' : (thread.last_from_them ? 'needs_reply' : 'waiting') });
+        const next = (them: boolean) => (action === 'done' ? 'done' : them ? 'needs_reply' : 'waiting') as InboxThread['state'];
+        onChanged({ ...thread, state: next(thread.last_from_them),
+          threads: thread.threads.map((t) => ({ ...t, state: next(t.last_from_them) })),
+          targets: thread.targets.map((t) => ({ ...t, state: next(t.last_from_them) })) });
       } else {
         onChanged(data.thread ?? thread);
       }
@@ -192,25 +223,25 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
   /** A chat that cannot be sent from here (iMessage, the Zeami link): the text is copied, the app opened when there
    *  is a link, and the edit / rating teach the voice like a send would (draft_teach). */
   async function copyOut(asIs: boolean) {
-    if (!thread || !proposal) return;
+    if (!thread || !cur || !proposal) return;
     const out = asIs ? proposal.message : text;
     try { await navigator.clipboard.writeText(out); } catch { setNote({ kind: 'error', text: 'Could not copy — select the text and copy it yourself.' }); return; }
-    if (thread.open_url) window.open(thread.open_url, '_blank', 'noopener');
+    if (cur.open_url) window.open(cur.open_url, '_blank', 'noopener');
     if (!learned && (verdictGiven(verdict) || out.trim() !== proposal.message.trim())) await teach(out);
     else if (!learned) setRate({ approvalId: null, before: proposal.message, after: out, step: proposal.situation });
     setProposal(null); setText(''); saveDraft(key, null);
-    setNote({ kind: 'info', text: `Copied — paste it in ${channelLabel(thread)} and send it there.` });
+    setNote({ kind: 'info', text: `Copied — paste it in ${cur.label} and send it there.` });
   }
 
   /** Teach from the proposal without sending: the edit so far, the stars and the two lines (draft_teach). */
   async function teach(after: string) {
-    if (!thread || !proposal) return;
+    if (!thread || !cur || !proposal) return;
     setTeaching(true); setTeachErr(null);
     try {
       const r = await fetch('/api/drafts/teach', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ before: proposal.message, after, ...(verdict.rating ? { rating: verdict.rating } : {}),
           ...(verdictReason(verdict) ? { reason: verdictReason(verdict) } : {}), ...(thread.prospect_id ? { prospect_id: thread.prospect_id } : {}),
-          channel: thread.channel, step: proposal.situation }) });
+          channel: cur.channel, step: proposal.situation }) });
       const d = await r.json();
       if (!r.ok || d.error) throw new Error(d.error || 'Not saved');
       setLearned(d as FeedbackResult);
@@ -223,17 +254,33 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
     }
   }
 
-  // Day separators between messages.
-  const rows: ({ day: string } | { m: InboxMessage })[] = [];
+  // Day separators between messages; when the person is on several channels, a "via …" line wherever it changes.
+  const mixed = new Set(thread.messages.map((m) => `${m.channel}:${m.app ?? ''}`)).size > 1;
+  const rows: ({ day: string } | { via: InboxMessage } | { m: InboxMessage })[] = [];
   let last = '';
+  let lastCh = '';
   for (const m of thread.messages) {
     const d = dayLabel(m.sent_at);
     if (d && d !== last) { rows.push({ day: d }); last = d; }
+    const ch = `${m.channel}:${m.app ?? ''}`;
+    if (mixed && ch !== lastCh) { rows.push({ via: m }); lastCh = ch; }
     rows.push({ m });
   }
   const leadHref = thread.sales_lead_id
     ? `/sales-leads?q=${encodeURIComponent(thread.name || '')}&open=${thread.sales_lead_id}`
     : thread.prospect_id ? `/prospects/${thread.prospect_id}` : null;
+  const emailTarget = targets.find((t) => t.channel === 'email');
+  // Pills: every non-email thread, email threads that need a reply, the newest email thread, and the chosen one;
+  // a person with many email threads keeps the rest in a select.
+  const emails = targets.filter((t) => t.channel === 'email');
+  const pills = targets.filter((t) => t.channel !== 'email' || t.state === 'needs_reply' || t === emails[0] || threadKey(t) === key);
+  const moreEmail = emails.filter((t) => !pills.includes(t));
+  const marks = targets.filter((t, i) => targets.findIndex((x) => x.channel === t.channel && (x.app ?? '') === (t.app ?? '')) === i);
+  const subjectOf = (t: ReplyTarget | undefined) => (t?.channel === 'email' && t.subject ? t.subject : null);
+  const viaLabel = (m: InboxMessage) => {
+    const s = subjectOf(targets.find((x) => x.id === m.thread_id));
+    return `via ${channelLabel(m)}${s ? ` · ${s}` : ''}`;
+  };
 
   return (
     <div className="h-full flex flex-col min-h-0">
@@ -244,8 +291,10 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 min-w-0 flex-wrap">
             <h2 className="font-semibold truncate">{thread.name || 'Unknown'}</h2>
-            <span className="inline-flex items-center gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>
-              <ChannelIcon channel={thread.channel} app={thread.app} size={14} /> {channelLabel(thread)}
+            <span className="inline-flex items-center gap-1 text-xs" style={{ color: 'var(--text-muted)' }}
+              title={marks.length > 1 ? `One conversation across ${marks.map((t) => t.label).join(', ')}` : undefined}>
+              {marks.map((t) => <ChannelIcon key={threadKey(t)} channel={t.channel} app={t.app} size={14} />)}
+              {marks.length === 1 ? marks[0].label : `${marks.length} channels`}
             </span>
             {thread.state === 'needs_reply' && <Pill color="var(--orange)">Needs reply</Pill>}
             {thread.state === 'done' && !thread.plan && <Pill color="var(--green)">Done</Pill>}
@@ -257,10 +306,10 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
             {thread.campaign_name && <Pill color="var(--blue)">{thread.campaign_name}</Pill>}
           </div>
           <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>
-            {[thread.headline, thread.company, thread.channel === 'email' ? thread.email : null].filter(Boolean).join(' · ')}
+            {[thread.headline, thread.company, thread.email].filter(Boolean).join(' · ')}
           </p>
-          {thread.channel === 'email' && thread.subject && (
-            <p className="text-xs truncate mt-0.5"><span style={{ color: 'var(--text-muted)' }}>Subject:</span> {thread.subject}</p>
+          {!mixed && subjectOf(cur) && (
+            <p className="text-xs truncate mt-0.5"><span style={{ color: 'var(--text-muted)' }}>Subject:</span> {subjectOf(cur)}</p>
           )}
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -268,25 +317,28 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
           {thread.profile_url && (
             <a href={thread.profile_url} target="_blank" rel="noreferrer" className="px-2.5 py-1 text-xs rounded-lg font-medium" style={{ border: '1px solid var(--border)' }}>Profile ↗</a>
           )}
-          {(thread.channel === 'chat' || thread.channel === 'email') && thread.open_url && (
-            <a href={thread.open_url} target="_blank" rel="noreferrer" className="px-2.5 py-1 text-xs rounded-lg font-medium" style={{ border: '1px solid var(--border)' }}>
-              Open in {thread.channel === 'email' ? 'Gmail' : channelLabel(thread)} ↗
+          {(cur.channel === 'chat' || cur.channel === 'email') && cur.open_url && (
+            <a href={cur.open_url} target="_blank" rel="noreferrer" className="px-2.5 py-1 text-xs rounded-lg font-medium" style={{ border: '1px solid var(--border)' }}>
+              Open in {cur.channel === 'email' ? 'Gmail' : cur.label} ↗
             </a>
           )}
-          {(thread.can_reply || (thread.channel === 'chat' && thread.mine)) && (
-            <Button size="sm" onClick={() => act('refresh')} disabled={!!busy} title="Read this conversation again now">
+          {cur.channel !== 'email' && emailTarget?.open_url && (
+            <a href={emailTarget.open_url} target="_blank" rel="noreferrer" className="px-2.5 py-1 text-xs rounded-lg font-medium" style={{ border: '1px solid var(--border)' }}>Open in Gmail ↗</a>
+          )}
+          {(canReply || (cur.channel === 'chat' && cur.mine)) && (
+            <Button size="sm" onClick={() => act('refresh')} disabled={!!busy} title={`Read the ${cur.label} conversation again now`}>
               {busy === 'refresh' ? 'Checking…' : 'Refresh'}
             </Button>
           )}
-          {(thread.can_reply || thread.mine) && (
+          {(canReply || cur.mine) && (
             <Button size="sm" onClick={() => setPlanOpen((v) => !v)} disabled={!!busy}
-              title="No reply needed: set follow-ups with a reason, or leave it with a reason — the system learns from it">
-              {thread.plan ? 'Plan' : 'No reply needed'}
+              title={`No reply needed on ${cur.label}: set follow-ups with a reason, or leave it with a reason — the system learns from it`}>
+              {cur.plan ? 'Plan' : 'No reply needed'}
             </Button>
           )}
           {thread.state === 'done'
             ? <Button size="sm" onClick={() => act('reopen')} disabled={!!busy}>Reopen</Button>
-            : <Button size="sm" onClick={() => act('done')} disabled={!!busy} title="Nothing to answer — move it out of Needs reply">Mark done</Button>}
+            : <Button size="sm" onClick={() => act('done')} disabled={!!busy} title={targets.length > 1 ? 'Nothing to answer on any channel — move it out of Needs reply' : 'Nothing to answer — move it out of Needs reply'}>Mark done</Button>}
         </div>
       </div>
 
@@ -299,13 +351,25 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
         )}
         {rows.map((r, i) => ('day' in r
           ? <p key={`d${i}`} className="text-[11px] text-center my-2" style={{ color: 'var(--text-muted)' }}>{r.day}</p>
-          : <Bubble key={r.m.id} m={r.m} channel={thread.channel} />))}
+          : 'via' in r
+            ? <p key={`v${i}`} className="text-[10px] inline-flex items-center gap-1 self-center px-2 py-0.5 rounded-full" style={{ color: 'var(--text-muted)', background: 'var(--bg-input)' }}>
+                <ChannelIcon channel={r.via.channel} app={r.via.app} size={11} /> {viaLabel(r.via)}
+              </p>
+            : <Bubble key={r.m.id} m={r.m} />))}
         <div ref={endRef} />
       </div>
 
       {planOpen && (
-        <PlanPanel thread={thread} onClose={() => setPlanOpen(false)}
-          onSaved={(state, plan: PlanSummary | null) => { setPlanOpen(false); onChanged({ ...thread, state, plan }); }} />
+        <PlanPanel thread={cur} onClose={() => setPlanOpen(false)}
+          onSaved={(state, plan: PlanSummary | null) => {
+            setPlanOpen(false);
+            const targetsNext = thread.targets.map((t) => (threadKey(t) === key ? { ...t, state, plan } : t));
+            const threadsNext = thread.threads.map((t) => (threadKey(t) === key ? { ...t, state, plan } : t));
+            const states = threadsNext.length ? threadsNext.map((t) => t.state) : [state];
+            onChanged({ ...thread, targets: targetsNext, threads: threadsNext,
+              state: states.includes('needs_reply') ? 'needs_reply' : states.includes('waiting') ? 'waiting' : state,
+              plan: threadsNext.find((t) => t.plan)?.plan ?? (threadsNext.length ? null : plan) });
+          }} />
       )}
 
       <div className="border-t p-3 max-h-[65vh] overflow-y-auto" style={{ borderColor: 'var(--border)' }}>
@@ -315,12 +379,40 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
             background: note.kind === 'error' ? 'color-mix(in srgb, var(--red) 10%, transparent)' : 'var(--bg-input)',
           }}>{note.text}</p>
         )}
-        {thread.can_reply || copyOnly ? (
+        {targets.length > 1 && (
+          <div className="flex items-center gap-1.5 mb-2 flex-wrap" role="radiogroup" aria-label="Answer on">
+            <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Answer on</span>
+            {pills.map((t) => {
+              const k = threadKey(t);
+              const on = k === key;
+              const usable = t.can_reply || t.copy_only;
+              return (
+                <button key={k} type="button" role="radio" aria-checked={on} onClick={() => setTargetKey(k)}
+                  title={usable ? `${t.label}${t.last_from_them ? ' · they wrote last here' : ''}${t.copy_only ? ' · copy and send in the app' : ''}` : (t.reply_note || `${t.label}: not from here`)}
+                  className="h-7 px-2 rounded-full text-xs font-medium inline-flex items-center gap-1.5"
+                  style={{ background: on ? 'var(--accent-glow)' : 'transparent', color: on ? 'var(--accent)' : usable ? 'var(--text)' : 'var(--text-muted)',
+                    border: `1px solid ${on ? 'transparent' : 'var(--border)'}`, opacity: usable ? 1 : 0.6 }}>
+                  <ChannelIcon channel={t.channel} app={t.app} size={13} />
+                  {t.label}{t.channel === 'email' && t.subject ? <span className="truncate max-w-[160px] font-normal" style={{ color: 'var(--text-muted)' }}>· {t.subject}</span> : null}
+                  {t.state === 'needs_reply' && <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--orange)' }} aria-label="needs reply" />}
+                </button>
+              );
+            })}
+            {moreEmail.length > 0 && (
+              <select value={moreEmail.some((t) => threadKey(t) === key) ? key : ''} onChange={(e) => { if (e.target.value) setTargetKey(e.target.value); }}
+                className="z-input !w-auto !h-7 !py-0 text-xs" aria-label="Other email threads" title="Older email threads with this person">
+                <option value="">{`${moreEmail.length} older email thread${moreEmail.length > 1 ? 's' : ''}…`}</option>
+                {moreEmail.map((t) => <option key={threadKey(t)} value={threadKey(t)}>{t.subject || '(no subject)'}{t.last_message_at ? ` · ${new Date(t.last_message_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : ''}</option>)}
+              </select>
+            )}
+          </div>
+        )}
+        {canReply || copyOnly ? (
           <>
             {/* While an AI proposal is open it IS the reply area (2026-11-06): edit in After, send from either column. */}
             {copyOnly && !proposal && (
               <div className="flex items-center gap-2">
-                <p className="text-[11px] flex-1" style={{ color: 'var(--text-muted)' }}>{thread.reply_note}</p>
+                <p className="text-[11px] flex-1" style={{ color: 'var(--text-muted)' }}>{cur.reply_note}</p>
                 <Button size="sm" onClick={() => act('draft')} disabled={!!busy} title="An AI proposal in your voice, with this conversation as context — you edit, copy and send it in the app">
                   <span className="inline-flex items-center gap-1"><Sparkle width={12} height={12} />{busy === 'draft' ? 'Drafting…' : 'Draft reply'}</span>
                 </Button>
@@ -331,10 +423,8 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
                 verdict={verdict} onVerdict={setVerdict} onTeach={() => teach(text)} teaching={teaching} learned={learned} error={teachErr}
                 onSendAsIs={() => (copyOnly ? copyOut(true) : act('reply', true))} onSend={() => (copyOnly ? copyOut(false) : act('reply'))}
                 onRedraft={() => act('draft')} busy={busy}
-                copyOnly={copyOnly} openUrl={thread.open_url} openLabel={channelLabel(thread)}
-                fromLine={`${thread.channel === 'email'
-                  ? `From ${thread.mailbox || 'your Gmail'} · in this thread${thread.subject ? ` (Re: ${thread.subject.replace(/^re:\s*/i, '')})` : ''} · your signature is added`
-                  : `From your ${channelLabel(thread)}`} · ⌘/Ctrl + Enter to send`}
+                copyOnly={copyOnly} openUrl={cur.open_url ?? null} openLabel={cur.label}
+                fromLine={fromLine(cur)}
                 onDiscard={async () => {
                   if (verdictGiven(verdict) && !learned) await teach(text);
                   else if (!learned) setRate({ approvalId: null, before: proposal.message, after: text, step: proposal.situation });
@@ -344,16 +434,12 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
               <>
                 <textarea
                   ref={boxRef} value={text} onChange={(e) => setText(e.target.value)} rows={2}
-                  placeholder={thread.channel === 'email' ? `Reply to ${thread.name || 'them'}…` : `Message ${thread.name || 'them'} on ${channelLabel(thread)}…`}
+                  placeholder={cur.channel === 'email' ? `Reply to ${thread.name || 'them'} by email…` : `Message ${thread.name || 'them'} on ${cur.label}…`}
                   onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && text.trim() && !busy) { e.preventDefault(); act('reply'); } }}
                   className="z-input resize-none" style={{ minHeight: 64 }} aria-label="Reply"
                 />
                 <div className="flex items-center gap-2 mt-2">
-                  <p className="text-[11px] flex-1 min-w-0 truncate" style={{ color: 'var(--text-muted)' }}>
-                    {thread.channel === 'email'
-                  ? `From ${thread.mailbox || 'your Gmail'} · in this thread${thread.subject ? ` (Re: ${thread.subject.replace(/^re:\s*/i, '')})` : ''} · your signature is added`
-                  : `From your ${channelLabel(thread)}`} · ⌘/Ctrl + Enter to send
-                  </p>
+                  <p className="text-[11px] flex-1 min-w-0 truncate" style={{ color: 'var(--text-muted)' }}>{fromLine(cur)}</p>
                   <Button size="sm" onClick={() => act('draft')} disabled={!!busy} title="An AI proposal in your voice, with this conversation as context — you edit and send">
                     <span className="inline-flex items-center gap-1"><Sparkle width={12} height={12} />{busy === 'draft' ? 'Drafting…' : 'Draft reply'}</span>
                   </Button>
@@ -370,10 +456,10 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
               </div>
             )}
             {rate && <RatingStrip approvalId={rate.approvalId} before={rate.before} after={rate.after} prospectId={thread.prospect_id}
-              channel={thread.channel === 'chat' ? 'whatsapp' : thread.channel} step={rate.step} senderFirst={(thread.owner_name || 'your').split(' ')[0]} onClose={() => setRate(null)} />}
+              channel={cur.channel === 'chat' ? 'whatsapp' : cur.channel} step={rate.step} senderFirst={(thread.owner_name || 'your').split(' ')[0]} onClose={() => setRate(null)} />}
           </>
         ) : (
-          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{thread.reply_note}</p>
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{cur.reply_note}</p>
         )}
       </div>
     </div>
