@@ -3672,6 +3672,43 @@ to the theme script), the supplied H12 wordmark (`components/ZeamiLogo.tsx`, `Ze
   states), the cytoscape canvases (`NetworkGraph`, `RouteGraph` still use literal dark-theme colours); `LeadsTable` + `ApprovalsPanel` were left
   untouched for ws-linkedin-connect.
 
+### 5.cu Files in the Inbox: attach and send, see what they sent (2026-11-10, feat/inbox-attachments, migration 104)
+
+Amir: "on the inbox are there a capability to attach files and send?" — there was none: every send lane carried text, and
+every mirror threw a message's files away.
+- **Core 104**: `message_files` (the uploader's file, bytes in Postgres: the app builds the Gmail message and the ring hands
+  LinkedIn / WhatsApp files to Unipile, two processes); `outreach_approvals.attachments` [{file_id, name, mime, size}];
+  `attachments` jsonb on `linkedin_messages` / `email_messages` / `chat_messages` ({id} = Unipile attachment id, {part_id} =
+  the Gmail part, {file_id} = our own sent copy). Limits (`policy/message_files.py`, mirrored in `lib/message-files.ts` —
+  change both): 5 files, 15 MB per message, programs/scripts refused.
+- **Bound to the approval**: `commands/message_files.attach` (only the uploader's own files, not on another message unless that
+  one never went out — failed / rejected / expired) runs inside `inbox.prepare_reply(file_ids=)`; with files the text may be
+  empty. Compose binds after filing (`inbox_reply._attach`; a refusal withdraws the draft). So the send gate's
+  one-send-per-approval rule covers the files.
+- **Send**: email → bridge `gmail_send {attachments: file ids}` → `sendGmail` reads the sender's own uploads, builds
+  multipart/mixed (`lib/gmail-mime.ts`, pure) and posts to Gmail's upload endpoint; LinkedIn reply (`linkedin_send` event
+  `files: true`), first message (`linkedin_start_chat` `files: true`) and WhatsApp → `unipile.send_message/start_chat(files=)`
+  as multipart (`attachments` parts). A text-only send never touches the file store (the old JSON call, a test guards it).
+- **Receive**: `thread_payload` / the WhatsApp mapping keep Unipile's `attachments`; `sync_thread` / `store_conversation`
+  store them (`policy/message_files.unipile_attachments`: files, images, audio, video; shared posts dropped) and fill an
+  empty list on a later read without counting a new message (that is how our own sent file gets its Unipile id);
+  `readThreads(full)` returns Gmail's file parts (signature logos with a Content-ID left out); our own email keeps its
+  `file_id` copy. Bytes are fetched only when opened: `GET /api/inbox/attachment/<channel>/<message>/<n>` (thread
+  visibility via `threadAccess`, the personal-mail rule included) → `gmailFile` (finds the part again: Gmail's attachment
+  ids change between reads) / `unipileFile`; `GET|DELETE /api/inbox/files/<id>` = our own copies (uploader or admin).
+  Only real images render inline; everything else downloads, `nosniff` + a sandbox CSP.
+- **UI** (`components/inbox/Attachments.tsx`): paperclip + drop on the reply box and compose (upload on pick, chips with
+  size / error / ×, Send waits for uploads), files under each bubble (image previews, download chips; a failed image falls
+  back to the chip). Not for copy-only chats (iMessage / Zeami link).
+- **Fixed on the way (on main as a hotfix, 6cb38ba)**: `keyOfThread` ran the email query with an empty viewer id → every
+  email conversation opened by link 500'd, and the reply call errored AFTER the email went out (risk of a second Send).
+- Tested: core pure + DB (`test_message_files*.py`), ring (`test_unipile_files.py`, `test_inbox_reply.py`), the MIME parsed by
+  Python's mail parser, routes walked with real logins on a scratch DB (upload, refusal, owner-only read/delete, received-file
+  route, reply through app → ring → kernel → bridge), reply box in Chrome. NOT tested: a real Gmail / LinkedIn / WhatsApp send
+  with a file, a real received file download (needs a live account). Unipile's multipart field name `attachments` is from
+  their docs, unverified live.
+- Not built: files in campaign / wave emails and the Telegram approval cards, forwarding a received file, virus scanning.
+
 ### 5.bj Gmail push — replies within seconds (2026-10-22, feat/gmail-push, no migration)
 
 **LIVE 2026-10-22 (0.63.0)**: ring deployed (smoke 0.63.0), app on Production (run 39842137712). Watch registered for the one active sender (amir@zeami.io); the endpoint refuses calls without Google's token (401). Not yet seen live: a real Google push.

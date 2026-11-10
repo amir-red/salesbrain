@@ -89,6 +89,18 @@ export interface InboxItem {
 
 export interface InboxCounts { needs_reply: number; unread: number; planned: number; email: number; linkedin: number; chat: number }
 
+/** A file on a message (core 104): ours as sent, or theirs (fetched from Gmail / Unipile when opened). */
+export interface InboxAttachment {
+  name: string;
+  mime: string | null;
+  size: number | null;
+  /** download link (`?inline=1` shows an image in the page) */
+  url: string;
+  image: boolean;
+  /** the provider no longer has it (an expired WhatsApp media file) */
+  unavailable?: boolean;
+}
+
 export interface InboxMessage {
   id: string;
   /** null = who wrote it is unknown (WhatsApp read by Zeami on a Mac) */
@@ -104,6 +116,8 @@ export interface InboxMessage {
   subject?: string | null;
   /** a reply typed here that the send gate holds (quiet hours, a cap) */
   pending?: boolean;
+  /** files on the message (core 104) */
+  attachments?: InboxAttachment[];
   /** which thread the message came through (every message carries it; the icon on the bubble) */
   channel: InboxChannel;
   app?: ChatApp | null;

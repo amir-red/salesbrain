@@ -67,3 +67,23 @@ export function listLinkedInAccounts(): Promise<UnipileAccount[] | { error: stri
 export function listWhatsAppAccounts(): Promise<UnipileAccount[] | { error: string }> {
   return listAccounts('WHATSAPP');
 }
+
+/**
+ * The bytes of one file on a LinkedIn / WhatsApp message (core 104: the Inbox keeps only the reference). Unipile
+ * serves it from the account that holds the conversation, on its message id.
+ */
+export async function unipileFile(messageId: string, attachmentId: string):
+  Promise<{ mime: string; content: Buffer } | { error: string }> {
+  const root = base();
+  const key = process.env.UNIPILE_API_KEY;
+  if (!root || !key) return { error: 'UNIPILE_DSN / UNIPILE_API_KEY not configured' };
+  try {
+    const res = await fetch(`${root}/api/v1/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`, {
+      headers: { 'X-API-KEY': key, accept: '*/*' }, cache: 'no-store', signal: AbortSignal.timeout(60_000),
+    });
+    if (!res.ok) return { error: `unipile ${res.status}: ${(await res.text()).slice(0, 160)}` };
+    return { mime: res.headers.get('content-type') || 'application/octet-stream', content: Buffer.from(await res.arrayBuffer()) };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'unipile request failed' };
+  }
+}

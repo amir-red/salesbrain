@@ -89,6 +89,8 @@ async function gmailSendTool(who: Who, args: Args) {
     to: String(args.to || ''), subject: String(args.subject || ''), body: String(args.body || ''),
     threadId: args.thread_id ? String(args.thread_id) : null, inReplyTo: args.in_reply_to ? String(args.in_reply_to) : null,
     mailbox: mailboxOf(args),
+    // core 104: the sender's own uploads (message_files), read here — only the app builds the Gmail message
+    attachments: Array.isArray(args.attachments) ? args.attachments.map(String).filter(Boolean) : [],
   });
 }
 

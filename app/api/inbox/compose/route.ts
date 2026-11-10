@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  let body: { action?: string; prospect_id?: string; channel?: string; text?: string; subject?: string; voice?: unknown } = {};
+  let body: { action?: string; prospect_id?: string; channel?: string; text?: string; subject?: string; voice?: unknown; file_ids?: unknown } = {};
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
   const id = body.prospect_id || '';
   const channel = body.channel === 'email' ? 'email' : body.channel === 'linkedin' ? 'linkedin' : null;
@@ -62,9 +62,10 @@ export async function POST(req: NextRequest) {
     const text = (body.text || '').trim();
     if (!text) return NextResponse.json({ error: 'Write the message first.' }, { status: 400 });
     const voice = cleanStamp(body.voice);
+    const fileIds = Array.isArray(body.file_ids) ? body.file_ids.map(String).filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 5) : [];
     const out = await kernelCall('inbox_compose', {
       prospect_id: id, channel, text, ...(channel === 'email' ? { subject: (body.subject || '').trim().slice(0, 200) } : {}),
-      ...(voice ? { voice } : {}),
+      ...(voice ? { voice } : {}), ...(fileIds.length ? { file_ids: fileIds } : {}),
     }, session.userId) as Record<string, unknown>;
     return NextResponse.json(out, { status: out.error ? 400 : 200 });
   } catch (err) {

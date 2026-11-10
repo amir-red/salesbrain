@@ -33,6 +33,7 @@ import { LearnedLines } from '@/components/voice/DraftReview';
 import type { FeedbackResult } from '@/lib/voice';
 import { Sparkle } from '@/components/icons';
 import PlanPanel, { planLine } from './PlanPanel';
+import { AttachButton, AttachmentChips, MessageFiles, dropProps, useAttachments } from './Attachments';
 import type { PlanSummary } from '@/lib/inbox';
 
 function dayLabel(iso: string | null): string {
@@ -62,7 +63,9 @@ function Bubble({ m }: { m: InboxMessage }) {
         {m.channel === 'email' && m.from && !m.from_me && (
           <p className="text-[11px] mb-1 truncate" style={{ color: 'var(--text-muted)' }}>{m.from}</p>
         )}
-        <p className="whitespace-pre-wrap break-words leading-relaxed">{m.text || <em style={{ color: 'var(--text-muted)' }}>(no text)</em>}</p>
+        {m.text ? <p className="whitespace-pre-wrap break-words leading-relaxed">{m.text}</p>
+          : !m.attachments?.length ? <p><em style={{ color: 'var(--text-muted)' }}>(no text)</em></p> : null}
+        <MessageFiles files={m.attachments} mine={m.from_me} />
         <p className="text-[10px] mt-1 flex items-center justify-end gap-1" style={{ color: 'var(--text-muted)' }}
           title={channelLabel(m)}>
           <ChannelIcon channel={m.channel} app={m.app} size={11} />
@@ -95,6 +98,7 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<{ kind: 'error' | 'info'; text: string } | null>(null);
   const [planOpen, setPlanOpen] = useState(false);   // the "No reply needed" panel (core 103)
+  const att = useAttachments();                        // files going out with the reply (core 104)
   // Which thread a reply goes into (2026-11-09): a person's conversation offers one target per channel thread; the
   // default is where they last wrote and we can answer. Chosen per conversation, reset when another one opens.
   const [targetKey, setTargetKey] = useState<string | null>(null);
@@ -118,7 +122,7 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
   const lastId = thread?.messages.length ? thread.messages[thread.messages.length - 1].id : null;
   const restored = useRef(false);
 
-  useEffect(() => { setTargetKey(null); }, [convKey]);
+  useEffect(() => { setTargetKey(null); att.clear(); }, [convKey]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     setNote(null); setRate(null); setVerdict(EMPTY_VERDICT); setLearned(null); setTeachErr(null); setPlanOpen(false);
     // a proposal written earlier for this conversation (and the edits made to it) comes back as it was
@@ -167,13 +171,16 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
   async function act(action: 'reply' | 'done' | 'reopen' | 'refresh' | 'draft', asIs = false) {
     if (!thread || !cur) return;
     const out = asIs && proposal ? proposal.message : text;
+    if (action === 'reply' && att.uploading) { setNote({ kind: 'info', text: 'A file is still uploading — send when it is done.' }); return; }
     setBusy(asIs ? 'reply-asis' : action); setNote(null);
     try {
       const url = (action === 'done' || action === 'reopen') && grouped
         ? `/api/inbox/person/${encodeURIComponent(convKey)}` : `/api/inbox/${cur.channel}/${cur.id}`;
       const res = await fetch(url, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(action === 'reply' ? { action, text: out, ...(proposal ? { voice: proposal.voice } : {}) } : { action }),
+        body: JSON.stringify(action === 'reply'
+          ? { action, text: out, ...(proposal ? { voice: proposal.voice } : {}), ...(att.ids.length ? { file_ids: att.ids } : {}) }
+          : { action }),
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || data.reason || 'Something went wrong');
@@ -201,8 +208,8 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
           }
           setProposal(null); saveDraft(key, null);
         }
-        if (data.sent) { setText(''); setNote(null); }
-        else if (data.waiting) { setText(''); setNote({ kind: 'info', text: data.note || 'Held by the send rules; it goes out at the next send window.' }); }
+        if (data.sent) { setText(''); att.clear(); setNote(null); }
+        else if (data.waiting) { setText(''); att.clear(); setNote({ kind: 'info', text: data.note || 'Held by the send rules; it goes out at the next send window.' }); }
         else throw new Error(data.reason || 'Not sent');
       }
       if (action === 'done' || action === 'reopen') {
@@ -431,23 +438,34 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
                   setProposal(null); setText(''); saveDraft(key, null);
                 }} />
             ) : copyOnly ? null : (
-              <>
+              <div {...dropProps(att.add, true)}>
                 <textarea
                   ref={boxRef} value={text} onChange={(e) => setText(e.target.value)} rows={2}
                   placeholder={cur.channel === 'email' ? `Reply to ${thread.name || 'them'} by email…` : `Message ${thread.name || 'them'} on ${cur.label}…`}
-                  onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && text.trim() && !busy) { e.preventDefault(); act('reply'); } }}
+                  onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && (text.trim() || att.count) && !busy && !att.uploading) { e.preventDefault(); act('reply'); } }}
                   className="z-input resize-none" style={{ minHeight: 64 }} aria-label="Reply"
                 />
+                <AttachmentChips files={att.files} onRemove={att.remove} />
                 <div className="flex items-center gap-2 mt-2">
+                  <AttachButton onPick={att.add} disabled={!!busy} compact />
                   <p className="text-[11px] flex-1 min-w-0 truncate" style={{ color: 'var(--text-muted)' }}>{fromLine(cur)}</p>
                   <Button size="sm" onClick={() => act('draft')} disabled={!!busy} title="An AI proposal in your voice, with this conversation as context — you edit and send">
                     <span className="inline-flex items-center gap-1"><Sparkle width={12} height={12} />{busy === 'draft' ? 'Drafting…' : 'Draft reply'}</span>
                   </Button>
-                  <Button variant="primary" onClick={() => act('reply')} disabled={!text.trim() || !!busy}>
-                    {busy === 'reply' ? 'Sending…' : 'Send'}
+                  <Button variant="primary" onClick={() => act('reply')} disabled={(!text.trim() && !att.count) || !!busy || att.uploading}>
+                    {busy === 'reply' ? 'Sending…' : att.uploading ? 'Uploading…' : 'Send'}
                   </Button>
                 </div>
-              </>
+              </div>
+            )}
+            {proposal && !copyOnly && (
+              <div className="flex items-center gap-2 mt-2 flex-wrap" {...dropProps(att.add, true)}>
+                <AttachButton onPick={att.add} disabled={!!busy} />
+                <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                  {att.count ? `${att.count} file${att.count > 1 ? 's' : ''} go${att.count > 1 ? '' : 'es'} out with the reply` : 'Files go out with the reply'}
+                </span>
+                <div className="w-full"><AttachmentChips files={att.files} onRemove={att.remove} /></div>
+              </div>
             )}
             {!proposal && learned && (
               <div className="rounded-xl px-3 py-2 mt-3 text-xs flex items-start gap-2" style={{ background: 'color-mix(in srgb, var(--green) 8%, transparent)' }}>

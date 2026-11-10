@@ -918,3 +918,28 @@ CREATE INDEX IF NOT EXISTS conversation_plans_owner
 CREATE INDEX IF NOT EXISTS conversation_plans_prospect
   ON conversation_plans (prospect_id) WHERE prospect_id IS NOT NULL;
 
+
+-- 104 message_files (Inbox attachments)
+CREATE TABLE IF NOT EXISTS message_files (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_user_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,   -- who uploaded it (the sender)
+  file_name      TEXT NOT NULL,
+  mime_type      TEXT NOT NULL DEFAULT 'application/octet-stream',
+  size_bytes     INTEGER NOT NULL CHECK (size_bytes > 0 AND size_bytes <= 15728640),
+  sha256         TEXT NOT NULL,
+  content        BYTEA NOT NULL,
+  approval_id    UUID REFERENCES outreach_approvals(id) ON DELETE SET NULL,   -- the send it went out with
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS message_files_owner ON message_files (owner_user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS message_files_approval ON message_files (approval_id) WHERE approval_id IS NOT NULL;
+
+-- [{file_id, name, mime, size}] — what this send carries
+ALTER TABLE outreach_approvals ADD COLUMN IF NOT EXISTS attachments JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+-- [{name, mime, size, ...}] per message; LinkedIn / WhatsApp: {id} = Unipile's attachment id; email: {part_id} = the
+-- Gmail part (Gmail's attachmentId changes between reads, so the part is found again on download); our own sends:
+-- {file_id} = message_files
+ALTER TABLE linkedin_messages ADD COLUMN IF NOT EXISTS attachments JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE email_messages    ADD COLUMN IF NOT EXISTS attachments JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE chat_messages     ADD COLUMN IF NOT EXISTS attachments JSONB NOT NULL DEFAULT '[]'::jsonb;
