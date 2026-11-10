@@ -3673,6 +3673,20 @@ to the theme script), the supplied H12 wordmark (`components/ZeamiLogo.tsx`, `Ze
   states), the cytoscape canvases (`NetworkGraph`, `RouteGraph` still use literal dark-theme colours); `LeadsTable` + `ApprovalsPanel` were left
   untouched for ws-linkedin-connect.
 
+### 5.cv LinkedIn connections made outside SalesBrain count as 1st degree (2026-11-10, feat/linkedin-degree, no migration)
+
+Amir's test first message to himself from Matthias's account was refused "not a 1st-degree connection" although they are
+connected: the send check (`linkedin._first_message_target`) read only `leads.network_degree` (set by whichever search
+found the lead; empty for hand-added / imported leads) or an accepted request on record, while the Write message page read
+the stored connection list. Now one rule: a lead is connected when the owner's LinkedIn member's stored network
+(`linkedin_relations`, on ANY live row of that member — Mateo's member sits on three rows, relations_primary) holds its slug
+or member id (`_in_network`). `linkedin.mark_connected(conn, owner?, prospect_ids?)` (set-based; also fills a missing member
+id unless another lead of the owner holds it; never lowers a degree) runs every hourly `linkedin_sync` account pass
+(`mark_connected_prospects`, owner scope — the module's no-admin-branch guard), after every graph-mirror page, and when a lead
+is added by hand (`add_lead`) or given its profile (`set_prospect_linkedin`). Rehearsed on production (rolled back): 48 leads,
+40 Hannes's (his row = Mateo's member) and 8 Mateo's; the first hourly sync after deploy fixes them. Test:
+`tests/test_linkedin_connected_db.py`. Not built: lowering a degree when a connection is removed.
+
 ### 5.cu Files in the Inbox: attach and send, see what they sent (2026-11-10, feat/inbox-attachments, migration 104)
 
 **LIVE 2026-11-10 (0.85.0)**: 104 applied, ring deployed (smoke 0.85.0), app on Production (run 42833866789), with the
