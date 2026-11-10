@@ -1229,6 +1229,7 @@ backfills existing rows; form / Calendly leads with no owner stay unassigned and
   is a thin `crm_convert_lead` call; `lib/sales-lead-roles.ts::leadLanded` fires from the zeami.io form and the
   Calendly webhook (SERVICE actor, fire-and-forget). Service MCP: `crm_list_sales_leads {owner, role}`, texts;
   `docs/service-mcp.md` changelog. Tool counts unchanged.
+- **Digest STOPPED 2026-11-10 (Amir)**: cron `sales-leads-due` removed on the box and retired in `deploy-server.sh` (removed on every deploy). Its ping dates and next steps had gone stale, so Mateo got 16 "overdue" lines a day. The kernel `roles_digest` and the script are still there; to bring it back, add the line to `JOBS` again.
 - Not built: a per-team default front office in the UI (SQL on the policy row for now), reassigning in bulk, a
   reminder when a due lead stays untouched for N more days, the digest for email-only cadence prospects (that is the
   outreach routine's job).
