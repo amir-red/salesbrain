@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Sparkle, Star } from '@/components/icons';
 import { LearnedLines } from '@/components/voice/DraftReview';
 import { diffWords } from '@/lib/diff-words';
+import PriorityList from '@/components/voice/PriorityList';
 import type { FeedbackResult, VoiceStamp } from '@/lib/voice';
 
 /**
@@ -19,7 +20,7 @@ export interface InboxProposal {
   used_facts: string[];
   voice: VoiceStamp;
   situation: 'reply' | 'followup' | 'first';
-  priorities: { content: string; kind: string }[];
+  priorities: { id?: string | null; content: string; kind: string }[];
 }
 
 const RATINGS = ['Unusable', 'Weak', 'Needed work', 'Small fixes', 'Send as is'];
@@ -60,12 +61,14 @@ function Stars({ value, onChange, size = 20, disabled }: { value: number | null;
  * you improved it, so the conversation keeps the room. Send records the rating and note on the sent draft; "Save
  * feedback" teaches without sending; Discard teaches from it too. */
 export function ProposalStrip({ p, after, onAfter, senderFirst, verdict, onVerdict, onDiscard, onTeach, teaching, learned, error,
-  onSendAsIs, onSend, onRedraft, busy, fromLine, copyOnly, openUrl, openLabel }: {
+  onSendAsIs, onSend, onRedraft, busy, fromLine, copyOnly, openUrl, openLabel, editablePriorities = true }: {
   p: InboxProposal; after: string; onAfter: (t: string) => void; senderFirst: string; verdict: Verdict; onVerdict: (v: Verdict) => void;
   onDiscard: () => void; onTeach: () => void; teaching: boolean; learned: FeedbackResult | null; error: string | null;
   onSendAsIs: () => void; onSend: () => void; onRedraft: () => void; busy: string | null; fromLine: string;
   /** a chat that cannot be sent from here: the buttons copy the text (and open the app when there is a link) */
   copyOnly?: boolean; openUrl?: string | null; openLabel?: string;
+  /** the viewer is the sender (their own conversation): the priority list can be reordered and added to */
+  editablePriorities?: boolean;
 }) {
   const asIsLabel = copyOnly ? (openUrl ? `Copy as is & open ${openLabel}` : 'Copy as is') : 'Send as is';
   const sendLabel = copyOnly ? (openUrl ? `Copy & open ${openLabel}` : 'Copy') : 'Send';
@@ -149,11 +152,8 @@ export function ProposalStrip({ p, after, onAfter, senderFirst, verdict, onVerdi
       <div className="grid gap-3 md:grid-cols-2 items-start">
         <details className="rounded-lg px-3 py-2" style={card}>
           <summary className="cursor-pointer font-medium">{senderFirst}&apos;s priority list ({p.priorities.length})</summary>
-          {p.priorities.length ? (
-            <ol className="list-decimal pl-5 mt-2 space-y-1" style={{ color: 'var(--text-muted)' }}>
-              {p.priorities.map((r, i) => <li key={i}>{r.content}</li>)}
-            </ol>
-          ) : <p className="mt-2" style={{ color: 'var(--text-muted)' }}>No priorities yet — what you write in the note becomes one.</p>}
+          {/* editable since 2026-11-10: ↑ / ↓ and "Add to the top" save to the sender's voice; the next draft follows it */}
+          <PriorityList items={p.priorities} senderFirst={senderFirst} editable={editablePriorities} />
         </details>
         <details className="rounded-lg px-3 py-2" style={card} open={!!verdict.note.trim() || undefined}>
           <summary className="cursor-pointer font-medium">How you improved it and what the AI missed{verdict.note.trim() ? ' ✓' : ''}</summary>
