@@ -35,7 +35,7 @@ export interface DraftResult {
   message: string; subject: string | null; reasoning: string | null; used_facts: string[]; blurb: string | null;
   voice: VoiceStamp; flags: VoiceFlag[]; linkedin_thread_id: string | null; sender_name: string | null;
   language: string | null; trust_level: string | null;
-  priorities: { content: string; kind: string }[];   // the sender's ranked rules the model saw (the card's foldable list)
+  priorities: { id?: string | null; content: string; kind: string }[];   // the sender's ranked rules the model saw (the card's foldable list)
 }
 
 /** Draft one message in the sender's voice through the kernel's one drafter. */
@@ -71,8 +71,8 @@ export async function draftInVoice(req: DraftRequest): Promise<DraftResult | { e
     language: typeof out.language === 'string' ? out.language : null,
     trust_level: typeof out.trust_level === 'string' ? out.trust_level : null,
     priorities: Array.isArray(out.priorities)
-      ? (out.priorities as { content?: unknown; kind?: unknown }[]).filter((p) => typeof p?.content === 'string')
-          .map((p) => ({ content: String(p.content), kind: String(p.kind ?? 'rule') })) : [],
+      ? (out.priorities as { id?: unknown; content?: unknown; kind?: unknown }[]).filter((p) => typeof p?.content === 'string')
+          .map((p) => ({ id: typeof p.id === 'string' ? p.id : null, content: String(p.content), kind: String(p.kind ?? 'rule') })) : [],
   };
 }
 

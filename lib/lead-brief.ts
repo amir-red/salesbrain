@@ -27,6 +27,10 @@ export interface BriefConversation extends BriefChannel { messages: BriefMessage
 export interface OpenItem { side: 'us' | 'them'; kind: 'question' | 'promise' | 'plan' | 'draft' | 'timer'; item: string; since?: string | null }
 export interface DatedFact { date: string; fact: string; kind: string; source_url: string; source_title?: string }
 
+/** "Check before you write" (2026-11-10): duplicate person, a teammate holds the lead or wrote recently, a date
+ *  mentioned but not booked, research that may be about a namesake. */
+export interface BriefCheck { kind: 'duplicate' | 'held' | 'teammate_wrote' | 'unconfirmed_date' | 'identity'; level: 'warn' | 'info'; text: string }
+
 export interface LeadBrief {
   prospect_id: string; person_id: string | null; card_id: string | null;
   owner: { user_id: string | null; name: string | null };
@@ -72,6 +76,7 @@ export interface LeadBrief {
   waiting: { id: string; kind: string; channel: string; status: string; message: string | null; created_at: string; owner_name: string | null; owner_user_id: string }[];
   plans: { id: string; channel: string; thread_id: string; decision: string; reason_kind: string; reason: string | null; steps: { n: number; due_at: string; purpose: string; status: string }[]; next_due_at: string | null }[];
   research: { at: string | null; tier: string | null; sources: { url: string; title?: string }[]; has_extras: boolean };
+  checks?: BriefCheck[];
   generated_at: string;
 }
 

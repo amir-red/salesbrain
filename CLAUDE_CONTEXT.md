@@ -3650,6 +3650,37 @@ D with each of the eight questions numbered and titled. `/prospects/[id]`:
 - Coverage, not a missing deploy, is why most people say "Research now": person research exists for 496 of 4,632 live leads
   (15 a night), company research for 776; dated why-now facts need the lead-profile research prompt deployed AND a re-research.
 
+### 5.cs Inbox: research beside the conversation, check before you write, editable priorities (2026-11-10, feat/inbox-research, no migration)
+
+From Mateo's sales-experiments page (8 Nov: "a research card beside every conversation", "My priority list, editable",
+"Check before you write"); Amir: "do 1 to 3".
+- **Editable priority list** (`components/voice/PriorityList.tsx`, in the Inbox draft review's fold — ProposalStrip, so
+  replies and compose): ↑ / ↓ per rule, "+ Add to the top" (a new sender rule in their own words, saved as number 1).
+  `reorder_rules` rewrites EVERY position of the sender, while a draft shows only the rules for its channel and step, so a
+  move loads the full list (`GET /api/voice/rules` → `sender`), moves the rule next to its visible neighbour there
+  (`moveNextTo`) and saves the full order. The drafter now returns each priority's `id` (`drafter.py`; `lib/voice-context`
+  keeps it); a proposal drafted before this shows the list read-only with "Draft again to reorder".
+- **Research column** (`components/inbox/ResearchPanel.tsx`, 360 px, lg+ only, toggle "Research" in the conversation header,
+  open by default, remembered in `localStorage inbox.research`): the kernel brief in Mateo's order — Check before you write ·
+  Next move · Where we stand + owed both ways · Who they are · Company today with dated, linked changes · Relationship and
+  last touches per channel · How to write — plus "Profile →" and Research again. `GET /api/inbox/brief?prospect=|person=`;
+  kernel `lead_brief(actor, prospect_id=None, person_id=None)` reads a thread that names only a person through
+  `lead_for_person` (the viewer's live row, else the newest live one); someone not in the CRM → `{not_a_lead: true}`.
+  Cached per person for 5 minutes in the browser.
+- **Check before you write** (kernel `policy/lead_brief.checks`, returned as `checks[]` on every brief, for the VIEWER;
+  `components/prospect/CheckBeforeWrite.tsx` on the Inbox column AND the person page's Overview): the person is in the CRM
+  more than once (`_twins`: other live lead rows of the same person = "also held by …", and other people / unlinked leads
+  with the same name), a teammate holds the lead, a teammate wrote within 72 h, a date or time mentioned in the last three
+  messages (21 days) with no call booked (`date_mention`, EN/DE weekdays, months, dd.mm., hh:mm), research that may be about
+  a namesake (`foreign_sources`: a source titled with the person's full name and none of their company's words — "Austin
+  Watkins - Wikipedia" while he works at IMCD; domain-only titles say nothing; no company known = no verdict), an
+  unconfirmed role, and LinkedIn's employer differing from the list's. Placeholder companies ("not found", "Unknown") are
+  ignored (`real_company`). Live check: Austin Watkins → the Wikipedia namesake; Luis De Azpiazu → in the CRM twice, Mateo
+  wrote today on WhatsApp; Arjun Aggarwal → twice, role unconfirmed.
+- Verified: core 716 / ring 435 tests (3 new check tests), tsc + build, the checks on live data. Not seen in a browser.
+- Not built (the artifact's points 4–5): a note instead of an auto-draft for someone new writing in, the brief on the Accepted
+  tab, Send through Zeami (blocked until Zeami sends from the Mac), the "Due for an update" 3-week page.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
