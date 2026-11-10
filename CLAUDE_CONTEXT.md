@@ -3675,6 +3675,9 @@ to the theme script), the supplied H12 wordmark (`components/ZeamiLogo.tsx`, `Ze
 
 ### 5.cu Files in the Inbox: attach and send, see what they sent (2026-11-10, feat/inbox-attachments, migration 104)
 
+**LIVE 2026-11-10 (0.85.0)**: 104 applied, ring deployed (smoke 0.85.0), app on Production (run 42833866789), with the
+`keyOfThread` hotfix. Not yet seen live: a real send with a file on any channel, a real received file opened.
+
 Amir: "on the inbox are there a capability to attach files and send?" — there was none: every send lane carried text, and
 every mirror threw a message's files away.
 - **Core 104**: `message_files` (the uploader's file, bytes in Postgres: the app builds the Gmail message and the ring hands
