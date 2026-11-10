@@ -3528,6 +3528,8 @@ knows when to answer, when to follow up, when to leave it."
 
 ### 5.cr The person page is a profile: the lead brief, a picture, Write message (2026-11-09, feat/lead-profile, no migration)
 
+**LIVE 2026-11-10 (0.84.0)**, published together with §5.cr–§5.ct: ring deployed, app on Production. No migration.
+
 Amir, after the brief plan (`~/.claude/plans/lead-brief-mateo-method.md`, artifact WSQsR5T45wjrZEh7hznmpc): "make it look
 like someone's profile, not just boxes; redesign the whole profile with those information, add a profile picture and an
 action button to write a message that leads to the Inbox to compose". Phase 1 of the plan, built: nothing stored needs a
@@ -3585,6 +3587,8 @@ migration (the research extras live in `trust_scores.research`).
 
 ### 5.cs Inbox: one conversation per person across channels, a channel icon on every message (2026-11-09, feat/inbox-person, app-only, no migration)
 
+**LIVE 2026-11-10 (0.84.0)**, published together with §5.cr–§5.ct: ring deployed, app on Production. No migration.
+
 Mateo, with a screenshot: the same person (Arjun Aggarwal on LinkedIn "I answered via email"; Anthony Sirica's calendar decline
 and his "nice to meet you" email) sat as two or three rows. Amir: one thread per person across email, LinkedIn, WhatsApp and
 iMessage, with a little icon saying which channel each message came through; a reply defaults to where they last wrote.
@@ -3619,6 +3623,8 @@ iMessage, with a little icon saying which channel each message came through; a r
   per thread), name-only matching for strangers (deliberately not: two namesakes would merge).
 
 ### 5.ct The person page, redesign E: journey header, the eight questions as numbered cards (2026-11-09, feat/person-page, no migration)
+
+**LIVE 2026-11-10 (0.84.0)**, published together with §5.cr–§5.ct: ring deployed, app on Production. No migration.
 
 Amir: "too much text, difficult to grasp". Options A-E drawn on Miten Marvania's real data (canvas
 https://claude.ai/artifact/FKUmum6U2vUP53pXdU2LxE); Amir combined B (story + rail) and C (journey board) into D, then E =
