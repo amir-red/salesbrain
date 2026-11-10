@@ -470,8 +470,10 @@ async function threadsOfKey(client: PoolClient, key: string, viewer: { userId: s
 }
 
 /** The group key of one thread (null when it does not exist). */
-async function keyOfThread(client: PoolClient, channel: InboxChannel, id: string): Promise<string | null> {
-  const o: ListOpts = { viewerId: '', team: true, channel, filter: 'all', q: '', view: 'all', limit: 1, plans: false };
+async function keyOfThread(client: PoolClient, channel: InboxChannel, id: string, viewerId: string): Promise<string | null> {
+  // the viewer's own id: the email query compares it to a uuid column (an empty string failed every email thread)
+  // and it is what lets the owner find their own personal mail
+  const o: ListOpts = { viewerId, team: true, channel, filter: 'all', q: '', view: 'all', limit: 1, plans: false };
   const vals: unknown[] = [];
   if (channel === 'chat' && !(await chatsStored(client))) return null;
   const base = channel === 'linkedin' ? linkedinSql(o, vals, true) : channel === 'chat' ? chatSql(o, vals, true) : emailSql(o, vals, true);
@@ -539,7 +541,7 @@ export async function getConversation(channel: InboxChannel, id: string, viewer:
   const client = await pool.connect();
   let key: string | null;
   try {
-    key = await keyOfThread(client, channel, id);
+    key = await keyOfThread(client, channel, id, viewer.userId);
   } finally {
     client.release();
   }
