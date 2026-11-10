@@ -3652,6 +3652,9 @@ D with each of the eight questions numbered and titled. `/prospects/[id]`:
 
 ### 5.cs Inbox: research beside the conversation, check before you write, editable priorities (2026-11-10, feat/inbox-research, no migration)
 
+**LIVE 2026-11-10 (0.86.0)**: ring deployed (smoke 0.86.0), app on Production (run 42867563859). Checked on the box: the brief for
+Luis De Azpiazu returns his three checks. Not yet seen in a browser.
+
 From Mateo's sales-experiments page (8 Nov: "a research card beside every conversation", "My priority list, editable",
 "Check before you write"); Amir: "do 1 to 3".
 - **Editable priority list** (`components/voice/PriorityList.tsx`, in the Inbox draft review's fold — ProposalStrip, so
