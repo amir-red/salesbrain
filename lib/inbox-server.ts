@@ -13,7 +13,7 @@
  */
 import type { PoolClient } from 'pg';
 import pool from '@/lib/db';
-import type { InboxChannel, InboxCounts, InboxFilter, InboxItem, InboxMessage, InboxState, InboxThread, InboxThreadRef, ReplyTarget } from '@/lib/inbox';
+import type { InboxAttachment, InboxChannel, InboxCounts, InboxFilter, InboxItem, InboxMessage, InboxState, InboxThread, InboxThreadRef, ReplyTarget } from '@/lib/inbox';
 import { channelLabel, parseKey, threadKey } from '@/lib/inbox';
 
 const TABLE: Record<InboxChannel, string> = { email: 'email_threads', linkedin: 'linkedin_threads', chat: 'chat_threads' };
@@ -323,6 +323,56 @@ export async function needsReplyCount(viewerId: string): Promise<number> {
   }
 }
 
+let filesReady = false;
+/** Migration 104 (message files) applied? (only a yes is remembered, so applying it needs no restart) */
+async function filesStored(client: PoolClient): Promise<boolean> {
+  if (filesReady) return true;
+  const { rows } = await client.query(`SELECT to_regclass('public.message_files') IS NOT NULL AS ok`);
+  filesReady = !!rows[0]?.ok;
+  return filesReady;
+}
+
+const IMAGE = /^image\/(png|jpe?g|gif|webp|heic|heif)$/i;
+
+/**
+ * A stored message's files → what the page draws. Ours as sent point at our own copy (/api/inbox/files/<id>); theirs
+ * at the message (/api/inbox/attachment/<channel>/<message>/<n>), fetched from Gmail / Unipile when opened.
+ */
+function attachmentsOf(channel: InboxChannel, messageId: string, list: unknown): { attachments?: InboxAttachment[] } {
+  if (!Array.isArray(list) || !list.length) return {};
+  const out: InboxAttachment[] = list.map((a: Record<string, unknown>, i: number) => {
+    const name = String(a.name || 'file');
+    const mime = a.mime ? String(a.mime) : null;
+    const url = a.file_id ? `/api/inbox/files/${a.file_id}` : `/api/inbox/attachment/${channel}/${messageId}/${i}`;
+    const image = (!!mime && IMAGE.test(mime)) || (!mime && a.kind === 'img');
+    return { name, mime, size: typeof a.size === 'number' ? a.size : null, url, image, ...(a.unavailable ? { unavailable: true } : {}) };
+  });
+  return { attachments: out };
+}
+
+/**
+ * Who owns a conversation, when the viewer may see it (the same rule as getThread: their own, or any as an
+ * administrator, within the personal-mail rule of the list queries). For the file downloads.
+ */
+export async function threadAccess(channel: InboxChannel, id: string, viewer: { userId: string; admin: boolean }):
+  Promise<{ owner_user_id: string } | null> {
+  const client = await pool.connect();
+  try {
+    if (channel === 'chat' && !(await chatsStored(client))) return null;
+    const o: ListOpts = { viewerId: viewer.userId, team: true, channel, filter: 'all', q: '', view: 'all', limit: 1, plans: await plansStored(client) };
+    const vals: unknown[] = [];
+    const base = channel === 'linkedin' ? linkedinSql(o, vals, true) : channel === 'chat' ? chatSql(o, vals, true) : emailSql(o, vals, true);
+    vals.push(id);
+    const { rows } = await client.query(`SELECT x.owner_user_id FROM (${base}) x WHERE x.id = $${vals.length}`, vals);
+    const head = rows[0];
+    if (!head) return null;
+    if (head.owner_user_id !== viewer.userId && !viewer.admin) return null;
+    return { owner_user_id: head.owner_user_id };
+  } finally {
+    client.release();
+  }
+}
+
 /** One conversation, or null when it does not exist or the viewer may not see it. Marks it seen for its owner. */
 export async function getThread(channel: InboxChannel, id: string, viewer: { userId: string; admin: boolean }):
   Promise<InboxThread | null> {
@@ -340,6 +390,8 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
     if (!mine && !viewer.admin) return null;
 
     let raw: Array<Omit<InboxMessage, 'channel' | 'app' | 'thread_id'>> = [];
+    // the message files (core 104); before 104 an empty list
+    const files = (await filesStored(client)) ? 'attachments' : `'[]'::jsonb AS attachments`;
     let profile_url: string | null = null;
     let mailbox: string | null = null;
     let chat: { can_reply: boolean; only_last_message: boolean; open_url: string | null; kind: string } | null = null;
@@ -353,37 +405,40 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
       chat = { can_reply: !!(r?.can_reply && r?.live && r?.kind === 'unipile_whatsapp'), only_last_message: !!r?.only_last_message,
                open_url: r?.open_url ?? null, kind: r?.kind ?? '' };
       const m = await client.query(
-        `SELECT id::text, from_me, COALESCE(text, '') AS text, sent_at, truncated, time_is_read_time FROM chat_messages
+        `SELECT id::text, from_me, COALESCE(text, '') AS text, sent_at, truncated, time_is_read_time, ${files} FROM chat_messages
           WHERE thread_id = $1 ORDER BY sent_at NULLS FIRST, created_at LIMIT 500`, [id]);
       raw = m.rows.map((r) => ({ id: r.id, from_me: r.from_me, text: r.truncated ? `${r.text}…` : r.text, sent_at: iso(r.sent_at),
-        ...(r.from_me === null ? { sender_unknown: true } : {}), ...(r.time_is_read_time ? { read_time: true } : {}) }));
+        ...(r.from_me === null ? { sender_unknown: true } : {}), ...(r.time_is_read_time ? { read_time: true } : {}),
+        ...attachmentsOf('chat', r.id, r.attachments) }));
       unknownSender = m.rows.some((r) => r.from_me === null || r.time_is_read_time);
     } else if (channel === 'linkedin') {
       const t = await client.query(`SELECT attendee_profile_url FROM linkedin_threads WHERE id = $1`, [id]);
       profile_url = t.rows[0]?.attendee_profile_url ?? null;
       const m = await client.query(
-        `SELECT id::text, is_sender AS from_me, COALESCE(text, '') AS text, sent_at FROM linkedin_messages
+        `SELECT id::text, is_sender AS from_me, COALESCE(text, '') AS text, sent_at, ${files} FROM linkedin_messages
           WHERE thread_id = $1 ORDER BY sent_at NULLS FIRST, created_at LIMIT 500`, [id]);
-      raw = m.rows.map((r) => ({ id: r.id, from_me: r.from_me, text: r.text, sent_at: iso(r.sent_at) }));
+      raw = m.rows.map((r) => ({ id: r.id, from_me: r.from_me, text: r.text, sent_at: iso(r.sent_at), ...attachmentsOf('linkedin', r.id, r.attachments) }));
     } else {
       const t = await client.query(`SELECT mailbox, gmail_thread_id, origin, person_id, prospect_id FROM email_threads WHERE id = $1`, [id]);
       mailbox = t.rows[0]?.mailbox ?? null;
       emailMeta = t.rows[0] ?? null;
       const m = await client.query(
-        `SELECT id::text, from_me, COALESCE(body, '') AS text, sent_at, from_header AS "from", subject FROM email_messages
+        `SELECT id::text, from_me, COALESCE(body, '') AS text, sent_at, from_header AS "from", subject, ${files} FROM email_messages
           WHERE thread_id = $1 ORDER BY sent_at NULLS FIRST, created_at LIMIT 500`, [id]);
-      raw = m.rows.map((r) => ({ id: r.id, from_me: r.from_me, text: r.text, sent_at: iso(r.sent_at), from: r.from, subject: r.subject }));
+      raw = m.rows.map((r) => ({ id: r.id, from_me: r.from_me, text: r.text, sent_at: iso(r.sent_at), from: r.from, subject: r.subject,
+        ...attachmentsOf('email', r.id, r.attachments) }));
     }
     // Replies typed here that the send gate is holding (quiet hours, a cap): shown as "waiting to be sent".
     const pend = await client.query(
-      `SELECT o.id::text, o.message, o.created_at FROM outreach_approvals o
+      `SELECT o.id::text, o.message, o.created_at, ${files === 'attachments' ? 'o.attachments' : files} FROM outreach_approvals o
         WHERE o.drafted_by = 'inbox' AND o.status = 'approved' AND o.consumed_at IS NULL
           AND ${channel === 'linkedin' ? 'o.linkedin_thread_id = $1::uuid'
             : channel === 'chat'
               ? `o.channel = 'whatsapp' AND (o.owner_user_id, o.person_id) = (SELECT owner_user_id, person_id FROM chat_threads WHERE id = $1)`
               : `o.email_thread_id = (SELECT gmail_thread_id FROM email_threads WHERE id = $1) AND o.owner_user_id = (SELECT owner_user_id FROM email_threads WHERE id = $1)`}
         ORDER BY o.created_at`, [id]);
-    raw = raw.concat(pend.rows.map((r) => ({ id: `pending:${r.id}`, from_me: true, text: r.message, sent_at: iso(r.created_at), pending: true })));
+    raw = raw.concat(pend.rows.map((r) => ({ id: `pending:${r.id}`, from_me: true, text: r.message, sent_at: iso(r.created_at), pending: true,
+      ...attachmentsOf(channel, r.id, r.attachments) })));
     // every message says which thread it came through (the icon on the bubble; the person view merges threads)
     const app = (head.app as InboxMessage['app']) ?? null;
     const messages: InboxMessage[] = raw.map((m) => ({ ...m, channel, app, thread_id: id }));
@@ -470,8 +525,10 @@ async function threadsOfKey(client: PoolClient, key: string, viewer: { userId: s
 }
 
 /** The group key of one thread (null when it does not exist). */
-async function keyOfThread(client: PoolClient, channel: InboxChannel, id: string): Promise<string | null> {
-  const o: ListOpts = { viewerId: '', team: true, channel, filter: 'all', q: '', view: 'all', limit: 1, plans: false };
+async function keyOfThread(client: PoolClient, channel: InboxChannel, id: string, viewerId: string): Promise<string | null> {
+  // the viewer's own id: the email query compares it to a uuid column (an empty string failed every email thread)
+  // and it is what lets the owner find their own personal mail
+  const o: ListOpts = { viewerId, team: true, channel, filter: 'all', q: '', view: 'all', limit: 1, plans: false };
   const vals: unknown[] = [];
   if (channel === 'chat' && !(await chatsStored(client))) return null;
   const base = channel === 'linkedin' ? linkedinSql(o, vals, true) : channel === 'chat' ? chatSql(o, vals, true) : emailSql(o, vals, true);
@@ -539,7 +596,7 @@ export async function getConversation(channel: InboxChannel, id: string, viewer:
   const client = await pool.connect();
   let key: string | null;
   try {
-    key = await keyOfThread(client, channel, id);
+    key = await keyOfThread(client, channel, id, viewer.userId);
   } finally {
     client.release();
   }

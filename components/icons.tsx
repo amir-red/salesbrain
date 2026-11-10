@@ -27,6 +27,8 @@ export const Handshake = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><path
 export const Note = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><path d="M6 3h9l5 5v13H6z M14 3v5h5M9 13h7M9 17h5" /></svg>;
 export const Flag = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><path d="M5 21V4h11l-1.5 4L16 12H5" /></svg>;
 export const User = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0116 0" /></svg>;
+export const Paperclip = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><path d="M20 11.5l-8.2 8.2a5 5 0 01-7.1-7.1l8.5-8.5a3.3 3.3 0 014.7 4.7l-8.4 8.4a1.7 1.7 0 01-2.4-2.4l7.6-7.6" /></svg>;
+export const FileIcon = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><path d="M6 3h8l5 5v13H6z M14 3v5h5" /></svg>;
 export const Download = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><path d="M12 3v12M7 10l5 5 5-5M4 21h16" /></svg>;
 export const Dot = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" /></svg>;
 export const External = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><path d="M14 4h6v6M20 4l-9 9M19 14v6H4V5h6" /></svg>;

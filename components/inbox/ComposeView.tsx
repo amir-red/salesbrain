@@ -10,6 +10,7 @@ import type { ComposeFacts } from '@/lib/inbox-compose-server';
 import type { FeedbackResult } from '@/lib/voice';
 import { LearnedLines } from '@/components/voice/DraftReview';
 import { EMPTY_VERDICT, ProposalStrip, RatingStrip, verdictGiven, verdictReason, type InboxProposal, type Verdict } from './InboxDraft';
+import { AttachButton, AttachmentChips, dropProps, useAttachments } from './Attachments';
 
 type Channel = 'linkedin' | 'email';
 
@@ -28,6 +29,7 @@ export default function ComposeView({ prospectId, onBack, onOpen }: { prospectId
   const [subject, setSubject] = useState('');
   const [proposal, setProposal] = useState<InboxProposal | null>(null);
   const [verdict, setVerdict] = useState<Verdict>(EMPTY_VERDICT);
+  const att = useAttachments();   // files going out with the first message (core 104)
   const [learned, setLearned] = useState<FeedbackResult | null>(null);
   const [teaching, setTeaching] = useState(false);
   const [teachErr, setTeachErr] = useState<string | null>(null);
@@ -85,10 +87,12 @@ export default function ComposeView({ prospectId, onBack, onOpen }: { prospectId
   async function send(asIs = false) {
     const out = asIs && proposal ? proposal.message : text;
     if (!out.trim()) return;
+    if (att.uploading) { setNote({ kind: 'info', text: 'A file is still uploading — send when it is done.' }); return; }
     setBusy(asIs ? 'send-asis' : 'send'); setNote(null);
     try {
       const res = await fetch('/api/inbox/compose', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'send', prospect_id: prospectId, channel, text: out, subject, ...(proposal ? { voice: proposal.voice } : {}) }) });
+        body: JSON.stringify({ action: 'send', prospect_id: prospectId, channel, text: out, subject, ...(proposal ? { voice: proposal.voice } : {}),
+          ...(att.ids.length ? { file_ids: att.ids } : {}) }) });
       const d = await res.json();
       if (!res.ok || d.error) {
         if (d.open) { onOpen(d.open); return; }
@@ -107,11 +111,11 @@ export default function ComposeView({ prospectId, onBack, onOpen }: { prospectId
         setProposal(null);
       }
       if (d.sent) {
-        setText('');
+        setText(''); att.clear();
         setNote({ kind: 'info', text: `Sent from your ${channel === 'linkedin' ? 'LinkedIn' : (d.mailbox || 'Gmail')}.` });
         if (d.open) setTimeout(() => onOpen(d.open), 1200);
       } else if (d.waiting) {
-        setText(''); setNote({ kind: 'info', text: d.note || 'Held by the send rules; it goes out at the next send window.' });
+        setText(''); att.clear(); setNote({ kind: 'info', text: d.note || 'Held by the send rules; it goes out at the next send window.' });
       } else {
         throw new Error(d.reason || 'Not sent');
       }
@@ -215,21 +219,32 @@ export default function ComposeView({ prospectId, onBack, onOpen }: { prospectId
                 setProposal(null); setText('');
               }} />
           ) : (
-            <>
+            <div {...dropProps(att.add, true)}>
               <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4}
                 placeholder={channel === 'email' ? `Your first email to ${first}…` : `Your first LinkedIn message to ${first}…`}
                 onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && text.trim() && !busy) { e.preventDefault(); void send(); } }}
                 className="z-input resize-none" style={{ minHeight: 96 }} aria-label="Message" />
+              <AttachmentChips files={att.files} onRemove={att.remove} />
               <div className="flex items-center gap-2 mt-2">
+                <AttachButton onPick={att.add} disabled={!!busy} compact />
                 <p className="text-[11px] flex-1 min-w-0 truncate" style={{ color: 'var(--text-muted)' }}>{fromLine}</p>
                 <Button size="sm" onClick={draft} disabled={!!busy} title="An AI proposal in your voice, from what we know about them — you edit and send">
                   <span className="inline-flex items-center gap-1"><Sparkle width={12} height={12} />{busy === 'draft' ? 'Drafting…' : 'Draft with AI'}</span>
                 </Button>
-                <Button variant="primary" onClick={() => send()} disabled={!text.trim() || !!busy || (channel === 'email' && !subject.trim())}>
-                  {busy === 'send' ? 'Sending…' : 'Send'}
+                <Button variant="primary" onClick={() => send()} disabled={!text.trim() || !!busy || att.uploading || (channel === 'email' && !subject.trim())}>
+                  {busy === 'send' ? 'Sending…' : att.uploading ? 'Uploading…' : 'Send'}
                 </Button>
               </div>
-            </>
+            </div>
+          )}
+          {proposal && (
+            <div className="flex items-center gap-2 mt-2 flex-wrap" {...dropProps(att.add, true)}>
+              <AttachButton onPick={att.add} disabled={!!busy} />
+              <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                {att.count ? `${att.count} file${att.count > 1 ? 's' : ''} go${att.count > 1 ? '' : 'es'} out with the message` : 'Files go out with the message'}
+              </span>
+              <div className="w-full"><AttachmentChips files={att.files} onRemove={att.remove} /></div>
+            </div>
           )}
           {!proposal && learned && (
             <div className="rounded-xl px-3 py-2 mt-3 text-xs flex items-start gap-2" style={{ background: 'color-mix(in srgb, var(--green) 8%, transparent)' }}>

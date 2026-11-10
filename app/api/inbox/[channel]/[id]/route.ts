@@ -11,7 +11,7 @@ import type { InboxChannel } from '@/lib/inbox';
  *      channel when the thread is grouped (2026-11-09), else the thread alone. Opening it marks it seen for its owner.
  * POST {action:'draft'} — an AI proposal for the next message in this conversation, in the OWNER's own voice (the one
  *      drafter, core 098): a reply when they wrote last, a follow-up when we did. Returns message, reasoning, voice.
- * POST {action:'reply', text, voice?} — sent at once from the owner's own account through the send gate (pressing
+ * POST {action:'reply', text, voice?, file_ids?} — sent at once from the owner's own account through the send gate (pressing
  *      Send is the decision; quiet hours / a cap keep it approved for the next window). Only the owner. `voice` = the
  *      stamp from 'draft', so the edit / untouched send / stars afterwards teach the owner's voice.
  *      {action:'done'|'reopen'} — the owner or an admin. {action:'refresh'} — re-read it now (owner).
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const p = parse(params);
   if (!p) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  let body: { action?: string; text?: string; voice?: unknown } = {};
+  let body: { action?: string; text?: string; voice?: unknown; file_ids?: unknown } = {};
   try { body = await req.json(); } catch { /* empty */ }
   const viewer = { userId: session.userId, admin: session.role === 'admin' };
 
@@ -89,11 +89,13 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   }
   if (body.action === 'reply' || body.action === 'refresh') {
     const text = typeof body.text === 'string' ? body.text : '';
-    if (body.action === 'reply' && !text.trim()) return NextResponse.json({ error: 'Write a reply first.' }, { status: 400 });
+    // files uploaded in the reply box (core 104: /api/inbox/files), sent with the reply
+    const fileIds = Array.isArray(body.file_ids) ? body.file_ids.map(String).filter((x) => UUID.test(x)).slice(0, 5) : [];
+    if (body.action === 'reply' && !text.trim() && !fileIds.length) return NextResponse.json({ error: 'Write a reply first.' }, { status: 400 });
     try {
       const voice = body.action === 'reply' ? cleanStamp(body.voice) : undefined;
       const out = await kernelCall(body.action === 'reply' ? 'inbox_reply' : 'inbox_refresh',
-        { channel: p.channel, thread_id: p.id, ...(body.action === 'reply' ? { text, ...(voice ? { voice } : {}) } : {}) }, session.userId);
+        { channel: p.channel, thread_id: p.id, ...(body.action === 'reply' ? { text, ...(voice ? { voice } : {}), ...(fileIds.length ? { file_ids: fileIds } : {}) } : {}) }, session.userId);
       const thread = await getConversation(p.channel, p.id, viewer);
       return NextResponse.json({ ...out, thread }, { status: out.error ? 400 : 200 });
     } catch (err) {

@@ -8,36 +8,15 @@
  */
 import pool from '@/lib/db';
 import { getValidAccessToken } from '@/lib/google-oauth';
+import { filesForSend } from '@/lib/message-files';
+import { buildMime, type MimeFile } from '@/lib/gmail-mime';
+
+export { buildMime };
 
 const GMAIL = 'https://gmail.googleapis.com/gmail/v1/users/me';
 
 function b64url(s: string | Buffer): string {
   return Buffer.from(s).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-/** RFC 2047 for a header with non-ASCII text (umlauts in a subject or a name). */
-function encodeHeader(v: string): string {
-  // eslint-disable-next-line no-control-regex
-  return /^[\x00-\x7F]*$/.test(v) ? v : `=?UTF-8?B?${Buffer.from(v, 'utf8').toString('base64')}?=`;
-}
-
-function cleanHeader(v: string): string {
-  return v.replace(/[\r\n]+/g, ' ').trim();
-}
-
-export function buildMime(o: { from: string; fromName?: string | null; to: string; subject: string; body: string; inReplyTo?: string | null }): string {
-  const from = o.fromName ? `${encodeHeader(cleanHeader(o.fromName))} <${cleanHeader(o.from)}>` : cleanHeader(o.from);
-  const lines = [
-    `From: ${from}`,
-    `To: ${cleanHeader(o.to)}`,
-    `Subject: ${encodeHeader(cleanHeader(o.subject))}`,
-    'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset="UTF-8"',
-    'Content-Transfer-Encoding: base64',
-  ];
-  if (o.inReplyTo) lines.push(`In-Reply-To: ${cleanHeader(o.inReplyTo)}`, `References: ${cleanHeader(o.inReplyTo)}`);
-  const body = Buffer.from(o.body.replace(/\r?\n/g, '\r\n'), 'utf8').toString('base64').replace(/(.{76})/g, '$1\r\n');
-  return `${lines.join('\r\n')}\r\n\r\n${body}`;
 }
 
 /** One of the person's sending mailboxes (core 102): `mailbox` when given, else their default. */
@@ -51,7 +30,7 @@ async function sender(userId: string, mailbox?: string | null) {
   return rows[0] as { address: string; display_name: string | null } | undefined;
 }
 
-export async function sendGmail(userId: string, msg: { to: string; subject: string; body: string; threadId?: string | null; inReplyTo?: string | null; mailbox?: string | null }):
+export async function sendGmail(userId: string, msg: { to: string; subject: string; body: string; threadId?: string | null; inReplyTo?: string | null; mailbox?: string | null; attachments?: string[] }):
   Promise<{ message_id: string; thread_id: string; rfc_id: string | null } | { error: string }> {
   const s = await sender(userId, msg.mailbox);
   if (!s) return { error: msg.mailbox ? `${msg.mailbox} is not connected for sending (Profile → Google, allow sending email).`
@@ -59,11 +38,35 @@ export async function sendGmail(userId: string, msg: { to: string; subject: stri
   const tok = await getValidAccessToken(userId, 'google', s.address);
   if (!tok) return { error: 'The Google connection stopped working (permission revoked or expired). Reconnect on Profile → Google.' };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(msg.to)) return { error: `not an email address: ${msg.to}` };
-  const raw = b64url(buildMime({ from: s.address, fromName: s.display_name, to: msg.to, subject: msg.subject, body: msg.body, inReplyTo: msg.inReplyTo }));
-  const res = await fetch(`${GMAIL}/messages/send`, {
-    method: 'POST', headers: { Authorization: `Bearer ${tok.accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(msg.threadId ? { raw, threadId: msg.threadId } : { raw }),
-  });
+  let files: MimeFile[] = [];
+  if (msg.attachments?.length) {
+    const got = await filesForSend(userId, msg.attachments);
+    if ('error' in got) return { error: got.error };
+    files = got;
+  }
+  const mime = buildMime({ from: s.address, fromName: s.display_name, to: msg.to, subject: msg.subject, body: msg.body, inReplyTo: msg.inReplyTo, files });
+  let res: Response;
+  if (!files.length) {
+    const raw = b64url(mime);
+    res = await fetch(`${GMAIL}/messages/send`, {
+      method: 'POST', headers: { Authorization: `Bearer ${tok.accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(msg.threadId ? { raw, threadId: msg.threadId } : { raw }),
+    });
+  } else {
+    // A message with files goes through Gmail's upload endpoint (up to 35 MB; the JSON form is meant for small mail):
+    // multipart/related = the metadata (thread) + the message itself.
+    const b = `sbup_${Date.now().toString(36)}`;
+    const body = Buffer.concat([
+      Buffer.from(`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(msg.threadId ? { threadId: msg.threadId } : {})}\r\n`
+        + `--${b}\r\nContent-Type: message/rfc822\r\n\r\n`),
+      Buffer.from(mime, 'utf8'),
+      Buffer.from(`\r\n--${b}--\r\n`),
+    ]);
+    res = await fetch('https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=multipart', {
+      method: 'POST', headers: { Authorization: `Bearer ${tok.accessToken}`, 'Content-Type': `multipart/related; boundary=${b}` },
+      body,
+    });
+  }
   if (!res.ok) {
     const detail = (await res.text()).replace(/\s+/g, ' ').slice(0, 200);
     return { error: `Gmail refused the send (${res.status}): ${detail}` };
@@ -90,13 +93,62 @@ export interface ThreadMessage {
   id: string; from: string; subject: string; snippet: string; date: string | null; from_me: boolean;
   /** with `full`: the plain-text body (quoted history cut off), To and the Message-ID header */
   body?: string; to?: string; rfc_id?: string | null;
+  /** with `full`: the message's files (core 104) — Gmail part ids, fetched on download */
+  attachments?: { part_id: string; name: string; mime: string | null; size: number | null }[];
   /** with `full`: the headers mail systems set on an automatic reply (out of office) — the kernel reads them */
   auto_headers?: Record<string, string>;
 }
 
 import { htmlToText, stripQuoted } from '@/lib/email-text';
 
-type GmailPart = { mimeType?: string; body?: { data?: string }; parts?: GmailPart[] };
+type GmailPart = {
+  partId?: string; mimeType?: string; filename?: string;
+  headers?: { name: string; value: string }[];
+  body?: { data?: string; attachmentId?: string; size?: number }; parts?: GmailPart[];
+};
+
+/**
+ * The files of one Gmail message: every part with a file name. An inline image with a Content-ID (a logo in a
+ * signature) is left out — it is part of the mail's look, not something someone sent.
+ */
+export function fileParts(p: GmailPart | undefined, out: { part_id: string; name: string; mime: string | null; size: number | null }[] = []) {
+  if (!p) return out;
+  if (p.filename && p.partId && (p.body?.attachmentId || p.body?.data)) {
+    const h = (n: string) => p.headers?.find((x) => x.name.toLowerCase() === n)?.value ?? '';
+    const inlineLogo = /^inline/i.test(h('content-disposition')) && !!h('content-id') && /^image\//i.test(p.mimeType || '');
+    if (!inlineLogo) out.push({ part_id: p.partId, name: p.filename, mime: p.mimeType || null, size: p.body?.size ?? null });
+  }
+  for (const c of p.parts || []) fileParts(c, out);
+  return out;
+}
+
+function findById(p: GmailPart | undefined, partId: string): GmailPart | null {
+  if (!p) return null;
+  if (p.partId === partId) return p;
+  for (const c of p.parts || []) { const hit = findById(c, partId); if (hit) return hit; }
+  return null;
+}
+
+/** The bytes of one file of a Gmail message (the part is found again: Gmail's attachment ids change between reads). */
+export async function gmailFile(userId: string, mailbox: string | null, gmailMessageId: string, partId: string):
+  Promise<{ name: string; mime: string; content: Buffer } | { error: string }> {
+  const tok = await getValidAccessToken(userId, 'google', mailbox);
+  if (!tok) return { error: 'The Google connection for this mailbox stopped working. Reconnect it on Profile → Google.' };
+  const auth = { headers: { Authorization: `Bearer ${tok.accessToken}` } };
+  const r = await fetch(`${GMAIL}/messages/${encodeURIComponent(gmailMessageId)}?format=full`, auth);
+  if (!r.ok) return { error: `Gmail refused reading the message (${r.status})` };
+  const m = await r.json() as { payload?: GmailPart };
+  const part = findById(m.payload, partId);
+  if (!part) return { error: 'This file is no longer in the message.' };
+  let data = part.body?.data;
+  if (!data && part.body?.attachmentId) {
+    const a = await fetch(`${GMAIL}/messages/${encodeURIComponent(gmailMessageId)}/attachments/${encodeURIComponent(part.body.attachmentId)}`, auth);
+    if (!a.ok) return { error: `Gmail refused the file (${a.status})` };
+    data = ((await a.json()) as { data?: string }).data;
+  }
+  if (!data) return { error: 'Gmail returned no file.' };
+  return { name: part.filename || 'file', mime: part.mimeType || 'application/octet-stream', content: Buffer.from(data, 'base64url') };
+}
 
 function decodePart(data: string): string {
   return Buffer.from(data, 'base64url').toString('utf8');
@@ -162,6 +214,7 @@ export async function readThreads(userId: string, threadIds: string[], opts: { f
           msg.body = stripQuoted(plain ?? (html != null ? htmlToText(html) : msg.snippet)).slice(0, 20000);
           msg.to = h('to');
           msg.rfc_id = h('message-id') || null;
+          msg.attachments = fileParts(m.payload).slice(0, 20);
           const auto: Record<string, string> = {};
           for (const name of ['auto-submitted', 'x-autoreply', 'x-autorespond', 'precedence', 'x-auto-response-suppress']) {
             const v = h(name);
