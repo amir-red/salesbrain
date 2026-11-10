@@ -179,6 +179,8 @@ export interface PanelPayload {
   /** The viewer may change this list: its owner or an admin (every list is visible to everyone). */
   can_edit: boolean;
   blockers: string[];
+  /** The Leads Finder's fence for this list (105); null before the migration. */
+  list_fit?: ListFit | null;
   quota: OwnerQuota;
   policy: {
     kill_switch: boolean;
@@ -255,6 +257,19 @@ export function stageTotal(stages: StageCounts): number {
 }
 
 /**
+ * The Leads Finder's fence for one list (core policy/lead_gate.py, migration 105): what its definition lacks, how many
+ * people the Leads Finder has added against the list's cap, and whether every search has stopped finding people who
+ * fit. Only people the Leads Finder found count toward the cap.
+ */
+export interface ListFit { missing: string[]; found: number; cap: number; max_leads: number | null; done: boolean }
+
+/** Same rule as lead_gate.search_ready: titles, locations and industries on the definition. */
+export function missingDefinition(criteria: { titles?: unknown[]; locations?: unknown[]; industries?: unknown[] } | null | undefined): string[] {
+  const c = criteria ?? {};
+  return (['titles', 'locations', 'industries'] as const).filter((k) => !(c[k] ?? []).some((v) => String(v ?? '').trim()));
+}
+
+/**
  * Why the Leads Finder will NOT run for this ICP right now, in the order the
  * scheduler checks (policy/leads_finder.should_run): kill switch → agent
  * enabled → held for this person → ICP held → LinkedIn present → account
@@ -267,6 +282,7 @@ export function blockersFor(
   policy: { kill_switch: boolean; leads_finder_enabled: boolean; user_hold?: string | null },
   state: IcpAgentState | null,
   now: Date = new Date(),
+  list?: ListFit | null,
 ): string[] {
   const out: string[] = [];
   if (!policy.kill_switch) out.push('Kill switch is on — every agent is stopped');
@@ -276,7 +292,10 @@ export function blockersFor(
   if (quota && !quota.connected) out.push('Owner has no LinkedIn connected — nothing can source');
   if (quota?.paused_at) out.push(`LinkedIn account paused — ${quota.pause_reason || 'provider errors'}`);
   if (quota && quota.search.cap > 0 && quota.search.used >= quota.search.cap) out.push(`Daily search budget spent (${quota.search.used}/${quota.search.cap})`);
-  if (state?.exhausted_at) out.push('Every search variant is exhausted — retries after the cool-off');
+  if (list?.missing.length) out.push(`List not ready to search: add ${list.missing.join(', ')} to its definition`);
+  if (list && list.found >= list.cap) out.push(`List full: the Leads Finder has added ${list.found} of its ${list.cap} people`);
+  if (list?.done) out.push('List done: every search stopped finding people who fit it');
+  else if (state?.exhausted_at) out.push('Every search variant is exhausted — retries after the cool-off');
   if (state?.next_eligible_at && new Date(state.next_eligible_at) > now) out.push(`Backing off until ${new Date(state.next_eligible_at).toLocaleString()}`);
   return out;
 }

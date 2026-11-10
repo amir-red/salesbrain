@@ -3649,6 +3649,34 @@ D with each of the eight questions numbered and titled. `/prospects/[id]`:
 - Coverage, not a missing deploy, is why most people say "Research now": person research exists for 496 of 4,632 live leads
   (15 a night), company research for 776; dated why-now facts need the lead-profile research prompt deployed AND a re-research.
 
+### 5.cu Leads Finder searches inside the list and stops (2026-11-10, feat/leads-finder-fit, migration 105)
+
+Amir, after NRW collected 2,642 owners of any German GmbH (title-only searches, no place, no industry, everyone saved):
+"only the best people that fit our ICP, not abroad, and stop when we can't find good results". Decisions: the LIST's own
+titles are the decision makers (no separate rule); cap 500 per list, changeable, owner told; stop rule below; clean NRW
+first, other lists later.
+- **Gate** `policy/lead_gate.py` (pure): a person is SAVED only if in the list's region (German states + LinkedIn metro
+  labels via `linkedin_find.place_tokens`; a list naming Germany takes "Greater Munich Metropolitan Area"), company in
+  its industries (industry field, or an industry word / German compound in the company or headline; unknown fails unless
+  the search filtered on industry), and title one of its titles; exclusions fail. `prospecting_core.run_icp_search`
+  applies it by default (`gate=True`) for every path and returns `kept` + `dropped` by reason.
+- **No search without a target**: `search_ready` = titles + locations + industries; `search_filters` sends the
+  definition to LinkedIn (location, industry, company size), resolved ONCE per `definition_hash` into
+  `icp_agent_state.resolved_filters`.
+- **Stop rule** (`record_query`): a wording whose page keeps fewer than 5 of 40 three times in a row is finished
+  (`icp_agent_state.query_stats`, refused afterwards); every stored wording finished = the list is done. A changed
+  definition starts over. **Cap** `icp_profiles.max_leads` (NULL = `agents.leads_finder.max_leads_per_list` 500),
+  counting only people the Leads Finder found (sales_navigator / linkedin_search, not archived).
+- `commands/agents.list_stop` (not_ready | full | done) runs in `leads_finder_plan` and `leads_agent.search_step`;
+  `leads_agent.notify_list_stop` DMs the owner once per kind + key (`icp_agent_state.notices`). Tools
+  `crm_leads_finder_list_status` (read) and `crm_icp_set_cap` (owner/admin, 0 = default). App: cap field + progress
+  in the list's Outreach settings (`ListCapField`, `/api/icp/[id]/cap`), the blocker line shows not ready / full / done.
+- **NRW (data, 2026-11-10)**: generic titles removed (leiter, leiterin, leitung, direktor, edv, vertreten durch, dipl kfm,
+  personalleitung, gesellschafter, gesellschafterin; 26 → 16, old list in agent_audit_log `icp_titles_edit`).
+  Cleanup = `python -m salesbrain_core.store.cleanup_list_nonfits --icp <id> [--locations …] [--report f] [--apply]`
+  (dry run default; only Leads Finder finds; protects anyone contacted / connected / requested / with a card, draft,
+  thread, priority or ✓; archives with a JSON backup, restorable). NOT applied yet — waiting for Amir.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
