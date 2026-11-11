@@ -3849,6 +3849,11 @@ every mirror threw a message's files away.
 
 ### 5.cx The daily connection card is a widget, one person at a time (2026-11-11, feat/connect-widget, no migration)
 
+**LIVE 2026-11-11 (0.91.0)**: ring deployed, adapter patched on the box (both `allowed_updates` lines, original kept as
+`adapter.py.orig-widget`), `SALESBRAIN_CONNECT_CARD_INSIDE=1` in the main and lead-conductor `.env`, "widget query handler
+installed" in `/root/.hermes/logs/agent.log`, the knowledge entry body updated. App unchanged (no Production push). Not yet
+seen live: a real card with buttons inside, a tap, a paced send.
+
 Amir, after Telegram's Bot API 10.4 in-message widgets: "change the daily connector to that widget, and instead of sending
 all in one, make it one by one with a little information about the person". The `connect_batch_card` (daily connector,
 `bundle_pending_connects`, the daily repost) is now posted by `salesbrain_hermes/connect_widget.py`: one HTML widget
