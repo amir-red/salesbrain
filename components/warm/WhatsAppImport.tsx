@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * "Import a WhatsApp chat" on /warm: the closest relationships live on WhatsApp (Mateo, 2026-10-26), which no API
+ * "WhatsApp chat" on Profile → Imports: the closest relationships live on WhatsApp (Mateo, 2026-10-26), which no API
  * reaches. Export a one-to-one chat on the phone (Export chat → Without media) and drop the file here; its messages
  * count towards warmth like LinkedIn and email conversations. Importing the same chat again adds nothing.
  */

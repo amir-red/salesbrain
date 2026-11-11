@@ -6,7 +6,7 @@ import Sidebar from '@/components/Sidebar';
 
 /**
  * /person/<person id> — opens a person's profile (/prospects/<id>). Replaces the People dossier page (/relationships,
- * retired 2026-11-11): links that only know a person id (Network, Warm people, old bookmarks) land here.
+ * retired 2026-11-11): links that only know a person id (Network, the Dashboard's warm list, old bookmarks) land here.
  * Picks the person's prospect row — the viewer's own first, then a live one, then the best fit, then the newest —
  * matched by person id or through their contact. Prospect profiles are readable by every teammate.
  */
@@ -38,7 +38,7 @@ export default async function PersonPage({ params }: { params: { id: string } })
           <h1 className="text-lg font-bold">{name}</h1>
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
             {name} is not a lead or prospect yet, so there is no profile.
-            Add them from <Link href="/warm" className="underline">Warm people</Link> or put them on a list.
+            Add them from <Link href="/dashboard#warm" className="underline">Warm, nobody on it</Link> on the Dashboard or put them on a list.
           </p>
           <p className="text-sm"><Link href="/network" className="underline" style={{ color: 'var(--accent)' }}>← Network</Link></p>
         </div>
