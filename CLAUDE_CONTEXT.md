@@ -3749,6 +3749,18 @@ row first, then live, best fit, newest; matched by person id or their contact), 
 plain text until added; Network's Dossier → Profile; the lead card's dossier link removed. The kernel tables
 (facts, commitments, interactions) stay: the agents read them.
 
+### 5.cz Warm people move to the Dashboard; knowing someone is one fact (2026-11-11, core 0.90.0, no migration)
+
+Amir: "do we need a dedicated warm people page?" Found: since Mateo's CSV import (11-02) a LinkedIn connection that is ALSO
+in a contacts export scored 0.25 + 0.20 = 0.40 = exactly "warm"; 1,954 of 2,180 warm people were only that, 190 had ever
+written to us, and "Add as lead" had never been used. Now `policy/warmth.score`: connection / by_request / saved are ONE fact,
+only the strongest counts (a bare connection = 0.25, cool; the reasons still list both). Re-scored on the box: 190 people
+warm or hot (Hannes 93, Mateo 2,004 → 75, Amir 32, Matthias 51 → 23). This also feeds the trust score, the Monday note and
+the Leads "warmest first" sort (rescored by the funnel refresh). `/warm` is off the menu and redirects to
+`/dashboard?owner=#warm`: `components/warm/WarmPeopleCard.tsx` ("Warm, nobody on it": top 8, Show all, hot/warm, also-worked,
+Excel export, Add as lead) on the Dashboard, following its teammate filter. WhatsApp chat import → Profile → Imports.
+Prospects keeps its warm filter (`?warm=1`). The Monday digest links to the Dashboard section.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
