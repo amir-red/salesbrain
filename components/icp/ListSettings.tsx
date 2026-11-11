@@ -7,6 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import ListVoiceFields, { type ListVoice } from './ListVoiceFields';
+import ListCapField from './ListCapField';
 import { DEFAULT_WEIGHTS, WEIGHT_LABELS, normalizeCriteria, normalizeWeights, weightsTotal } from '@/lib/icp';
 import type { IcpCriteria, WeightKey } from '@/lib/icp';
 import { Chat, Chevron, Info, Note, Send, Sliders } from '@/components/icons';
@@ -100,7 +101,7 @@ export default function ListSettings({ icpId, onSaved }: { icpId: string; onSave
         className="w-full flex items-center gap-2 px-4 min-h-12 text-left">
         <Sliders width={16} height={16} style={{ color: 'var(--accent)' }} />
         <span className="text-sm font-semibold">Outreach settings</span>
-        <span className="text-xs" style={muted}>pitch · first message · scoring</span>
+        <span className="text-xs" style={muted}>pitch · first message · Leads Finder cap · scoring</span>
         <Chevron width={16} height={16} className="ml-auto transition-transform duration-150" style={{ ...muted, transform: open ? 'rotate(90deg)' : undefined }} />
       </button>
 
@@ -132,6 +133,8 @@ export default function ListSettings({ icpId, onSaved }: { icpId: string; onSave
                   placeholder="Hi {first_name}, thanks for connecting…" className="z-input text-sm resize-y" />
                 <p className="text-[11px]" style={muted}>{'{first_name} {full_name} {company}'}</p>
               </div>
+
+              {icp.objective !== 'list' && <ListCapField icpId={icpId} editable={editable} />}
 
               <div className="space-y-2">
                 <Head icon={Sliders} title="Scoring" tip="How a person's fit score (0–100) is made up. The list's tuning panel can propose these from what got answers." />
