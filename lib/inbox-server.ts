@@ -5,7 +5,8 @@
  * What is listed: "outreach" conversations. Email = every Gmail thread a SalesBrain email started (so all of them).
  * LinkedIn = a mirrored chat whose person is a prospect or sales lead, or that a SalesBrain message went into;
  * `view: 'all'` shows every LinkedIn chat of the account. Chats (core 100: WhatsApp / iMessage / Telegram) = every
- * stored one, since the store only keeps one-to-one conversations with people the owner's CRM knows.
+ * stored one; since core 106 that includes groups and people the CRM does not know, which are their OWNER's alone (like
+ * personal mail) and are left out of the 'outreach' view.
  * Email (core 102): every connected Google account's whole Primary inbox is stored too (origin 'mailbox'). View
  * 'outreach' = threads our email started or with a person in the CRM; 'all' = everything. A mailbox thread with nobody
  * from the CRM in it is visible to its OWNER only — an admin's team view never lists a teammate's personal mail. Visibility: your own accounts; an admin may pass
@@ -159,7 +160,14 @@ function emailSql(o: ListOpts, vals: unknown[], forCount = false): string {
 
 function chatSql(o: ListOpts, vals: unknown[], forCount = false): string {
   const where: string[] = ['t.last_message_at IS NOT NULL'];
-  if (!o.team) { vals.push(o.viewerId); where.push(`t.owner_user_id = $${vals.length}`); }
+  vals.push(o.viewerId);
+  const me = vals.length;
+  if (!o.team) where.push(`t.owner_user_id = $${me}`);
+  // A group, or someone nobody has in the CRM (core 106), is its owner's alone: a teammate's team view never lists it.
+  const known = `(NOT t.is_group AND (t.prospect_id IS NOT NULL OR (t.person_id IS NOT NULL AND (
+      EXISTS (SELECT 1 FROM contacts kc WHERE kc.person_id = t.person_id) OR EXISTS (SELECT 1 FROM prospects kp WHERE kp.person_id = t.person_id)))))`;
+  where.push(`(t.owner_user_id = $${me} OR ${known})`);
+  if (o.view === 'outreach') where.push(known);
   if (!forCount) {
     if (o.filter === 'needs_reply') where.push(`t.state = 'needs_reply'`);
     else if (o.filter === 'unread') where.push(CH_UNREAD);
@@ -176,7 +184,7 @@ function chatSql(o: ListOpts, vals: unknown[], forCount = false): string {
   return `
     SELECT 'chat' AS channel, t.id::text AS id, t.owner_user_id::text AS owner_user_id, u.name AS owner_name,
            COALESCE(c.full_name, pe.full_name, t.counterpart_name, t.title) AS name,
-           COALESCE(c.title, pe.facets ->> 'title') AS headline,
+           COALESCE(c.title, pe.facets ->> 'title', CASE WHEN t.is_group THEN 'Group chat' END) AS headline,
            COALESCE(a.name, pe.organization) AS company, t.counterpart_email AS email, NULL::text AS subject,
            t.last_snippet AS snippet, t.last_message_at, COALESCE(t.last_from_them, true) AS last_from_them, t.state,
            ${CH_UNREAD} AS unread, t.prospect_id::text AS prospect_id, t.person_id::text AS person_id,
@@ -396,18 +404,21 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
     let mailbox: string | null = null;
     let chat: { can_reply: boolean; only_last_message: boolean; open_url: string | null; kind: string } | null = null;
     let unknownSender = false;
+    let isGroup = false;
     let emailMeta: { mailbox: string | null; gmail_thread_id: string; origin: string; person_id: string | null; prospect_id: string | null } | null = null;
     if (channel === 'chat') {
       const t = await client.query(
-        `SELECT t.can_reply, t.only_last_message, t.open_url, s.kind, s.revoked_at IS NULL AS live
+        `SELECT t.can_reply, t.only_last_message, t.open_url, t.is_group, s.kind, s.revoked_at IS NULL AS live
            FROM chat_threads t JOIN messaging_sources s ON s.id = t.source_id WHERE t.id = $1`, [id]);
       const r = t.rows[0];
-      chat = { can_reply: !!(r?.can_reply && r?.live && r?.kind === 'unipile_whatsapp'), only_last_message: !!r?.only_last_message,
+      isGroup = !!r?.is_group;
+      chat = { can_reply: !!(r?.can_reply && r?.live && r?.kind === 'unipile_whatsapp' && !r?.is_group), only_last_message: !!r?.only_last_message,
                open_url: r?.open_url ?? null, kind: r?.kind ?? '' };
       const m = await client.query(
-        `SELECT id::text, from_me, COALESCE(text, '') AS text, sent_at, truncated, time_is_read_time, ${files} FROM chat_messages
+        `SELECT id::text, from_me, sender_name, COALESCE(text, '') AS text, sent_at, truncated, time_is_read_time, ${files} FROM chat_messages
           WHERE thread_id = $1 ORDER BY sent_at NULLS FIRST, created_at LIMIT 500`, [id]);
       raw = m.rows.map((r) => ({ id: r.id, from_me: r.from_me, text: r.truncated ? `${r.text}…` : r.text, sent_at: iso(r.sent_at),
+        ...(isGroup && r.from_me === false && r.sender_name ? { sender_name: r.sender_name as string } : {}),
         ...(r.from_me === null ? { sender_unknown: true } : {}), ...(r.time_is_read_time ? { read_time: true } : {}),
         ...attachmentsOf('chat', r.id, r.attachments) }));
       unknownSender = m.rows.some((r) => r.from_me === null || r.time_is_read_time);
@@ -464,7 +475,9 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
     }
     if (chat) {
       can_reply = mine && chat.can_reply;
-      if (mine && !chat.can_reply) reply_note = 'Sending from here works for WhatsApp connected on Profile → Messaging. Draft a reply, copy it and send it in the app.';
+      if (mine && !chat.can_reply) reply_note = isGroup
+        ? 'A group chat is read here only. Answer it in WhatsApp.'
+        : 'Sending from here works for WhatsApp connected on Profile → Messaging. Draft a reply, copy it and send it in the app.';
       source_note = chat.kind === 'zeami_link'
         ? (chat.only_last_message
           ? 'Read from Zeami Messaging, which keeps only the last message of this chat: the history here builds up from the times we read it (every 10 minutes).'
