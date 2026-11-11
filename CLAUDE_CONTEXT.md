@@ -3824,6 +3824,62 @@ missing member id when no other lead of the owner holds it; never lowers a degre
 (`mark_connected_prospects`, owner scope; stat `leads_marked_connected`), after every relations page of the graph mirror, and
 when a lead is added by hand or gets its LinkedIn profile (`prospecting._mark_if_connected`). Test `test_linkedin_connected_db.py`.
 
+### 5.cx Email replies that understand the conversation; the strong model for every draft; no em dash, ever (2026-11-11, feat/email-cc, migration 108)
+
+Mateo, on two Inbox drafts: Liliane's mail to Digital Africa's AWS manager (Mateo only in Cc) was answered as if it were
+his; Jochen's introduction (two intros in one Gmail thread, then Niklas and his colleague Michael answering) was answered
+"Hallo Herr Linck" to the introducer, and two of Mateo's real "Hi Niklas" mails had gone To Jochen. Amir: build all
+eight improvements, the strong model for every draft "so it doesn't look AI wrote the message", and "DO NOT EVER USE em
+dash, put that instruction everywhere". Plan of record: the eight points in the 2026-11-11 conversation.
+- **Copied-only mail (108)**: `email_messages.cc_header`, `email_threads.cc_only`. `inbox.written_to_us`: ours when one of
+  the owner's addresses (login, every Google account, every sending mailbox, the thread's mailbox: `our_addresses`) is in
+  To, or when the mail names them (subject, greeting, or anywhere in its first 1,500 characters, which is how an
+  introduction that Cc's them still needs their reply). Otherwise `_summarize` keeps it out of Needs reply ("waiting";
+  a done one stays done). One-off `python -m salesbrain_core.store.recheck_email_turns [--apply]` (dry run 2026-11-11:
+  9 of 121 conversations, all Mateo's; touches nothing but cc_only and needs_reply → waiting).
+- **The conversation reader** (ring `email_reader.py`, kernel `commands/email_context.py`, pure `policy/email_situation.py`):
+  before an email reply is drafted, one strong-model call reads the whole thread (12 newest messages, 7,000 characters,
+  who wrote to whom) plus what we know about each person (`known_people`: teammate, CRM person, lead, warmth, the
+  account behind the domain) and, for people the CRM does not know, ONE Google-grounded lookup on the FAST model
+  (non-free-mail domains, at most 4; the strong model with search took 45 s+). JSON → `parse_reading` (kind intro |
+  cc_fyi | scheduling | question | decision | thanks | update | other, summary, addressee, greet_as, To/Cc/Bcc, ask,
+  we_owe, language, du/Sie, people with roles introducer | introduced | introduced_colleague | teammate | …; every address
+  must be on the thread). Cached on `email_threads.situation` until a new message (`situation_key` = newest Gmail id).
+- **The drafter** (`drafter.py`): EVERY draft on `llm.STRONG_MODEL` (`SALESBRAIN_STRONG_MODEL`, gemini-4-argon; falls back to
+  the main Gemini model, then Bedrock). An email thread gets the whole thread, "WHAT IS GOING ON" (`es.describe`), the
+  INTRO_REPLY step when the reader says intro, the sender's own intro replies first as examples (corpus situation
+  `intro_reply`: "Danke Jochen!\n\nHi Niklas", 108 widens the CHECK; a full corpus refresh reclassifies), and free calendar
+  windows when a meeting is in play (bridge `calendar_free`: Google freeBusy over every account with calendar access,
+  09:00-18:00 Mon-Fri in the calendar's time zone). **Checks** (`policy/email_people`): greeting names someone in To,
+  du/Sie as they write, a clock time inside a free window (no calendar: only their own proposed times pass). One
+  rewrite, then the draft comes back with `warnings` (shown on the proposal, never dropped). Live on Mateo's real thread
+  (scratch DB): reading 17 s, draft 7 s, "Hi Micha," in du, the actual topic, one of his proposed times.
+- **Reply-all and choosing recipients**: `inbox.prepare_reply(recipients, draft_recipients)`; default = reply-all from the
+  thread (`policy/email_people.default_recipients`, TS twin `lib/email-recipients.ts`); every address checked against the
+  do-not-contact list; the send gate checks the person in To (a bare person is made for a new address); stored on
+  `outreach_approvals.recipients`; Gmail gets To/Cc/Bcc (`buildMime`, `sendGmail` takes lists). **Learning (8)**: when the
+  person sends to other people than the reader proposed, `email_context.recipient_lesson` turns the roles into a rule
+  ("When answering an introduction by email, reply to the person you were introduced to, not the person who made the
+  introduction") stored in their voice at once (`kv.learn`, kind judgment) and shown after the send.
+- **App**: Inbox email replies show `ReadingCard` (kind, summary, they ask / you owe, who is who with **Add as lead** →
+  `POST /api/inbox/add-lead` → `crm_prospect_add`) and `RecipientsEditor` (To / Cc / Bcc chips, move, remove, add; a
+  changed one is marked); the proposal shows warnings and the free times; each email bubble shows to / cc; "You're in Cc"
+  pill and a cc chip in the list. `crm_draft` / `campaign_preview` get a 6-minute RPC ceiling.
+- **No em dash, anywhere** (`policy/writing.strip_dashes`, TS `lib/no-dash.ts`, change both): every ring model output
+  (`llm.converse`, `llm.grounded`), every app model output and prompt (`createMessage` adds the rule and cleans text and
+  tool inputs), every Telegram message and card edit (`deliver._send_telegram/_edit_telegram`), every draft
+  (`drafter._finish` rewrites a dash instead of dropping the draft), template paths (`render_first_message`, wave `render`,
+  campaign fixed text); the rule in the drafter prompt's first section, the reader prompt, the default SOUL ("Writing: no
+  em dash, ever") and every agent's base rules; 253 lines of persona / skill / rulebook / routine text de-dashed; 108 adds
+  "—" to every brand's never-write list and de-dashes stored voice rules, templates and first-message templates. Not
+  covered: the chat bot's own replies are steered by the SOUL only (no verified Hermes hook rewrites them), hand-typed
+  text is sent as typed, code comments and error strings still contain dashes.
+- **Cost**: every draft and every email reading on Argon (2 / 10 per MTok, doubling 2026-12-01); the nightly blind
+  evaluation (`draft_eval`) drafts on it too.
+- **Rollout (integration)**: apply 108; `recheck_email_turns --apply`; deploy ring + app; a full
+  `sender_corpus.refresh` per sender so intro replies are tagged. Not built: splitting one Gmail thread that holds two
+  separate introductions into two rows, naming the conversation after its latest writer, a booking link.
+
 ### 5.cv Delete, Mark as spam, Opt out in the Inbox (2026-11-11, migration 107)
 
 **LIVE 2026-11-11 (0.88.0)**: 107 applied, ring deployed (smoke 0.88.0), app on Production (run 43001637633), with the Inbox

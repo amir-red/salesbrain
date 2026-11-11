@@ -5,7 +5,9 @@ import { Sparkle, Star } from '@/components/icons';
 import { LearnedLines } from '@/components/voice/DraftReview';
 import { diffWords } from '@/lib/diff-words';
 import PriorityList from '@/components/voice/PriorityList';
-import type { FeedbackResult, VoiceStamp } from '@/lib/voice';
+import type { FeedbackResult, VoiceFlag, VoiceStamp } from '@/lib/voice';
+import type { EmailReading } from '@/lib/inbox';
+import type { Recipients } from '@/lib/email-recipients';
 
 /**
  * The AI proposal inside the Inbox (2026-11-05). `Draft reply` asks the one drafter (core 098) for the next message
@@ -21,6 +23,13 @@ export interface InboxProposal {
   voice: VoiceStamp;
   situation: 'reply' | 'followup' | 'first';
   priorities: { id?: string | null; content: string; kind: string }[];
+  /** email (core 108): the conversation reader's result, whom it proposed the reply goes to, the checks that did not
+   *  pass after one rewrite (greeting, du/Sie, a time not free in the calendar), the free times it was given */
+  reading?: EmailReading | null;
+  recipients?: Recipients | null;
+  warnings?: VoiceFlag[];
+  free_times?: { label: string }[] | null;
+  time_zone?: string | null;
 }
 
 const RATINGS = ['Unusable', 'Weak', 'Needed work', 'Small fixes', 'Send as is'];
@@ -61,7 +70,7 @@ function Stars({ value, onChange, size = 20, disabled }: { value: number | null;
  * you improved it, so the conversation keeps the room. Send records the rating and note on the sent draft; "Save
  * feedback" teaches without sending; Discard teaches from it too. */
 export function ProposalStrip({ p, after, onAfter, senderFirst, verdict, onVerdict, onDiscard, onTeach, teaching, learned, error,
-  onSendAsIs, onSend, onRedraft, busy, fromLine, copyOnly, openUrl, openLabel, editablePriorities = true }: {
+  onSendAsIs, onSend, onRedraft, busy, fromLine, copyOnly, openUrl, openLabel, editablePriorities = true, sendBlocked = false }: {
   p: InboxProposal; after: string; onAfter: (t: string) => void; senderFirst: string; verdict: Verdict; onVerdict: (v: Verdict) => void;
   onDiscard: () => void; onTeach: () => void; teaching: boolean; learned: FeedbackResult | null; error: string | null;
   onSendAsIs: () => void; onSend: () => void; onRedraft: () => void; busy: string | null; fromLine: string;
@@ -69,6 +78,8 @@ export function ProposalStrip({ p, after, onAfter, senderFirst, verdict, onVerdi
   copyOnly?: boolean; openUrl?: string | null; openLabel?: string;
   /** the viewer is the sender (their own conversation): the priority list can be reordered and added to */
   editablePriorities?: boolean;
+  /** nothing can be sent yet (an email with nobody in To) */
+  sendBlocked?: boolean;
 }) {
   const asIsLabel = copyOnly ? (openUrl ? `Copy as is & open ${openLabel}` : 'Copy as is') : 'Send as is';
   const sendLabel = copyOnly ? (openUrl ? `Copy & open ${openLabel}` : 'Copy') : 'Send';
@@ -102,13 +113,21 @@ export function ProposalStrip({ p, after, onAfter, senderFirst, verdict, onVerdi
       {folded ? (
         <div className="flex items-center gap-2">
           <p className="flex-1 min-w-0 truncate" style={{ color: 'var(--text-muted)' }}>{after || p.message}</p>
-          <button type="button" onClick={onSend} disabled={!after.trim() || !!busy}
+          <button type="button" onClick={onSend} disabled={!after.trim() || !!busy || sendBlocked}
             className="px-4 py-1 rounded-full text-sm font-semibold disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
             {busy === 'reply' ? 'Sending…' : sendLabel}
           </button>
         </div>
       ) : (<>
       {why && p.reasoning && <p style={{ color: 'var(--text-muted)' }}>{p.reasoning}{p.used_facts.length ? ` · used: ${p.used_facts.join(', ')}` : ''}</p>}
+      {!!p.warnings?.length && (
+        <div className="rounded-lg px-2 py-1.5" style={{ background: 'color-mix(in srgb, var(--orange) 12%, transparent)' }}>
+          {p.warnings.map((w, i) => <p key={i}><b>Check:</b> {w.detail || w.check}</p>)}
+        </div>
+      )}
+      {why && !!p.free_times?.length && (
+        <p style={{ color: 'var(--text-muted)' }}>Free in your calendar{p.time_zone ? ` (${p.time_zone})` : ''}: {p.free_times.slice(0, 6).map((f) => f.label).join(' · ')}</p>
+      )}
 
       <div className="grid gap-3 md:grid-cols-[1fr_auto_1fr] items-stretch">
         <div className="flex flex-col">
@@ -118,7 +137,7 @@ export function ProposalStrip({ p, after, onAfter, senderFirst, verdict, onVerdi
               : <del key={i} style={{ color: 'var(--red)', background: 'color-mix(in srgb, var(--red) 8%, transparent)' }}>{d.text}</del>)}
           </div>
           <div className="mt-2 flex justify-center">
-            <button type="button" onClick={onSendAsIs} disabled={!!busy} title={copyOnly ? "Copies the AI's text exactly as written" : "Sends the AI's text exactly as written"}
+            <button type="button" onClick={onSendAsIs} disabled={!!busy || sendBlocked} title={copyOnly ? "Copies the AI's text exactly as written" : "Sends the AI's text exactly as written"}
               className="px-4 py-1.5 rounded-full text-sm font-medium disabled:opacity-40" style={card}>
               {busy === 'reply-asis' ? 'Sending…' : asIsLabel}
             </button>
@@ -157,7 +176,7 @@ export function ProposalStrip({ p, after, onAfter, senderFirst, verdict, onVerdi
           </div>
           </div>
           <div className="mt-2 flex justify-center">
-            <button type="button" onClick={onSend} disabled={!after.trim() || !!busy} title={copyOnly ? 'Copies the text in the After box' : 'Sends the text in the After box'}
+            <button type="button" onClick={onSend} disabled={!after.trim() || !!busy || sendBlocked} title={copyOnly ? 'Copies the text in the After box' : 'Sends the text in the After box'}
               className="px-5 py-1.5 rounded-full text-sm font-semibold disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
               {busy === 'reply' ? 'Sending…' : sendLabel}
             </button>

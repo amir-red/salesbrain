@@ -12,6 +12,7 @@
  */
 
 import type Anthropic from '@anthropic-ai/sdk';
+import { NO_DASH_RULE, stripDashes, stripDashesDeep } from '@/lib/no-dash';
 import pool from './db';
 import { anthropic, BEDROCK_ENABLED, BEDROCK_MODEL, GEMINI_API_KEY, GEMINI_ENABLED, GEMINI_MODEL, geminiModelFor } from './llm';
 import { geminiCreate } from './gemini';
@@ -93,7 +94,29 @@ function forClaude(params: Anthropic.MessageCreateParamsNonStreaming): Anthropic
  * then the Claude path on ANY Gemini failure: an HTTP error, a timeout, a blocked or empty answer.
  * The call sites never see which one answered, except through `response.model`.
  */
+/**
+ * Every model call of the app. Whatever the model writes comes back without em dashes (lib/no-dash.ts), and every
+ * prompt says so: text, and every string inside a tool call's input.
+ */
 export async function createMessage(
+  params: Anthropic.MessageCreateParamsNonStreaming,
+  tag: UsageTag
+): Promise<Anthropic.Message> {
+  const sys = params.system;
+  const withRule: Anthropic.MessageCreateParamsNonStreaming = {
+    ...params,
+    system: typeof sys === 'string' ? `${sys}\n\n${NO_DASH_RULE}`
+      : Array.isArray(sys) ? [...sys, { type: 'text' as const, text: NO_DASH_RULE }] : NO_DASH_RULE,
+  };
+  const res = await createMessageRaw(withRule, tag);
+  return {
+    ...res,
+    content: res.content.map((b) => (b.type === 'text' ? { ...b, text: stripDashes(b.text) }
+      : b.type === 'tool_use' ? { ...b, input: stripDashesDeep(b.input) } : b)) as Anthropic.Message['content'],
+  };
+}
+
+async function createMessageRaw(
   params: Anthropic.MessageCreateParamsNonStreaming,
   tag: UsageTag
 ): Promise<Anthropic.Message> {

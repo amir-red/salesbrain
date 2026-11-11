@@ -86,3 +86,65 @@ async function listAccountMeetings(userId: string, mailbox: string, daysBack: nu
   }
   return { events: out };
 }
+
+export interface FreeWindow { day: string; from: string; to: string; label: string }
+
+/**
+ * Free time in the person's calendar for the next working days (Mateo, 2026-11-11: the drafter proposed "11:00"
+ * without looking). Busy time from Google's freeBusy over every connected account with calendar access, in the
+ * calendar's own time zone; working hours 09:00 to 18:00, Monday to Friday, from two hours from now; windows of at
+ * least 30 minutes. Nothing is stored.
+ */
+export async function freeTimes(userId: string, days = 5): Promise<{ free?: FreeWindow[]; time_zone?: string; error?: string; needs?: string }> {
+  if (!(await hasCalendar(userId))) return { error: 'Calendar access is not granted: reconnect Google on Profile → Google', needs: 'calendar' };
+  const accounts = (await listGoogleAccounts(userId)).filter((a) => a.scopes.includes('calendar.readonly')).map((a) => a.email);
+  const start = Date.now() + 2 * 3600_000;
+  const end = start + Math.min(14, Math.max(1, days)) * 2 * 86400_000;   // calendar days enough to hold the working days
+  const busy: [number, number][] = [];
+  let tz: string | null = null;
+  let got = false;
+  for (const mailbox of accounts) {
+    const tok = await getValidAccessToken(userId, 'google', mailbox);
+    if (!tok) continue;
+    const auth = { Authorization: `Bearer ${tok.accessToken}` };
+    if (!tz) {
+      const c = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary', { headers: auth });
+      if (c.ok) tz = ((await c.json()) as { timeZone?: string }).timeZone || null;
+    }
+    const r = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
+      method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ timeMin: new Date(start).toISOString(), timeMax: new Date(end).toISOString(), items: [{ id: 'primary' }] }),
+    });
+    if (!r.ok) continue;
+    got = true;
+    const j = await r.json() as { calendars?: Record<string, { busy?: { start: string; end: string }[] }> };
+    for (const cal of Object.values(j.calendars || {})) for (const b of cal.busy || []) busy.push([Date.parse(b.start), Date.parse(b.end)]);
+  }
+  if (!got) return { error: 'The calendar could not be read (reconnect Google on Profile → Google)', needs: 'google' };
+  const zone = tz || 'Europe/Berlin';
+  const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: zone, weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  const parts = (t: number) => Object.fromEntries(fmt.formatToParts(new Date(t)).map((p) => [p.type, p.value])) as Record<string, string>;
+  const step = 30 * 60_000;
+  const first = Math.ceil(start / step) * step;
+  const windows: { day: string; label: string; from: string; to: string; endT: number }[] = [];
+  const workDays = new Set<string>();
+  for (let t = first; t < end; t += step) {
+    const p = parts(t);
+    if (p.weekday === 'Sat' || p.weekday === 'Sun') continue;
+    const mins = Number(p.hour) * 60 + Number(p.minute);
+    if (mins < 9 * 60 || mins + 30 > 18 * 60) continue;
+    const day = `${p.year}-${p.month}-${p.day}`;
+    if (!workDays.has(day)) { if (workDays.size >= days) break; workDays.add(day); }
+    if (busy.some(([a, b]) => a < t + step && b > t)) continue;
+    const hm = `${p.hour}:${p.minute}`;
+    const endP = parts(t + step);
+    const endHm = `${endP.hour}:${endP.minute}`;
+    const last = windows[windows.length - 1];
+    if (last && last.day === day && last.endT === t) { last.to = endHm; last.endT = t + step; continue; }
+    windows.push({ day, label: `${p.weekday} ${p.day} ${p.month}`, from: hm, to: endHm, endT: t + step });
+  }
+  return {
+    time_zone: zone,
+    free: windows.map((w) => ({ day: w.day, from: w.from, to: w.to, label: `${w.label}, ${w.from} to ${w.to}` })),
+  };
+}
