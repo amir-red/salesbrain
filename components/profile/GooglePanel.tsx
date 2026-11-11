@@ -16,7 +16,7 @@ import { relativeTime } from '@/lib/time';
  */
 interface GoogleAccount {
   account_email: string; connected_at: string | null; is_default: boolean; needs_reconnect: boolean;
-  can: { contacts: boolean; read_mail: boolean; send: boolean; calendar?: boolean };
+  can: { contacts: boolean; read_mail: boolean; send: boolean; calendar?: boolean; modify?: boolean };
 }
 interface Mine { address: string; display_name: string | null; signature: string | null; daily_cap: number; is_default?: boolean;
   connected_at: string; revoked_at: string | null; last_sent_at: string | null; last_error: string | null;
@@ -110,7 +110,7 @@ export default function GooglePanel() {
         {!!accounts?.length && (
           <div className="grid gap-3">
             {accounts.map((a) => {
-              const perms = [['Contacts', a.can.contacts], ['Read Gmail', a.can.read_mail], ['Send email', a.can.send], ['Calendar meetings', !!a.can.calendar]] as const;
+              const perms = [['Contacts', a.can.contacts], ['Read Gmail', a.can.read_mail], ['Send email', a.can.send], ['Calendar meetings', !!a.can.calendar], ['Delete & spam in Gmail', !!a.can.modify]] as const;
               const missing = perms.filter(([, ok]) => !ok).map(([k]) => k);
               return (
                 <div key={a.account_email} className="rounded-xl p-3 grid gap-2" style={{ border: '1px solid var(--border)' }}>

@@ -3759,6 +3759,29 @@ every mirror threw a message's files away.
   their docs, unverified live.
 - Not built: files in campaign / wave emails and the Telegram approval cards, forwarding a received file, virus scanning.
 
+### 5.cv Delete, Mark as spam, Opt out in the Inbox (2026-11-11, migration 107)
+
+Amir, on a cold pitch from a stranger: "I do not have the option to delete messages. Mark them as spam. Or opt out."
+Decisions: Delete and Spam act in SalesBrain AND in Gmail; Opt out = "never contact them".
+- **Core 107**: thread states `deleted` and `spam` on `email_threads`, `linkedin_threads`, `chat_threads`;
+  `suppression_list.person_id` + `added_by`. Every Inbox list, count and person view leaves them out (`GONE` in
+  `lib/inbox-server.ts`). Deleted comes back when they write again (as Gmail does: `inbox.thread_state`,
+  `policy/chats.thread_state`, `linkedin.sync_thread`); spam stays spam, and a NEW email thread from a sender on the list
+  with reason `spam` lands as spam (`inbox._summarize`). A spam chat / LinkedIn thread never raises a reply.
+- **Kernel** `inbox.thread_action(actor, channel, thread_id, delete|spam|optout)` — the conversation's OWNER only (it is
+  their mailbox; an admin is refused). Spam puts the person and their addresses on `suppression_list` (reason `spam`);
+  Opt out does the same with reason `opt_out`, expires their pending / approved unsent drafts, archives their prospects
+  (P9) and marks the conversation done (kept visible). App-only RPC `inbox_thread_action`.
+- **Gate**: `record_outreach` (for delivery) refuses a person on the list FIRST, on every channel, before the approval is
+  claimed (`permanent`); logging a call they made still works. `invitations.consume_connect` refuses and expires a
+  connection request to them.
+- **Gmail**: `gmail.modify` added to the one Google consent; `moveGmailThread` (trash, or label SPAM minus INBOX). A
+  connection made before 2026-11-11 lacks it: the action still clears the conversation here and the Inbox says to
+  reconnect on Profile → Google (pill "Delete & spam in Gmail").
+- **App**: `POST /api/inbox/person/[key] {action: delete|spam|optout}` → `cleanupPerson` (the viewer's own threads of the
+  person); the conversation header's **More ▾** menu, with a confirmation for spam and opt out.
+- Not built: undo / a "Deleted & spam" view, domain-wide spam, unsubscribing from newsletters (List-Unsubscribe).
+
 ### 5.bj Gmail push — replies within seconds (2026-10-22, feat/gmail-push, no migration)
 
 **LIVE 2026-10-22 (0.63.0)**: ring deployed (smoke 0.63.0), app on Production (run 39842137712). Watch registered for the one active sender (amir@zeami.io); the endpoint refuses calls without Google's token (401). Not yet seen live: a real Google push.

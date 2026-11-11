@@ -22,7 +22,7 @@ export async function GET() {
   );
 
   const can = (scopes: string[]) => ({ contacts: scopes.includes('contacts.readonly'), read_mail: scopes.includes('gmail.readonly'),
-    calendar: scopes.includes('calendar.readonly'), send: scopes.includes('gmail.send') });
+    calendar: scopes.includes('calendar.readonly'), send: scopes.includes('gmail.send'), modify: scopes.includes('gmail.modify') });
   const providers: Record<string, Record<string, unknown>> = {};
   for (const r of rows) {
     if (r.provider === 'google') continue;

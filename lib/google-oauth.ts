@@ -22,6 +22,9 @@ export const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/contacts.readonly',
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.send',
+  // Delete / Mark as spam in the Inbox (2026-11-11, core 107): moves a thread to Gmail's Bin or Spam folder. A connection
+  // made before this lacks it: the Inbox still clears the conversation in SalesBrain and says to reconnect.
+  'https://www.googleapis.com/auth/gmail.modify',
   // meetings with leads (2026-10-26): read only, matched to leads by attendee email (lib/google-calendar.ts)
   'https://www.googleapis.com/auth/calendar.readonly',
 ];

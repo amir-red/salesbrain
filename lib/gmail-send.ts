@@ -234,6 +234,26 @@ export async function readThreads(userId: string, threadIds: string[], opts: { f
  * detection (/api/gmail/push). Google ends a watch after 7 days; calling again renews it, so the reply job and a new
  * Google connection simply call this. `{ skipped }` when no topic is configured.
  */
+/** Delete (to Gmail's Bin) or Mark as spam (to Gmail's Spam folder) one thread, from the Inbox (core 107). Needs the
+ *  `gmail.modify` permission: a connection made before 2026-11-11 lacks it and gets `needs_reconnect`. */
+export async function moveGmailThread(userId: string, mailbox: string | null, threadId: string, to: 'trash' | 'spam'):
+  Promise<{ ok: true } | { needs_reconnect: true; mailbox: string | null } | { error: string }> {
+  const { rows } = await pool.query<{ scopes: string[] | null }>(
+    `SELECT scopes FROM oauth_tokens WHERE user_id = $1 AND provider = 'google'
+       AND ($2::text IS NULL OR lower(account_email) = lower($2)) ORDER BY created_at LIMIT 1`, [userId, mailbox]);
+  if (!rows[0]?.scopes?.includes('gmail.modify')) return { needs_reconnect: true, mailbox };
+  const tok = await getValidAccessToken(userId, 'google', mailbox);
+  if (!tok) return { error: 'Google is not connected (or the connection stopped working). Reconnect on Profile → Google.' };
+  const url = to === 'trash' ? `${GMAIL}/threads/${encodeURIComponent(threadId)}/trash` : `${GMAIL}/threads/${encodeURIComponent(threadId)}/modify`;
+  const res = await fetch(url, {
+    method: 'POST', headers: { Authorization: `Bearer ${tok.accessToken}`, 'Content-Type': 'application/json' },
+    body: to === 'trash' ? undefined : JSON.stringify({ addLabelIds: ['SPAM'], removeLabelIds: ['INBOX'] }),
+  });
+  if (res.status === 403) return { needs_reconnect: true, mailbox };
+  if (!res.ok) return { error: `Gmail refused (${res.status}): ${(await res.text()).replace(/\s+/g, ' ').slice(0, 200)}` };
+  return { ok: true };
+}
+
 export async function watchMailbox(userId: string, mailbox?: string | null): Promise<{ history_id?: string; expires_at?: string; skipped?: string } | { error: string }> {
   const topic = process.env.GMAIL_PUSH_TOPIC;
   if (!topic) return { skipped: 'GMAIL_PUSH_TOPIC is not set' };
