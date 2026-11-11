@@ -3405,6 +3405,18 @@ Plan `~/.claude/plans/is-the-daily-linkedin-jaunty-nebula.md`.
   moved to waiting). **Accepted tab** (app-only): `lib/inbox-accepted.ts` + `/api/inbox/accepted[/id]` + `AcceptedView` =
   requests accepted in 30 days with the first message (the waiting card: edit / send / skip; else the list's template or an AI
   draft; Send = propose/edit + approve through the gate). At launch Matthias had ~74 acceptances never messaged.
+- **Every chat is stored (2026-11-11, core 106, Amir: "sync all of them"; LIVE 0.87.0, app run 42993907499).** First sync on
+  the new code: Mateo 10 → 58 chats (33 groups, 15 unknown people, 10 linked), 294 of 295 group messages carry a sender name. Mateo's WhatsApp showed far more than our Inbox:
+  of his 20 newest chats 11 were groups (dropped by design) and the one-to-one ones failed to match because only 10 of his
+  3,052 contacts carry a phone and Unipile gives each person's OWN WhatsApp profile name ("JanP", "Larsson 😎"), not the name
+  he saved them under. Now `store_conversation` keeps every conversation: a group (`chat_threads.is_group`, each message's
+  `sender_name` from Unipile's `sender_attendee_id`) or someone nobody has in the CRM is stored with `person_id` NULL and
+  writes NO interaction / handle / warmth / track record / reply; a one-to-one chat is matched again on every sync that brings
+  something new and, the moment a person matches, is linked and its stored messages become interactions once. Such chats are
+  their OWNER's alone (team view and direct open refuse them, like personal mail) and are left out of the Inbox's "outreach"
+  view. Groups never need a reply and are never sent to from here ("answer it in WhatsApp"); a reply to an unknown one-to-one
+  chat makes a bare person with the WhatsApp number at send time (`inbox._chat_person`, the `_email_person` rule). The Mac
+  iMessage script still filters to known handles on the Mac itself.
 
 ### 5.cp Several Google accounts per person (2026-11-06, feat/mailboxes, migration 102)
 
@@ -3649,6 +3661,40 @@ D with each of the eight questions numbered and titled. `/prospects/[id]`:
   their reply" on Peter Barlog, who had 7 of ours and an answer from us after his reply).
 - Coverage, not a missing deploy, is why most people say "Research now": person research exists for 496 of 4,632 live leads
   (15 a night), company research for 776; dated why-now facts need the lead-profile research prompt deployed AND a re-research.
+
+### 5.cs Inbox: research beside the conversation, check before you write, editable priorities (2026-11-10, feat/inbox-research, no migration)
+
+**LIVE 2026-11-10 (0.86.0)**: ring deployed (smoke 0.86.0), app on Production (run 42867563859). Checked on the box: the brief for
+Luis De Azpiazu returns his three checks. Not yet seen in a browser.
+
+From Mateo's sales-experiments page (8 Nov: "a research card beside every conversation", "My priority list, editable",
+"Check before you write"); Amir: "do 1 to 3".
+- **Editable priority list** (`components/voice/PriorityList.tsx`, in the Inbox draft review's fold — ProposalStrip, so
+  replies and compose): ↑ / ↓ per rule, "+ Add to the top" (a new sender rule in their own words, saved as number 1).
+  `reorder_rules` rewrites EVERY position of the sender, while a draft shows only the rules for its channel and step, so a
+  move loads the full list (`GET /api/voice/rules` → `sender`), moves the rule next to its visible neighbour there
+  (`moveNextTo`) and saves the full order. The drafter now returns each priority's `id` (`drafter.py`; `lib/voice-context`
+  keeps it); a proposal drafted before this shows the list read-only with "Draft again to reorder".
+- **Research column** (`components/inbox/ResearchPanel.tsx`, 360 px, lg+ only, toggle "Research" in the conversation header,
+  open by default, remembered in `localStorage inbox.research`): the kernel brief in Mateo's order — Check before you write ·
+  Next move · Where we stand + owed both ways · Who they are · Company today with dated, linked changes · Relationship and
+  last touches per channel · How to write — plus "Profile →" and Research again. `GET /api/inbox/brief?prospect=|person=`;
+  kernel `lead_brief(actor, prospect_id=None, person_id=None)` reads a thread that names only a person through
+  `lead_for_person` (the viewer's live row, else the newest live one); someone not in the CRM → `{not_a_lead: true}`.
+  Cached per person for 5 minutes in the browser.
+- **Check before you write** (kernel `policy/lead_brief.checks`, returned as `checks[]` on every brief, for the VIEWER;
+  `components/prospect/CheckBeforeWrite.tsx` on the Inbox column AND the person page's Overview): the person is in the CRM
+  more than once (`_twins`: other live lead rows of the same person = "also held by …", and other people / unlinked leads
+  with the same name), a teammate holds the lead, a teammate wrote within 72 h, a date or time mentioned in the last three
+  messages (21 days) with no call booked (`date_mention`, EN/DE weekdays, months, dd.mm., hh:mm), research that may be about
+  a namesake (`foreign_sources`: a source titled with the person's full name and none of their company's words — "Austin
+  Watkins - Wikipedia" while he works at IMCD; domain-only titles say nothing; no company known = no verdict), an
+  unconfirmed role, and LinkedIn's employer differing from the list's. Placeholder companies ("not found", "Unknown") are
+  ignored (`real_company`). Live check: Austin Watkins → the Wikipedia namesake; Luis De Azpiazu → in the CRM twice, Mateo
+  wrote today on WhatsApp; Arjun Aggarwal → twice, role unconfirmed.
+- Verified: core 716 / ring 435 tests (3 new check tests), tsc + build, the checks on live data. Not seen in a browser.
+- Not built (the artifact's points 4–5): a note instead of an auto-draft for someone new writing in, the brief on the Accepted
+  tab, Send through Zeami (blocked until Zeami sends from the Mac), the "Due for an update" 3-week page.
 
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 

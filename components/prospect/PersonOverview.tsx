@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import Button from '@/components/panel/Button';
+import CheckBeforeWrite from '@/components/prospect/CheckBeforeWrite';
 import { External, Send, Sparkle } from '@/components/icons';
 import type { LeadBrief } from '@/lib/lead-brief';
 import { agoLabel, dayLabel, initialsOf, SIGNAL_LABEL } from '@/lib/lead-brief';
@@ -100,6 +101,7 @@ export default function PersonOverview({ b, p, onEnrich, enriching, onResearch, 
   return (
     <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 py-6">
       <main className="flex-1 min-w-0 flex flex-col gap-3">
+        <CheckBeforeWrite checks={b.checks} />
         <Question n={1} title="Where do we stand?" note={b.stand.days != null ? `${b.stand.days} days since last contact` : null}>
           <p className="text-sm leading-relaxed">{stand.line}</p>
           {stand.sub && <p className="text-xs" style={muted}>{stand.sub}</p>}

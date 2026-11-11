@@ -33,6 +33,7 @@ import { LearnedLines } from '@/components/voice/DraftReview';
 import type { FeedbackResult } from '@/lib/voice';
 import { Sparkle } from '@/components/icons';
 import PlanPanel, { planLine } from './PlanPanel';
+import ResearchPanel from './ResearchPanel';
 import { AttachButton, AttachmentChips, MessageFiles, dropProps, useAttachments } from './Attachments';
 import type { PlanSummary } from '@/lib/inbox';
 
@@ -60,6 +61,9 @@ function Bubble({ m }: { m: InboxMessage }) {
           borderBottomRightRadius: m.from_me ? 6 : undefined, borderBottomLeftRadius: m.from_me ? undefined : 6,
           opacity: m.pending ? 0.75 : 1,
         }}>
+        {m.sender_name && !m.from_me && (
+          <p className="text-[11px] mb-1 truncate font-medium" style={{ color: 'var(--text-muted)' }}>{m.sender_name}</p>
+        )}
         {m.channel === 'email' && m.from && !m.from_me && (
           <p className="text-[11px] mb-1 truncate" style={{ color: 'var(--text-muted)' }}>{m.from}</p>
         )}
@@ -98,6 +102,10 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<{ kind: 'error' | 'info'; text: string } | null>(null);
   const [planOpen, setPlanOpen] = useState(false);   // the "No reply needed" panel (core 103)
+  // The research column beside the conversation (2026-11-10): open by default, the choice remembered per browser.
+  const [research, setResearchState] = useState(true);
+  useEffect(() => { try { if (localStorage.getItem('inbox.research') === '0') setResearchState(false); } catch { /* ignore */ } }, []);
+  const setResearch = (on: boolean) => { setResearchState(on); try { localStorage.setItem('inbox.research', on ? '1' : '0'); } catch { /* ignore */ } };
   const att = useAttachments();                        // files going out with the reply (core 104)
   // Which thread a reply goes into (2026-11-09): a person's conversation offers one target per channel thread; the
   // default is where they last wrote and we can answer. Chosen per conversation, reset when another one opens.
@@ -320,6 +328,11 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
           )}
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
+          {(thread.prospect_id || thread.person_id) && (
+            <Button size="sm" onClick={() => setResearch(!research)} title={research ? 'Hide the research about this person' : 'Show who they are, what changed, what is open — before you write'}>
+              <span style={{ color: research ? 'var(--accent)' : undefined }}>Research</span>
+            </Button>
+          )}
           {leadHref && <Button size="sm" href={leadHref}>Open lead</Button>}
           {thread.profile_url && (
             <a href={thread.profile_url} target="_blank" rel="noreferrer" className="px-2.5 py-1 text-xs rounded-lg font-medium" style={{ border: '1px solid var(--border)' }}>Profile ↗</a>
@@ -349,6 +362,8 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
         </div>
       </div>
 
+      <div className="flex-1 flex min-h-0">
+      <div className="flex-1 min-w-0 flex flex-col min-h-0">
       <div className="flex-1 overflow-y-auto min-h-0 px-4 py-4 flex flex-col gap-2">
         {!thread.messages.length && (
           <p className="text-sm text-center mt-10" style={{ color: 'var(--text-muted)' }}>No messages stored yet. Press Refresh to read the conversation now.</p>
@@ -479,6 +494,13 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
         ) : (
           <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{cur.reply_note}</p>
         )}
+      </div>
+      </div>
+      {research && (thread.prospect_id || thread.person_id) && (
+        <div className="hidden lg:flex min-h-0">
+          <ResearchPanel prospectId={thread.prospect_id} personId={thread.person_id} name={thread.name} onClose={() => setResearch(false)} />
+        </div>
+      )}
       </div>
     </div>
   );
