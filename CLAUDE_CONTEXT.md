@@ -3405,6 +3405,17 @@ Plan `~/.claude/plans/is-the-daily-linkedin-jaunty-nebula.md`.
   moved to waiting). **Accepted tab** (app-only): `lib/inbox-accepted.ts` + `/api/inbox/accepted[/id]` + `AcceptedView` =
   requests accepted in 30 days with the first message (the waiting card: edit / send / skip; else the list's template or an AI
   draft; Send = propose/edit + approve through the gate). At launch Matthias had ~74 acceptances never messaged.
+- **Every chat is stored (2026-11-11, core 106, Amir: "sync all of them").** Mateo's WhatsApp showed far more than our Inbox:
+  of his 20 newest chats 11 were groups (dropped by design) and the one-to-one ones failed to match because only 10 of his
+  3,052 contacts carry a phone and Unipile gives each person's OWN WhatsApp profile name ("JanP", "Larsson 😎"), not the name
+  he saved them under. Now `store_conversation` keeps every conversation: a group (`chat_threads.is_group`, each message's
+  `sender_name` from Unipile's `sender_attendee_id`) or someone nobody has in the CRM is stored with `person_id` NULL and
+  writes NO interaction / handle / warmth / track record / reply; a one-to-one chat is matched again on every sync that brings
+  something new and, the moment a person matches, is linked and its stored messages become interactions once. Such chats are
+  their OWNER's alone (team view and direct open refuse them, like personal mail) and are left out of the Inbox's "outreach"
+  view. Groups never need a reply and are never sent to from here ("answer it in WhatsApp"); a reply to an unknown one-to-one
+  chat makes a bare person with the WhatsApp number at send time (`inbox._chat_person`, the `_email_person` rule). The Mac
+  iMessage script still filters to known handles on the Mac itself.
 
 ### 5.cp Several Google accounts per person (2026-11-06, feat/mailboxes, migration 102)
 
