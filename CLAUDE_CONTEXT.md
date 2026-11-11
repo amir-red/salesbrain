@@ -3734,6 +3734,13 @@ first, other lists later.
   thread, priority or ✓; archives with a JSON backup, restorable). Enrichment queue: `crm_enrich_queue {prospect_ids | icp_id,
   clear}` = skip the Enricher's fit-score gate and go first.
 
+### 5.cx /settings holds Brand & Voice and Agents (2026-11-11, app-only)
+
+Amir: off the side menu. `/settings?section=brand|agents` (`app/settings/page.tsx`) renders
+`components/settings/BrandSettings.tsx` (was app/brand/page.tsx; its own `tab` / `brand` params) and
+`components/settings/AgentsSettings.tsx` (was app/agents/page.tsx). `/brand` and `/agents` redirect there with their
+query string. Sidebar: the two items and the "Prospects" group are gone; a Settings (gear) link sits under Profile.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
