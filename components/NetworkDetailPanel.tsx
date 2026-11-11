@@ -150,8 +150,8 @@ export default function NetworkDetailPanel({ node, onClose, onUpdate }: Props) {
             </ActionRow>
             <ActionRow>
               <ActionLink
-                href={meta.person_id ? `/relationships?person=${meta.person_id}` : null}
-                label="Dossier"
+                href={meta.prospect_id ? `/prospects/${meta.prospect_id}` : meta.person_id ? `/person/${meta.person_id}` : null}
+                label="Profile"
               />
             </ActionRow>
           </div>

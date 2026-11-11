@@ -21,9 +21,9 @@ interface Opt { id: string; name: string; email?: string }
 
 const selectStyle = { background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)' };
 
-/** Their SalesBrain profile: the person page when they are a prospect, else the dossier (people on no list). */
-function profileHref(p: WarmPerson): string {
-  return p.prospect_id ? `/prospects/${p.prospect_id}` : `/relationships?person=${p.person_id}`;
+/** Their profile page. A person on no list has no profile until they are added as a lead (/person resolves it then). */
+function profileHref(p: WarmPerson, added: boolean): string | null {
+  return p.prospect_id ? `/prospects/${p.prospect_id}` : added ? `/person/${p.person_id}` : null;
 }
 
 function Row({ p, onAdded }: { p: WarmPerson; onAdded: (msg: string) => void }) {
@@ -47,8 +47,11 @@ function Row({ p, onAdded }: { p: WarmPerson; onAdded: (msg: string) => void }) 
     <div className="flex flex-wrap items-start gap-x-4 gap-y-2 px-4 py-3" style={{ borderTop: '1px solid var(--border)' }}>
       <div className="w-full sm:w-auto sm:flex-1 min-w-0 sm:min-w-[260px]">
         <div className="flex items-center gap-2 min-w-0">
-          <Link href={profileHref(p)} className="font-medium truncate hover:underline"
-            title={p.prospect_id ? 'Open their SalesBrain profile' : 'Open what SalesBrain knows about them'}>{p.name}</Link>
+          {profileHref(p, added) ? (
+            <Link href={profileHref(p, added)!} className="font-medium truncate hover:underline" title="Open their profile">{p.name}</Link>
+          ) : (
+            <span className="font-medium truncate" title="Not a lead yet: add them to get a profile">{p.name}</span>
+          )}
           {li && <a href={li} target="_blank" rel="noreferrer" className="text-xs shrink-0" style={{ color: 'var(--text-muted)' }}>LinkedIn ↗</a>}
         </div>
         <div className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>
