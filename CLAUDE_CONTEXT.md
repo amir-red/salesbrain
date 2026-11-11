@@ -4214,6 +4214,40 @@ enrolled people alone; (4) a free canvas; (5) LinkedIn + email in the first vers
 - Not built: A/B variants per step, per-step send windows, sending to a teammate's card for someone else's lead, a
   campaign view on the lead card, re-entering a finished campaign.
 
+### 5.cz Daily connector asks only vetted firms; list exclusions from chat; VC list cleaned (2026-11-11, core/hermes 0.90.1, no migration)
+
+**LIVE 2026-11-11 (0.90.1)**: ring deployed (smoke 0.90.1, one gateway); app unchanged. Checked on the box: Mateo's next
+daily card draws from partners at "go" funds only (42CAP, Crane, Alven, Balderton, …), 69 candidates.
+
+Mateo, on Telegram: Remy Goldstein (Venture University, a paid VC course) accepted his request and pitched him; "another one
+that was not very useful". Trace: an old 28 Oct Sales Navigator search for CEO/CIO titles found him ("Partner" in the
+headline), the cohort sort put him on the VC list with high confidence, the daily connector picked him (2nd degree) on 9 Nov,
+Mateo approved the card. VU was never on the list's 562 researched firms: 28 of 94 VC requests had gone to such people. The
+bot then said it had "added a negative exclusion rule to memory and criteria": it had only saved a personal memory note,
+which no agent reads.
+- **Firm gate** (`conductor._LIST_SQL`): a list with `list_firms` rows connects only people whose account is a `go` firm on
+  that list; every list skips people its own exclusions scored 0 (`qualification_reason LIKE 'EXCLUDED:%'`). Lists without
+  firms are unchanged.
+- **Why the weakest came first**: `batch_pick` orders priority → list priority → firm already asked → mutual → **2nd degree** →
+  3rd/unknown → score. Firm research lands partners without a measured degree, so any 2nd-degree stranger outranked them.
+- **`icp_owner.icp_exclude`** / ring **`crm_icp_exclude`** (mcp=None; blocked in agent runs and automations): appends
+  company / title words to a list's exclusions (never replaces the definition, unlike `crm_icp_define`, which overwrote the
+  VC list's criteria once on 9 Nov and briefly scored all 629 "do not pursue"), re-scores, names who is now excluded.
+  Word-boundary matching: "CTO" / "Engineer" would knock out GPs (BlueYard, InReach, Engineering Capital), so do not.
+- **SOUL Tool truth**: "Action taken" lists only what a tool result confirmed; a memory note is "noted for you"; "how did X
+  get here" comes from `crm_lead_lookup`, never a story. Knowledge entry "Keep a kind of company or title off a list".
+- **Data on the VC list (Amir's decisions)**, backup `~/.cache/salesbrain/backups/vc-cleanup-20261111175414.json`: 21 rows
+  archived (non-investors, space/deeptech funds, fund CFO/COO, 2 duplicate rows of Curtis MacDonald / Morgan Slain), Mateo's
+  waiting card of 10 expired, brief geographies Europe + North America (re-judged: 376 go, 175 later, 11 out), locations
+  + US/Canada, fit weights title 35 / seniority 25 / location 15 / network 25 / industry 0 / size 0 (industry and size are
+  blank for most firm-team partners; strong fit 9 → 174), company exclusions University, Academy, Accelerator, Incubator,
+  Venture Studio, Fellowship. Leads Finder held, then running again for Mateo (it does not search his hand-made lists).
+- **Open**: Mateo's 9 Nov title exclusions "fellow" / "advisor" / "operating partner" score 0 for Gianluca Dettori (GP Primo,
+  "Kauffman Fellow"), Deborah Magid (MD NextStar), Herbert Drayton (MP HI Mark); about 30 real investors sit at firms not
+  on the list (Zetta, Moderne, Gorilla, SOSV, …) and are now gated out until their firms are imported and researched; the
+  trust score's fit and openness parts read customer signals, so the VC list ranks by authority alone (0.7/30 path, 0.9/20
+  openness); 27 accepted investors have no first message (no template on the list).
+
 ## 6. Env vars
 
 All must be in `.env.local` (dev) and as GitHub repo secrets (prod — workflow writes them to `.env.production`).
