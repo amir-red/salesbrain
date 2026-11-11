@@ -6,7 +6,8 @@ import { normalizeCriteria } from '@/lib/icp';
 import type { AgentRun } from '@/lib/icp';
 import { visibleIcp } from '@/lib/icp-server';
 import { ownerQuotas } from '@/lib/quota-server';
-import { blockersFor, ListFunnel } from '@/lib/icp-panel';
+import { blockersFor, ListFunnel, missingDefinition } from '@/lib/icp-panel';
+import type { ListFit } from '@/lib/icp-panel';
 import type { Coverage, PanelApproval, PanelPayload, StageCounts } from '@/lib/icp-panel';
 
 const RUN_COLS = `r.id, r.agent, r.trigger, r.source, r.status, r.started_at, r.finished_at,
@@ -95,6 +96,25 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
                    FROM agent_runs WHERE icp_profile_id = $1 AND agent = 'leads_finder' AND started_at > now() - interval '7 days'
                   GROUP BY 1) d) AS daily`, [id]);
     const f = finder.rows[0];
+
+    // The list's fence (migration 105): cap over the people the Leads Finder itself added, and whether it is done.
+    // Before 105 the columns are missing — then there is no fence to show.
+    let listFit: ListFit | null = null;
+    try {
+      const lf = await q(
+        `SELECT i.criteria, i.max_leads, s.notices,
+                (SELECT count(*)::int FROM prospects f WHERE f.icp_profile_id = i.id
+                    AND f.source_type IN ('sales_navigator','linkedin_search')
+                    AND f.stage NOT IN ('P8_DISQUALIFIED','P9_ARCHIVED')) AS found
+           FROM icp_profiles i LEFT JOIN icp_agent_state s ON s.icp_profile_id = i.id WHERE i.id = $1`, [id]);
+      const r = lf.rows[0];
+      if (r) {
+        const def = Number(rule['agents.leads_finder']?.max_leads_per_list ?? 500) || 500;
+        listFit = { missing: missingDefinition(r.criteria), found: Number(r.found) || 0,
+                    cap: Number(r.max_leads) || def, max_leads: r.max_leads ?? null,
+                    done: Boolean((r.notices ?? {}).done) };
+      }
+    } catch { listFit = null; }
 
     const attempts = await q(
       `SELECT pe.kind, pe.result, count(*)::int AS n, coalesce(sum(pe.credits), 0)::int AS credits
@@ -202,7 +222,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       icp: { ...(icp as unknown as PanelPayload['icp']), criteria: normalizeCriteria(icp.criteria as never) },
       is_owner: owner === session.userId,
       can_edit: Boolean(icp.can_edit),
-      blockers: blockersFor(icp, quota, { kill_switch: killSwitch, leads_finder_enabled: enabled.leads_finder, user_hold: userHold }, finderState),
+      blockers: blockersFor(icp, quota, { kill_switch: killSwitch, leads_finder_enabled: enabled.leads_finder, user_hold: userHold }, finderState, new Date(), listFit),
+      list_fit: listFit,
       quota,
       policy: { kill_switch: killSwitch, enabled, leads_finder: rule['agents.leads_finder'] ?? {}, enricher: rule['agents.enricher'] ?? {} },
       fit: { strong: a.strong, proceed: a.proceed, weak: a.weak, do_not_pursue: a.do_not_pursue, unscored: a.unscored },
