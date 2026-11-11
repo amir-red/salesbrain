@@ -88,7 +88,7 @@ export default function UsersAdminPage() {
           </div>
           <div className="flex items-center gap-3 text-[11px]">
             {data && <span style={{ color: live ? 'var(--green)' : 'var(--red)' }}>● {live ? 'agents live' : 'KILL SWITCH — all agents stopped'}</span>}
-            <Link href="/agents" className="underline" style={{ color: 'var(--text-muted)' }}>Agents →</Link>
+            <Link href="/settings?section=agents" className="underline" style={{ color: 'var(--text-muted)' }}>Agents →</Link>
             <Link href="/icp" className="underline" style={{ color: 'var(--text-muted)' }}>ICP lists →</Link>
             <Link href="/admin/service" className="underline" style={{ color: 'var(--text-muted)' }}>Service integrations →</Link>
             <Link href="/admin/linkedin" className="underline" style={{ color: 'var(--text-muted)' }}>LinkedIn health →</Link>
