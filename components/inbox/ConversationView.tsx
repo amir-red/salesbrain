@@ -67,6 +67,12 @@ function Bubble({ m }: { m: InboxMessage }) {
         {m.channel === 'email' && m.from && !m.from_me && (
           <p className="text-[11px] mb-1 truncate" style={{ color: 'var(--text-muted)' }}>{m.from}</p>
         )}
+        {m.channel === 'email' && (m.to || m.cc) && (
+          <p className="text-[11px] mb-1 truncate" style={{ color: 'var(--text-muted)' }}
+            title={[m.to && `To: ${m.to}`, m.cc && `Cc: ${m.cc}`].filter(Boolean).join('\n')}>
+            {m.to && <>to {m.to}</>}{m.to && m.cc && ' · '}{m.cc && <>cc {m.cc}</>}
+          </p>
+        )}
         {m.text ? <p className="whitespace-pre-wrap break-words leading-relaxed">{m.text}</p>
           : !m.attachments?.length ? <p><em style={{ color: 'var(--text-muted)' }}>(no text)</em></p> : null}
         <MessageFiles files={m.attachments} mine={m.from_me} />
@@ -357,6 +363,11 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
               {marks.length === 1 ? marks[0].label : `${marks.length} channels`}
             </span>
             {thread.state === 'needs_reply' && <Pill color="var(--orange)">Needs reply</Pill>}
+            {thread.threads.some((t) => t.channel === 'email' && t.cc_only && t.last_from_them) && (
+              <span title="Their latest email was written to someone else — you were only copied, so it does not wait for your reply.">
+                <Pill color="var(--text-muted)">You&apos;re in Cc</Pill>
+              </span>
+            )}
             {thread.state === 'done' && !thread.plan && <Pill color="var(--green)">Done</Pill>}
             {thread.plan && (
               <button type="button" onClick={() => setPlanOpen(true)} title="The plan you set on this conversation — click to see or change it">

@@ -44,6 +44,8 @@ export interface InboxThreadRef {
   unread: boolean;
   last_message_at: string | null;
   last_from_them: boolean;
+  /** email only (core 108): their newest message went to someone else; we were only copied */
+  cc_only?: boolean;
   subject?: string | null;
   mailbox?: string | null;
   plan?: PlanSummary | null;
@@ -85,6 +87,8 @@ export interface InboxItem {
   mailbox?: string | null;
   /** the active conversation plan, when there is one (core 103) */
   plan?: PlanSummary | null;
+  /** email only (core 108): their newest message went to someone else; we were only copied */
+  cc_only?: boolean;
 }
 
 export interface InboxCounts { needs_reply: number; unread: number; planned: number; email: number; linkedin: number; chat: number }
@@ -115,6 +119,9 @@ export interface InboxMessage {
   sent_at: string | null;
   /** email only */
   from?: string | null;
+  /** email only: the To and Cc lines (core 108) */
+  to?: string | null;
+  cc?: string | null;
   subject?: string | null;
   /** a reply typed here that the send gate holds (quiet hours, a cap) */
   pending?: boolean;

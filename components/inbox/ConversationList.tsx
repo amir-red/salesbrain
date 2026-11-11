@@ -143,6 +143,10 @@ export default function ConversationList({
                     {it.last_from_them ? '' : 'You: '}{it.snippet || ''}
                   </p>
                   {it.unread && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: 'var(--accent)' }} aria-label="unread" />}
+                  {it.threads.some((t) => t.cc_only && t.last_from_them) && (
+                    <span className="text-[10px] flex-shrink-0 px-1.5 rounded-full" title="Written to someone else — you were only copied"
+                      style={{ color: 'var(--text-muted)', background: 'var(--bg-input)' }}>cc</span>
+                  )}
                   {!it.unread && it.state === 'needs_reply' && (
                     <span className="text-[10px] flex-shrink-0 px-1.5 rounded-full" style={{ color: 'var(--orange)', background: 'color-mix(in srgb, var(--orange) 14%, transparent)' }}>reply</span>
                   )}

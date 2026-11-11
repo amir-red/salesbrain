@@ -106,6 +106,7 @@ function linkedinSql(o: ListOpts, vals: unknown[], forCount = false): string {
            ${LI_UNREAD} AS unread, pr.id::text AS prospect_id, t.person_id::text AS person_id, sl.id::text AS sales_lead_id,
            (SELECT cc.name FROM campaign_enrollments ce JOIN campaigns cc ON cc.id = ce.campaign_id
              WHERE ce.prospect_id = pr.id ORDER BY ce.status = 'active' DESC, ce.entered_node_at DESC LIMIT 1) AS campaign_name,
+           false AS cc_only,
            NULL::text AS app, NULL::text AS mailbox, ${planCol('linkedin', o.plans)},
            ${gkeyCol('linkedin', 'COALESCE(t.person_id, pr.person_id)', 'pr.id', `'li:' || la.owner_user_id::text || ':' || t.attendee_provider_id`)}
       FROM linkedin_threads t
@@ -150,6 +151,7 @@ function emailSql(o: ListOpts, vals: unknown[], forCount = false): string {
            t.prospect_id::text AS prospect_id, t.person_id::text AS person_id, sl.id::text AS sales_lead_id,
            (SELECT cc.name FROM campaign_enrollments ce JOIN campaigns cc ON cc.id = ce.campaign_id
              WHERE ce.prospect_id = t.prospect_id ORDER BY ce.status = 'active' DESC, ce.entered_node_at DESC LIMIT 1) AS campaign_name,
+           COALESCE(t.cc_only, false) AS cc_only,
            NULL::text AS app, t.mailbox, ${planCol('email', o.plans)},
            ${gkeyCol('email', 'COALESCE(t.person_id, p.person_id)', 't.prospect_id', `'em:' || t.owner_user_id::text || ':' || lower(NULLIF(t.counterpart_email, ''))`)}
       FROM email_threads t
@@ -194,6 +196,7 @@ function chatSql(o: ListOpts, vals: unknown[], forCount = false): string {
            sl.id::text AS sales_lead_id,
            (SELECT cc.name FROM campaign_enrollments ce JOIN campaigns cc ON cc.id = ce.campaign_id
              WHERE ce.prospect_id = t.prospect_id ORDER BY ce.status = 'active' DESC, ce.entered_node_at DESC LIMIT 1) AS campaign_name,
+           false AS cc_only,
            t.app, NULL::text AS mailbox, ${planCol('chat', o.plans)},
            ${gkeyCol('chat', 'COALESCE(t.person_id, p.person_id)', 't.prospect_id')}
       FROM chat_threads t
@@ -236,6 +239,7 @@ function toRef(r: Row): InboxThreadRef {
     unread: !!r.unread, last_message_at: iso(r.last_message_at), last_from_them: !!r.last_from_them,
     subject: (r.subject as string | null) ?? null, mailbox: (r.mailbox as string | null) ?? null,
     plan: (r.plan as InboxThreadRef['plan']) ?? null,
+    cc_only: !!r.cc_only,
   };
 }
 
@@ -437,9 +441,11 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
       mailbox = t.rows[0]?.mailbox ?? null;
       emailMeta = t.rows[0] ?? null;
       const m = await client.query(
-        `SELECT id::text, from_me, COALESCE(body, '') AS text, sent_at, from_header AS "from", subject, ${files} FROM email_messages
+        `SELECT id::text, from_me, COALESCE(body, '') AS text, sent_at, from_header AS "from", to_header AS "to",
+                cc_header AS cc, subject, ${files} FROM email_messages
           WHERE thread_id = $1 ORDER BY sent_at NULLS FIRST, created_at LIMIT 500`, [id]);
       raw = m.rows.map((r) => ({ id: r.id, from_me: r.from_me, text: r.text, sent_at: iso(r.sent_at), from: r.from, subject: r.subject,
+        to: r.to ?? null, cc: r.cc ?? null,
         ...attachmentsOf('email', r.id, r.attachments) }));
     }
     // Replies typed here that the send gate is holding (quiet hours, a cap): shown as "waiting to be sent".

@@ -92,7 +92,7 @@ function unescapeHtml(s: string): string {
 export interface ThreadMessage {
   id: string; from: string; subject: string; snippet: string; date: string | null; from_me: boolean;
   /** with `full`: the plain-text body (quoted history cut off), To and the Message-ID header */
-  body?: string; to?: string; rfc_id?: string | null;
+  body?: string; to?: string; cc?: string; rfc_id?: string | null;
   /** with `full`: the message's files (core 104) — Gmail part ids, fetched on download */
   attachments?: { part_id: string; name: string; mime: string | null; size: number | null }[];
   /** with `full`: the headers mail systems set on an automatic reply (out of office) — the kernel reads them */
@@ -213,6 +213,7 @@ export async function readThreads(userId: string, threadIds: string[], opts: { f
           const html = plain == null ? findPart(m.payload, 'text/html') : null;
           msg.body = stripQuoted(plain ?? (html != null ? htmlToText(html) : msg.snippet)).slice(0, 20000);
           msg.to = h('to');
+          msg.cc = h('cc');
           msg.rfc_id = h('message-id') || null;
           msg.attachments = fileParts(m.payload).slice(0, 20);
           const auto: Record<string, string> = {};
