@@ -3773,6 +3773,19 @@ every mirror threw a message's files away.
   their docs, unverified live.
 - Not built: files in campaign / wave emails and the Telegram approval cards, forwarding a received file, virus scanning.
 
+### 5.cw LinkedIn connections made outside SalesBrain count as 1st degree (2026-11-11, core/hermes 0.88.1, no migration)
+
+**LIVE 2026-11-11 (0.88.1)**: kernel + ring deployed; the one-time pass marked 48 leads (Hannes's row 40 = Mateo's member, Mateo 8).
+
+A first message to Amir from Matthias's account was refused "not a 1st-degree connection" although they were connected long
+before SalesBrain: the compose page read `linkedin_relations`, the kernel only `network_degree` / an accepted invitation, and
+`network_degree` is set by whichever search found the lead (none for hand-added or imported leads). Now
+`commands/linkedin._in_network` (the member's stored network on any live row of the same `provider_id`, slug or member id,
+not removed) also counts in `_first_message_target`, and `mark_connected(conn, owner?, ids?)` sets `network_degree='1'` (and a
+missing member id when no other lead of the owner holds it; never lowers a degree). Runs from the hourly `linkedin_sync.py`
+(`mark_connected_prospects`, owner scope; stat `leads_marked_connected`), after every relations page of the graph mirror, and
+when a lead is added by hand or gets its LinkedIn profile (`prospecting._mark_if_connected`). Test `test_linkedin_connected_db.py`.
+
 ### 5.cv Delete, Mark as spam, Opt out in the Inbox (2026-11-11, migration 107)
 
 **LIVE 2026-11-11 (0.88.0)**: 107 applied, ring deployed (smoke 0.88.0), app on Production (run 43001637633), with the Inbox
