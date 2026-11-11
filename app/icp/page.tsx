@@ -132,7 +132,7 @@ export default function IcpPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <Link href="/agents" className="text-sm px-3 py-2 rounded-full hover:underline" style={{ color: 'var(--text-muted)' }}>Agents</Link>
+                <Link href="/settings?section=agents" className="text-sm px-3 py-2 rounded-full hover:underline" style={{ color: 'var(--text-muted)' }}>Agents</Link>
                 <div role="group" aria-label="Layout" className="flex gap-1 p-1 rounded-full" style={{ background: 'color-mix(in srgb, var(--accent) 8%, transparent)' }}>
                   {(['grid', 'list'] as const).map((l) => (
                     <button key={l} aria-pressed={layout === l} onClick={() => setLayout(l)} title={l === 'grid' ? 'Cards with a funnel each' : 'One line per list'}

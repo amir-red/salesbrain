@@ -36,7 +36,7 @@ export default function ListVoiceFields({ brandKey, value, onChange, inputStyle 
         placeholder="The hook, e.g. “Met at Fakuma 2026 — they plan 50+ machines in Excel.”"
         className="z-input text-sm resize-y" style={inputStyle} aria-label="Hook" />
       <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-        Products live on <Link href={`/brand?tab=products&brand=${brandKey}`} className="underline">Brand &amp; Voice</Link>.
+        Products live on <Link href={`/settings?section=brand&tab=products&brand=${brandKey}`} className="underline">Brand &amp; Voice</Link>.
       </div>
     </div>
   );

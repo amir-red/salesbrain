@@ -225,7 +225,7 @@ export default function PersonOverview({ b, p, onEnrich, enriching, onResearch, 
             </button>
           )}
           {b.waiting.length > 0 && (
-            <Link href="/agents" className="text-xs" style={{ color: '#ebdff0' }}>
+            <Link href="/settings?section=agents" className="text-xs" style={{ color: '#ebdff0' }}>
               {b.waiting.length === 1 ? 'A draft waits' : `${b.waiting.length} drafts wait`} for approval →
             </Link>
           )}

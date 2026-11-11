@@ -194,7 +194,7 @@ export default function ComposeView({ prospectId, onBack, onOpen }: { prospectId
             {f.waiting.map((w) => (
               <li key={w.id} className="text-xs rounded-lg px-3 py-2" style={{ background: 'color-mix(in srgb, var(--yellow) 12%, transparent)' }}>
                 {w.status === 'approved' ? 'Approved, going out' : 'Waiting for your approval'} · {w.kind === 'connect' ? 'connection request' : w.kind === 'followup' ? 'message' : 'first message'}
-                {w.message ? <span style={{ color: 'var(--text-muted)' }}> — “{w.message}”</span> : null} · <Link href="/agents" className="underline">decide on Agents</Link>
+                {w.message ? <span style={{ color: 'var(--text-muted)' }}> — “{w.message}”</span> : null} · <Link href="/settings?section=agents" className="underline">decide on Agents</Link>
               </li>
             ))}
           </ul>

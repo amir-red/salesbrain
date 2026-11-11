@@ -60,7 +60,7 @@ export default function CostsAdminPage() {
                 </button>
               ))}
             </div>
-            <Link href="/agents" className="underline" style={{ color: 'var(--text-muted)' }}>Agents →</Link>
+            <Link href="/settings?section=agents" className="underline" style={{ color: 'var(--text-muted)' }}>Agents →</Link>
             <Link href="/admin/users" className="underline" style={{ color: 'var(--text-muted)' }}>Users →</Link>
             <Link href="/admin/linkedin" className="underline" style={{ color: 'var(--text-muted)' }}>LinkedIn health →</Link>
           </div>
