@@ -88,6 +88,16 @@ function fromLine(t: ReplyTarget): string {
 }
 
 /** The right side: who it is, the whole conversation across channels, and the reply box (only on your own account). */
+type CleanupAction = 'delete' | 'spam' | 'optout';
+/** The More menu (core 107, Amir 2026-11-11). */
+const CLEANUP: { action: CleanupAction; label: string; hint: string; confirm?: (name: string) => string }[] = [
+  { action: 'delete', label: 'Delete', hint: 'Gone from the Inbox (and Gmail\'s Bin). Comes back if they write again.' },
+  { action: 'spam', label: 'Mark as spam', hint: 'Gone for good (and Gmail\'s Spam). Never contacted again.',
+    confirm: (n) => `Mark ${n} as spam? The conversation leaves the Inbox, their later mail lands as spam, and nobody on the team can contact them.` },
+  { action: 'optout', label: 'Opt out — never contact them', hint: 'Keeps the conversation; no campaign, agent or teammate ever writes to them.',
+    confirm: (n) => `Never contact ${n} again? Their open drafts are dropped, their leads are archived, and every send to them is refused, on every channel.` },
+];
+
 export default function ConversationView({ thread, loading, onBack, onChanged }: {
   thread: InboxThread | null; loading: boolean; onBack: () => void; onChanged: (t: InboxThread | null) => void;
 }) {
@@ -101,6 +111,7 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
   const autoDrafted = useRef<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<{ kind: 'error' | 'info'; text: string } | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);   // the "No reply needed" panel (core 103)
   // The research column beside the conversation (2026-11-10): open by default, the choice remembered per browser.
   const [research, setResearchState] = useState(true);
@@ -235,6 +246,40 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
     }
   }
 
+  /** Delete / Mark as spam / Opt out (core 107) on the viewer's own threads of this person. Delete and spam also move
+   *  an email thread in Gmail when the connection has the permission; otherwise the result says to reconnect. */
+  async function cleanup(action: CleanupAction) {
+    if (!thread) return;
+    setMenuOpen(false);
+    const c = CLEANUP.find((x) => x.action === action)!;
+    if (c.confirm && !window.confirm(c.confirm(thread.name || 'this person'))) return;
+    setBusy(action); setNote(null);
+    try {
+      const res = await fetch(`/api/inbox/person/${encodeURIComponent(convKey)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Something went wrong');
+      const lines: string[] = [];
+      if (data.needs_reconnect?.length) {
+        lines.push(`Cleared here, but Gmail was not changed: reconnect Google on Profile → Google to let SalesBrain ${action === 'spam' ? 'mark mail as spam' : 'delete mail'} in Gmail.`);
+      }
+      if (data.errors?.length) lines.push(data.errors[0]);
+      if (action === 'optout') {
+        const n = data.prospects_archived ? ` ${data.prospects_archived} lead${data.prospects_archived > 1 ? 's' : ''} archived.` : '';
+        setNote({ kind: 'info', text: `${thread.name || 'They'} will never be contacted again, on any channel.${n} ${lines.join(' ')}`.trim() });
+        onChanged({ ...thread, state: 'done', threads: thread.threads.map((t) => ({ ...t, state: 'done' })),
+          targets: thread.targets.map((t) => ({ ...t, state: 'done' })) });
+        return;
+      }
+      if (lines.length) window.alert(lines.join('\n\n'));
+      onChanged(null);
+    } catch (err) {
+      setNote({ kind: 'error', text: err instanceof Error ? err.message : 'Something went wrong' });
+    } finally {
+      setBusy(null);
+    }
+  }
+
   /** A chat that cannot be sent from here (iMessage, the Zeami link): the text is copied, the app opened when there
    *  is a link, and the edit / rating teach the voice like a send would (draft_teach). */
   async function copyOut(asIs: boolean) {
@@ -359,6 +404,24 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
           {thread.state === 'done'
             ? <Button size="sm" onClick={() => act('reopen')} disabled={!!busy}>Reopen</Button>
             : <Button size="sm" onClick={() => act('done')} disabled={!!busy} title={targets.length > 1 ? 'Nothing to answer on any channel — move it out of Needs reply' : 'Nothing to answer — move it out of Needs reply'}>Mark done</Button>}
+          {thread.targets.some((t) => t.mine) && (
+            <div className="relative">
+              <Button size="sm" onClick={() => setMenuOpen((v) => !v)} disabled={!!busy} aria-haspopup="menu" aria-expanded={menuOpen}
+                title="Delete, mark as spam, or never contact them">More ▾</Button>
+              {menuOpen && (
+                <div role="menu" className="absolute right-0 top-full mt-1 z-20 w-64 rounded-xl p-1 text-sm shadow-lg"
+                  style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                  {CLEANUP.map((c) => (
+                    <button key={c.action} type="button" role="menuitem" onClick={() => cleanup(c.action)}
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-[var(--bg-input)]">
+                      <span className="font-medium" style={{ color: c.action === 'delete' ? 'var(--text)' : 'var(--red)' }}>{c.label}</span>
+                      <span className="block text-[11px]" style={{ color: 'var(--text-muted)' }}>{c.hint}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

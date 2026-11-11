@@ -75,8 +75,11 @@ const LI_UNREAD = `(t.last_from_them AND t.last_message_at > COALESCE(t.inbox_se
 const EM_UNREAD = `(t.last_from_them AND t.last_message_at > COALESCE(t.inbox_seen_at, '-infinity'::timestamptz) AND t.state <> 'done')`;
 const CH_UNREAD = EM_UNREAD;
 
+/** Deleted and spam conversations (core 107) leave every list, count and person view. */
+const GONE = `t.state NOT IN ('deleted', 'spam')`;
+
 function linkedinSql(o: ListOpts, vals: unknown[], forCount = false): string {
-  const where: string[] = ['t.is_company = false', 'la.revoked_at IS NULL', 't.last_message_at IS NOT NULL'];
+  const where: string[] = ['t.is_company = false', 'la.revoked_at IS NULL', 't.last_message_at IS NOT NULL', GONE];
   if (!o.team) { vals.push(o.viewerId); where.push(`la.owner_user_id = $${vals.length}`); }
   if (o.view === 'outreach') {
     where.push(`(pr.id IS NOT NULL OR EXISTS (SELECT 1 FROM outreach_approvals oa WHERE oa.linkedin_thread_id = t.id))`);
@@ -116,7 +119,7 @@ function linkedinSql(o: ListOpts, vals: unknown[], forCount = false): string {
 }
 
 function emailSql(o: ListOpts, vals: unknown[], forCount = false): string {
-  const where: string[] = ['t.last_message_at IS NOT NULL'];
+  const where: string[] = ['t.last_message_at IS NOT NULL', GONE];
   vals.push(o.viewerId);
   const me = vals.length;
   if (!o.team) where.push(`t.owner_user_id = $${me}`);
@@ -159,7 +162,7 @@ function emailSql(o: ListOpts, vals: unknown[], forCount = false): string {
 }
 
 function chatSql(o: ListOpts, vals: unknown[], forCount = false): string {
-  const where: string[] = ['t.last_message_at IS NOT NULL'];
+  const where: string[] = ['t.last_message_at IS NOT NULL', GONE];
   vals.push(o.viewerId);
   const me = vals.length;
   if (!o.team) where.push(`t.owner_user_id = $${me}`);
@@ -618,6 +621,50 @@ export async function getConversation(channel: InboxChannel, id: string, viewer:
 }
 
 /** done / reopen on every thread of a person the viewer may act on. Returns how many changed. */
+export type CleanupAction = 'delete' | 'spam' | 'optout';
+export interface CleanupResult { changed: number; gmail_moved: number; needs_reconnect: string[]; errors: string[]; prospects_archived: number }
+
+/**
+ * Delete / Mark as spam / Opt out on every thread of one person the viewer OWNS (core 107) — it is their mailbox and
+ * account, so an admin cannot do it on a teammate's conversations. The kernel sets the state and the do-not-contact
+ * list; an email thread is then moved in Gmail (Bin / Spam) when the connection has the modify permission.
+ */
+export async function cleanupPerson(key: string, action: CleanupAction, viewer: { userId: string; admin: boolean }): Promise<CleanupResult> {
+  const out: CleanupResult = { changed: 0, gmail_moved: 0, needs_reconnect: [], errors: [], prospects_archived: 0 };
+  const k = parseKey(key);
+  if (!k || k.kind === 'accepted') return out;
+  let rows: { channel: InboxChannel; id: string; owner_user_id: string }[];
+  if (k.kind === 'thread') {
+    rows = [{ channel: k.channel!, id: k.id, owner_user_id: viewer.userId }];
+  } else {
+    const client = await pool.connect();
+    try {
+      rows = (await threadsOfKey(client, key, viewer)).map((r) => ({ channel: r.channel, id: r.id, owner_user_id: String(r.owner_user_id) }));
+    } finally { client.release(); }
+  }
+  const { kernelCall } = await import('@/lib/mcp/kernel-rpc');
+  const { moveGmailThread } = await import('@/lib/gmail-send');
+  for (const r of rows.filter((x) => x.owner_user_id === viewer.userId)) {
+    let res: { ok?: boolean; error?: string; prospects_archived?: number; gmail?: { mailbox: string | null; gmail_thread_id: string } };
+    try {
+      res = await kernelCall('inbox_thread_action', { channel: r.channel, thread_id: r.id, action }, viewer.userId) as typeof res;
+    } catch (e) {   // the kernel refuses with an error (not the owner, not found): kernelCall throws it
+      out.errors.push(e instanceof Error ? e.message : 'failed');
+      continue;
+    }
+    if (!res?.ok) { out.errors.push(res?.error || 'failed'); continue; }
+    out.changed++;
+    out.prospects_archived += res.prospects_archived || 0;
+    if (res.gmail) {
+      const g = await moveGmailThread(viewer.userId, res.gmail.mailbox, res.gmail.gmail_thread_id, action === 'spam' ? 'spam' : 'trash');
+      if ('ok' in g) out.gmail_moved++;
+      else if ('needs_reconnect' in g) { if (!out.needs_reconnect.includes(g.mailbox || '')) out.needs_reconnect.push(g.mailbox || ''); }
+      else out.errors.push(g.error);
+    }
+  }
+  return out;
+}
+
 export async function setPersonState(key: string, action: 'done' | 'reopen', viewer: { userId: string; admin: boolean }): Promise<number> {
   const k = parseKey(key);
   if (!k || k.kind === 'accepted') return 0;

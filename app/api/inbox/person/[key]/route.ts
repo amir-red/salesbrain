@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { getPerson, setPersonState } from '@/lib/inbox-server';
+import { cleanupPerson, getPerson, setPersonState } from '@/lib/inbox-server';
 import { parseKey } from '@/lib/inbox';
 
 /**
@@ -8,6 +8,8 @@ import { parseKey } from '@/lib/inbox';
  *      channel we hold with them (2026-11-09): the merged timeline, one reply target per thread. Opening it marks
  *      your own threads seen.
  * POST {action:'done'|'reopen'} — on every thread of the person the viewer may act on (owner or admin).
+ * POST {action:'delete'|'spam'|'optout'} (core 107) — on the viewer's OWN threads of the person: Delete / Mark as spam
+ *      (also moved in Gmail when the connection allows it) / Opt out (never contact them, on every channel).
  * Replies, drafts and refreshes stay per thread: POST /api/inbox/{channel}/{id}.
  */
 type Ctx = { params: { key: string } };
@@ -41,6 +43,11 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   if (!key) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   let body: { action?: string } = {};
   try { body = await req.json(); } catch { /* empty */ }
+  if (body.action === 'delete' || body.action === 'spam' || body.action === 'optout') {
+    const res = await cleanupPerson(key, body.action, { userId: session.userId, admin: session.role === 'admin' });
+    if (!res.changed) return NextResponse.json({ error: res.errors[0] || 'Only the owner of this conversation can do that.', ...res }, { status: 403 });
+    return NextResponse.json({ ok: true, ...res });
+  }
   if (body.action !== 'done' && body.action !== 'reopen') return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
   const n = await setPersonState(key, body.action, { userId: session.userId, admin: session.role === 'admin' });
   return NextResponse.json(n ? { ok: true, changed: n } : { error: 'Not found' }, { status: n ? 200 : 404 });
