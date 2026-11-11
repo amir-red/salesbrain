@@ -3761,6 +3761,9 @@ every mirror threw a message's files away.
 
 ### 5.cv Delete, Mark as spam, Opt out in the Inbox (2026-11-11, migration 107)
 
+**LIVE 2026-11-11 (0.88.0)**: 107 applied, ring deployed (smoke 0.88.0), app on Production (run 43001637633), with the Inbox
+room fix (reply area ≤ 45vh, Minimise). Not yet seen live: a real Gmail trash / spam (needs a teammate to reconnect Google).
+
 Amir, on a cold pitch from a stranger: "I do not have the option to delete messages. Mark them as spam. Or opt out."
 Decisions: Delete and Spam act in SalesBrain AND in Gmail; Opt out = "never contact them".
 - **Core 107**: thread states `deleted` and `spam` on `email_threads`, `linkedin_threads`, `chat_threads`;
