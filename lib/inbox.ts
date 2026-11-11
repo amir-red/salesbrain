@@ -107,6 +107,8 @@ export interface InboxMessage {
   from_me: boolean | null;
   /** chat only: Zeami gave no sender */
   sender_unknown?: boolean;
+  /** chat only, group chats (core 106): who in the group wrote it */
+  sender_name?: string;
   /** chat only: Zeami gave no time; sent_at is when we read it */
   read_time?: boolean;
   text: string;

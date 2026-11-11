@@ -61,6 +61,9 @@ function Bubble({ m }: { m: InboxMessage }) {
           borderBottomRightRadius: m.from_me ? 6 : undefined, borderBottomLeftRadius: m.from_me ? undefined : 6,
           opacity: m.pending ? 0.75 : 1,
         }}>
+        {m.sender_name && !m.from_me && (
+          <p className="text-[11px] mb-1 truncate font-medium" style={{ color: 'var(--text-muted)' }}>{m.sender_name}</p>
+        )}
         {m.channel === 'email' && m.from && !m.from_me && (
           <p className="text-[11px] mb-1 truncate" style={{ color: 'var(--text-muted)' }}>{m.from}</p>
         )}
