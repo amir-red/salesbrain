@@ -73,6 +73,8 @@ export function ProposalStrip({ p, after, onAfter, senderFirst, verdict, onVerdi
   const asIsLabel = copyOnly ? (openUrl ? `Copy as is & open ${openLabel}` : 'Copy as is') : 'Send as is';
   const sendLabel = copyOnly ? (openUrl ? `Copy & open ${openLabel}` : 'Copy') : 'Send';
   const [why, setWhy] = useState(false);
+  // Folded to one line so the conversation above can be read in full; the text and rating stay as they are.
+  const [folded, setFolded] = useState(false);
   const diff = diffWords(p.message, after);
   const changed = diff.some((d) => d.op !== 'same');
   // The After box is a textarea over a copy of its text in which the added words are marked: same font, padding and
@@ -92,13 +94,26 @@ export function ProposalStrip({ p, after, onAfter, senderFirst, verdict, onVerdi
           {busy === 'draft' ? 'Drafting…' : 'Draft again'}
         </button>
         <button type="button" onClick={onDiscard} className="underline" style={{ color: 'var(--text-muted)' }}>Discard</button>
+        <button type="button" onClick={() => setFolded((v) => !v)} className="underline" style={{ color: 'var(--text-muted)' }}
+          aria-expanded={!folded} title={folded ? 'Show the proposal again' : 'Fold the proposal to read the conversation'}>
+          {folded ? 'Show' : 'Minimise'}
+        </button>
       </div>
+      {folded ? (
+        <div className="flex items-center gap-2">
+          <p className="flex-1 min-w-0 truncate" style={{ color: 'var(--text-muted)' }}>{after || p.message}</p>
+          <button type="button" onClick={onSend} disabled={!after.trim() || !!busy}
+            className="px-4 py-1 rounded-full text-sm font-semibold disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
+            {busy === 'reply' ? 'Sending…' : sendLabel}
+          </button>
+        </div>
+      ) : (<>
       {why && p.reasoning && <p style={{ color: 'var(--text-muted)' }}>{p.reasoning}{p.used_facts.length ? ` · used: ${p.used_facts.join(', ')}` : ''}</p>}
 
       <div className="grid gap-3 md:grid-cols-[1fr_auto_1fr] items-stretch">
         <div className="flex flex-col">
           <p className={label} style={{ color: 'var(--text-muted)' }}>Before · the AI&apos;s text</p>
-          <div className={`${face} rounded-lg flex-1 min-h-[6rem]`} style={card}>
+          <div className={`${face} rounded-lg flex-1 min-h-[6rem] max-h-[13rem] overflow-y-auto`} style={card}>
             {diff.filter((d) => d.op !== 'ins').map((d, i) => d.op === 'same' ? <span key={i}>{d.text}</span>
               : <del key={i} style={{ color: 'var(--red)', background: 'color-mix(in srgb, var(--red) 8%, transparent)' }}>{d.text}</del>)}
           </div>
@@ -127,7 +142,8 @@ export function ProposalStrip({ p, after, onAfter, senderFirst, verdict, onVerdi
         </div>
         <div className="flex flex-col">
           <p className={label} style={{ color: 'var(--text-muted)' }}>After · your text, edit it here {changed ? '' : '(no edits yet)'}</p>
-          <div className="relative rounded-lg flex-1 min-h-[6rem]" style={card}>
+          <div className="rounded-lg flex-1 min-h-[6rem] max-h-[13rem] overflow-y-auto" style={card}>
+          <div className="relative min-h-full">
             <div aria-hidden className={`${face} absolute inset-0 overflow-hidden pointer-events-none`} style={{ color: 'transparent' }}>
               {diff.filter((d) => d.op !== 'del').map((d, i) => d.op === 'same' ? <span key={i}>{d.text}</span>
                 : <mark key={i} style={{ color: 'transparent', background: 'color-mix(in srgb, var(--green) 22%, transparent)', borderRadius: 3 }}>{d.text}</mark>)}
@@ -138,6 +154,7 @@ export function ProposalStrip({ p, after, onAfter, senderFirst, verdict, onVerdi
               className={`${face} relative w-full h-full min-h-[6rem] resize-none bg-transparent outline-none`}
               style={{ color: 'var(--text)', overflow: 'hidden' }}
               ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; } }} />
+          </div>
           </div>
           <div className="mt-2 flex justify-center">
             <button type="button" onClick={onSend} disabled={!after.trim() || !!busy} title={copyOnly ? 'Copies the text in the After box' : 'Sends the text in the After box'}
@@ -173,6 +190,7 @@ export function ProposalStrip({ p, after, onAfter, senderFirst, verdict, onVerdi
           </div>
         </details>
       </div>
+      </>)}
       {learned && <LearnedLines res={learned} />}
       {error && <p role="alert" style={{ color: 'var(--red)' }}>{error}</p>}
     </div>

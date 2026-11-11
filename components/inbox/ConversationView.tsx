@@ -394,7 +394,8 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
           }} />
       )}
 
-      <div className="border-t p-3 max-h-[65vh] overflow-y-auto" style={{ borderColor: 'var(--border)' }}>
+      {/* At most 45% of the height (2026-11-11, Amir: "I can barely see the prior conversation"): the conversation keeps the room. */}
+      <div className="border-t p-3 max-h-[45vh] overflow-y-auto" style={{ borderColor: 'var(--border)' }}>
         {note && (
           <p className="text-xs mb-2 p-2 rounded-lg" style={{
             color: note.kind === 'error' ? 'var(--red)' : 'var(--text)',
