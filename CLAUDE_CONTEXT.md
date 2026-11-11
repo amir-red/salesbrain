@@ -3841,6 +3841,12 @@ when a lead is added by hand or gets its LinkedIn profile (`prospecting._mark_if
 
 ### 5.cx Email replies that understand the conversation; the strong model for every draft; no em dash, ever (2026-11-11, feat/email-cc, migration 108)
 
+**LIVE 2026-11-11 (0.90.0)**: 108 applied, `recheck_email_turns --apply` moved 9 of Mateo's copied-only conversations out of
+Needs reply (Jochen's introduction stays), ring deployed (smoke 0.90.0, one gateway; carried salesbrain-39's warmth fix
+core 94ebc9f), app on Production (run 43073237639, with 5b3793f Warm people on the Dashboard), full corpus refresh: 5 of
+Mateo's own intro replies tagged `intro_reply`. Not yet seen live: a real reading in the Inbox, a reply-all send, a
+recipient lesson, the calendar free times (Calendar API must be enabled + reconnect for calendar.readonly).
+
 Mateo, on two Inbox drafts: Liliane's mail to Digital Africa's AWS manager (Mateo only in Cc) was answered as if it were
 his; Jochen's introduction (two intros in one Gmail thread, then Niklas and his colleague Michael answering) was answered
 "Hallo Herr Linck" to the introducer, and two of Mateo's real "Hi Niklas" mails had gone To Jochen. Amir: build all
