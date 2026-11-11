@@ -3698,6 +3698,15 @@ From Mateo's sales-experiments page (8 Nov: "a research card beside every conver
 
 ### 5.cu Leads Finder searches inside the list and stops (2026-11-10, feat/leads-finder-fit, migration 105)
 
+**LIVE 2026-11-11 (0.89.0)**: 105 applied, ring deployed (smoke 0.89.0), app on Production (run 43041755209). NRW cleanup DONE
+(2026-11-10/11, backups `~/.cache/salesbrain/backups/list-nonfits-2e2c3cf8-*.json` on Amir's Mac): titles 26 → 16, locations
+NRW only (germany/deutschland removed, audit `icp_locations_edit`), 2,136 Leads Finder finds archived in four passes (profile
+groups Amir named, everyone outside NRW, then fit-except-region). Left: 69 fit, 31 protected, 284 NRW people queued for the
+Enricher (`leads.enrich_requested_at`, `crm_enrich_queue`; ~15 profile fetches/day on Matthias's account; re-run the
+cleanup after they are enriched), 34 NRW people with manufacturing / trade words held for review. **Matthias's Leads Finder
+is HELD** (`user_agent_state` paused, by admin) on Amir's word: resume on /admin/users or
+`crm_agent_set_user_state agent=leads_finder state=running owner_user_id=<Matthias>`.
+
 Amir, after NRW collected 2,642 owners of any German GmbH (title-only searches, no place, no industry, everyone saved):
 "only the best people that fit our ICP, not abroad, and stop when we can't find good results". Decisions: the LIST's own
 titles are the decision makers (no separate rule); cap 500 per list, changeable, owner told; stop rule below; clean NRW
@@ -3722,7 +3731,8 @@ first, other lists later.
   personalleitung, gesellschafter, gesellschafterin; 26 → 16, old list in agent_audit_log `icp_titles_edit`).
   Cleanup = `python -m salesbrain_core.store.cleanup_list_nonfits --icp <id> [--locations …] [--report f] [--apply]`
   (dry run default; only Leads Finder finds; protects anyone contacted / connected / requested / with a card, draft,
-  thread, priority or ✓; archives with a JSON backup, restorable). NOT applied yet — waiting for Amir.
+  thread, priority or ✓; archives with a JSON backup, restorable). Enrichment queue: `crm_enrich_queue {prospect_ids | icp_id,
+  clear}` = skip the Enricher's fit-score gate and go first.
 
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
