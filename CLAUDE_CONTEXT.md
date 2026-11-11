@@ -3847,6 +3847,44 @@ every mirror threw a message's files away.
   their docs, unverified live.
 - Not built: files in campaign / wave emails and the Telegram approval cards, forwarding a received file, virus scanning.
 
+### 5.cx The daily connection card is a widget, one person at a time (2026-11-11, feat/connect-widget, no migration)
+
+Amir, after Telegram's Bot API 10.4 in-message widgets: "change the daily connector to that widget, and instead of sending
+all in one, make it one by one with a little information about the person". The `connect_batch_card` (daily connector,
+`bundle_pending_connects`, the daily repost) is now posted by `salesbrain_hermes/connect_widget.py`: one HTML widget
+(`sendWidget`, ~1.5 KB of the 4 KB compressed limit) showing ONE person — initials, name, title · company, place, mutual /
+2nd degree, score, the trust "why", the list, "Open profile on LinkedIn", progress "Person 3 of 12" + bar, the 24 h cap —
+with **✅ Connect · ⏭ Skip** as an inline keyboard UNDER it (`c1:<approval id>:y|n` in telegram_buttons). Each tap
+decides THAT approval through `decide_outreach(telegram_user_id=)` (owner-only), the card moves on at once
+(`editMessageWidgetData` + `editMessageCaption` with the next buttons), and the request goes out from a per-owner
+in-memory queue in the gateway, 8–16 s after the previous one, through `_send_connect` (caps + once-only gate unchanged).
+- **Buttons inside the card** (Amir, after test card 3444): a tap inside a widget is a `widget_query` update, which the
+  gateway's python-telegram-bot 22.6 never asks for (`allowed_updates=Update.ALL_TYPES` predates Bot API 10.4).
+  `deploy-server.sh` patches that line in `/usr/local/lib/hermes-agent/plugins/platforms/telegram/adapter.py` to
+  `[*Update.ALL_TYPES, "widget_query"]` (idempotent, original kept as `*.orig-widget`, re-applied after a Hermes upgrade)
+  and ONLY when the patched line is confirmed writes `SALESBRAIN_CONNECT_CARD_INSIDE=1` into the main `.env` (agent profiles
+  copy it via `_shared/env.keys`); otherwise it removes the flag. With the flag the widget is sent with
+  `allow_queries: true`, draws ✅ Connect / ⏭ Skip itself (`TelegramWidget.request('c1:<approval>:y|n')`, 41 bytes of the
+  64 allowed) and has no row underneath; `telegram_buttons._on_widget_query` (a `TypeHandler(Update)` in group -11; PTB puts
+  the unknown field in `update.api_kwargs`) runs the same `connect_widget.on_tap`, answers with `answerWidgetQuery` within
+  12 s (the card shows the answer under the buttons) and stops propagation; every other update passes through untouched.
+  Without the flag, and on the text fallback, the buttons stay UNDER the card. A card posted before the flag flipped shows
+  "Buttons inside are off on this card" on an inside tap (the daily repost replaces it). Not verified live: that no Hermes
+  intake filter drops a message-less update before group -11, a real tap, a real `answerWidgetQuery`.
+- **Kernel** `conductor.connect_card_state(batch_id)` (current person, fixed order priority → rank → name, counts sent /
+  skipped / failed / sending / waiting, cap) and `stranded_connect_approvals(actor)`. The widget's state is the message's
+  `chat_data` (≤ 1024 bytes; `widget_state` shortens long fields). The batch closes itself when nothing waits or sends.
+- **Not now vs not this person**: a cap or paused-account refusal leaves the request APPROVED; the hourly Lead Conductor
+  (step 1a, `drain_stranded`) sends those and anything a gateway restart stranded (approved > 10 min, unconsumed). Losing a
+  race to the other sender ("approval already used") records nothing, so a sent request is never marked failed.
+- **Fallbacks**: Telegram refuses the widget → the same card as plain text with the same per-person buttons (edited with
+  `editMessageText`); the widget code fails entirely → the old list card. Old `cb:` cards still in chats keep working.
+  Auto mode (`daily_connect='auto'`) and the web "Approve all" are unchanged. Clients without widget support see the caption
+  ("🔗 3 of 12 · Name — Title, Company") and the buttons.
+- **Rollout**: ring deploy only (restarts the gateway: pick a quiet moment). The seed entry "Daily LinkedIn connector" is insert-only: update its body on the box by
+  hand. Mateo's card waiting now (10 people, 2026-11-11) becomes a widget at its next daily repost. Not seen live yet: a
+  real widget in Telegram, a tap, a paced send from the queue. Tests: `salesbrain-hermes/tests/test_connect_widget.py`.
+
 ### 5.cw LinkedIn connections made outside SalesBrain count as 1st degree (2026-11-11, core/hermes 0.88.1, no migration)
 
 **LIVE 2026-11-11 (0.88.1)**: kernel + ring deployed; the one-time pass marked 48 leads (Hannes's row 40 = Mateo's member, Mateo 8).
