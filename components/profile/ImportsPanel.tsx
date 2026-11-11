@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import WhatsAppImport from '@/components/warm/WhatsAppImport';
 
 interface Contact { id: string; full_name: string; email: string | null; company_name?: string | null }
 
@@ -14,6 +15,7 @@ export default function ImportsPanel() {
 }
 
 function IntegrationsPageInner() {
+  const [waNote, setWaNote] = useState<string | null>(null);
   const searchParams = useSearchParams();
   const urlError = searchParams.get('error');
 
@@ -163,6 +165,21 @@ function IntegrationsPageInner() {
             {csvResult && (
               <pre className="text-xs p-2 rounded overflow-x-auto" style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>{JSON.stringify(csvResult, null, 2)}</pre>
             )}
+          </div>
+
+          {/* WhatsApp chat export → conversation + warmth (was on /warm until 2026-11-11) */}
+          <div className="rounded-xl p-4 space-y-2 col-span-2" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold">WhatsApp chat</h2>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  On your phone: open the chat → Export chat → Without media, then drop the file here. Every message becomes
+                  a dated conversation with that person and counts towards how warm they are. Importing it again adds nothing.
+                </p>
+              </div>
+              <WhatsAppImport onDone={setWaNote} />
+            </div>
+            {waNote && <p className="text-xs" style={{ color: 'var(--green)' }}>{waNote}</p>}
           </div>
 
           {/* WhatsApp / text paste per contact */}

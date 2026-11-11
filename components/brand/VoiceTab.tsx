@@ -136,7 +136,7 @@ function MyVoice({ rules, stats, brandKey, reload, showOld, setShowOld }: {
 
   return (
     <Section title="Your voice"
-      help={<>Learned from you: a draft you send as written counts as a 10 by itself; every edit and every chip you tap (what was wrong) becomes a rule here at once — in your voice only. Decide drafts on the Telegram card or on <a href="/agents" className="underline">Agents</a>.</>}
+      help={<>Learned from you: a draft you send as written counts as a 10 by itself; every edit and every chip you tap (what was wrong) becomes a rule here at once — in your voice only. Decide drafts on the Telegram card or on <a href="/settings?section=agents" className="underline">Agents</a>.</>}
       aside={<label className="text-[11px] flex items-center gap-1 shrink-0" style={{ color: 'var(--text-muted)' }}>
         <input type="checkbox" checked={showOld} onChange={(e) => setShowOld(e.target.checked)} /> show forgotten</label>}>
       {stats && (

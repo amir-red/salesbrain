@@ -8,6 +8,7 @@
  * send and the chip they tap all tie to exactly what the model wrote.
  */
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
+import type { EmailReading } from '@/lib/inbox';
 import type { VoiceFlag, VoiceStamp, VoiceStep } from '@/lib/voice';
 
 export interface DraftRequest {
@@ -36,6 +37,12 @@ export interface DraftResult {
   voice: VoiceStamp; flags: VoiceFlag[]; linkedin_thread_id: string | null; sender_name: string | null;
   language: string | null; trust_level: string | null;
   priorities: { id?: string | null; content: string; kind: string }[];   // the sender's ranked rules the model saw (the card's foldable list)
+  /** email conversations (core 108): what the reader made of the thread, whom the reply goes to, what to check */
+  reading: EmailReading | null;
+  recipients: { to: string[]; cc: string[]; bcc: string[] } | null;
+  warnings: VoiceFlag[];
+  free_times: { day: string; from: string; to: string; label: string }[] | null;
+  time_zone: string | null;
 }
 
 /** Draft one message in the sender's voice through the kernel's one drafter. */
@@ -70,6 +77,11 @@ export async function draftInVoice(req: DraftRequest): Promise<DraftResult | { e
     sender_name: typeof out.sender_name === 'string' ? out.sender_name : null,
     language: typeof out.language === 'string' ? out.language : null,
     trust_level: typeof out.trust_level === 'string' ? out.trust_level : null,
+    reading: out.reading && typeof out.reading === 'object' ? (out.reading as EmailReading) : null,
+    recipients: out.recipients && typeof out.recipients === 'object' ? (out.recipients as DraftResult['recipients']) : null,
+    warnings: Array.isArray(out.warnings) ? (out.warnings as VoiceFlag[]) : [],
+    free_times: Array.isArray(out.free_times) ? (out.free_times as DraftResult['free_times']) : null,
+    time_zone: typeof out.time_zone === 'string' ? out.time_zone : null,
     priorities: Array.isArray(out.priorities)
       ? (out.priorities as { id?: unknown; content?: unknown; kind?: unknown }[]).filter((p) => typeof p?.content === 'string')
           .map((p) => ({ id: typeof p.id === 'string' ? p.id : null, content: String(p.content), kind: String(p.kind ?? 'rule') })) : [],

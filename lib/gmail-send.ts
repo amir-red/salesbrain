@@ -30,21 +30,27 @@ async function sender(userId: string, mailbox?: string | null) {
   return rows[0] as { address: string; display_name: string | null } | undefined;
 }
 
-export async function sendGmail(userId: string, msg: { to: string; subject: string; body: string; threadId?: string | null; inReplyTo?: string | null; mailbox?: string | null; attachments?: string[] }):
+export async function sendGmail(userId: string, msg: { to: string | string[]; cc?: string[]; bcc?: string[]; subject: string; body: string; threadId?: string | null; inReplyTo?: string | null; mailbox?: string | null; attachments?: string[] }):
   Promise<{ message_id: string; thread_id: string; rfc_id: string | null } | { error: string }> {
   const s = await sender(userId, msg.mailbox);
   if (!s) return { error: msg.mailbox ? `${msg.mailbox} is not connected for sending (Profile → Google, allow sending email).`
     : 'Google is not connected for sending (Profile → Google, allow sending email).' };
   const tok = await getValidAccessToken(userId, 'google', s.address);
   if (!tok) return { error: 'The Google connection stopped working (permission revoked or expired). Reconnect on Profile → Google.' };
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(msg.to)) return { error: `not an email address: ${msg.to}` };
+  const isAddr = (a: string) => /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(a);
+  const list = (v: string | string[] | undefined) => (Array.isArray(v) ? v : String(v || '').split(','))
+    .map((a) => a.trim()).filter(Boolean);
+  const to = list(msg.to); const cc = list(msg.cc); const bcc = list(msg.bcc);
+  const bad = [...to, ...cc, ...bcc].find((a) => !isAddr(a));
+  if (bad) return { error: `not an email address: ${bad}` };
+  if (!to.length) return { error: 'no address to send to' };
   let files: MimeFile[] = [];
   if (msg.attachments?.length) {
     const got = await filesForSend(userId, msg.attachments);
     if ('error' in got) return { error: got.error };
     files = got;
   }
-  const mime = buildMime({ from: s.address, fromName: s.display_name, to: msg.to, subject: msg.subject, body: msg.body, inReplyTo: msg.inReplyTo, files });
+  const mime = buildMime({ from: s.address, fromName: s.display_name, to: to.join(', '), cc, bcc, subject: msg.subject, body: msg.body, inReplyTo: msg.inReplyTo, files });
   let res: Response;
   if (!files.length) {
     const raw = b64url(mime);
@@ -92,7 +98,7 @@ function unescapeHtml(s: string): string {
 export interface ThreadMessage {
   id: string; from: string; subject: string; snippet: string; date: string | null; from_me: boolean;
   /** with `full`: the plain-text body (quoted history cut off), To and the Message-ID header */
-  body?: string; to?: string; rfc_id?: string | null;
+  body?: string; to?: string; cc?: string; rfc_id?: string | null;
   /** with `full`: the message's files (core 104) — Gmail part ids, fetched on download */
   attachments?: { part_id: string; name: string; mime: string | null; size: number | null }[];
   /** with `full`: the headers mail systems set on an automatic reply (out of office) — the kernel reads them */
@@ -213,6 +219,7 @@ export async function readThreads(userId: string, threadIds: string[], opts: { f
           const html = plain == null ? findPart(m.payload, 'text/html') : null;
           msg.body = stripQuoted(plain ?? (html != null ? htmlToText(html) : msg.snippet)).slice(0, 20000);
           msg.to = h('to');
+          msg.cc = h('cc');
           msg.rfc_id = h('message-id') || null;
           msg.attachments = fileParts(m.payload).slice(0, 20);
           const auto: Record<string, string> = {};

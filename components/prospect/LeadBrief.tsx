@@ -170,7 +170,7 @@ export default function LeadBrief({ b, researching, onResearch, enriching, onEnr
             ['Automation', n.lifecycle.step],
           ]} />
           {b.waiting.length > 0 && (
-            <p className="text-xs"><span style={{ color: 'var(--yellow)' }}>●</span> {b.waiting.length === 1 ? 'One card waits' : `${b.waiting.length} cards wait`} for a tap · <Link href="/agents" className="underline">Agents</Link></p>
+            <p className="text-xs"><span style={{ color: 'var(--yellow)' }}>●</span> {b.waiting.length === 1 ? 'One card waits' : `${b.waiting.length} cards wait`} for a tap · <Link href="/settings?section=agents" className="underline">Agents</Link></p>
           )}
           <div className="pt-1">
             <Button variant="primary" size="sm" href={`/inbox?compose=${b.prospect_id}`}><Send width={12} height={12} />Write message</Button>

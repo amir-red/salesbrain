@@ -27,11 +27,14 @@ function fileParams(name: string): string {
   return `filename="${encodeHeader(clean)}"; filename*=UTF-8''${encodeURIComponent(clean)}`;
 }
 
-export function buildMime(o: { from: string; fromName?: string | null; to: string; subject: string; body: string; inReplyTo?: string | null; files?: MimeFile[] }): string {
+export function buildMime(o: { from: string; fromName?: string | null; to: string; cc?: string[]; bcc?: string[]; subject: string; body: string; inReplyTo?: string | null; files?: MimeFile[] }): string {
   const from = o.fromName ? `${encodeHeader(cleanHeader(o.fromName))} <${cleanHeader(o.from)}>` : cleanHeader(o.from);
   const lines = [
     `From: ${from}`,
     `To: ${cleanHeader(o.to)}`,
+    // core 108: reply-all and the recipients chosen in the Inbox. Gmail sends to a Bcc address and drops the line.
+    ...(o.cc?.length ? [`Cc: ${cleanHeader(o.cc.join(', '))}`] : []),
+    ...(o.bcc?.length ? [`Bcc: ${cleanHeader(o.bcc.join(', '))}`] : []),
     `Subject: ${encodeHeader(cleanHeader(o.subject))}`,
     'MIME-Version: 1.0',
     'Content-Type: text/plain; charset="UTF-8"',

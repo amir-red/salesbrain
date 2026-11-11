@@ -223,7 +223,7 @@ export function LinkedInFollowups({ tab, onCounts }: { tab: 'pending' | 'sent'; 
                     {it.pending && (
                       <div className="mt-2 rounded p-2 text-xs" style={{ background: 'color-mix(in srgb, var(--yellow) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--yellow) 30%, transparent)' }}>
                         <span className="font-medium" style={{ color: 'var(--yellow)' }}>Draft awaiting the owner&apos;s approval</span>
-                        <span style={{ color: 'var(--text-muted)' }}> — on Telegram or <Link href="/agents" className="underline">/agents</Link></span>
+                        <span style={{ color: 'var(--text-muted)' }}> — on Telegram or <Link href="/settings?section=agents" className="underline">/agents</Link></span>
                         <p className="mt-1 whitespace-pre-wrap" style={{ color: 'var(--text)' }}>{show(it.pending.message)}</p>
                       </div>
                     )}

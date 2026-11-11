@@ -28,6 +28,9 @@ function saveDraft(key: string, d: StoredDraft | null) {
   } catch { /* storage unavailable: the draft just is not remembered */ }
 }
 import ChannelIcon from './ChannelIcon';
+import { ReadingCard, RecipientsEditor } from './EmailReading';
+import type { Recipients } from '@/lib/email-recipients';
+import type { EmailReadingPerson } from '@/lib/inbox';
 import { EMPTY_VERDICT, ProposalStrip, RatingStrip, verdictGiven, verdictReason, type InboxProposal, type Verdict } from './InboxDraft';
 import { LearnedLines } from '@/components/voice/DraftReview';
 import type { FeedbackResult } from '@/lib/voice';
@@ -66,6 +69,12 @@ function Bubble({ m }: { m: InboxMessage }) {
         )}
         {m.channel === 'email' && m.from && !m.from_me && (
           <p className="text-[11px] mb-1 truncate" style={{ color: 'var(--text-muted)' }}>{m.from}</p>
+        )}
+        {m.channel === 'email' && (m.to || m.cc) && (
+          <p className="text-[11px] mb-1 truncate" style={{ color: 'var(--text-muted)' }}
+            title={[m.to && `To: ${m.to}`, m.cc && `Cc: ${m.cc}`].filter(Boolean).join('\n')}>
+            {m.to && <>to {m.to}</>}{m.to && m.cc && ' · '}{m.cc && <>cc {m.cc}</>}
+          </p>
         )}
         {m.text ? <p className="whitespace-pre-wrap break-words leading-relaxed">{m.text}</p>
           : !m.attachments?.length ? <p><em style={{ color: 'var(--text-muted)' }}>(no text)</em></p> : null}
@@ -137,6 +146,31 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
   const copyOnly = !!cur && cur.copy_only;
   const canReply = !!cur && cur.can_reply;
   const grouped = !!thread && parseKey(convKey)?.kind !== 'thread';
+  // An email reply (core 108): the conversation reader's result and whom the reply goes to. Reply-all by default
+  // (To = whoever wrote last, the rest in Cc); the reader's proposal replaces it once a draft is made; every change
+  // the person makes is theirs (recips), and a changed recipient teaches their voice when it is sent.
+  const [recips, setRecips] = useState<Recipients | null>(null);
+  const isEmail = cur?.channel === 'email';
+  const reading = isEmail ? (proposal?.reading ?? cur?.reading ?? null) : null;
+  const proposedRecips: Recipients | null = isEmail
+    ? ((proposal?.recipients?.to?.length ? proposal.recipients : null) ?? (reading?.recipients?.to?.length ? reading.recipients : null)) : null;
+  const recipients: Recipients | null = isEmail ? (recips ?? proposedRecips ?? cur?.recipients ?? null) : null;
+  const recipientNames: Record<string, string> = {
+    ...(cur?.names || {}),
+    ...Object.fromEntries((reading?.people || []).filter((x) => x.name).map((x) => [x.email, x.name as string])),
+  };
+  const noRecipient = isEmail && !!recipients && !recipients.to.length;
+  async function addLead(person: EmailReadingPerson): Promise<string | null> {
+    const introducer = reading?.people?.find((x) => x.role === 'introducer');
+    const res = await fetch('/api/inbox/add-lead', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: person.email, name: person.name, company: person.company, title: person.title,
+        notes: [person.notes, introducer && introducer.email !== person.email ? `Introduced by ${introducer.name || introducer.email}` : null,
+          cur?.subject ? `Email thread: ${cur.subject}` : null].filter(Boolean).join('. ') }),
+    });
+    const data = await res.json().catch(() => ({}));
+    return res.ok && !data.error ? null : String(data.error || 'Not added');
+  }
 
   const lastId = thread?.messages.length ? thread.messages[thread.messages.length - 1].id : null;
   const restored = useRef(false);
@@ -147,6 +181,7 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
     // a proposal written earlier for this conversation (and the edits made to it) comes back as it was
     const kept = key ? loadDraft(key, lastId) : null;
     setProposal(kept ? kept.proposal : null); setText(kept ? kept.text : '');
+    setRecips(null);
     restored.current = !!kept;
   }, [key]);   // eslint-disable-line react-hooks/exhaustive-deps
   // A conversation that needs an answer drafts by itself when it opens — once; afterwards the kept draft is shown.
@@ -198,14 +233,20 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
       const res = await fetch(url, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(action === 'reply'
-          ? { action, text: out, ...(proposal ? { voice: proposal.voice } : {}), ...(att.ids.length ? { file_ids: att.ids } : {}) }
+          ? { action, text: out, ...(proposal ? { voice: proposal.voice } : {}), ...(att.ids.length ? { file_ids: att.ids } : {}),
+              ...(isEmail && recipients ? { recipients } : {}),
+              ...(isEmail && proposedRecips && reading ? { draft_recipients: { ...proposedRecips,
+                roles: Object.fromEntries((reading.people || []).map((x) => [x.email, x.role])), kind: reading.kind } } : {}) }
           : { action }),
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || data.reason || 'Something went wrong');
       if (action === 'draft') {
         setProposal({ message: data.message, reasoning: data.reasoning ?? null, used_facts: data.used_facts ?? [], voice: data.voice,
-          situation: data.situation === 'followup' ? 'followup' : 'reply', priorities: data.priorities ?? [] });
+          situation: data.situation === 'followup' ? 'followup' : 'reply', priorities: data.priorities ?? [],
+          reading: data.reading ?? null, recipients: data.recipients ?? null, warnings: data.warnings ?? [],
+          free_times: data.free_times ?? null, time_zone: data.time_zone ?? null });
+        setRecips(null);
         if (data.planned) setNote({ kind: 'info', text: `Drafted for the follow-up you planned: ${data.planned}` });
         setRate(null); setVerdict(EMPTY_VERDICT); setLearned(null); setTeachErr(null); setText(data.message);
         return;
@@ -227,7 +268,10 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
           }
           setProposal(null); saveDraft(key, null);
         }
-        if (data.sent) { setText(''); att.clear(); setNote(null); }
+        if (data.sent) {
+          setText(''); att.clear(); setRecips(null);
+          setNote(data.lesson?.rule ? { kind: 'info', text: `Learned for your voice: ${data.lesson.rule}` } : null);
+        }
         else if (data.waiting) { setText(''); att.clear(); setNote({ kind: 'info', text: data.note || 'Held by the send rules; it goes out at the next send window.' }); }
         else throw new Error(data.reason || 'Not sent');
       }
@@ -357,6 +401,11 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
               {marks.length === 1 ? marks[0].label : `${marks.length} channels`}
             </span>
             {thread.state === 'needs_reply' && <Pill color="var(--orange)">Needs reply</Pill>}
+            {thread.threads.some((t) => t.channel === 'email' && t.cc_only && t.last_from_them) && (
+              <span title="Their latest email was written to someone else — you were only copied, so it does not wait for your reply.">
+                <Pill color="var(--text-muted)">You&apos;re in Cc</Pill>
+              </span>
+            )}
             {thread.state === 'done' && !thread.plan && <Pill color="var(--green)">Done</Pill>}
             {thread.plan && (
               <button type="button" onClick={() => setPlanOpen(true)} title="The plan you set on this conversation — click to see or change it">
@@ -495,6 +544,10 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
         )}
         {canReply || copyOnly ? (
           <>
+            {reading && <ReadingCard reading={reading} onAdd={addLead} />}
+            {isEmail && canReply && recipients && (
+              <RecipientsEditor value={recipients} onChange={setRecips} names={recipientNames} reading={reading} proposed={proposedRecips} />
+            )}
             {/* While an AI proposal is open it IS the reply area (2026-11-06): edit in After, send from either column. */}
             {copyOnly && !proposal && (
               <div className="flex items-center gap-2">
@@ -510,7 +563,7 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
                 onSendAsIs={() => (copyOnly ? copyOut(true) : act('reply', true))} onSend={() => (copyOnly ? copyOut(false) : act('reply'))}
                 onRedraft={() => act('draft')} busy={busy}
                 copyOnly={copyOnly} openUrl={cur.open_url ?? null} openLabel={cur.label}
-                fromLine={fromLine(cur)}
+                fromLine={fromLine(cur)} sendBlocked={noRecipient}
                 onDiscard={async () => {
                   if (verdictGiven(verdict) && !learned) await teach(text);
                   else if (!learned) setRate({ approvalId: null, before: proposal.message, after: text, step: proposal.situation });
@@ -520,7 +573,9 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
               <div {...dropProps(att.add, true)}>
                 <textarea
                   ref={boxRef} value={text} onChange={(e) => setText(e.target.value)} rows={2}
-                  placeholder={cur.channel === 'email' ? `Reply to ${thread.name || 'them'} by email…` : `Message ${thread.name || 'them'} on ${cur.label}…`}
+                  placeholder={cur.channel === 'email'
+                    ? `Reply to ${(recipients?.to || []).map((e) => recipientNames[e] || e).join(', ') || thread.name || 'them'} by email…`
+                    : `Message ${thread.name || 'them'} on ${cur.label}…`}
                   onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && (text.trim() || att.count) && !busy && !att.uploading) { e.preventDefault(); act('reply'); } }}
                   className="z-input resize-none" style={{ minHeight: 64 }} aria-label="Reply"
                 />
@@ -531,7 +586,7 @@ export default function ConversationView({ thread, loading, onBack, onChanged }:
                   <Button size="sm" onClick={() => act('draft')} disabled={!!busy} title="An AI proposal in your voice, with this conversation as context — you edit and send">
                     <span className="inline-flex items-center gap-1"><Sparkle width={12} height={12} />{busy === 'draft' ? 'Drafting…' : 'Draft reply'}</span>
                   </Button>
-                  <Button variant="primary" onClick={() => act('reply')} disabled={(!text.trim() && !att.count) || !!busy || att.uploading}>
+                  <Button variant="primary" onClick={() => act('reply')} disabled={(!text.trim() && !att.count) || !!busy || att.uploading || noRecipient}>
                     {busy === 'reply' ? 'Sending…' : att.uploading ? 'Uploading…' : 'Send'}
                   </Button>
                 </div>

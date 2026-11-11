@@ -14,7 +14,8 @@
  */
 import type { PoolClient } from 'pg';
 import pool from '@/lib/db';
-import type { InboxAttachment, InboxChannel, InboxCounts, InboxFilter, InboxItem, InboxMessage, InboxState, InboxThread, InboxThreadRef, ReplyTarget } from '@/lib/inbox';
+import { namesOf, parseAddresses, replyAll } from '@/lib/email-recipients';
+import type { EmailReading, InboxAttachment, InboxChannel, InboxCounts, InboxFilter, InboxItem, InboxMessage, InboxState, InboxThread, InboxThreadRef, ReplyTarget } from '@/lib/inbox';
 import { channelLabel, parseKey, threadKey } from '@/lib/inbox';
 
 const TABLE: Record<InboxChannel, string> = { email: 'email_threads', linkedin: 'linkedin_threads', chat: 'chat_threads' };
@@ -106,6 +107,7 @@ function linkedinSql(o: ListOpts, vals: unknown[], forCount = false): string {
            ${LI_UNREAD} AS unread, pr.id::text AS prospect_id, t.person_id::text AS person_id, sl.id::text AS sales_lead_id,
            (SELECT cc.name FROM campaign_enrollments ce JOIN campaigns cc ON cc.id = ce.campaign_id
              WHERE ce.prospect_id = pr.id ORDER BY ce.status = 'active' DESC, ce.entered_node_at DESC LIMIT 1) AS campaign_name,
+           false AS cc_only,
            NULL::text AS app, NULL::text AS mailbox, ${planCol('linkedin', o.plans)},
            ${gkeyCol('linkedin', 'COALESCE(t.person_id, pr.person_id)', 'pr.id', `'li:' || la.owner_user_id::text || ':' || t.attendee_provider_id`)}
       FROM linkedin_threads t
@@ -150,6 +152,7 @@ function emailSql(o: ListOpts, vals: unknown[], forCount = false): string {
            t.prospect_id::text AS prospect_id, t.person_id::text AS person_id, sl.id::text AS sales_lead_id,
            (SELECT cc.name FROM campaign_enrollments ce JOIN campaigns cc ON cc.id = ce.campaign_id
              WHERE ce.prospect_id = t.prospect_id ORDER BY ce.status = 'active' DESC, ce.entered_node_at DESC LIMIT 1) AS campaign_name,
+           COALESCE(t.cc_only, false) AS cc_only,
            NULL::text AS app, t.mailbox, ${planCol('email', o.plans)},
            ${gkeyCol('email', 'COALESCE(t.person_id, p.person_id)', 't.prospect_id', `'em:' || t.owner_user_id::text || ':' || lower(NULLIF(t.counterpart_email, ''))`)}
       FROM email_threads t
@@ -194,6 +197,7 @@ function chatSql(o: ListOpts, vals: unknown[], forCount = false): string {
            sl.id::text AS sales_lead_id,
            (SELECT cc.name FROM campaign_enrollments ce JOIN campaigns cc ON cc.id = ce.campaign_id
              WHERE ce.prospect_id = t.prospect_id ORDER BY ce.status = 'active' DESC, ce.entered_node_at DESC LIMIT 1) AS campaign_name,
+           false AS cc_only,
            t.app, NULL::text AS mailbox, ${planCol('chat', o.plans)},
            ${gkeyCol('chat', 'COALESCE(t.person_id, p.person_id)', 't.prospect_id')}
       FROM chat_threads t
@@ -236,6 +240,7 @@ function toRef(r: Row): InboxThreadRef {
     unread: !!r.unread, last_message_at: iso(r.last_message_at), last_from_them: !!r.last_from_them,
     subject: (r.subject as string | null) ?? null, mailbox: (r.mailbox as string | null) ?? null,
     plan: (r.plan as InboxThreadRef['plan']) ?? null,
+    cc_only: !!r.cc_only,
   };
 }
 
@@ -408,6 +413,10 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
     let chat: { can_reply: boolean; only_last_message: boolean; open_url: string | null; kind: string } | null = null;
     let unknownSender = false;
     let isGroup = false;
+    let emailReading: EmailReading | null = null;
+    let emailOurs: string[] = [];
+    let emailRecipients: { to: string[]; cc: string[]; bcc: string[] } | undefined;
+    let emailNames: Record<string, string> | undefined;
     let emailMeta: { mailbox: string | null; gmail_thread_id: string; origin: string; person_id: string | null; prospect_id: string | null } | null = null;
     if (channel === 'chat') {
       const t = await client.query(
@@ -433,13 +442,30 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
           WHERE thread_id = $1 ORDER BY sent_at NULLS FIRST, created_at LIMIT 500`, [id]);
       raw = m.rows.map((r) => ({ id: r.id, from_me: r.from_me, text: r.text, sent_at: iso(r.sent_at), ...attachmentsOf('linkedin', r.id, r.attachments) }));
     } else {
-      const t = await client.query(`SELECT mailbox, gmail_thread_id, origin, person_id, prospect_id FROM email_threads WHERE id = $1`, [id]);
+      const t = await client.query(
+        `SELECT t.mailbox, t.gmail_thread_id, t.origin, t.person_id, t.prospect_id,
+                CASE WHEN t.situation_key = (SELECT gmail_message_id FROM email_messages m WHERE m.thread_id = t.id
+                                               AND m.body IS NOT NULL AND NOT m.auto_reply
+                                             ORDER BY m.sent_at DESC NULLS LAST, m.created_at DESC LIMIT 1)
+                     THEN t.situation END AS reading,
+                ARRAY(SELECT lower(a) FROM users u, LATERAL unnest(ARRAY[u.email]
+                        || ARRAY(SELECT account_email FROM oauth_tokens WHERE user_id = u.id AND account_email IS NOT NULL)
+                        || ARRAY(SELECT address FROM email_senders WHERE user_id = u.id)) a
+                       WHERE u.id = t.owner_user_id) AS ours
+           FROM email_threads t WHERE t.id = $1`, [id]);
       mailbox = t.rows[0]?.mailbox ?? null;
       emailMeta = t.rows[0] ?? null;
+      emailReading = (t.rows[0]?.reading as EmailReading | null) ?? null;
+      emailOurs = [...(t.rows[0]?.ours || []), ...(mailbox ? [mailbox.toLowerCase()] : [])];
       const m = await client.query(
-        `SELECT id::text, from_me, COALESCE(body, '') AS text, sent_at, from_header AS "from", subject, ${files} FROM email_messages
+        `SELECT id::text, from_me, COALESCE(body, '') AS text, sent_at, from_header AS "from", to_header AS "to",
+                cc_header AS cc, subject, ${files} FROM email_messages
           WHERE thread_id = $1 ORDER BY sent_at NULLS FIRST, created_at LIMIT 500`, [id]);
+      for (const r of m.rows) if (r.from_me) for (const a of parseAddresses(r.from)) emailOurs.push(a.email);
+      emailRecipients = replyAll(m.rows, emailOurs);
+      emailNames = namesOf(m.rows);
       raw = m.rows.map((r) => ({ id: r.id, from_me: r.from_me, text: r.text, sent_at: iso(r.sent_at), from: r.from, subject: r.subject,
+        to: r.to ?? null, cc: r.cc ?? null,
         ...attachmentsOf('email', r.id, r.attachments) }));
     }
     // Replies typed here that the send gate is holding (quiet hours, a cap): shown as "waiting to be sent".
@@ -493,6 +519,7 @@ export async function getThread(channel: InboxChannel, id: string, viewer: { use
       prospect_stage: stage,
       mine,
       targets: [], default_target: null,
+      ...(channel === 'email' ? { reading: emailReading, reply_recipients: emailRecipients, names: emailNames } : {}),
       ...(chat ? { only_last_message: chat.only_last_message, open_url: chat.open_url, source_note } : {}),
       ...(open_url ? { open_url } : {}),
     };
@@ -524,6 +551,7 @@ function targetOf(t: InboxThread): ReplyTarget {
     copy_only: !t.can_reply && t.channel === 'chat' && !!t.mine, reply_note: t.reply_note,
     last_from_them: t.last_from_them, last_message_at: t.last_message_at, state: t.state, plan: t.plan ?? null,
     mailbox: t.mailbox, subject: t.subject, open_url: t.open_url ?? null, profile_url: t.profile_url, mine: !!t.mine,
+    ...(t.channel === 'email' ? { reading: t.reading ?? null, recipients: t.reply_recipients, names: t.names } : {}),
   };
 }
 

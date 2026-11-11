@@ -44,6 +44,8 @@ export interface InboxThreadRef {
   unread: boolean;
   last_message_at: string | null;
   last_from_them: boolean;
+  /** email only (core 108): their newest message went to someone else; we were only copied */
+  cc_only?: boolean;
   subject?: string | null;
   mailbox?: string | null;
   plan?: PlanSummary | null;
@@ -85,6 +87,8 @@ export interface InboxItem {
   mailbox?: string | null;
   /** the active conversation plan, when there is one (core 103) */
   plan?: PlanSummary | null;
+  /** email only (core 108): their newest message went to someone else; we were only copied */
+  cc_only?: boolean;
 }
 
 export interface InboxCounts { needs_reply: number; unread: number; planned: number; email: number; linkedin: number; chat: number }
@@ -115,6 +119,9 @@ export interface InboxMessage {
   sent_at: string | null;
   /** email only */
   from?: string | null;
+  /** email only: the To and Cc lines (core 108) */
+  to?: string | null;
+  cc?: string | null;
   subject?: string | null;
   /** a reply typed here that the send gate holds (quiet hours, a cap) */
   pending?: boolean;
@@ -127,6 +134,19 @@ export interface InboxMessage {
 }
 
 /** One thread a reply can go into: the pills above the reply box. */
+/** The conversation reader's result for an email thread (core 108; salesbrain-core policy/email_situation.py). */
+export interface EmailReadingPerson {
+  email: string; name: string | null; role: string; company: string | null; title: string | null; notes: string | null;
+  in_crm?: boolean; teammate?: boolean; prospect_id?: string; person_id?: string;
+}
+export interface EmailReading {
+  kind: 'intro' | 'cc_fyi' | 'scheduling' | 'question' | 'decision' | 'thanks' | 'update' | 'other';
+  summary: string | null; last_writer: string | null; addressee: string | null; greet_as: string | null;
+  recipients: { to: string[]; cc: string[]; bcc: string[] };
+  wants_time: boolean; proposed_times: string[]; ask: string | null; we_owe: string | null;
+  language: string | null; address_form: 'du' | 'Sie' | null; people: EmailReadingPerson[]; web_notes?: string;
+}
+
 export interface ReplyTarget {
   channel: InboxChannel;
   id: string;
@@ -145,9 +165,19 @@ export interface ReplyTarget {
   open_url?: string | null;
   profile_url?: string | null;
   mine: boolean;
+  /** email only (core 108): the reader's result for the newest message, when one was made */
+  reading?: EmailReading | null;
+  /** email only: reply-all from the thread (To = whoever wrote last, the rest in Cc) */
+  recipients?: { to: string[]; cc: string[]; bcc: string[] };
+  /** email only: names seen on the thread, by address */
+  names?: Record<string, string>;
 }
 
 export interface InboxThread extends InboxItem {
+  /** email only (core 108): see ReplyTarget */
+  reading?: EmailReading | null;
+  reply_recipients?: { to: string[]; cc: string[]; bcc: string[] };
+  names?: Record<string, string>;
   profile_url: string | null;
   mailbox: string | null;
   messages: InboxMessage[];

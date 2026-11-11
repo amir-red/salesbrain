@@ -106,13 +106,18 @@ const LONG_RUNNING_TOOLS = new Set<string>([
   'crm_firm_find_people',
 ]);
 
+// Every draft runs on the strong model since core 108 (slower, ~10-30 s a call): an email draft reads the thread first
+// (one call, plus one grounded lookup for people we do not know) and may rewrite once; a campaign Test run writes up
+// to ~8 drafts in a row.
+const VERY_LONG_TOOLS = new Set<string>(['crm_draft', 'campaign_preview']);
+
 async function rpc(
   request: Record<string, unknown>,
   label: string,
 ): Promise<Record<string, unknown>> {
   const encoded = Buffer.from(JSON.stringify(request)).toString('base64');
   const tool = typeof request.tool === 'string' ? request.tool : '';
-  const timeoutMs = LONG_RUNNING_TOOLS.has(tool) ? 180_000 : 30_000;
+  const timeoutMs = VERY_LONG_TOOLS.has(tool) ? 360_000 : LONG_RUNNING_TOOLS.has(tool) ? 180_000 : 30_000;
 
   let stdout: string;
   try {

@@ -19,6 +19,7 @@ import { useFunnel } from '@/components/panel/FunnelStrip';
 import FunnelChart from '@/components/funnel/FunnelChart';
 import FunnelMore from '@/components/funnel/FunnelMore';
 import Insights, { useInsights } from '@/components/funnel/Insights';
+import WarmPeopleCard from '@/components/warm/WarmPeopleCard';
 import { Briefcase, Calendar, Chat, Send } from '@/components/icons';
 import { FUNNEL_LANES, drawnSteps, pct, type FunnelLane, type FunnelSummary } from '@/lib/funnel';
 import {
@@ -386,6 +387,8 @@ function DashboardPage() {
               <WhatWorks insights={insights.data} error={insights.error} onAll={() => open('findings')} />
             </div>
           )}
+
+          <WarmPeopleCard owner={owner} />
 
           <section id="dashboard-more" className="z-panel rounded-2xl p-4 space-y-3">
             <div className="flex flex-wrap items-center gap-1.5">

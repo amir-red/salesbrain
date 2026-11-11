@@ -3734,6 +3734,33 @@ first, other lists later.
   thread, priority or ✓; archives with a JSON backup, restorable). Enrichment queue: `crm_enrich_queue {prospect_ids | icp_id,
   clear}` = skip the Enricher's fit-score gate and go first.
 
+### 5.cx /settings holds Brand & Voice and Agents (2026-11-11, app-only)
+
+Amir: off the side menu. `/settings?section=brand|agents` (`app/settings/page.tsx`) renders
+`components/settings/BrandSettings.tsx` (was app/brand/page.tsx; its own `tab` / `brand` params) and
+`components/settings/AgentsSettings.tsx` (was app/agents/page.tsx). `/brand` and `/agents` redirect there with their
+query string. Sidebar: the two items and the "Prospects" group are gone; a Settings (gear) link sits under Profile.
+
+### 5.cy People dossier page retired (2026-11-11, app-only)
+
+Amir: not needed. `/person/<person id>` (`app/person/[id]/page.tsx`) opens the person's prospect profile (viewer's own
+row first, then live, best fit, newest; matched by person id or their contact), else says "not a lead yet".
+`/relationships?person=` redirects there; `/api/relationships` is gone. Warm people names without a prospect are
+plain text until added; Network's Dossier → Profile; the lead card's dossier link removed. The kernel tables
+(facts, commitments, interactions) stay: the agents read them.
+
+### 5.cz Warm people move to the Dashboard; knowing someone is one fact (2026-11-11, core 0.90.0, no migration)
+
+Amir: "do we need a dedicated warm people page?" Found: since Mateo's CSV import (11-02) a LinkedIn connection that is ALSO
+in a contacts export scored 0.25 + 0.20 = 0.40 = exactly "warm"; 1,954 of 2,180 warm people were only that, 190 had ever
+written to us, and "Add as lead" had never been used. Now `policy/warmth.score`: connection / by_request / saved are ONE fact,
+only the strongest counts (a bare connection = 0.25, cool; the reasons still list both). Re-scored on the box: 190 people
+warm or hot (Hannes 93, Mateo 2,004 → 75, Amir 32, Matthias 51 → 23). This also feeds the trust score, the Monday note and
+the Leads "warmest first" sort (rescored by the funnel refresh). `/warm` is off the menu and redirects to
+`/dashboard?owner=#warm`: `components/warm/WarmPeopleCard.tsx` ("Warm, nobody on it": top 8, Show all, hot/warm, also-worked,
+Excel export, Add as lead) on the Dashboard, following its teammate filter. WhatsApp chat import → Profile → Imports.
+Prospects keeps its warm filter (`?warm=1`). The Monday digest links to the Dashboard section.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
@@ -3851,6 +3878,68 @@ not removed) also counts in `_first_message_target`, and `mark_connected(conn, o
 missing member id when no other lead of the owner holds it; never lowers a degree). Runs from the hourly `linkedin_sync.py`
 (`mark_connected_prospects`, owner scope; stat `leads_marked_connected`), after every relations page of the graph mirror, and
 when a lead is added by hand or gets its LinkedIn profile (`prospecting._mark_if_connected`). Test `test_linkedin_connected_db.py`.
+
+### 5.cx Email replies that understand the conversation; the strong model for every draft; no em dash, ever (2026-11-11, feat/email-cc, migration 108)
+
+**LIVE 2026-11-11 (0.90.0)**: 108 applied, `recheck_email_turns --apply` moved 9 of Mateo's copied-only conversations out of
+Needs reply (Jochen's introduction stays), ring deployed (smoke 0.90.0, one gateway; carried salesbrain-39's warmth fix
+core 94ebc9f), app on Production (run 43073237639, with 5b3793f Warm people on the Dashboard), full corpus refresh: 5 of
+Mateo's own intro replies tagged `intro_reply`. Not yet seen live: a real reading in the Inbox, a reply-all send, a
+recipient lesson, the calendar free times (Calendar API must be enabled + reconnect for calendar.readonly).
+
+Mateo, on two Inbox drafts: Liliane's mail to Digital Africa's AWS manager (Mateo only in Cc) was answered as if it were
+his; Jochen's introduction (two intros in one Gmail thread, then Niklas and his colleague Michael answering) was answered
+"Hallo Herr Linck" to the introducer, and two of Mateo's real "Hi Niklas" mails had gone To Jochen. Amir: build all
+eight improvements, the strong model for every draft "so it doesn't look AI wrote the message", and "DO NOT EVER USE em
+dash, put that instruction everywhere". Plan of record: the eight points in the 2026-11-11 conversation.
+- **Copied-only mail (108)**: `email_messages.cc_header`, `email_threads.cc_only`. `inbox.written_to_us`: ours when one of
+  the owner's addresses (login, every Google account, every sending mailbox, the thread's mailbox: `our_addresses`) is in
+  To, or when the mail names them (subject, greeting, or anywhere in its first 1,500 characters, which is how an
+  introduction that Cc's them still needs their reply). Otherwise `_summarize` keeps it out of Needs reply ("waiting";
+  a done one stays done). One-off `python -m salesbrain_core.store.recheck_email_turns [--apply]` (dry run 2026-11-11:
+  9 of 121 conversations, all Mateo's; touches nothing but cc_only and needs_reply → waiting).
+- **The conversation reader** (ring `email_reader.py`, kernel `commands/email_context.py`, pure `policy/email_situation.py`):
+  before an email reply is drafted, one strong-model call reads the whole thread (12 newest messages, 7,000 characters,
+  who wrote to whom) plus what we know about each person (`known_people`: teammate, CRM person, lead, warmth, the
+  account behind the domain) and, for people the CRM does not know, ONE Google-grounded lookup on the FAST model
+  (non-free-mail domains, at most 4; the strong model with search took 45 s+). JSON → `parse_reading` (kind intro |
+  cc_fyi | scheduling | question | decision | thanks | update | other, summary, addressee, greet_as, To/Cc/Bcc, ask,
+  we_owe, language, du/Sie, people with roles introducer | introduced | introduced_colleague | teammate | …; every address
+  must be on the thread). Cached on `email_threads.situation` until a new message (`situation_key` = newest Gmail id).
+- **The drafter** (`drafter.py`): EVERY draft on `llm.STRONG_MODEL` (`SALESBRAIN_STRONG_MODEL`, gemini-4-argon; falls back to
+  the main Gemini model, then Bedrock). An email thread gets the whole thread, "WHAT IS GOING ON" (`es.describe`), the
+  INTRO_REPLY step when the reader says intro, the sender's own intro replies first as examples (corpus situation
+  `intro_reply`: "Danke Jochen!\n\nHi Niklas", 108 widens the CHECK; a full corpus refresh reclassifies), and free calendar
+  windows when a meeting is in play (bridge `calendar_free`: Google freeBusy over every account with calendar access,
+  09:00-18:00 Mon-Fri in the calendar's time zone). **Checks** (`policy/email_people`): greeting names someone in To,
+  du/Sie as they write, a clock time inside a free window (no calendar: only their own proposed times pass). One
+  rewrite, then the draft comes back with `warnings` (shown on the proposal, never dropped). Live on Mateo's real thread
+  (scratch DB): reading 17 s, draft 7 s, "Hi Micha," in du, the actual topic, one of his proposed times.
+- **Reply-all and choosing recipients**: `inbox.prepare_reply(recipients, draft_recipients)`; default = reply-all from the
+  thread (`policy/email_people.default_recipients`, TS twin `lib/email-recipients.ts`); every address checked against the
+  do-not-contact list; the send gate checks the person in To (a bare person is made for a new address); stored on
+  `outreach_approvals.recipients`; Gmail gets To/Cc/Bcc (`buildMime`, `sendGmail` takes lists). **Learning (8)**: when the
+  person sends to other people than the reader proposed, `email_context.recipient_lesson` turns the roles into a rule
+  ("When answering an introduction by email, reply to the person you were introduced to, not the person who made the
+  introduction") stored in their voice at once (`kv.learn`, kind judgment) and shown after the send.
+- **App**: Inbox email replies show `ReadingCard` (kind, summary, they ask / you owe, who is who with **Add as lead** →
+  `POST /api/inbox/add-lead` → `crm_prospect_add`) and `RecipientsEditor` (To / Cc / Bcc chips, move, remove, add; a
+  changed one is marked); the proposal shows warnings and the free times; each email bubble shows to / cc; "You're in Cc"
+  pill and a cc chip in the list. `crm_draft` / `campaign_preview` get a 6-minute RPC ceiling.
+- **No em dash, anywhere** (`policy/writing.strip_dashes`, TS `lib/no-dash.ts`, change both): every ring model output
+  (`llm.converse`, `llm.grounded`), every app model output and prompt (`createMessage` adds the rule and cleans text and
+  tool inputs), every Telegram message and card edit (`deliver._send_telegram/_edit_telegram`), every draft
+  (`drafter._finish` rewrites a dash instead of dropping the draft), template paths (`render_first_message`, wave `render`,
+  campaign fixed text); the rule in the drafter prompt's first section, the reader prompt, the default SOUL ("Writing: no
+  em dash, ever") and every agent's base rules; 253 lines of persona / skill / rulebook / routine text de-dashed; 108 adds
+  "—" to every brand's never-write list and de-dashes stored voice rules, templates and first-message templates. Not
+  covered: the chat bot's own replies are steered by the SOUL only (no verified Hermes hook rewrites them), hand-typed
+  text is sent as typed, code comments and error strings still contain dashes.
+- **Cost**: every draft and every email reading on Argon (2 / 10 per MTok, doubling 2026-12-01); the nightly blind
+  evaluation (`draft_eval`) drafts on it too.
+- **Rollout (integration)**: apply 108; `recheck_email_turns --apply`; deploy ring + app; a full
+  `sender_corpus.refresh` per sender so intro replies are tagged. Not built: splitting one Gmail thread that holds two
+  separate introductions into two rows, naming the conversation after its latest writer, a booking link.
 
 ### 5.cv Delete, Mark as spam, Opt out in the Inbox (2026-11-11, migration 107)
 
@@ -4152,6 +4241,40 @@ enrolled people alone; (4) a free canvas; (5) LinkedIn + email in the first vers
   the canvas clicked through in Chrome. NOT tested: a real Telegram card, a real LinkedIn/Gmail send.
 - Not built: A/B variants per step, per-step send windows, sending to a teammate's card for someone else's lead, a
   campaign view on the lead card, re-entering a finished campaign.
+
+### 5.cz Daily connector asks only vetted firms; list exclusions from chat; VC list cleaned (2026-11-11, core/hermes 0.90.1, no migration)
+
+**LIVE 2026-11-11 (0.90.1)**: ring deployed (smoke 0.90.1, one gateway); app unchanged. Checked on the box: Mateo's next
+daily card draws from partners at "go" funds only (42CAP, Crane, Alven, Balderton, …), 69 candidates.
+
+Mateo, on Telegram: Remy Goldstein (Venture University, a paid VC course) accepted his request and pitched him; "another one
+that was not very useful". Trace: an old 28 Oct Sales Navigator search for CEO/CIO titles found him ("Partner" in the
+headline), the cohort sort put him on the VC list with high confidence, the daily connector picked him (2nd degree) on 9 Nov,
+Mateo approved the card. VU was never on the list's 562 researched firms: 28 of 94 VC requests had gone to such people. The
+bot then said it had "added a negative exclusion rule to memory and criteria": it had only saved a personal memory note,
+which no agent reads.
+- **Firm gate** (`conductor._LIST_SQL`): a list with `list_firms` rows connects only people whose account is a `go` firm on
+  that list; every list skips people its own exclusions scored 0 (`qualification_reason LIKE 'EXCLUDED:%'`). Lists without
+  firms are unchanged.
+- **Why the weakest came first**: `batch_pick` orders priority → list priority → firm already asked → mutual → **2nd degree** →
+  3rd/unknown → score. Firm research lands partners without a measured degree, so any 2nd-degree stranger outranked them.
+- **`icp_owner.icp_exclude`** / ring **`crm_icp_exclude`** (mcp=None; blocked in agent runs and automations): appends
+  company / title words to a list's exclusions (never replaces the definition, unlike `crm_icp_define`, which overwrote the
+  VC list's criteria once on 9 Nov and briefly scored all 629 "do not pursue"), re-scores, names who is now excluded.
+  Word-boundary matching: "CTO" / "Engineer" would knock out GPs (BlueYard, InReach, Engineering Capital), so do not.
+- **SOUL Tool truth**: "Action taken" lists only what a tool result confirmed; a memory note is "noted for you"; "how did X
+  get here" comes from `crm_lead_lookup`, never a story. Knowledge entry "Keep a kind of company or title off a list".
+- **Data on the VC list (Amir's decisions)**, backup `~/.cache/salesbrain/backups/vc-cleanup-20261111175414.json`: 21 rows
+  archived (non-investors, space/deeptech funds, fund CFO/COO, 2 duplicate rows of Curtis MacDonald / Morgan Slain), Mateo's
+  waiting card of 10 expired, brief geographies Europe + North America (re-judged: 376 go, 175 later, 11 out), locations
+  + US/Canada, fit weights title 35 / seniority 25 / location 15 / network 25 / industry 0 / size 0 (industry and size are
+  blank for most firm-team partners; strong fit 9 → 174), company exclusions University, Academy, Accelerator, Incubator,
+  Venture Studio, Fellowship. Leads Finder held, then running again for Mateo (it does not search his hand-made lists).
+- **Open**: Mateo's 9 Nov title exclusions "fellow" / "advisor" / "operating partner" score 0 for Gianluca Dettori (GP Primo,
+  "Kauffman Fellow"), Deborah Magid (MD NextStar), Herbert Drayton (MP HI Mark); about 30 real investors sit at firms not
+  on the list (Zetta, Moderne, Gorilla, SOSV, …) and are now gated out until their firms are imported and researched; the
+  trust score's fit and openness parts read customer signals, so the VC list ranks by authority alone (0.7/30 path, 0.9/20
+  openness); 27 accepted investors have no first message (no template on the list).
 
 ## 6. Env vars
 

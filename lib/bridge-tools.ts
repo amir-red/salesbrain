@@ -15,7 +15,7 @@ import { listUserTokens, revokeToken } from '@/lib/mcp/tokens';
 import { sendTelegram } from '@/lib/tg-notify';
 import { syncZeamiDealEvents } from '@/lib/zeami-sync';
 import { listInboxThreads, readThreads, sendGmail, watchMailbox } from '@/lib/gmail-send';
-import { listMeetings } from '@/lib/google-calendar';
+import { freeTimes, listMeetings } from '@/lib/google-calendar';
 
 export interface Who { userId: string; role: string }
 const MAX_XLSX_BYTES = 20 * 1024 * 1024;
@@ -86,7 +86,10 @@ const mailboxOf = (args: Args) => (args.mailbox ? String(args.mailbox) : null);
 
 async function gmailSendTool(who: Who, args: Args) {
   return sendGmail(who.userId, {
-    to: String(args.to || ''), subject: String(args.subject || ''), body: String(args.body || ''),
+    // core 108: To may be several addresses (reply-all), plus Cc and Bcc
+    to: Array.isArray(args.to) ? args.to.map(String) : String(args.to || ''),
+    cc: Array.isArray(args.cc) ? args.cc.map(String) : [], bcc: Array.isArray(args.bcc) ? args.bcc.map(String) : [],
+    subject: String(args.subject || ''), body: String(args.body || ''),
     threadId: args.thread_id ? String(args.thread_id) : null, inReplyTo: args.in_reply_to ? String(args.in_reply_to) : null,
     mailbox: mailboxOf(args),
     // core 104: the sender's own uploads (message_files), read here — only the app builds the Gmail message
@@ -120,6 +123,11 @@ async function calendarEventsTool(who: Who, args: Args) {
   return listMeetings(who.userId, back, ahead);
 }
 
+/** Free time in the caller's own calendar for the next working days (the drafter's meeting proposals, core 108). */
+async function calendarFreeTool(who: Who, args: Args) {
+  return freeTimes(who.userId, Math.min(10, Math.max(1, Number(args.days) || 5)));
+}
+
 const TOOLS: Record<string, (who: Who, args: Args) => Promise<Record<string, unknown>>> = {
   google_sync: googleSync,
   import_contacts: importContacts,
@@ -131,6 +139,7 @@ const TOOLS: Record<string, (who: Who, args: Args) => Promise<Record<string, unk
   gmail_watch: gmailWatchTool,
   gmail_inbox: gmailInboxTool,
   calendar_events: calendarEventsTool,
+  calendar_free: calendarFreeTool,
 };
 
 export async function runBridgeTool(tool: string, args: Args, userId: string): Promise<Record<string, unknown>> {
