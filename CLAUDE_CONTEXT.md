@@ -3761,6 +3761,15 @@ the Leads "warmest first" sort (rescored by the funnel refresh). `/warm` is off 
 Excel export, Add as lead) on the Dashboard, following its teammate filter. WhatsApp chat import → Profile → Imports.
 Prospects keeps its warm filter (`?warm=1`). The Monday digest links to the Dashboard section.
 
+**Same day, 0.90.2 (Amir: "just Mateo and Matthias only")**: deleted the stored networks of Amir's own LinkedIn
+(`amir-redwan`, 3 revoked rows) and Hannes's own (`hannes-garben`, revoked): 448 relations, 139 threads, 303 messages; all
+441 of Amir's graph links and the 298 of Hannes's that his live account (= Mateo's member) does not back; Amir's 234 imported
+contacts (LinkedIn CSV + Google, none linked to a lead); 215 of Amir's live leads archived (4 with cards kept). Hannes's
+leads and cards untouched. Backup `~/.cache/salesbrain/backups/network-cleanup-amir-hannes-20261111182148.json` (Amir's Mac),
+audit `network_cleanup`. NEW policy row `agents.warmth.exclude_users` (user ids; SQL-only, not in the chat editor) = whose
+relationships add no warmth: [Amir] (his Google stays connected for the Inbox). Warm or hot after: Mateo 75, Hannes 74 (his
+live Mateo-account conversations + Napa card meetings), Matthias 23. "Clean once": a reconnect of their own LinkedIn syncs it again.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
