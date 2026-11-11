@@ -3741,6 +3741,14 @@ Amir: off the side menu. `/settings?section=brand|agents` (`app/settings/page.ts
 `components/settings/AgentsSettings.tsx` (was app/agents/page.tsx). `/brand` and `/agents` redirect there with their
 query string. Sidebar: the two items and the "Prospects" group are gone; a Settings (gear) link sits under Profile.
 
+### 5.cy People dossier page retired (2026-11-11, app-only)
+
+Amir: not needed. `/person/<person id>` (`app/person/[id]/page.tsx`) opens the person's prospect profile (viewer's own
+row first, then live, best fit, newest; matched by person id or their contact), else says "not a lead yet".
+`/relationships?person=` redirects there; `/api/relationships` is gone. Warm people names without a prospect are
+plain text until added; Network's Dossier → Profile; the lead card's dossier link removed. The kernel tables
+(facts, commitments, interactions) stay: the agents read them.
+
 ### 5.ai Zeami brand UI — foundation (2026-10-03, feat/ui-improvement, app-only)
 
 The app now wears the Zeami brand basics (`docs/brand/zeami-brand-basics.md`): light product style by default,
