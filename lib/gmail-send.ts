@@ -30,21 +30,27 @@ async function sender(userId: string, mailbox?: string | null) {
   return rows[0] as { address: string; display_name: string | null } | undefined;
 }
 
-export async function sendGmail(userId: string, msg: { to: string; subject: string; body: string; threadId?: string | null; inReplyTo?: string | null; mailbox?: string | null; attachments?: string[] }):
+export async function sendGmail(userId: string, msg: { to: string | string[]; cc?: string[]; bcc?: string[]; subject: string; body: string; threadId?: string | null; inReplyTo?: string | null; mailbox?: string | null; attachments?: string[] }):
   Promise<{ message_id: string; thread_id: string; rfc_id: string | null } | { error: string }> {
   const s = await sender(userId, msg.mailbox);
   if (!s) return { error: msg.mailbox ? `${msg.mailbox} is not connected for sending (Profile → Google, allow sending email).`
     : 'Google is not connected for sending (Profile → Google, allow sending email).' };
   const tok = await getValidAccessToken(userId, 'google', s.address);
   if (!tok) return { error: 'The Google connection stopped working (permission revoked or expired). Reconnect on Profile → Google.' };
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(msg.to)) return { error: `not an email address: ${msg.to}` };
+  const isAddr = (a: string) => /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(a);
+  const list = (v: string | string[] | undefined) => (Array.isArray(v) ? v : String(v || '').split(','))
+    .map((a) => a.trim()).filter(Boolean);
+  const to = list(msg.to); const cc = list(msg.cc); const bcc = list(msg.bcc);
+  const bad = [...to, ...cc, ...bcc].find((a) => !isAddr(a));
+  if (bad) return { error: `not an email address: ${bad}` };
+  if (!to.length) return { error: 'no address to send to' };
   let files: MimeFile[] = [];
   if (msg.attachments?.length) {
     const got = await filesForSend(userId, msg.attachments);
     if ('error' in got) return { error: got.error };
     files = got;
   }
-  const mime = buildMime({ from: s.address, fromName: s.display_name, to: msg.to, subject: msg.subject, body: msg.body, inReplyTo: msg.inReplyTo, files });
+  const mime = buildMime({ from: s.address, fromName: s.display_name, to: to.join(', '), cc, bcc, subject: msg.subject, body: msg.body, inReplyTo: msg.inReplyTo, files });
   let res: Response;
   if (!files.length) {
     const raw = b64url(mime);

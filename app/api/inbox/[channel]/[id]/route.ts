@@ -3,6 +3,7 @@ import pool from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { kernelCall } from '@/lib/mcp/kernel-rpc';
 import { getConversation, getThread, setThreadState } from '@/lib/inbox-server';
+import { cleanRecipients } from '@/lib/email-recipients';
 import { cleanStamp, draftInVoice } from '@/lib/voice-context';
 import type { InboxChannel } from '@/lib/inbox';
 
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const p = parse(params);
   if (!p) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  let body: { action?: string; text?: string; voice?: unknown; file_ids?: unknown } = {};
+  let body: { action?: string; text?: string; voice?: unknown; file_ids?: unknown; recipients?: unknown; draft_recipients?: unknown } = {};
   try { body = await req.json(); } catch { /* empty */ }
   const viewer = { userId: session.userId, admin: session.role === 'admin' };
 
@@ -94,8 +95,13 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     if (body.action === 'reply' && !text.trim() && !fileIds.length) return NextResponse.json({ error: 'Write a reply first.' }, { status: 400 });
     try {
       const voice = body.action === 'reply' ? cleanStamp(body.voice) : undefined;
+      // core 108: an email reply goes to the recipients chosen in the Inbox (reply-all by default); the reader's
+      // proposal travels with it so a changed recipient teaches the sender's voice
+      const recipients = p.channel === 'email' ? cleanRecipientsArg(body.recipients) : null;
+      const draftRecipients = p.channel === 'email' ? cleanDraftRecipients(body.draft_recipients) : null;
       const out = await kernelCall(body.action === 'reply' ? 'inbox_reply' : 'inbox_refresh',
-        { channel: p.channel, thread_id: p.id, ...(body.action === 'reply' ? { text, ...(voice ? { voice } : {}), ...(fileIds.length ? { file_ids: fileIds } : {}) } : {}) }, session.userId);
+        { channel: p.channel, thread_id: p.id, ...(body.action === 'reply' ? { text, ...(voice ? { voice } : {}), ...(fileIds.length ? { file_ids: fileIds } : {}),
+          ...(recipients ? { recipients } : {}), ...(draftRecipients ? { draft_recipients: draftRecipients } : {}) } : {}) }, session.userId);
       const thread = await getConversation(p.channel, p.id, viewer);
       return NextResponse.json({ ...out, thread }, { status: out.error ? 400 : 200 });
     } catch (err) {
@@ -103,4 +109,26 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     }
   }
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
+}
+
+/** {to, cc, bcc} from the browser: valid addresses only, at most 20 in all. */
+function cleanRecipientsArg(raw: unknown): { to: string[]; cc: string[]; bcc: string[] } | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const list = (v: unknown) => (Array.isArray(v) ? v.map(String) : []);
+  const out = cleanRecipients({ to: list(r.to), cc: list(r.cc), bcc: list(r.bcc) });
+  const total = out.to.length + out.cc.length + out.bcc.length;
+  return out.to.length && total <= 20 ? out : null;
+}
+
+/** The reader's proposal, as the kernel's recipient lesson needs it: recipients, each person's role, the kind. */
+function cleanDraftRecipients(raw: unknown): Record<string, unknown> | null {
+  const base = cleanRecipientsArg(raw);
+  if (!base) return null;
+  const r = raw as Record<string, unknown>;
+  const roles: Record<string, string> = {};
+  if (r.roles && typeof r.roles === 'object') {
+    for (const [k, v] of Object.entries(r.roles as Record<string, unknown>)) if (typeof v === 'string') roles[k.toLowerCase()] = v.slice(0, 40);
+  }
+  return { ...base, roles, kind: typeof r.kind === 'string' ? r.kind.slice(0, 20) : null };
 }
