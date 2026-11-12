@@ -4299,6 +4299,30 @@ which no agent reads.
   on the list (Zetta, Moderne, Gorilla, SOSV, …) and are now gated out until their firms are imported and researched; the
   trust score's fit and openness parts read customer signals, so the VC list ranks by authority alone (0.7/30 path, 0.9/20
   openness); 27 accepted investors have no first message (no template on the list).
+- **2026-11-11/12 follow-up (data)**: "fellow" / "advisor" removed from the title exclusions, Drayton's title corrected, 22
+  partners' firms put on the list and researched (16 go, 6 later), 179 web-found LinkedIn profiles confirmed by a profile
+  fetch and saved (18 rejected), one card of 4 requests filed for Mateo.
+
+### 5.da Mateo's customer cohorts 1-4 are searched; countries now resolve (2026-11-12, hermes 0.91.1 committed, NOT deployed)
+
+Amir: "review Mateo's other ICPs, fill the missing data, turn the Leads Finder on". Every cohort list was `objective='list'`
+with no locations / industries, so the Leads Finder never searched any of them. Now (data, backup
+`/root/.cache/salesbrain/backups/mateo-lists-20261112133415.json`, audit `icp_criteria_edit`), each with a 150-lead cap:
+1 distributors = DACH, wholesale chemical / building materials / machinery / import-export, 11-500; 2 freight forwarders =
+DACH + Benelux, transportation-logistics + freight, 11-500; 3 admin services = UK, DACH, Netherlands, accounting / HR
+services / outsourcing / administrative support, 11-500; 4 vertical software = UK, US, DACH, software development, 11-200.
+Criteria keep country names (the fit gate reads them); `filters.location` names what LinkedIn resolves; the resolution is
+cached in `icp_agent_state.resolved_filters`. PE cohorts 6-10 stay hand-made: LinkedIn has no "PE-backed" filter.
+188 people on cohorts 1-4 and 6-9 missing a profile, an email or company research were queued for the Enricher.
+- **Bug found**: `unipile.FILTER_PARAM_TYPES['location'] = 'REGION'`, and REGION lists only big regions (DACH, Europe,
+  North America, Benelux), so EVERY country, state or city on a list resolved empty and was dropped from the search filter.
+  Fix (hermes 1b82701, 0.91.1): fall back to LOCATION (same geo ids). Committed and pushed, **not deployed** (the
+  deploy was refused by the permission check); lists 3-4 were resolved with the fallback by a script and cached, so they
+  do not need it. Any list edited before the deploy re-resolves with the old code. NRW (held) names states: deploy before
+  it is resumed, or it refuses to search ("none of its locations matched").
+- Mateo's Sales Navigator search cap (40 per rolling 24 h) is shared by the Leads Finder AND the LinkedIn rung of profile
+  lookups; the firm-people sweep spent all 40 on 2026-11-11 18:08-18:59 UTC, so the first cohort searches run on the
+  2026-11-13 morning ticks.
 
 ## 6. Env vars
 
