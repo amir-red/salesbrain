@@ -21,6 +21,9 @@ export async function GET(req: NextRequest) {
     if (out.not_a_lead) return NextResponse.json(out, { status: 200 });
     return NextResponse.json(out, { status: out.error ? 404 : 200 });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });
+    const msg = err instanceof Error ? err.message : String(err);
+    // kernelCall throws on any { error }; a kernel before 0.91.2 answered "not a lead" that way (2026-11-13).
+    if (msg.startsWith('Not in the CRM yet')) return NextResponse.json({ not_a_lead: true }, { status: 200 });
+    return NextResponse.json({ error: msg }, { status: 502 });
   }
 }

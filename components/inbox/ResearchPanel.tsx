@@ -66,7 +66,7 @@ export default function ResearchPanel({ prospectId, personId, name, onClose }: {
       const res = await fetch(`/api/prospects/${b.prospect_id}/trust-research`, { method: 'POST' });
       const d = await res.json();
       if (!res.ok || d.error) setNote(d.error === 'Not found' ? 'Only the lead’s owner or an admin can research them.' : (d.error || 'Research failed'));
-      else { setNote(d.extracted ? 'Researched — updated below.' : 'Nothing new was found.'); await load(true); }
+      else { setNote(d.extracted ? 'Researched. Updated below.' : 'Nothing new was found.'); await load(true); }
     } catch (e) { setNote(e instanceof Error ? e.message : String(e)); }
     finally { setResearching(false); }
   }
