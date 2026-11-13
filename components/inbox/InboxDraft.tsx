@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Sparkle, Star } from '@/components/icons';
+import { Chevron, Sparkle, Star } from '@/components/icons';
 import { LearnedLines } from '@/components/voice/DraftReview';
 import { diffWords } from '@/lib/diff-words';
 import PriorityList from '@/components/voice/PriorityList';
@@ -98,16 +98,18 @@ export function ProposalStrip({ p, after, onAfter, senderFirst, verdict, onVerdi
       <div className="flex items-center gap-2 flex-wrap">
         <span style={{ color: 'var(--accent)' }}><Sparkle width={13} height={13} /></span>
         <span className="font-medium">AI proposal in {senderFirst}&apos;s voice</span>
-        <span style={{ color: 'var(--text-muted)' }}>· {p.situation === 'reply' ? 'a reply to what they wrote' : p.situation === 'first' ? 'a first message — they accepted your request' : 'a follow-up, they have not answered'}</span>
+        <span style={{ color: 'var(--text-muted)' }}>· {p.situation === 'reply' ? 'a reply to what they wrote' : p.situation === 'first' ? 'a first message, they accepted your request' : 'a follow-up, they have not answered'}</span>
         <span className="flex-1" />
         {p.reasoning && <button type="button" onClick={() => setWhy((v) => !v)} className="underline" style={{ color: 'var(--text-muted)' }}>{why ? 'hide why' : 'why this'}</button>}
         <button type="button" onClick={onRedraft} disabled={!!busy} className="underline disabled:opacity-40" style={{ color: 'var(--text-muted)' }}>
           {busy === 'draft' ? 'Drafting…' : 'Draft again'}
         </button>
         <button type="button" onClick={onDiscard} className="underline" style={{ color: 'var(--text-muted)' }}>Discard</button>
-        <button type="button" onClick={() => setFolded((v) => !v)} className="underline" style={{ color: 'var(--text-muted)' }}
-          aria-expanded={!folded} title={folded ? 'Show the proposal again' : 'Fold the proposal to read the conversation'}>
-          {folded ? 'Show' : 'Minimise'}
+        <button type="button" onClick={() => setFolded((v) => !v)}
+          className="w-7 h-7 -my-1 rounded-full flex items-center justify-center hover:bg-[var(--bg-card)]" style={{ color: 'var(--text-muted)' }}
+          aria-expanded={!folded} aria-label={folded ? 'Show the proposal' : 'Minimise the proposal'}
+          title={folded ? 'Show the proposal again' : 'Minimise: fold the proposal to read the conversation'}>
+          <Chevron width={16} height={16} style={{ transform: `rotate(${folded ? -90 : 90}deg)` }} />
         </button>
       </div>
       {folded ? (
